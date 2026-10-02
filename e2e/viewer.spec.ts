@@ -91,3 +91,39 @@ test('fetches a ball thrown', async ({ page }) => {
 
   await expect(page.locator('#mood')).toHaveText(/^eReturningBall/, { timeout: 30000 });
 });
+
+test('flinches when sprayed', async ({ page }) => {
+  test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
+  await page.goto('/viewer.html');
+
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await page.check('#live');
+  await page.waitForTimeout(1000);
+
+  const box = (await page.locator('canvas').boundingBox())!;
+  await page.click('#spray-out');
+
+  /* The middle of what is drawn: the dog. */
+  const dog = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')!;
+    const { data } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+    let [x, y, n] = [0, 0, 0];
+
+    for (let at = 3; at < data.length; at += 4) {
+      if (data[at]) {
+        x += ((at - 3) / 4) % canvas.width;
+        y += Math.floor((at - 3) / 4 / canvas.width);
+        n++;
+      }
+    }
+
+    return { x: x / n, y: y / n, width: canvas.width };
+  });
+  const scale = box.width / dog.width;
+
+  await page.mouse.move(box.x + dog.x * scale, box.y + dog.y * scale);
+  await page.mouse.down();
+  await page.mouse.up();
+
+  await expect(page.locator('#mood')).toHaveText(/^eSprayReact/, { timeout: 5000 });
+});

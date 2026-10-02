@@ -35,17 +35,22 @@ export function mapColours(picture: Dib, palette: readonly Colour[]) {
   });
 }
 
-/** Draws a picture with its top left at a point, its transparent colour left out. */
+/**
+ * Draws a picture with its top left at a point, its transparent colour left
+ * out; mirrored, left for right, as `XDrawPicture`'s last argument asks.
+ */
 export function drawPicture(
   bitmap: IndexedBitmap,
   picture: Dib,
   colours: readonly number[],
   left: number,
-  top: number
+  top: number,
+  mirrored = false
 ) {
   for (let y = 0; y < picture.height; y++) {
     for (let x = 0; x < picture.width; x++) {
-      const index = picture.pixels[y * picture.width + x];
+      const from = mirrored ? picture.width - 1 - x : x;
+      const index = picture.pixels[y * picture.width + from];
 
       if (index !== TRANSPARENT) {
         bitmap.set(left + x, top + y, colours[index]);

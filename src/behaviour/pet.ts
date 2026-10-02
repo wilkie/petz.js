@@ -15,6 +15,7 @@ import {
   FIRST_TRICK,
   type EngineScripts,
   POSITION,
+  TRICK_COUNT,
   type TrickScript,
 } from '../formats/engine.ts';
 import { type Script } from '../formats/script.ts';
@@ -58,6 +59,7 @@ export const STATE = {
   chasingWall: 0x54,
   lastIdleTrick: 0x60,
   lungingWall: 0x66,
+  sprayReact: 0x68,
   firstBallTrick: 0x61,
   lastBallTrick: 0x65,
 } as const;
@@ -79,6 +81,9 @@ export const GLOBAL = {
 const SITTING = 6;
 const STANDING = 9;
 const RUNNING = 21;
+
+/** The yelp a sprayed dog gives (`PlaySound(75, 1)`, seg20:17ff on). */
+const SPRAY_SOUND = 75;
 const SITTING_UP = 30;
 
 /** Balls glued by: the belly, and the chest. */
@@ -114,6 +119,8 @@ const SCRIPT = {
   eatFromBowlPause: 328,
   lap: 262,
   sick: 287,
+  sprayed: 68,
+  shakeOffSpray: 323,
   stopRunning: 26,
   stopRunningHard: 205,
   snatch: 240,
@@ -327,6 +334,12 @@ export class Pet {
   /** The script playing, and the trick last done (`0x8b06`), for a treat to reward. */
   private playing = -1;
   lastTrick = 0;
+
+  /** Sounds the engine plays itself (`ScriptSprite::PlaySound`), with the next frame shown. */
+  private sounds: number[] = [];
+
+  /** When the trick last done was begun, in ticks (`0x1ce6` of the sprite). */
+  private lastTrickTime = 0;
 
   /** A state is waiting on the user (`0x222`), set by cue 0 or 4 and cleared by cue 1. */
   private waiting = false;
@@ -608,6 +621,7 @@ export class Pet {
         this.processCue(item.cue);
       } else if ('trick' in item) {
         this.lastTrick = item.trick;
+        this.lastTrickTime = this.time;
       } else if ('factor' in item) {
         /* `0x8adf n value` (`PetModule::SetFactor`). */
         this.setFactor(...item.factor);
@@ -632,6 +646,11 @@ export class Pet {
         placedBy = item.step.frame;
       } else if ('step' in item) {
         step = { ...item.step, glue: item.step.glue ?? glue };
+
+        if (this.sounds.length) {
+          step.sounds = [...(step.sounds ?? []), ...this.sounds];
+          this.sounds = [];
+        }
         this.playing = item.script ?? this.playing;
       } else {
         control(item);
@@ -910,6 +929,8 @@ export class Pet {
         return this.doGrabbingTreat(mode);
       case STATE.begging:
         return this.doBegging(mode);
+      case STATE.sprayReact:
+        return this.doSprayReact(mode);
     }
 
     return undefined;
@@ -2467,8 +2488,13 @@ export class Pet {
   /** `PetModule::DecideIfGrabFromUser` (seg14:215e): frustrated and grabby enough, by chance. */
   private decideIfGrabFromUser() {
     const range = 0x1a4;
-    return this.rand() % range < this.factor(9) && this.rand() % range < this.factor(2);
+    const grab = this.rand() % range < this.factor(9) && this.rand() % range < this.factor(2);
+    this.grabDecisions = [grab, ...this.grabDecisions].slice(0, 5);
+    return grab;
   }
+
+  /** The last few decisions to snatch, newest first (`0x1262`, and `0x1264` on). */
+  private grabDecisions: boolean[] = [];
 
   /** `PetModule::PushBegWaitLoops` (seg18:25e0): pants, waiting for the treat after a trick. */
   private pushBegWaitLoops() {
@@ -2691,7 +2717,7 @@ export class Pet {
   /**
    * Cue 12, a mouthful (seg18:1c4e on): a serving less in the bowl; from the
    * food bowl, the dog fuller, and fuller than half again the bowl it is
-   * sick of it: it stops, stands and is sick (script 287), and is calmed to
+   * sick of it: it stops after this mouthful, stands and is sick (script 287), and is calmed to
    * an excitement under 10.
    */
   private mouthful(food: Food) {
@@ -2705,7 +2731,9 @@ export class Pet {
 
     if (this.fullness > food.full * 1.5) {
       this.fullness += 5;
-      this.queue = [];
+
+      /* `ResetScriptSoft` (vtable 0x2c): the mouthful playing finishes. */
+      this.resetSoft();
       this.push({ cue: 13 });
       this.pushTransition(STANDING, BELLY);
       this.push({ glue: BELLY });
@@ -2795,6 +2823,94 @@ export class Pet {
 
     if (flags & 1) {
       this.newGlobalState(GLOBAL.idle);
+    }
+
+    return step;
+  }
+
+  // The spray bottle.
+
+  /**
+   * The spray bottle let go of over the dog (`SpraySprite::Update`,
+   * seg20:174d): what it did is discouraged, it yelps (sound 75), all it
+   * was doing is dropped, and it reacts.
+   */
+  sprayed() {
+    this.negativeReinforcement();
+    this.sounds.push(SPRAY_SOUND);
+    this.resetScript();
+    this.newState(STATE.sprayReact);
+  }
+
+  /**
+   * `PetModule::NegativeReinforcement` (seg14:1bc5). A dog that has lately
+   * decided to snatch is 5 less grabby. Otherwise, left alone, the trick it
+   * was at is 5 less likely, never less than 1: the state before this one if
+   * the last trick began under a second ago, else that trick, either taking
+   * the other's place if it is no trick and the trick was within ten
+   * seconds. At play, it is 5 more naughty, or 5 less if it was being
+   * naughty, and it changes its mind about being naughty.
+   */
+  private negativeReinforcement() {
+    if (this.grabDecisions.slice(0, 3).some(Boolean)) {
+      this.factors[2] = Math.max(1, this.factors[2] - 5);
+      this.grabDecisions = [];
+      return;
+    }
+
+    const global = this.reducedGlobal();
+
+    if (global === GLOBAL.idle && this.lastTrick && this.history[1]) {
+      const seconds = Math.trunc((this.time - this.lastTrickTime) / 60);
+      const isTrick = (n: number) => n >= 0 && n < TRICK_COUNT;
+      let [first, second] = [this.history[1] - FIRST_TRICK, this.lastTrick - FIRST_TRICK];
+
+      if (seconds >= 1) {
+        [first, second] = [second, first];
+      }
+
+      const n = !isTrick(first) && seconds < 10 ? second : first;
+      const trick = this.data.tricks[n];
+
+      if (isTrick(n) && trick) {
+        trick.idleWeight = Math.max(1, trick.idleWeight - 5);
+      }
+    } else if (global === GLOBAL.fetch) {
+      this.factors[1] = Math.min(100, Math.max(1, this.factors[1] + (this.naughty ? -5 : 5)));
+      this.naughty = !this.naughty;
+    }
+  }
+
+  /**
+   * `PetModule::DoSprayReact` (seg14:0f69): lets go of what is under its
+   * paw, starts afresh glued by its chest, flinches (script 68) and shakes
+   * itself off or runs (323); then back to waiting for the ball at play, or
+   * to being left alone.
+   */
+  private doSprayReact(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.releaseObject(1);
+      this.resetScript();
+
+      /* With `0x8ae6 0 0`, its tilt eased level; not yet played. */
+      this.pushStored(SCRIPT.sprayed);
+      this.push({ glue: CHEST });
+      this.pushStored(SCRIPT.shakeOffSpray);
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags) {
+      if (this.reducedGlobal() === GLOBAL.fetch) {
+        this.newState(STATE.anticipatingBall);
+      } else {
+        this.newGlobalState(GLOBAL.idle);
+      }
     }
 
     return step;

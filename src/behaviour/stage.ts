@@ -166,6 +166,9 @@ export class Stage implements PetWorld {
   /** Where the user's cursor is, and whether its primary button is down. */
   pointer = { x: -1000, y: -1000, button: false };
 
+  /** The spray bottle, held on the cursor, and whether it sprays (the button down). */
+  spray: { x: number; y: number; spraying: boolean } | null = null;
+
   /** The food out of the toy box, at most one of each kind. */
   foods: Food[] = [];
   ball: Ball | null = null;
@@ -437,6 +440,23 @@ export class Stage implements PetWorld {
       ball.y === y &&
       Math.abs(chinX - chin.x) < 7 &&
       Math.abs(chinY - chin.y) < 7
+    );
+  }
+
+  /**
+   * Whether the spray bottle let go of at a point hits the dog: within the
+   * rectangle it is drawn in, widened on every side by its standard width
+   * and height (`SpraySprite::Update`, seg20:17c9 on, by the sizes
+   * `FigureOutStandardWidthAndHeight` keeps at DS:0x3bd0).
+   */
+  sprayHits(point: { x: number; y: number }) {
+    const rect = this.rect();
+    const { width, height } = this.standardSize();
+    return (
+      point.x >= rect.left - width &&
+      point.x < rect.right + width &&
+      point.y >= rect.top - height &&
+      point.y < rect.bottom + height
     );
   }
 

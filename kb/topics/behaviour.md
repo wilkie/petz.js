@@ -126,8 +126,16 @@ flowchart LR
 - [[inferred]] The distances `GetNewNaughtyTarget` is called with are inferred.
 - [[inferred]] On a stage smaller than Dogz's own screen a dog runs far enough to drop the ball off it, and fetches it again and again; the viewer's live stage is 640 by 480, as the game's.
 
+## The spray bottle
+
+- [[read out]] The spray bottle is a sprite with two pictures, 10400 at rest and 10401 spraying (`InitSpraySprite`, seg20:15c2). Held with the button down, it sprays; it is drawn turned left for right when right of the dog's middle, so it points at the dog (`SpraySprite::Draw`, seg20:18b1).
+- [[read out]] Let go of, it goes back in its box, and if the cursor is within the dog's drawn rectangle widened on every side by the dog's standard width and height (DS:0x3bd0, set by `FigureOutStandardWidthAndHeight`), the dog is sprayed (`SpraySprite::Update`, seg20:174d): `NegativeReinforcement`, a yelp (`PlaySound(75)`), its script dropped at once (`ResetScriptHard`, glued by the chest), and `eSprayReact`. No global state is entered: 0x3f4, `EnterSpray`'s, is set by nothing.
+- [[read out]] `NegativeReinforcement` (seg14:1bc5): a dog that decided to snatch in its last few chances (`0x1262`, `0x1264` on) is 5 less grabby, and forgets them. Otherwise, left alone, the trick it was at is 5 less likely, idle, never less than 1: the state before the one it is in (`0xc2`, the second of `NewState`'s history at `0xc0`) if the last trick (`0x8b06`) began under a second ago, else that trick; either gives way to the other if it is no trick and the trick was within ten seconds. At play, it is 5 more naughty, or 5 less if it was being naughty, and changes its mind about being naughty.
+- [[read out]] `DoSprayReact` (seg14:0f69) lets go of what is under its paw, drops its script again, eases its tilt level, and flinches (script 68) and, glued by the chest, shakes itself off or runs (323, seven variants); then waits for the ball at play, or is left alone. The brain is not told: it has no input for spraying.
+- [[inferred]] The tilt easing (`0x8ae6 0 0`) and `0x8b01 n`, which script 68 is full of, are not yet played.
+
 ## Not yet
 
-- [[read out]] The spray bottle, the cursor games and scruffing are states this does not yet play; nor, at play, the dog faking a throw, tumbling with the ball, the user too close, turning to the ball before a grab (`0x8ae8`), or the ball moved during a ball trick (`0x8aed`, `0x8af4`).
+- [[read out]] The cursor games, scruffing, `eGuilty` and birthing are states this does not yet play; nor, at play, the dog faking a throw, tumbling with the ball, the user too close, turning to the ball before a grab (`0x8ae8`), or the ball moved during a ball trick (`0x8aed`, `0x8af4`).
 - [[read out]] `DoTargettedLocomote` passes the target's distance from a local it never sets; the reimplementation passes 4, as `DoLocomote` does.
 - [[inferred]] `ResetScriptSoft`, which a state calls leaving, is taken to let the script playing finish and drop the rest.

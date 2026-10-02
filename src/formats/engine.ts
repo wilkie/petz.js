@@ -272,6 +272,9 @@ export const BALL_PICTURE = 10200;
  */
 export const TREAT_PICTURE = 10300;
 
+/** The spray bottle's pictures: 10400 at rest and 10401 spraying (`InitSpraySprite`, seg20:16a8). */
+export const SPRAY_PICTURE = 10400;
+
 /** The bowls' pictures: `10000 + 10 × kind + n`, n 0 full, 1 half, 2 empty and 3 the rim. */
 export const BOWL_PICTURE = 10000;
 

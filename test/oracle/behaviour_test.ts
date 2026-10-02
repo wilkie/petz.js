@@ -253,13 +253,14 @@ withOracle('the engine’s behaviour', () => {
 
     const setUp = (seed: number, width = 320, height = 240) => {
       const stage = new Stage(width, height, breed, header, frames, 5);
+      const dogTricks = structuredClone(tricks.current);
       stage.bodyAreas = readBodyAreas(engine);
       const pet = new Pet(
         {
           scripts,
           table,
           positionKinds: kinds,
-          tricks: structuredClone(tricks.current),
+          tricks: dogTricks,
           trickDefaults: tricks.defaults,
           trickScripts,
           engineScripts,
@@ -272,6 +273,7 @@ withOracle('the engine’s behaviour', () => {
       );
       let tick = 0;
       const states: number[] = [];
+      const sounds: number[][] = [];
 
       const run = (frameCount: number, act?: (n: number) => void) => {
         for (let n = 0; n < frameCount; n++, tick++) {
@@ -279,11 +281,12 @@ withOracle('the engine’s behaviour', () => {
           const step = pet.tick((tick * 45) / 17);
           stage.show(step, step.rotation, step.placedBy);
           states.push(step.state);
+          sounds.push(step.sounds ?? []);
         }
       };
 
       pet.start(0);
-      return { stage, pet, run, states };
+      return { stage, pet, run, states, sounds, tricks: dogTricks };
     };
 
     it('takes stroking the chest for petting, enjoys it more and more, and rolls over', () => {
@@ -474,6 +477,51 @@ withOracle('the engine’s behaviour', () => {
       bowl.held = false;
       pet.foodPutDown(bowl);
       expect(pet.global).toBe(GLOBAL.idle);
+    });
+
+    it('flinches when sprayed, and does the trick it was at less', () => {
+      const { stage, pet, run, states, sounds, tricks: dogTricks } = setUp(3, 640, 480);
+      let trick = -1;
+      run(3000, () => {
+        if (trick < 0 && pet.state >= FIRST_TRICK && pet.state <= STATE.lastIdleTrick) {
+          trick = pet.state;
+        }
+      });
+      expect(trick).toBeGreaterThan(0);
+
+      /* Sprayed while it does it, or just after. */
+      pet.lastTrick = trick;
+      pet.history[1] = trick;
+      const before = dogTricks[trick - FIRST_TRICK].idleWeight;
+      expect(stage.sprayHits(stage.centre())).toBe(true);
+
+      pet.sprayed();
+      expect(dogTricks[trick - FIRST_TRICK].idleWeight).toBe(Math.max(1, before - 5));
+
+      const sprayed = sounds.length;
+      run(800);
+
+      expect(states).toContain(STATE.sprayReact);
+      expect(pet.global).toBe(GLOBAL.idle);
+      expect(sounds[sprayed]).toContain(75);
+    });
+
+    it('sprayed at play, changes its mind about being naughty', () => {
+      const { stage, pet, run } = setUp(3, 640, 480);
+      run(200);
+
+      stage.ball = { x: 320, y: 120, vx: 0, vy: 0, held: true, slot: null, recorded: null };
+      pet.ballPickedUp();
+      run(50);
+
+      const naughty = pet.factor(1);
+      pet.naughty = false;
+      pet.sprayed();
+      expect(pet.factor(1)).toBe(Math.min(100, naughty + 5));
+      expect(pet.naughty).toBe(true);
+
+      run(800);
+      expect(pet.state).not.toBe(STATE.sprayReact);
     });
 
     it('has the bowls the size of their pictures: full, half, empty and the rim', () => {

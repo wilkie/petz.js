@@ -31,6 +31,7 @@ import {
 import {
   BALL_PICTURE,
   readBodyAreas,
+  SPRAY_PICTURE,
   BOWL_PICTURE,
   TREAT_PICTURE,
   readBrainMap,
@@ -110,6 +111,12 @@ let petData: Omit<PetData, 'flags'>;
 let engineStateNames: string[] = [];
 let bodyAreas: number[] = [];
 let ballPicture: Dib;
+
+/** The spray bottle at rest, and spraying. */
+let sprayPictures: Dib[] = [];
+
+/** The size of the spray bottle's pictures. */
+const SPRAY_SIZE = { width: 32, height: 32 };
 let treatPictures: Dib[] = [];
 
 /** The food and water bowls' pictures: full, half, empty, and the rim. */
@@ -175,13 +182,13 @@ function drawDog(
   const bitmap = new IndexedBitmap(STAGE.width, STAGE.height);
   const ball = stage?.ball;
   const foods = stage?.foods ?? [];
-  const draw = (picture: Dib, at: { x: number; y: number }) => {
+  const draw = (picture: Dib, at: { x: number; y: number }, mirrored = false) => {
     const { left, top } = ballRect({ x: Math.trunc(at.x), y: Math.trunc(at.y) }, picture);
-    drawPicture(bitmap, picture, mapColours(picture, palette), left, top);
+    drawPicture(bitmap, picture, mapColours(picture, palette), left, top, mirrored);
   };
 
   /* What is on the stage, by itself, and what is drawn with the dog. */
-  const loose: [Dib, { x: number; y: number }][] = [];
+  const loose: [Dib, { x: number; y: number }, boolean?][] = [];
   let inMouth: (chin: { x: number; y: number }) => void = () => {};
   let underHead: (() => void) | undefined;
 
@@ -215,6 +222,14 @@ function drawDog(
     }
   }
 
+  /* The spray bottle, spraying while the button is down, turned to face the
+   * dog when right of its middle (`SpraySprite::Draw`, seg20:18b1). */
+  const spray = stage?.spray;
+
+  if (spray) {
+    loose.push([sprayPictures[spray.spraying ? 1 : 0], spray, stage!.centre().x < spray.x]);
+  }
+
   /*
    * Facing the user, within 0x41 of it, the dog is drawn under what is
    * loose on the stage; otherwise over it (`GrabSprite::Update`, seg20:018c).
@@ -222,7 +237,7 @@ function drawDog(
   const front = Math.abs(yaw) < 0x41;
 
   if (!front) {
-    loose.forEach(([picture, at]) => draw(picture, at));
+    loose.forEach(([picture, at, mirrored]) => draw(picture, at, mirrored));
   }
 
   drawPet(bitmap, breed, header, allFrames[frameNumber], {
@@ -238,7 +253,7 @@ function drawDog(
   });
 
   if (front) {
-    loose.forEach(([picture, at]) => draw(picture, at));
+    loose.forEach(([picture, at, mirrored]) => draw(picture, at, mirrored));
   }
 
   const pixels = new ImageData(bitmap.toRgba(palettes.get(colours)!), bitmap.width, bitmap.height);
@@ -444,6 +459,10 @@ canvas.addEventListener('mousemove', (event) => {
   const point = stagePoint(event);
   live.stage.pointer = { ...point, button: (event.buttons & 1) !== 0 };
 
+  if (live.stage.spray) {
+    Object.assign(live.stage.spray, keepOnStage(point, SPRAY_SIZE, STAGE.width, STAGE.height));
+  }
+
   for (const food of live.stage.foods) {
     if (food.held) {
       Object.assign(food, keepOnStage(point, foodSize(food), STAGE.width, STAGE.height));
@@ -469,6 +488,13 @@ canvas.addEventListener('mousedown', (event) => {
 
   const point = stagePoint(event);
   const { stage, pet } = live;
+
+  /* The spray bottle held sprays while the button is down. */
+  if (stage.spray) {
+    stage.pointer = { ...point, button: true };
+    stage.spray.spraying = true;
+    return;
+  }
 
   /* Anywhere on its picture's rectangle (`GrabSprite::Update`, `XPointInXRect`). */
   const on = (at: { x: number; y: number }, size: { width: number; height: number }) => {
@@ -502,10 +528,22 @@ canvas.addEventListener('mousedown', (event) => {
   }
 });
 
-/** Letting go of the button throws the ball held, at the speed the cursor last moved. */
+/**
+ * Letting go of the button throws the ball held, at the speed the cursor
+ * last moved, and sprays with the spray bottle.
+ */
 window.addEventListener('mouseup', () => {
   if (live) {
     live.stage.pointer = { ...live.stage.pointer, button: false };
+
+    /* Let go of, the spray bottle goes back in the box, and over the dog, sprays it. */
+    if (live.stage.spray?.spraying) {
+      if (live.stage.sprayHits(live.stage.spray)) {
+        live.pet.sprayed();
+      }
+
+      live.stage.spray = null;
+    }
 
     if (live.stage.ball?.held) {
       live.stage.ball.held = false;
@@ -564,6 +602,21 @@ element<HTMLButtonElement>('ball-out').addEventListener('click', () => {
 });
 
 element<HTMLButtonElement>('ball-away').addEventListener('click', putBallAway);
+
+/** The spray bottle comes out held where the cursor is; what was held goes back. */
+element<HTMLButtonElement>('spray-out').addEventListener('click', () => {
+  if (!live) {
+    return;
+  }
+
+  if (live.stage.ball?.held) {
+    putBallAway();
+  }
+
+  putFoodAway((food) => food.held);
+  const { x, y } = live.stage.pointer;
+  live.stage.spray = { x, y, spraying: false };
+});
 
 liveInput.addEventListener('change', () => {
   stop();
@@ -633,6 +686,7 @@ async function start(files: GameFiles) {
   engineStateNames = readEngineStateNames(engine);
   bodyAreas = readBodyAreas(engine, header.ballCount);
   ballPicture = readPicture(engine, BALL_PICTURE);
+  sprayPictures = [0, 1].map((n) => readPicture(engine, SPRAY_PICTURE + n));
   treatPictures = [0, 1, 2].map((colour) => readPicture(engine, TREAT_PICTURE + colour));
   bowlPictures = [0, 1].map((kind) =>
     [0, 1, 2, 3].map((n) => readPicture(engine, BOWL_PICTURE + 10 * kind + n))
