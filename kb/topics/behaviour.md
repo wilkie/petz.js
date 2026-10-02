@@ -65,7 +65,14 @@ flowchart LR
 
 - [[read out]] `PickLocomotionAction` (seg21:837c) walks (13), trots (71) or runs (9) by `((rand() % 21 + e − 10) × 3) / 100`; a hammy dog sometimes struts (241) or marches (111), and a dull one walks sadly (220). `GetNewTarget` (seg16:177b) picks a point on the stage, 60 pixels in from its edges, at least 400 pixels away — or, on a smaller stage, half the diagonal inside those margins less 50.
 - [[read out]] Reaching it, the dog stops if `rand() % 150` is at least its excitement, and otherwise picks another (`DoLocomote`, seg16:1263).
-- [[inferred]] How the sprite steers the dog to its target is not yet read. The reimplementation eases the dog's rotation, over each stretch of walking, to face the target, and counts it reached within 24 pixels.
+- [[read out]] Steering is the sprite's (`ScriptSprite::SetTargetLocation`, seg7:295e; `PopScript`, seg7:6b38 to 6d24). A target is a point, a rate of turn — 6 in 256ths of a turn a frame — and a box. Each frame the target is reached if it falls in the box: as wide and high as given, centred ahead of the nose (ball 55) by the box's diagonal over a distance, 4, the way the dog faces (`MakeFocusRect`, seg7:3565). Otherwise the dog's rotation is set turning towards `atan2(−dy, −dx) × 256 / 6.283 + 64`, wrapped to ±128, from the middle of the rectangle it is drawn in, the shorter way round (`AngleFudger::SetTarget`, seg4:0e98).
+- [[read out]] The box is the pet's standard size — frame 35 drawn side on (`FigureOutStandardWidthAndHeight`, seg21:0289) — times 0.8 walking, 0.5 trotting, and 1.2 by 0.7 of its width running (`GetLocomotionFudge`, seg21:85ad). Walking about, the target is set again at the start of each stride (cue 4).
+
+## Chasing
+
+- [[read out]] `DoTargettedLocomote` (seg21:79d4) runs every state that chases something: the cursor (3, and 0x13 to be petted), the treat held (0x26), a wall (0x54), the ball. It walks, trots or runs — trotting after the cursor to be petted, running at the wall, by excitement after a treat — steering at the target each stride. A user waggling the target hurries it: a walk to a trot, a trot to a run (`PickFasterLocomotionAction`).
+- [[read out]] Reaching it, the dog waits to be petted, does a trick for the treat (`PickTrickState`), or lunges at the wall (`DoLungingWall`, seg16:22c1: turned to it, scripts 263, 228, and 227 two to four times). Running or trotting, a clumsy dog trips (`DoLocomoteTrip`, seg21:8735: script 155 or 24 out of a run, 204 out of a trot) and goes back to what it was doing; stopped out of a run, it skids (script 205) one time in three.
+- [[read out]] The wall chased is the far one: the stage's right edge less the standard width if the dog is in the left half, else its left edge plus it, at its height give or take 70, kept 150 from the top and bottom.
 
 ## Excitement and the factors
 
@@ -86,7 +93,7 @@ flowchart LR
 - [[read out]] The dog wants petting on one of three spots, picked by chance — the chest, 20 in 100, the belly, 30, the rump, 50 — for a few strokes before it picks another (`PickNewPetSpot`, seg17:192b). The cursor is on the spot within 0.8 of the spot's ball's drawn width either side of it, at any height within 300 pixels (`IsCursorOverPetSpot`, seg17:17de).
 - [[read out]] Facing the user or away, the dog first turns side on and walks back or forth until its spot is under the cursor (`DoAligningPetting`, seg17:08f7); then it waits, panting, 20 to 39 pants before it gives up (`DoWaitPetting`, seg17:0410); a cursor that leaves it is followed.
 - [[read out]] Each stroke (`DoPettingGood`, seg17:0e25) raises how much it has enjoyed the petting, up to 16. Stroked on the head or body it leans into the hand (scripts 47 and 45), on the hindquarters it thumps a leg (64, 65, 66), and the more it has enjoyed, the likelier, out of 16, it rolls onto its back instead. On its back it wriggles (DS:0x20c4); enjoyed past 14, rolled on its back, and calm enough by `rand() % 150` against its excitement, it falls asleep.
-- [[inferred]] How the dog turns side on, and how it follows a cursor that leaves it (`DoTargettedLocomote`), are not yet read; the reimplementation turns it a quarter turn and walks it to the cursor.
+- [[inferred]] How the dog turns side on to be petted is not yet read; the reimplementation turns it a quarter turn.
 
 ## Treats
 
@@ -94,9 +101,10 @@ flowchart LR
 - [[read out]] For a treat held, the dog sits up and begs, five to ten times (script 14; `DoBegging`, seg18:0bec). Then `ActivateBrain` (seg18:290d) wakes the brain ([[topic:brain]]), telling it the treat was brought out, and `PickTrickState` chooses: the dog's frustration rises by 4, and if `rand() % 420` is below it, and again below its grab-object factor, it snatches the treat from the user's hand (`DecideIfGrabFromUser`, seg14:215e). Otherwise it does a trick: the brain's choice, or, when "brain has no opinions", one at random that needs no ball.
 - [[read out]] After a trick done begging, it pants and waits for the treat, from `(100 − e) / 20 + 1` pants to nearly four times as many, sitting more often the calmer it is (`PushBegWaitLoops`, seg18:25e0). Waggling the treat while it waits has it do another trick at once; taking the treat away has it follow.
 - [[read out]] A treat put down is eaten in one bite (script 86; `DoEating`, seg18:12cb). Its cue 10 is the bite: the treat is gone, the dog's frustration settles to its centre, and, only if the brain was not yet woken, the trick last done is rewarded ([[format:tdt]]). So the trick weights learn only from a treat given before the dog has begged; once it has, what it learns is the brain's.
-- [[inferred]] How the dog walks to a treat and follows one held is simplified, as is its following the treat about while it begs.
+- [[inferred]] How the dog walks to a treat put down, and its following the treat about while it begs, are simplified: it steers to the treat as when chasing.
 
 ## Not yet
 
-- [[read out]] The ball, the spray bottle, the cursor games and scruffing are states this does not yet play. Nor `eComplexTrickChasingWall`, which an idle dog can choose; its handler is `DoTargettedLocomote`, and the reimplementation goes straight back to idle.
+- [[read out]] The ball, the spray bottle, the cursor games and scruffing are states this does not yet play.
+- [[read out]] `DoTargettedLocomote` passes the target's distance from a local it never sets; the reimplementation passes 4, as `DoLocomote` does.
 - [[inferred]] `ResetScriptSoft`, which a state calls leaving, is taken to let the script playing finish and drop the rest.

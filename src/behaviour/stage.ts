@@ -73,7 +73,7 @@ export class Stage implements PetWorld {
   }
 
   /** The centre of the rectangle a frame is drawn in, from the dog's origin. */
-  private centre(frame: Frame, rotation: number) {
+  private frameCentre(frame: Frame, rotation: number) {
     const placed = project(
       this.breed,
       this.header,
@@ -102,8 +102,8 @@ export class Stage implements PetWorld {
       this.x += before.x - after.x;
       this.y += before.y - after.y;
     } else if (reference !== undefined) {
-      const from = this.centre(this.frames[reference], rotation);
-      const to = this.centre(next, rotation);
+      const from = this.frameCentre(this.frames[reference], rotation);
+      const to = this.frameCentre(next, rotation);
       this.x += from.x - to.x;
       this.y += from.y - to.y;
     }
@@ -165,6 +165,31 @@ export class Stage implements PetWorld {
     }
 
     return -1;
+  }
+
+  /** The middle of the rectangle the dog is drawn in: the sprite's position (`XSprite::MoveSpriteRect`). */
+  centre() {
+    const { left, top, right, bottom } = this.rect();
+    return { x: Math.trunc((left + right) / 2), y: Math.trunc((top + bottom) / 2) };
+  }
+
+  /**
+   * The pet's standard size: frame 35 drawn side on, rotation 64, as
+   * `PetModule::FigureOutStandardWidthAndHeight` (seg21:0289) measures it.
+   */
+  standardSize() {
+    const placed = project(
+      this.breed,
+      this.header,
+      this.frames[35],
+      scalesForAge(this.breed, this.age),
+      64,
+      100 - this.age
+    );
+    const extent = (axis: 'x' | 'y') =>
+      Math.max(...placed.map((ball) => ball[axis] + ball.diameter / 2)) -
+      Math.min(...placed.map((ball) => ball[axis] - ball.diameter / 2));
+    return { width: Math.trunc(extent('x')), height: Math.trunc(extent('y')) };
   }
 
   eatTreat() {

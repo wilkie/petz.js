@@ -368,7 +368,8 @@ canvas.addEventListener('mousemove', (event) => {
 
 canvas.addEventListener('mouseleave', () => {
   if (live) {
-    live.stage.pointer = { x: -1000, y: -1000, button: false };
+    /* The cursor off the stage is still where it left it, to the engine. */
+    live.stage.pointer = { ...live.stage.pointer, button: false };
   }
 });
 

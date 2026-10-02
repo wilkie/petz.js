@@ -193,7 +193,20 @@ describeWithOracle('the engine’s behaviour', () => {
       expect(
         [...visited].some((state) => state >= FIRST_TRICK && state <= STATE.lastIdleTrick)
       ).toBe(true);
-      expect([...visited].some((state) => state > STATE.lastIdleTrick)).toBe(false);
+      /* The tricks with the ball are 0x61 to 0x65. */
+      expect([...visited].some((state) => state >= 0x61 && state <= 0x65)).toBe(false);
+    });
+
+    it('steers to where it walks, and gets there', () => {
+      expect(states.slice(0, 12 * 30)).toContain(STATE.postLocomote);
+    });
+
+    it('chases the wall, when it chooses to, and lunges at it', () => {
+      const chased = states.indexOf(STATE.chasingWall);
+
+      if (chased !== -1) {
+        expect(states.slice(chased)).toContain(STATE.lungingWall);
+      }
     });
 
     it('shows only frames that exist, and keeps its factors from 1 to 100', () => {
@@ -272,6 +285,25 @@ describeWithOracle('the engine’s behaviour', () => {
       expect(pet.global === GLOBAL.petting || pet.global === GLOBAL.idle).toBe(true);
       expect(states).toContain(STATE.pettingGood);
       expect(pet.pettingLevel).toBeGreaterThan(3);
+    });
+
+    it('follows a cursor that leaves it while it waits to be petted, and waits again there', () => {
+      const { stage, pet, run, states } = setUp(3);
+      run(300);
+      run(60, (n) => {
+        const chest = stage.ballOnStage(50);
+        stage.pointer = { x: chest.x + ((n % 6) - 3) * 3, y: chest.y, button: true };
+      });
+
+      const away = { x: stage.centre().x < 160 ? 280 : 40, y: 120, button: false };
+      pet.newState(STATE.waitPetting);
+      run(600, () => {
+        stage.pointer = away;
+      });
+
+      const chased = states.lastIndexOf(STATE.chasingPetting);
+      expect(chased).toBeGreaterThan(-1);
+      expect(states.slice(chased)).toContain(STATE.waitPetting);
     });
 
     it('does not take a cursor merely resting on the dog, button down, for petting', () => {

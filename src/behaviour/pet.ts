@@ -26,8 +26,10 @@ import { AUTO, findTransition, type TransitionTable } from './transitions.ts';
 
 /** The engine's states this file plays, by the numbers `readEngineStateNames` names. */
 export const STATE = {
+  chasingOwner: 3,
   idle: 4,
   sleeping: 5,
+  locomoteTrip: 6,
   locomote: 7,
   postLocomote: 8,
   chasingPetting: 0x13,
@@ -40,7 +42,9 @@ export const STATE = {
   grabbingTreat: 0x29,
   begging: 0x2a,
   firstTrick: FIRST_TRICK,
+  chasingWall: 0x54,
   lastIdleTrick: 0x60,
+  lungingWall: 0x66,
 } as const;
 
 /**
@@ -87,6 +91,7 @@ const SCRIPT = {
   walkBackwards: 210,
   eatTreat: 86,
   stopRunning: 26,
+  stopRunningHard: 205,
   snatch: 240,
   pantLonger: 30,
   sitPantLonger: 119,
@@ -111,8 +116,14 @@ export const TICKS_PER_SECOND = 1000 / 17;
 /** The excitement cycle's period, in seconds over pi (`PetModule::LoadFactors`). */
 const MOOD_PERIOD = 400;
 
-/** How close to a target the dog must come to have reached it. Inferred. */
-const REACHED = 24;
+/** The ball the dog arrives by: a target is reached when it is ahead of the nose (seg7:6b45). */
+const NOSE = 55;
+
+/** How fast the dog turns towards a target, in 256ths of a turn a frame (`DoLocomote`). */
+const TURN_RATE = 6;
+
+/** What `SetTargetLocation`'s last number is when the engine gives it (`DoLocomote`). */
+const FOCUS_DISTANCE = 4;
 
 export interface PetData {
   scripts: Script[];
@@ -152,6 +163,12 @@ export interface PetWorld {
 
   /** A ball of the dog on the stage, and how wide it is drawn. */
   ballOnStage?(ball: number): { x: number; y: number; diameter: number };
+
+  /** The middle of the rectangle the dog is drawn in: where the engine takes it to be (`0x86`). */
+  centre?(): { x: number; y: number };
+
+  /** The pet's standard size: frame 35 drawn side on (`FigureOutStandardWidthAndHeight`). */
+  standardSize?(): { width: number; height: number };
 
   /** The rectangle the dog is drawn in. */
   rect?(): { left: number; top: number; right: number; bottom: number };
@@ -221,6 +238,19 @@ export class Pet {
 
   rotation = 0;
   target: { x: number; y: number } | null = null;
+
+  /**
+   * Where the sprite is steering to (`SetTargetLocation`, seg7:295e): a
+   * point, how fast to turn, and the size and distance of the box ahead of
+   * the nose the point must fall in to be reached.
+   */
+  steer: {
+    point: { x: number; y: number };
+    rate: number;
+    width: number;
+    height: number;
+    distance: number;
+  } | null = null;
 
   private queue: Item[] = [];
   private gotoState = 0;
@@ -556,6 +586,10 @@ export class Pet {
       flags |= 1;
     }
 
+    if (this.steer) {
+      flags |= this.steerFrame();
+    }
+
     if (step) {
       this.turn(step);
       this.lastStep = step;
@@ -569,15 +603,65 @@ export class Pet {
       this.placedBy = undefined;
     }
 
-    if (this.target) {
-      const { x, y } = this.world.where();
+    return { step, flags };
+  }
 
-      if (Math.hypot(this.target.x - x, this.target.y - y) < REACHED) {
-        flags |= 2;
+  /** `ScriptSprite::SetTargetLocation` (seg7:295e): steer to a point, or, with none, stop. */
+  setTargetLocation(
+    point: { x: number; y: number } | null,
+    rate = TURN_RATE,
+    width = 0,
+    height = 0,
+    distance = FOCUS_DISTANCE
+  ) {
+    this.steer = point ? { point: { ...point }, rate, width, height, distance } : null;
+  }
+
+  /**
+   * What `PopScript` does each frame for a target (seg7:6b38 to 6d24): it is
+   * reached if it falls in a box of the target's size ahead of the nose —
+   * the box's diagonal over the distance, the way the dog faces
+   * (`MakeFocusRect`, seg7:3565); otherwise the dog's rotation is set
+   * turning towards it, `atan2` of where it is from the middle of the dog.
+   */
+  private steerFrame() {
+    const { point, rate, width, height, distance } = this.steer!;
+    const nose = this.world.ballOnStage?.(NOSE);
+    const centre = this.world.centre?.() ?? this.world.where();
+
+    if (nose) {
+      const ahead = Math.trunc(Math.trunc(Math.sqrt(width * width + height * height)) / distance);
+      const sine = Math.trunc(Math.sin((this.rotation * Math.PI) / 128) * 256);
+      const x = nose.x - Math.trunc((256 * ahead * sine) / 65536);
+      const half = { x: Math.trunc(width / 2), y: Math.trunc(height / 2) };
+
+      if (
+        point.x >= x - half.x &&
+        point.x < x + half.x &&
+        point.y >= nose.y - half.y &&
+        point.y < nose.y + half.y
+      ) {
+        return 2;
       }
     }
 
-    return { step, flags };
+    const dx = Math.trunc(point.x - centre.x);
+    const dy = Math.trunc(point.y - centre.y);
+
+    if (dx === 0 && dy === 0) {
+      return 2;
+    }
+
+    let bearing = Math.trunc((Math.atan2(-dy, -dx) * 256) / 6.283) + 64;
+
+    if (bearing > 128) {
+      bearing -= 256;
+    }
+
+    /* `AngleFudger::SetTarget` (seg4:0e98): the shorter way round. */
+    const ahead = (((bearing - this.rotation) % 256) + 256) % 256;
+    this.ease = { to: wrap(bearing), by: ahead > 128 ? -rate : rate };
+    return 0;
   }
 
   /** Frames queued before the next state change: what an ease is spread over. */
@@ -665,14 +749,23 @@ export class Pet {
       return this.doPostLocomote(mode);
     }
 
+    switch (state) {
+      case STATE.chasingOwner:
+      case STATE.chasingPetting:
+      case STATE.beggingChasing:
+      case STATE.chasingWall:
+        return this.doTargettedLocomote(mode);
+      case STATE.locomoteTrip:
+        return this.doLocomoteTrip(mode);
+      case STATE.lungingWall:
+        return this.doLungingWall(mode);
+    }
+
     if (state >= STATE.firstTrick && state <= STATE.lastIdleTrick) {
       return this.doTrick(mode);
     }
 
     switch (state) {
-      case STATE.chasingPetting:
-      case STATE.beggingChasing:
-        return this.doChasing(mode);
       case STATE.waitPetting:
         return this.doWaitPetting(mode);
       case STATE.pettingGood:
@@ -700,6 +793,7 @@ export class Pet {
     const end = this.queue.findIndex((item) => 'end' in item);
     this.queue = end === -1 ? [] : this.queue.slice(0, end + 1);
     this.target = null;
+    this.steer = null;
   }
 
   private isOnscreen() {
@@ -1044,17 +1138,27 @@ export class Pet {
   }
 
   /**
-   * `PetModule::PickLocomotionAction`: walk, trot or run by excitement,
-   * and sometimes a strut, a sad walk or a march by ham.
+   * `PetModule::PickLocomotionAction` (seg21:837c): walk, trot or run by
+   * excitement, or the pace asked for; and, when asked, sometimes a strut,
+   * a sad walk or a march by ham.
    */
-  private pickLocomotion() {
+  private pickLocomotion(pace = 0, overrides = true) {
     const excitement = this.factor(0);
-    const [walk, trot, run] = this.data.engineScripts.locomotion;
-    const pace = Math.min(
+    const paces = this.data.engineScripts.locomotion;
+    const byExcitement = Math.min(
       2,
       Math.max(0, Math.trunc((((this.rand() % 21) + excitement - 10) * 3) / 100))
     );
-    let action = [walk, trot, run][pace];
+
+    if (pace !== 0) {
+      return paces[pace];
+    }
+
+    let action = paces[byExcitement];
+
+    if (!overrides) {
+      return action;
+    }
 
     if (excitement > 70 && this.factor(5) > 70 && this.rand() % 2) {
       action = 241;
@@ -1069,6 +1173,32 @@ export class Pet {
     }
 
     return action;
+  }
+
+  /** `PickFasterLocomotionAction` (seg21:84f4): a walk to a trot, the rest to a run, a sad walk to a walk. */
+  private fasterLocomotion(action: number) {
+    return (
+      ({ 9: 9, 13: 71, 71: 9, 111: 9, 220: 13, 241: 9 } as Record<number, number>)[action] ?? action
+    );
+  }
+
+  /**
+   * `PetModule::GetLocomotionFudge` (seg21:85ad): the box a target must fall
+   * in, by the pet's standard size: walking 0.8 of it, trotting half, running
+   * 1.2 of its width wide and 0.7 high.
+   */
+  private locomotionFudge(action: number) {
+    const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+
+    if (action === 9) {
+      return { width: Math.trunc(width * 1.2), height: Math.trunc(width * 0.7) };
+    }
+
+    if (action === 71) {
+      return { width: Math.trunc(width * 0.5), height: Math.trunc(height * 0.5) };
+    }
+
+    return { width: Math.trunc(width * 0.8), height: Math.trunc(height * 0.8) };
   }
 
   /** `PetModule::GetNewTarget`: a point on the stage at least so far from the dog. */
@@ -1092,16 +1222,20 @@ export class Pet {
     return { x: width / 2, y: height / 2 };
   }
 
-  /** Walks a stretch towards the target: steering is the sprite's, and inferred here. */
+  /** Walks a stretch towards the target, steered by `SetTargetLocation`. */
   private pushLocomotion() {
     if (this.target) {
-      this.push({ ease: this.world.aim(this.target) });
+      const box = this.locomotionFudge(this.locomotion);
+      this.setTargetLocation(this.target, TURN_RATE, box.width, box.height);
     }
 
     this.pushStored(this.locomotion);
   }
 
-  /** `PetModule::DoLocomote`, seg16:1263: off to somewhere, and on to somewhere else. */
+  /**
+   * `PetModule::DoLocomote` (seg16:1263): off to somewhere, steering there
+   * from the start of each stride (cue 4), and on to somewhere else.
+   */
   private doLocomote(mode: Mode): Step | undefined {
     if (mode === 'exit') {
       this.resetSoft();
@@ -1109,35 +1243,47 @@ export class Pet {
     }
 
     if (mode === 'enter') {
-      this.locomotion = this.pickLocomotion();
+      this.locomotion = this.pickLocomotion(0, true);
       this.target = this.newTarget();
-      this.pushLocomotion();
+      this.pushStored(this.locomotion);
       return undefined;
     }
 
     const { step, flags } = this.pop();
 
+    if (this.cues.has(4) && this.target) {
+      const box = this.locomotionFudge(this.locomotion);
+      this.setTargetLocation(this.target, TURN_RATE, box.width, box.height);
+    }
+
     if (flags & 2) {
+      this.setTargetLocation(null);
+
       if (this.rand() % 150 >= this.factor(0)) {
         this.newState(STATE.postLocomote);
         return step;
       }
 
       this.target = this.newTarget();
+      const box = this.locomotionFudge(this.locomotion);
+      this.setTargetLocation(this.target, TURN_RATE, box.width, box.height);
     }
 
     if (flags & 1) {
       if (this.rand() % 5 === 0) {
-        this.locomotion = this.pickLocomotion();
+        this.locomotion = this.pickLocomotion(0, true);
       }
 
-      this.pushLocomotion();
+      this.pushStored(this.locomotion);
     }
 
     return step;
   }
 
-  /** `PetModule::DoPostLocomote`, seg16:1544: stop and stand, or head back onto the stage. */
+  /**
+   * `PetModule::DoPostLocomote` (seg16:1544): stop and stand; or, off the
+   * stage, walk back to its middle (`0x8af2`, then script 13).
+   */
   private doPostLocomote(mode: Mode): Step | undefined {
     if (mode === 'exit') {
       this.resetSoft();
@@ -1146,6 +1292,7 @@ export class Pet {
 
     if (mode === 'enter') {
       this.target = null;
+      this.setTargetLocation(null);
       this.pushTransition(STANDING, BELLY);
       return undefined;
     }
@@ -1156,9 +1303,186 @@ export class Pet {
       if (this.isOnscreen()) {
         this.newState(STATE.idle);
       } else {
-        this.target = { x: this.world.width / 2, y: this.world.height / 2 };
-        this.pushLocomotion();
+        const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+        this.setTargetLocation(
+          { x: this.world.width / 2, y: this.world.height / 2 },
+          5,
+          width,
+          height
+        );
+        this.locomotion = SCRIPT.walk;
+        this.pushStored(SCRIPT.walk);
       }
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::DoTargettedLocomote` (seg21:79d4), for the states that
+   * chase something: the user's cursor (3, and 0x13 to be petted), the
+   * treat held (0x26), a wall (0x54). The dog walks, trots or runs at it,
+   * faster if the user waggles it, re-aiming each stride; tripping now and
+   * then; and on reaching it waits to be petted, does a trick for the treat,
+   * or lunges at the wall.
+   */
+  private doTargettedLocomote(mode: Mode): Step | undefined {
+    const state = this.state;
+    const target = () => {
+      if (state === STATE.chasingWall) {
+        return this.wallTarget;
+      }
+
+      if (state === STATE.beggingChasing && this.world.treat) {
+        return this.world.treat;
+      }
+
+      return this.samples[0] ?? this.wallTarget;
+    };
+
+    if (mode === 'exit') {
+      this.queue = [];
+      this.setTargetLocation(null);
+
+      const stopping = [STATE.chasingOwner, STATE.chasingPetting, STATE.beggingChasing] as number[];
+
+      if (this.playing === SCRIPT.run && stopping.includes(state) && this.rand() % 3 === 0) {
+        this.push({ glue: BELLY });
+        this.pushStored(SCRIPT.stopRunningHard);
+      }
+
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      if (state === STATE.chasingWall) {
+        const at = this.world.centre?.() ?? this.world.where();
+        const { width } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+        let y = at.y + 70 - (this.rand() % 140);
+        y = Math.min(this.world.height - 150, Math.max(150, y));
+        this.wallTarget = {
+          x: at.x < this.world.width / 2 ? this.world.width - width : width,
+          y,
+        };
+      }
+
+      const pace = state === STATE.chasingPetting ? 1 : state === STATE.chasingWall ? 2 : 0;
+      this.locomotion = this.pickLocomotion(pace, false);
+      this.pushStored(this.locomotion);
+      this.waiting = false;
+      return undefined;
+    }
+
+    if (state === STATE.beggingChasing && !this.world.treat) {
+      this.newGlobalState(GLOBAL.idle);
+      return this.pop().step;
+    }
+
+    if (this.waiting && this.waggling) {
+      this.locomotion = this.fasterLocomotion(this.locomotion);
+    }
+
+    const { step, flags } = this.pop();
+
+    if (this.cues.has(4)) {
+      this.waiting = true;
+    }
+
+    if (this.waiting) {
+      const box = this.locomotionFudge(this.locomotion);
+      this.setTargetLocation(target(), TURN_RATE, box.width, box.height);
+    }
+
+    if (flags & 2) {
+      this.setTargetLocation(null);
+
+      switch (state) {
+        case STATE.chasingOwner:
+          this.newState(STATE.idle);
+          return step;
+        case STATE.chasingPetting:
+          this.newState(STATE.waitPetting);
+          return step;
+        case STATE.beggingChasing:
+          this.newState(this.pickTrickState());
+          return step;
+        case STATE.chasingWall:
+          this.newState(STATE.lungingWall);
+          return step;
+      }
+    }
+
+    if (flags & 1) {
+      const fast = this.locomotion === SCRIPT.run || this.locomotion === 71;
+
+      if (this.playing === this.locomotion && fast && this.decideIfClumsy()) {
+        this.newState(STATE.locomoteTrip);
+        return step;
+      }
+
+      this.pushStored(this.locomotion);
+    }
+
+    return step;
+  }
+
+  /** Where a dog chasing the wall is running to (`0x127c`). */
+  private wallTarget = { x: 0, y: 0 };
+
+  /**
+   * `PetModule::DoLocomoteTrip` (seg21:8735): a stumble out of a run or a
+   * trot, then back to what the dog was doing.
+   */
+  private doLocomoteTrip(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      const stumble = this.playing === SCRIPT.run ? (this.rand() % 2 === 0 ? 155 : 24) : 204;
+      this.push({ glue: BELLY });
+      this.pushStored(stumble);
+      this.push({ glue: BELLY });
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
+      this.newState(this.history[1] ?? STATE.idle);
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::DoLungingWall` (seg16:22c1): at the wall, the dog turns to
+   * it and leaps at it two to four times, then goes back to idle. Where
+   * the engine sets the leap's target (`0x8af4`), not yet played.
+   */
+  private doLungingWall(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      const right = this.rotation < 1;
+      this.rand();
+      this.pushStored(263);
+      this.push({ ease: right ? -64 : 64 });
+      this.pushStored(228);
+
+      for (let times = (this.rand() % 3) + 2; times; times--) {
+        this.pushStored(227);
+      }
+
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
+      this.newState(STATE.idle);
     }
 
     return step;
@@ -1656,51 +1980,6 @@ export class Pet {
     return step;
   }
 
-  /**
-   * Chasing the cursor to be petted (0x13), or the treat to beg for it
-   * (0x26). The engine's `DoTargettedLocomote` is not yet read; this walks
-   * to within reach, then waits or begs.
-   */
-  private doChasing(mode: Mode): Step | undefined {
-    if (mode === 'exit') {
-      this.resetSoft();
-      return undefined;
-    }
-
-    const goal = () => {
-      const treat = this.world.treat;
-      return this.state === STATE.beggingChasing && treat && !treat.held ? treat : this.samples[0];
-    };
-
-    if (mode === 'enter') {
-      this.locomotion = this.pickLocomotion();
-      this.target = goal() ?? null;
-      this.pushLocomotion();
-      return undefined;
-    }
-
-    if (this.state === STATE.beggingChasing && !this.world.treat) {
-      this.newGlobalState(GLOBAL.idle);
-      return this.pop().step;
-    }
-
-    if (this.state === STATE.beggingChasing && !this.world.treat?.held) {
-      this.newState(STATE.eating);
-      return this.pop().step;
-    }
-
-    const { step, flags } = this.pop();
-    this.target = goal() ?? this.target;
-
-    if (this.target && this.near(this.target)) {
-      this.newState(this.state === STATE.beggingChasing ? STATE.begging : STATE.waitPetting);
-    } else if (flags & 1) {
-      this.pushLocomotion();
-    }
-
-    return step;
-  }
-
   private near(point: { x: number; y: number }) {
     const at = this.world.where();
     return Math.hypot(point.x - at.x, point.y - at.y) < NEAR + 40;
@@ -1940,8 +2219,9 @@ export class Pet {
       }
     }
 
-    if (this.target && treat && this.near(treat)) {
+    if (this.target && treat && (flags & 2 || this.near(treat))) {
       this.target = null;
+      this.setTargetLocation(null);
       this.queue = this.queue.filter((item) => !('step' in item));
       this.eat();
     } else if (flags & 1) {
