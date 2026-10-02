@@ -681,6 +681,56 @@ withOracle('the engine’s behaviour', () => {
       expect(states).toContain(STATE.chasingOwner);
     });
 
+    it('guarding the ball, minds the owner coming close, and runs off with it', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(200);
+
+      const chin = stage.ballOnStage(51);
+      stage.ball = { x: chin.x, y: chin.y, vx: 0, vy: 0, held: false, slot: null, recorded: null };
+
+      /* The cursor settled far from the ball first. */
+      const away = { x: chin.x > 320 ? 20 : 620, y: chin.y > 240 ? 20 : 460, button: false };
+      stage.pointer = away;
+      run(5);
+      pet.ballPickedUp();
+      stage.ball.held = false;
+      pet.naughty = true;
+      pet.newState(STATE.guardingBall);
+      run(30, () => {
+        stage.pointer = away;
+      });
+      expect(pet.state).toBe(STATE.guardingBall);
+
+      /* The cursor comes up to the ball. */
+      run(400, () => {
+        stage.pointer = { x: stage.ball!.x + 30, y: stage.ball!.y, button: false };
+      });
+
+      expect(states).toContain(STATE.ownerTooCloseToBall);
+      expect(states).toContain(STATE.returningBallIndirect);
+    });
+
+    it('is fooled by a throw pulled back, and runs off after nothing', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(200);
+
+      stage.ball = { x: 320, y: 200, vx: 0, vy: 0, held: true, slot: null, recorded: null };
+      stage.pointer = { x: 320, y: 200, button: true };
+      pet.ballPickedUp();
+      run(120, () => {
+        stage.pointer = { x: 320, y: 200, button: true };
+      });
+
+      /* A swing out, and back. */
+      const swing = [320, 360, 420, 480, 420, 340, 320];
+      run(swing.length, (n) => {
+        stage.pointer = { x: swing[n], y: 200, button: true };
+        Object.assign(stage.ball!, { x: swing[n] });
+      });
+
+      expect(states).toContain(STATE.fakingBall);
+    });
+
     it('has the bowls the size of their pictures: full, half, empty and the rim', () => {
       for (const n of [0, 1, 2, 3, 10, 11, 12, 13]) {
         const picture = readPicture(engine, BOWL_PICTURE + n);

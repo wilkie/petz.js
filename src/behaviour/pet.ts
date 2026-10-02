@@ -57,6 +57,8 @@ export const STATE = {
   jumpingGrabbingBall: 0x1f,
   jumpingGrabbingBallMiss: 0x20,
   releasingBall: 0x21,
+  ownerTooCloseToBall: 0x22,
+  fakingBall: 0x23,
   observingBallThrown: 0x25,
   beggingChasing: 0x26,
   eating: 0x28,
@@ -130,6 +132,7 @@ const SCRIPT = {
   sick: 287,
   pickedUp: 4,
   dangling: 3,
+  growlOverBall: 55,
   sprayed: 68,
   shakeOffSpray: 323,
   grabShoeRunning: 1,
@@ -180,6 +183,9 @@ const MOOD_PERIOD = 400;
 
 /** The ball the dog arrives by: a target is reached when it is ahead of the nose (seg7:6b45). */
 const NOSE = 55;
+
+/** How near the user may come to a guarded ball (`0x1246`, set by `EnterFetch`, seg19:0024). */
+const OWNER_TOO_CLOSE = 180;
 
 /** The neck, by which the dog is scruffed (`DoScruffHandler`). */
 const NECK = 54;
@@ -538,6 +544,7 @@ export class Pet {
     this.doScruffHandler();
     this.doCallingHandler();
     this.called = false;
+    this.checkFake();
 
     const shown = this.dispatch();
     this.world.updateBall?.();
@@ -954,8 +961,13 @@ export class Pet {
       case STATE.waitState:
         return this.doWaitState(mode);
       case STATE.anticipatingBall:
-      case STATE.guardingBall:
         return this.doAnticipatingBall(mode);
+      case STATE.guardingBall:
+        return this.doGuardingBall(mode);
+      case STATE.ownerTooCloseToBall:
+        return this.doOwnerTooCloseToBall(mode);
+      case STATE.fakingBall:
+        return this.doFakingBall(mode);
       case STATE.grabbingBall:
         return this.doGrabbingBall(mode);
       case STATE.grabbingBallMiss:
@@ -3472,6 +3484,281 @@ export class Pet {
     }
   }
 
+  // Fetch: guarding, the owner too close, and faking.
+
+  /** Whether the dog leaps for a ball that will bounce once, decided at each throw (`0x19e` of the ball). */
+  private leapsBounce = false;
+
+  /**
+   * How far the cursor must jerk back for a throw to be taken as a fake
+   * (`BallSprite::theirFakeDistance`, 0 to start): 50 more for each fake,
+   * 13 less, to no less than 50, for each throw.
+   */
+  private fakeDistance = 0;
+
+  /** The guarding dog's rounds left (`0x127a`). */
+  private guardRounds = 0;
+
+  /** Where the dog runs to after a fake (DS:0x3b92). */
+  private fakeTarget = { x: 0, y: 0 };
+
+  /**
+   * The fake throw (`BallSprite::Update`, seg20:20b8, to 25fe): the ball
+   * held, and the dog moving, standing or sitting up, the cursor's
+   * distances from where it was the last four frames are taken in turn;
+   * one falling by more than the fake distance, and none rising by more
+   * after it, is a throw pulled back. The fourth is from where the ball's
+   * holder flags would be read as a point, (0, 0) while the user holds it.
+   */
+  private checkFake() {
+    const ball = this.world.ball;
+    const now = this.samples[0];
+
+    if (!ball?.held || !now || this.state === STATE.fakingBall) {
+      return;
+    }
+
+    const moving = (this.playingKind() & POSITION.moving) !== 0;
+
+    if (!moving && this.position !== STANDING && this.position !== SITTING_UP) {
+      return;
+    }
+
+    let falling = true;
+    let fake = true;
+    let was = -5000;
+
+    for (let n = 1; n < 5; n++) {
+      const then = n < 4 ? this.samples[n] : { x: 0, y: 0 };
+
+      if (!then) {
+        return;
+      }
+
+      const distance = Math.trunc(Math.hypot(now.x - then.x, now.y - then.y));
+
+      if (!falling && distance - was > this.fakeDistance) {
+        fake = false;
+        break;
+      }
+
+      if (falling && distance - was < -this.fakeDistance) {
+        falling = false;
+      }
+
+      was = distance;
+    }
+
+    if (fake && !falling) {
+      this.fakeDistance += 50;
+      this.newState(STATE.fakingBall);
+    }
+  }
+
+  private totallyOnscreen() {
+    const rect = this.world.rect?.();
+    return (
+      !!rect &&
+      rect.left >= 0 &&
+      rect.top >= 0 &&
+      rect.right <= this.world.width &&
+      rect.bottom <= this.world.height
+    );
+  }
+
+  private totallyOffscreen() {
+    const rect = this.world.rect?.();
+    return (
+      !!rect &&
+      (rect.right < 0 ||
+        rect.bottom < 0 ||
+        rect.left > this.world.width ||
+        rect.top > this.world.height)
+    );
+  }
+
+  /**
+   * `PetModule::DoFakingBall` (seg19:1a98): fooled, the dog runs where the
+   * ball seemed bound, then, at the end of its run or once off the stage,
+   * looks about (script 60) and begs for the ball still held. Where it
+   * runs is fifteen times the longest step of the ball's last four places
+   * on from the earlier — with, as the engine has it, the step's x for its
+   * y too — and then turned to its negative, which is off the stage, up
+   * and to the left (seg19:1c9d).
+   */
+  private doFakingBall(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      this.setTargetLocation(null);
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      const places = this.samples.slice(0, 4);
+      let best = 0;
+      let [a, b] = [places[0], places[0]];
+
+      places.forEach((from, i) =>
+        places.slice(0, i).forEach((to) => {
+          const d2 = (from.x - to.x) ** 2 + (from.y - to.y) ** 2;
+
+          if (d2 > best) {
+            best = d2;
+            [a, b] = [from, to];
+          }
+        })
+      );
+
+      if (a && b) {
+        this.fakeTarget = {
+          x: -((b.x - a.x) * 15 + a.x),
+          y: -((b.x - a.y) * 15 + a.y),
+        };
+      }
+
+      this.resetScript(36);
+      this.pushTransition(this.data.scripts[SCRIPT.run].from, BELLY);
+      this.push({ glue: CHEST });
+
+      for (let n = this.rand() % 2; n > 0; n--) {
+        this.pushStored(SCRIPT.run);
+      }
+
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1 || this.totallyOffscreen()) {
+      if (this.totallyOnscreen()) {
+        this.pushStored(SCRIPT.lookAgain);
+      }
+
+      this.newState(this.world.ball?.held ? STATE.begging : STATE.anticipatingBall);
+    } else if (this.cues.has(4)) {
+      const { width } = this.world.standardSize?.() ?? { width: 60 };
+      this.setTargetLocation(this.fakeTarget, 5, width, Math.trunc(width / 2));
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::DoGuardingBall` (seg19:1ec7): the naughty dog guards the
+   * ball dropped, panting, for 2 to 5 rounds, more the naughtier, with a
+   * trick between; called, unless naughty again, it gives up and waits for
+   * the throw. Its head off the stage, it takes the ball off, or goes after
+   * it. The cursor within 180 of the ball, or come 40 nearer it over three
+   * frames, and the owner is too close. Its head following the cursor is
+   * not yet played.
+   */
+  private doGuardingBall(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      this.resetScript();
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.guardRounds = Math.trunc(((this.factor(1) - 1) * 4) / 100) + 2;
+      this.pushBegWaitLoops();
+      return undefined;
+    }
+
+    if (!this.isOnscreen()) {
+      this.newState(this.isBallGrabbable() ? STATE.returningBallIndirect : STATE.chasingBall);
+      return this.pop().step;
+    }
+
+    if (this.called && !this.decideIfNaughty()) {
+      this.newState(STATE.anticipatingBall);
+      return this.pop().step;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 8) {
+      this.resetScript();
+      this.newState(this.gotoState);
+    } else if (flags & 1) {
+      if (this.guardRounds-- < 0) {
+        this.naughty = false;
+        this.newState(STATE.anticipatingBall);
+      } else {
+        this.pushTrick(this.pickTrickState());
+        this.pushBegWaitLoops();
+      }
+    } else if (this.ownerTooClose()) {
+      this.newState(STATE.ownerTooCloseToBall);
+    }
+
+    return step;
+  }
+
+  /** The cursor within 180 of the ball (`0x1246`), or come 40 nearer it over three frames (seg19:2130 on). */
+  private ownerTooClose() {
+    const ball = this.world.ball;
+    const [now, then] = [this.samples[0], this.samples[3]];
+
+    if (!ball || !now) {
+      return false;
+    }
+
+    const near = Math.trunc(Math.hypot(ball.x - now.x, ball.y - now.y));
+    const was = then ? Math.trunc(Math.hypot(ball.x - then.x, ball.y - then.y)) : near;
+    return was - near > 40 || OWNER_TOO_CLOSE > near;
+  }
+
+  /**
+   * `PetModule::DoOwnerTooCloseToBall` (seg19:22ca): the dog takes the ball
+   * and growls over it (script 55, two to seven times); the user coming
+   * within 180, or by chance, one frame in 150, it runs off with it; done,
+   * it runs off one time in twenty, else drops it and guards it again.
+   */
+  private doOwnerTooCloseToBall(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.resetScript();
+      this.pushBallGrabAction();
+
+      for (let n = (this.rand() % 6) + 2; n > 0; n--) {
+        this.pushStored(SCRIPT.growlOverBall);
+      }
+
+      return undefined;
+    }
+
+    const ball = this.world.ball;
+    const now = this.samples[0];
+
+    /* The engine tests whether it has settled (`0x222`) and does the same either way (seg19:244a). */
+    if (ball && now) {
+      const near = Math.trunc(Math.hypot(ball.x - now.x, ball.y - now.y));
+
+      if (OWNER_TOO_CLOSE > near || this.rand() % 150 === 0) {
+        this.resetScript(36);
+        this.pushBallGrabAction();
+        this.newState(STATE.returningBallIndirect);
+        return this.pop().step;
+      }
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
+      if (this.rand() % 20 === 0) {
+        this.pushBallGrabAction();
+        this.newState(STATE.returningBallIndirect);
+      } else {
+        this.pushBallReleaseAction();
+        this.newState(STATE.guardingBall);
+      }
+    }
+
+    return step;
+  }
+
   // Scruffing and calling.
 
   /** The secondary button the frame before (`0x216`). */
@@ -3916,8 +4203,11 @@ export class Pet {
     this.queue = [{ glue: 36 }];
     this.factors[9] = this.centres[9];
 
-    /* Whether it will misjudge the catch, by its clumsiness; not yet played. */
-    this.rand();
+    /* Whether it will leap for a ball that bounces once: the clumsier, the less likely (seg20:22b6). */
+    this.leapsBounce = 50 + Math.trunc(((this.factor(3) - 1) * 50) / 100) < this.rand() % 105;
+
+    /* A throw makes it readier to be fooled again, to a point (`theirFakeDistance`). */
+    this.fakeDistance = this.fakeDistance - 13 > 49 ? this.fakeDistance - 13 : 50;
 
     const chase = this.rand() % 30 < excitement + 10 || !this.isOnscreen();
     this.newState(chase ? STATE.chasingBall : STATE.observingBallThrown);
@@ -3989,7 +4279,7 @@ export class Pet {
     const ahead = this.world.projectBall?.(14);
     const chin = this.world.ballOnStage?.(51);
 
-    if (!ahead || !chin || ahead.bounces > 1 || (ahead.bounces === 1 && !this.ballMoving())) {
+    if (!ahead || !chin || ahead.bounces > 1 || (ahead.bounces === 1 && !this.leapsBounce)) {
       return false;
     }
 
@@ -4193,8 +4483,7 @@ export class Pet {
   /**
    * `PetModule::DoAnticipatingBall` (seg19:101d): the ball dropped, the dog
    * waits for the throw, doing a trick or two; if the user goes away from
-   * it, it takes the ball back itself; after enough, it loses interest. A
-   * naughty dog's guarding (0x1c, seg19:1ec7) is played the same way.
+   * it, it takes the ball back itself; after enough, it loses interest.
    */
   private doAnticipatingBall(mode: Mode): Step | undefined {
     if (mode === 'exit') {
