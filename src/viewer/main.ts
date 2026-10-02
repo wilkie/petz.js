@@ -5,6 +5,7 @@
  * drawing with the oracle's.
  */
 
+import { Brain, type BrainMapping } from '../behaviour/brain.ts';
 import { Pet, type PetData } from '../behaviour/pet.ts';
 import { borlandRand } from '../behaviour/random.ts';
 import { Stage } from '../behaviour/stage.ts';
@@ -19,6 +20,7 @@ import {
 } from '../formats/animation.ts';
 import {
   readBodyAreas,
+  readBrainMap,
   readEngineScripts,
   readEngineStateNames,
   readPositionKinds,
@@ -28,6 +30,7 @@ import { type Breed, parseLnz, readFactors } from '../formats/lnz.ts';
 import { parseNe } from '../formats/ne.ts';
 import { type Colour, PALETTE_16, PALETTE_256, readPalette } from '../formats/palette.ts';
 import { parseScripts, readOpcodes, readStateNames, type Script } from '../formats/script.ts';
+import { type BrainFile, parseBrain } from '../formats/brain.ts';
 import { parseTricks } from '../formats/tricks.ts';
 import { drawPet } from '../render/ballz.ts';
 import { IndexedBitmap, random } from '../render/raster.ts';
@@ -86,6 +89,10 @@ let gameFiles: GameFiles;
 let petData: Omit<PetData, 'flags'>;
 let engineStateNames: string[] = [];
 let bodyAreas: number[] = [];
+
+/** The brain, as the game's file has it, then as the live dog has learned; and how the engine maps it. */
+let brainFile: BrainFile | null = null;
+let brainMap: BrainMapping[] = [];
 let live: { pet: Pet; stage: Stage; started: number } | null = null;
 
 /** The stage, in Dogz's own pixels. */
@@ -271,14 +278,25 @@ function startLive() {
   const age = Number(ageInput.value);
   const stage = new Stage(STAGE.width, STAGE.height, breed, header, allFrames, age);
   stage.bodyAreas = bodyAreas;
+
+  /* One stream of random numbers, as the engine has, for the dog and its brain. */
+  const rand = borlandRand(Date.now());
+
+  /* A dog started again keeps what its brain has learned, as the game keeps it in the file. */
+  if (live?.pet.brain) {
+    brainFile = live.pet.brain.toFile();
+  }
+
+  const brain = brainFile ? new Brain(brainFile, brainMap, rand) : undefined;
   const pet = new Pet(
     {
       ...petData,
       tricks: structuredClone(petData.tricks),
       flags: (frame) => allFrames[frame]?.tag ?? 3,
+      brain,
     },
     stage,
-    borlandRand(Date.now()),
+    rand,
     readFactors(breed.sections),
     Math.trunc(age / 10)
   );
@@ -303,9 +321,11 @@ function tickLive() {
     }
   }
 
+  const brain = pet.brain;
+  const wants = brain && pet.brainActive ? `, wants ${brain.file.desires[brain.situation()]}` : '';
   mood.value = `${engineStateNames[step.state] ?? step.state}, excitement ${pet.factor(0)}${
     pet.global === 0x3f3 ? `, petted ${pet.pettingLevel}` : ''
-  }`;
+  }${wants}`;
 }
 
 /** The treats' colours, not yet the game's own pictures of them. */
@@ -465,6 +485,13 @@ async function start(files: GameFiles) {
   const tricks = parseTricks(await files.read('DOGZ.DOG/TRICKS.TDT'));
   engineStateNames = readEngineStateNames(engine);
   bodyAreas = readBodyAreas(engine, header.ballCount);
+  brainMap = readBrainMap(engine);
+
+  try {
+    brainFile = parseBrain(await files.read('DOGZ.DOG/BRAIN.PBT'));
+  } catch {
+    brainFile = null;
+  }
   petData = {
     scripts,
     table: transitionTable(scripts),

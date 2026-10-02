@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { Brain } from '../../src/behaviour/brain.ts';
 import { GLOBAL, Pet, STATE } from '../../src/behaviour/pet.ts';
 import { borlandRand } from '../../src/behaviour/random.ts';
 import { Stage } from '../../src/behaviour/stage.ts';
@@ -16,6 +17,7 @@ import {
   FIRST_TRICK,
   POSITION,
   readBodyAreas,
+  readBrainMap,
   readEngineScripts,
   readEngineStateNames,
   readPositionKinds,
@@ -25,6 +27,7 @@ import { parseLnz, readFactors } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/script.ts';
 import { parseTricks } from '../../src/formats/tricks.ts';
+import { parseBrain, writeBrain } from '../../src/formats/brain.ts';
 
 const ROOT = join(process.cwd(), 'oracle', 'build', 'drive-c');
 const DOGZ = join(ROOT, 'DOGZ.DOG');
@@ -316,6 +319,65 @@ describeWithOracle('the engine’s behaviour', () => {
 
       expect(stage.treat).toBeNull();
       expect(pet.brainActive).toBe(false);
+    });
+  });
+
+  describe('the brain', () => {
+    const data = read('DATA/BRAIN.PBT');
+    const file = parseBrain(data);
+    const map = readBrainMap(engine);
+
+    it('reads BRAIN.PBT and writes it back byte for byte', () => {
+      expect(writeBrain(file)).toEqual(data);
+      expect(file.inputVerbs).toEqual([
+        '[w]Throw!',
+        '[-]Putaway',
+        '[a]Wave',
+        '[+]BringOut*',
+        'Use',
+      ]);
+      expect(file.desires.slice(0, 3)).toEqual(['TrickBlue', 'TrickGreen', 'TrickRed']);
+      expect(file.synapses).toHaveLength(42);
+    });
+
+    it('maps every trick the brain can choose, with the null object, to the engine’s state of its name', () => {
+      expect(map).toHaveLength(35);
+
+      for (const { verb, object, state } of map) {
+        expect(object).toBe('Null');
+        expect(names[state]).toBe(verb);
+      }
+    });
+
+    it('gives each colour of treat its own tricks', () => {
+      const tricksOf = (desire: number) =>
+        file.synapses.filter(([d]) => d === desire).map(([, verb]) => file.outputVerbs[verb]);
+
+      expect(tricksOf(0)).toContain('eTrickRollAndWiggle');
+      expect(tricksOf(2)).not.toContain('eTrickRollAndWiggle');
+      expect(tricksOf(2)).toContain('eTrickHowl');
+    });
+
+    it('learns: a red treat brought out and given after each trick raises the tricks rewarded', () => {
+      const brain = new Brain(parseBrain(data), map, borlandRand(3));
+      const before = brain.weight[2].map((verbs) => verbs[0]);
+
+      for (let session = 0; session < 10; session++) {
+        brain.zeroOutDesires();
+        brain.tell('[+]BringOut*', '[u]RedTreat');
+
+        for (let frame = 0; frame < 30; frame++) {
+          brain.pulse();
+        }
+
+        brain.tell('[w]Throw!', '[u]RedTreat');
+      }
+
+      const after = brain.weight[2].map((verbs) => verbs[0]);
+      const gained = after.map((weight, verb) => weight - before[verb]);
+
+      expect(Math.max(...gained)).toBeGreaterThan(20);
+      expect(brain.desire[2]).toBe(480);
     });
   });
 });

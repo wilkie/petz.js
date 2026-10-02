@@ -1,10 +1,11 @@
 ---
 kind: format
 name: .PBT brain
-summary: BRAIN.PBT — the "Petz Brain File" the engine's XBrain reads, in sections of the verbs the user can do, the tricks the dog can do, objects and desires, with the links between them as binary records. What it decides is which trick a begging dog does; how it learns is not yet read.
-status: partial
+summary: BRAIN.PBT — the "Petz Brain File" the engine's XBrain reads, in sections of the verbs the user can do, the tricks the dog can do, objects and desires, with the links between them as binary records: what a begging dog's tricks are chosen by, and what it learns.
+status: implemented
+source: [src/formats/brain.ts]
 files: [DOGZ.DOG/BRAIN.PBT, DOGZ.DOG/DATA/BRAIN.PBT, DOGZ.DOG/BRAIN.BAK]
-topics: [behaviour]
+topics: [behaviour, brain]
 ---
 
 [[read out]] DOGZDLL.DLL's class `XBrain` (segments 12 and 13) reads and writes the brain: `ReadFile` and `WriteFile`, each section handled by `DispatchRecord` (seg13:0835). [[file:DOGZ.DOG/DOGZ.INI]] names the file, `Brain File=brain.pbt`. [[measured]] Setup installs the same 1,879 bytes as `BRAIN.PBT` and `DATA\BRAIN.PBT`, and adopting a puppy copies it to `BRAIN.BAK`; the engine's "Failed to open %s for brain backup" is that copy.
@@ -33,10 +34,11 @@ topics: [behaviour]
 
 - [[read out]] The engine knows nineteen section names (DS:0x1d72): these, `!WINDOWPOSITIONS`, and text forms of the three binary ones, `!SYNAPSES`, `!INEFFECTS` and `!OUTEFFECTS`, which `PrintBrain` heads with comments such as "synapse tables, listed in order by desire".
 - [[measured]] Each binary section's last record starts with the word -1.
-- [[inferred]] A synapse record is a desire, an output verb, a long and a weight: its first word runs 0 to 2, the three trick desires, and its second up to 34, an output verb. An in-effect record is a desire, an input verb, an object, a flag and an amount: the largest, 500 with the flag set, is for bringing out (`[+]BringOut*`) the treat of the desire's colour. None of it is read from the code yet.
+- [[read out]] Every record is five words (`DispatchRecord`, seg13:0835, its cases 16 to 18). A synapse is a desire, an output verb, an object, its instinct type — an index into `:LMH=`, none, low, medium, high, fixed — and its weight. An in-effect is a desire, an input verb, an object, its type — an index into `:!`, added or set — and its amount; an out-effect the same, for an output verb.
+- [[measured]] Each binary section ends with the last record written, anywhere, its first word made -1: the engine writes the end from the buffer it wrote with. The out-effects, which are none, end with the in-effects' last record. Written so, `src/formats/brain.ts` writes the file back byte for byte.
+- [[read out]] In Dogz's file, bringing out a treat (`[+]BringOut*` on `[u]BlueTreat`, say) sets its colour's desire to 500; putting it down (`[w]Throw!`) takes 20 off; putting it away adds 5; using the spray bottle adds 50 to each. Each colour has eleven to seventeen tricks, weighted 1 or 5, and no out-effects.
+- [[read out]] `!GLOBALCONTROLS` are the entropy, 15; the weights of the instincts L, M and H, 100, 200 and 500; and three switches, learning by situation, the jolt mode and the situation bleed. `!MOREGLOBALCONTROLS` are the most a synapse may weigh, 32,000, and the most a lesson may change it, 60. `!MEMOUTLEARNWEIGHTS` are how much a lesson teaches the output done so many outputs ago. See [[topic:brain]].
 
 ## What it decides
 
-- [[read out]] When the dog is begging for a treat, `PetModule::PickTrickState` (seg21:6907) asks the brain for a trick, logging "brain says go to $$%s$$"; only when "brain has no opinions" does it pick one at random ([[topic:behaviour]]).
-- [[read out]] The engine names the brain's output verbs in a table at DS:0x1e9c, the trick states by name, and the objects at DS:0x1e6c, `Null`, then each treat as `[a]`, `[u]` and `[w]`, and `SprayBottle`.
-- Not yet known: how `XBrain` thinks (`thinkbutton_click`, `HowDoYouFeelAboutThis`) and learns (`LearnKernel`, `jolt`), and what the controls are.
+[[read out]] Which trick a begging dog does, and what it learns from the treats it is given: [[topic:brain]].

@@ -59,4 +59,7 @@ test('begs for a treat held up', async ({ page }) => {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
 
   await expect(page.locator('#mood')).toHaveText(/^eBegging/, { timeout: 20000 });
+
+  /* Once it has begged, its brain wants the red treat, and chooses its tricks. */
+  await expect(page.locator('#mood')).toHaveText(/wants TrickRed$/, { timeout: 40000 });
 });

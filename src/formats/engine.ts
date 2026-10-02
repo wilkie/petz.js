@@ -189,3 +189,69 @@ export function readBodyAreas(engine: NeModule, balls = 65): number[] {
 
   return areas;
 }
+
+/**
+ * A string a far pointer in the data segment points to: the loader's
+ * relocation at that place says where.
+ */
+function farString(engine: NeModule, at: number): string | null {
+  const relocation = engine
+    .relocations(dataSegmentNumber(engine))
+    .find((r) => r.offset === at && r.target.kind === 'internal');
+
+  if (!relocation || relocation.target.kind !== 'internal') {
+    return null;
+  }
+
+  const bytes = engine.segmentBytes(relocation.target.segment);
+  let text = '';
+
+  for (let n = relocation.target.offset; bytes[n]; n++) {
+    text += String.fromCharCode(bytes[n]);
+  }
+
+  return text;
+}
+
+function dataSegmentNumber(engine: NeModule) {
+  const view = new DataView(engine.data.buffer, engine.data.byteOffset, engine.data.byteLength);
+  return view.getUint16(view.getUint32(0x3c, true) + 0x0e, true);
+}
+
+/**
+ * How the engine maps the brain's outputs to its states (seg15:160b): a
+ * table at DS:0x1f2c of five words a row -- output verb and object, each by
+ * its place in a list of names (DS:0x1e9c, DS:0x1e6c), the state, a flag
+ * that makes it none, and frames before the choice is made real -- ended
+ * by -1.
+ */
+export function readBrainMap(engine: NeModule) {
+  const data = dataSegment(engine);
+  const names = (at: number) => {
+    const list: string[] = [];
+
+    for (let n = 0; ; n++) {
+      const name = farString(engine, at + 4 * n);
+
+      if (!name) {
+        return list;
+      }
+
+      list.push(name);
+    }
+  };
+
+  const verbs = names(0x1e9c);
+  const objects = names(0x1e6c);
+  const map = [];
+
+  for (let at = 0x1f2c; ; at += 10) {
+    const [verb, object, state, flag, delay] = words(data, at, 5);
+
+    if (verb === -1) {
+      return map;
+    }
+
+    map.push({ verb: verbs[verb], object: objects[object], state, flag, delay });
+  }
+}

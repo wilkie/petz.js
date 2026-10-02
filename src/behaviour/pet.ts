@@ -19,6 +19,7 @@ import {
 } from '../formats/engine.ts';
 import { type Script } from '../formats/script.ts';
 import { type Trick } from '../formats/tricks.ts';
+import { type Brain } from './brain.ts';
 import { type Rand } from './random.ts';
 import { DEFAULT_GLUE, type Step, timeline } from './timeline.ts';
 import { AUTO, findTransition, type TransitionTable } from './transitions.ts';
@@ -124,7 +125,13 @@ export interface PetData {
 
   /** Each frame's sequence flags, numbered over every animation. */
   flags: (frame: number) => number;
+
+  /** The brain, if the dog has one (`XBrain`, from `BRAIN.PBT`). */
+  brain?: Brain;
 }
+
+/** The treats' names, as `FoodSprite::theirNames` gives them after food and water. */
+const TREATS = ['BlueTreat', 'GreenTreat', 'RedTreat'];
 
 /** What the engine needs to know of the stage, and of where the dog is on it. */
 export interface PetWorld {
@@ -258,8 +265,12 @@ export class Pet {
   private waitCount = 0;
   private walkDirection = 1;
 
-  /** The brain is consulted from the first beg on (`ActivateBrain`); it is not yet played. */
+  /** The brain is consulted from the first beg on (`ActivateBrain`). */
   brainActive = false;
+
+  get brain() {
+    return this.data.brain;
+  }
 
   private readonly idleWeights: number;
   private readonly data: PetData;
@@ -387,6 +398,7 @@ export class Pet {
 
     const shown = this.dispatch();
     this.pulse();
+    this.data.brain?.pulse();
     return { ...shown, rotation: this.rotation, state: this.state, placedBy: this.placedBy };
   }
 
@@ -1719,6 +1731,10 @@ export class Pet {
     }
 
     if (this.state === STATE.eating && this.global === GLOBAL.firstTreat + treat.colour) {
+      if (this.brainActive) {
+        this.data.brain?.tell('[+]BringOut*', `[u]${TREATS[treat.colour]}`);
+      }
+
       this.newState(STATE.begging);
     } else {
       this.newGlobalState(GLOBAL.firstTreat + treat.colour);
@@ -1731,6 +1747,10 @@ export class Pet {
 
     if (!treat) {
       return;
+    }
+
+    if (this.brainActive) {
+      this.data.brain?.tell('[w]Throw!', `[u]${TREATS[treat.colour]}`);
     }
 
     if (this.global === GLOBAL.firstTreat + treat.colour) {
@@ -1790,10 +1810,18 @@ export class Pet {
     return step;
   }
 
-  /** `PetModule::ActivateBrain` (seg18:290d): begging, from now on the brain chooses. */
+  /**
+   * `PetModule::ActivateBrain` (seg18:290d): begging, from now on the brain
+   * chooses. Its desires are cleared, and it is told the treat was brought
+   * out, which sets the desire of the treat's colour.
+   */
   private activateBrain() {
-    if (this.reducedGlobal() === GLOBAL.begEat) {
+    const treat = this.world.treat;
+
+    if (this.reducedGlobal() === GLOBAL.begEat && !this.brainActive) {
       this.brainActive = true;
+      this.data.brain?.zeroOutDesires();
+      this.data.brain?.tell('[+]BringOut*', `[u]${treat ? TREATS[treat.colour] : ''}`);
     }
   }
 
@@ -1817,9 +1845,9 @@ export class Pet {
       return STATE.begging;
     }
 
-    /* The brain is not yet played: it has, as the engine logs, no opinions. */
+    /* Each try, the brain thinks; with no opinion, a trick at random (seg21:6b3c). */
     for (let tries = 0; tries < 1000; tries++) {
-      const state = (this.rand() % 0x3a) + FIRST_TRICK;
+      const state = this.data.brain?.think() || (this.rand() % 0x3a) + FIRST_TRICK;
 
       if (!this.data.tricks[state - FIRST_TRICK].withBall) {
         return state;
