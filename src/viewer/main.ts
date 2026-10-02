@@ -427,6 +427,10 @@ function startLive() {
   const stage = new Stage(STAGE.width, STAGE.height, breed, header, allFrames, age);
   stage.bodyAreas = bodyAreas;
 
+  /* The kennel is the toolbox's dog button, beside the playpen: where the oracle's
+   * screen has it, its middle 226 left of the playpen and 98 above it. */
+  stage.kennel = { x: -226, y: -98 };
+
   /* One stream of random numbers, as the engine has, for the dog and its brain. */
   const rand = borlandRand(Date.now());
 
@@ -459,7 +463,7 @@ function tickLive() {
   const breed = breeds.get(breedSelect.value)!;
   const step = pet.tick((performance.now() - started) / 17);
 
-  stage.show(step, step.rotation, step.placedBy, step.pinned);
+  stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt);
   drawDog(step.frame, stage.x, stage.y, step.rotation, stage);
 
   if (soundInput.checked) {

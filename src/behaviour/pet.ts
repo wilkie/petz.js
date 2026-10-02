@@ -29,6 +29,7 @@ import { AUTO, findTransition, type TransitionTable } from './transitions.ts';
 /** The engine's states this file plays, by the numbers `readEngineStateNames` names. */
 export const STATE = {
   waitState: 1,
+  leaveKennel: 2,
   chasingOwner: 3,
   idle: 4,
   sleeping: 5,
@@ -61,6 +62,7 @@ export const STATE = {
   fakingBall: 0x23,
   observingBallThrown: 0x25,
   beggingChasing: 0x26,
+  beggingChasingHindLegs: 0x27,
   eating: 0x28,
   grabbingTreat: 0x29,
   begging: 0x2a,
@@ -130,6 +132,12 @@ const SCRIPT = {
   eatFromBowlPause: 328,
   lap: 262,
   sick: 287,
+  begReact: 41,
+  begShuffle: 15,
+  begShuffleBack: 18,
+  hindLegsWalk: 33,
+  leaveKennel: 93,
+  leaveKennelOther: 92,
   pickedUp: 4,
   dangling: 3,
   growlOverBall: 55,
@@ -186,6 +194,9 @@ const NOSE = 55;
 
 /** How near the user may come to a guarded ball (`0x1246`, set by `EnterFetch`, seg19:0024). */
 const OWNER_TOO_CLOSE = 180;
+
+/** How likely a begging dog chases on its hind legs, in 100 (`0x1ce4`, set by `ResetParams`). */
+const HIND_LEGS_CHANCE = 60;
 
 /** The neck, by which the dog is scruffed (`DoScruffHandler`). */
 const NECK = 54;
@@ -256,6 +267,9 @@ export interface PetWorld {
   /** The shoe out of the toy box, if any. */
   shoe?: Shoe | null;
 
+  /** Where the dog's kennel is: the dog button of the toolbox, beside the playpen (`PetParams` +0x50). */
+  kennel?: { x: number; y: number } | null;
+
   /** The user's cursor moved by the engine (`SetCursorPos`): the dog tugging at the shoe. */
   moveCursor?(point: { x: number; y: number }): void;
 
@@ -306,6 +320,9 @@ export interface Tick extends Step {
 
   /** A ball of the dog held to a point, the dog drawn about it: hanging from the shoe. */
   pinned?: { ball: number; x: number; y: number };
+
+  /** The dog moved so the middle of its rectangle is at a point (`XSprite::MoveSpritePt`). */
+  centredAt?: { x: number; y: number };
 }
 
 /** A state's handler runs as the state is entered, as it is left, and every tick between. */
@@ -529,7 +546,10 @@ export class Pet {
     this.time = time;
     this.nextDrift = time;
     this.setExcitement(this.centres[0]);
-    this.enterIdle(0);
+
+    /* Shown the first time, the dog comes out of its kennel (seg21:3fc8). */
+    this.global = GLOBAL.idle;
+    this.enterIdle(STATE.leaveKennel);
   }
 
   /**
@@ -551,12 +571,16 @@ export class Pet {
     this.wearFullness();
     this.pulse();
     this.data.brain?.pulse();
+    const centredAt = this.centreAt ?? undefined;
+    this.centreAt = null;
+
     return {
       ...shown,
       rotation: this.rotation,
       state: this.state,
       placedBy: this.placedBy,
       pinned: this.pinned ?? undefined,
+      centredAt,
     };
   }
 
@@ -685,7 +709,7 @@ export class Pet {
       } else if ('steerAt' in item) {
         /* `0x8af2 x y rate width height` (`SetTargetLocation`). */
         const { x, y, rate, width, height } = item.steerAt;
-        this.setTargetLocation({ x, y }, rate, width, height);
+        this.setTargetLocation(rate ? { x, y } : null, rate, width, height);
       } else if ('grab' in item) {
         this.grabbedSlot = item.grab;
         this.grabObject(item.grab);
@@ -1008,6 +1032,10 @@ export class Pet {
         return this.doSprayReact(mode);
       case STATE.scruff:
         return this.doScruff(mode);
+      case STATE.beggingChasingHindLegs:
+        return this.doBeggingChasingHindLegs(mode);
+      case STATE.leaveKennel:
+        return this.doLeaveKennel(mode);
       case STATE.chasingCursor:
       case STATE.chargingCursor:
         return this.doChasingChargingCursor(mode);
@@ -1616,8 +1644,11 @@ export class Pet {
         return this.wallTarget;
       }
 
-      if (state === STATE.beggingChasing && this.food) {
-        return this.food;
+      /* What it begs for (`0x11d4`): the food, the ball, or the shoe. */
+      const held = this.heldObject();
+
+      if (state === STATE.beggingChasing && held) {
+        return { x: held.x, y: held.y };
       }
 
       if (state === STATE.chasingBall && this.world.ball) {
@@ -1689,7 +1720,7 @@ export class Pet {
       return undefined;
     }
 
-    if (state === STATE.beggingChasing && !this.food) {
+    if (state === STATE.beggingChasing && !this.heldObject()) {
       this.newGlobalState(GLOBAL.idle);
       return this.pop().step;
     }
@@ -2006,7 +2037,8 @@ export class Pet {
       }
     }
 
-    if (moves < 2 || this.food?.held) {
+    /* Not while the user holds anything (`0x220`, seg17:0145). */
+    if (moves < 2 || this.food?.held || this.world.holding?.()) {
       this.petting = false;
     }
 
@@ -2497,19 +2529,26 @@ export class Pet {
   }
 
   /**
-   * `PetModule::DoBegging` (seg18:0bec): sits up, five to ten times, for the
-   * treat held; then the brain is woken and a trick chosen. The engine's
-   * following the treat about while begging is simplified to chasing it
-   * when it is taken away.
+   * `PetModule::DoBegging` (seg18:0bec): sits up and begs, five to ten
+   * times (script 14), for the treat held, the ball, or the shoe; settled
+   * (cue 0), it follows the cursor: gone further than a box twice its
+   * standard width about its belly, it chases it; come within one that
+   * width, it reacts (41); both then and six frames before outside it, it
+   * chases on its hind legs if the cursor is level with it, within 10 of
+   * 256ths of a turn, by chance, 60 in 100 (`0x1ce4`), else shuffles after
+   * it (15, then 18). Waggled at it, settled, it does a trick at once;
+   * begged out, its brain is woken and a trick chosen.
    */
   private doBegging(mode: Mode): Step | undefined {
     if (mode === 'exit') {
-      this.queue = [];
+      this.resetScript();
       return undefined;
     }
 
     if (mode === 'enter') {
-      if (this.reducedGlobal() === GLOBAL.begEat && !this.food?.held) {
+      const food = this.food;
+
+      if (this.reducedGlobal() === GLOBAL.begEat && food && !food.held) {
         this.newState(STATE.eating);
         return undefined;
       }
@@ -2525,18 +2564,135 @@ export class Pet {
       return undefined;
     }
 
-    const { step, flags } = this.pop();
-    this.noteWaiting();
+    const cursor = this.samples[0];
 
-    if (this.waiting && !this.treatNear() && this.reducedGlobal() === GLOBAL.begEat) {
-      this.queue = [];
-      this.newState(STATE.beggingChasing);
-    } else if (flags & 1) {
+    if (this.waiting && cursor) {
+      const belly = this.world.ballOnStage?.(BELLY) ?? this.world.where();
+      const { width } = this.world.standardSize?.() ?? { width: 60 };
+      const wide = this.focusRectAt(belly, width * 2, width * 2);
+      const close = this.focusRectAt(belly, width, width);
+      const before = this.samples[6] ?? cursor;
+
+      if (!Pet.within(wide, cursor)) {
+        this.newState(STATE.beggingChasing);
+        return this.pop().step;
+      }
+
+      if (!Pet.within(close, before) && Pet.within(close, cursor)) {
+        this.resetScript(36);
+        this.pushStored(SCRIPT.begReact);
+        this.push({ cue: 0 }, { glue: CHEST });
+        this.waiting = false;
+      } else if (!Pet.within(close, before) && !Pet.within(close, cursor)) {
+        const centre = this.world.centre?.() ?? this.world.where();
+
+        if (Pet.level(centre, cursor) < 10 && this.rand() % 100 < HIND_LEGS_CHANCE) {
+          this.newState(STATE.beggingChasingHindLegs);
+          return this.pop().step;
+        }
+
+        this.resetScript(36);
+        this.push({ steerAt: { x: cursor.x, y: cursor.y, rate: 5, width: 10, height: 10 } });
+        this.pushStored(SCRIPT.begShuffle);
+        this.push({ glue: CHEST }, { steerAt: { x: 0, y: 0, rate: 0, width: 0, height: 0 } });
+        this.pushStored(SCRIPT.begShuffleBack);
+        this.push({ cue: 0 }, { glue: CHEST });
+        this.waiting = false;
+      }
+    }
+
+    if (this.waiting && this.waggling) {
+      this.resetSoft();
       this.activateBrain();
+      this.newState(this.pickTrickState());
+      return this.pop().step;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
+      this.activateBrain();
+      this.newState(this.pickTrickState());
+      return step;
+    }
+
+    if (this.cues.has(0)) {
+      this.waiting = true;
+    }
+
+    if (this.cues.has(1)) {
+      this.waiting = false;
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::DoBeggingChasingHindLegs` (seg18:23f2): on its hind legs
+   * (script 33, once or twice), it steers at the treat — or the cursor —
+   * with a box half its standard width and 40 more; then a trick.
+   */
+  private doBeggingChasingHindLegs(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      this.resetScript();
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      const { width } = this.world.standardSize?.() ?? { width: 60 };
+      const food = this.reducedGlobal() === GLOBAL.begEat ? this.food : null;
+      const at = food ?? this.samples[0] ?? this.world.where();
+      const box = Math.trunc(width / 2) + 40;
+      this.push({ cue: 3 }, { steerAt: { x: at.x, y: at.y, rate: 5, width: box, height: box } });
+
+      for (let n = (this.rand() % 2) + 1; n > 0; n--) {
+        this.pushStored(SCRIPT.hindLegsWalk);
+      }
+
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
       this.newState(this.pickTrickState());
     }
 
     return step;
+  }
+
+  /**
+   * How level a point is with another (seg11:1f57): the angle between
+   * them, in 256ths of a turn, folded to between 0, level, and 64, one
+   * above the other.
+   */
+  private static level(from: { x: number; y: number }, to: { x: number; y: number }) {
+    let angle = Math.trunc((Math.atan2(to.y - from.y, to.x - from.x) * 128) / Math.PI);
+
+    if (angle < 0) {
+      angle += 128;
+    }
+
+    return angle > 63 ? 128 - angle : angle;
+  }
+
+  /** `MakeFocusRect` (seg7:3565) about a point: a box so wide and high, ahead of it the way the dog faces. */
+  private focusRectAt(
+    point: { x: number; y: number },
+    width: number,
+    height: number,
+    distance = FOCUS_DISTANCE
+  ) {
+    const [w, h] = [Math.trunc(width), Math.trunc(height)];
+    const ahead = Math.trunc(Math.trunc(Math.sqrt(w * w + h * h)) / distance);
+    const sine = Math.trunc(Math.sin((this.rotation * Math.PI) / 128) * 256);
+    const x = point.x - Math.trunc((256 * ahead * sine) / 65536);
+    return {
+      left: x - Math.trunc(w / 2),
+      right: x + Math.trunc(w / 2),
+      top: point.y - Math.trunc(h / 2),
+      bottom: point.y + Math.trunc(h / 2),
+    };
   }
 
   /**
@@ -3754,6 +3910,44 @@ export class Pet {
         this.pushBallReleaseAction();
         this.newState(STATE.guardingBall);
       }
+    }
+
+    return step;
+  }
+
+  // The kennel.
+
+  /** Where the dog is put this frame, its rectangle's middle at the point. */
+  private centreAt: { x: number; y: number } | null = null;
+
+  /**
+   * `eLeaveKennel`, played by `PetModule::DoPlayAnimation` (seg14:017a):
+   * its angles set straight and its script dropped, the dog comes out of
+   * its kennel (script 93 or 92, one at random), put with its middle at
+   * the kennel — the toolbox's dog button, whose rectangle the host gives
+   * (`PetParams` +0x50 to +0x56, less the stage's place, +0x1c) — and is
+   * then left alone. Without a kennel it comes out where it is.
+   */
+  private doLeaveKennel(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.rotation = 0;
+      this.ease = null;
+      this.drift = 0;
+      this.resetScript();
+      this.pushStored(this.rand() % 2 === 0 ? SCRIPT.leaveKennel : SCRIPT.leaveKennelOther);
+      this.centreAt = this.world.kennel ?? null;
+      this.push({ glue: CHEST });
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags) {
+      this.newGlobalState(GLOBAL.idle);
     }
 
     return step;

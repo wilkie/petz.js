@@ -223,6 +223,9 @@ export class Stage implements PetWorld {
   /** The brush, held on the cursor, and the colour it paints (`PaintSprite`). */
   brush: { x: number; y: number; colour: number } | null = null;
 
+  /** Where the dog's kennel is, if anywhere: it comes out of it when it starts. */
+  kennel: { x: number; y: number } | null = null;
+
   /** The shoe out of the toy box. */
   shoe: Shoe | null = null;
 
@@ -321,7 +324,8 @@ export class Stage implements PetWorld {
     step: Step,
     rotation: number,
     reference?: number,
-    pinned?: { ball: number; x: number; y: number }
+    pinned?: { ball: number; x: number; y: number },
+    centredAt?: { x: number; y: number }
   ) {
     const next = this.frames[step.frame];
 
@@ -339,6 +343,13 @@ export class Stage implements PetWorld {
 
     this.frame = next;
     this.rotation = rotation;
+
+    /* Put by its middle (`XSprite::MoveSpritePt`): the kennel. */
+    if (centredAt) {
+      const middle = this.centre();
+      this.x += centredAt.x - middle.x;
+      this.y += centredAt.y - middle.y;
+    }
 
     /* Held by a ball, the dog is moved so that ball is at the point
      * (`DoLungingCursor`, seg3:1a9f on, moving its rectangle). */

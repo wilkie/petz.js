@@ -44,8 +44,8 @@ test('leaves a dog to itself, live', async ({ page }) => {
 
   await expect(page.locator('#mood')).toHaveText(/^e[A-Za-z]+, excitement \d+$/);
 
-  /* Live, drawn at the game's size: a quarter of the pixels. */
-  await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(1250);
+  /* Live, drawn at the game's size: a quarter of the pixels; once it has come out of its kennel. */
+  await expect.poll(() => page.evaluate(drawnPixels), { timeout: 20000 }).toBeGreaterThan(1250);
 });
 
 test('begs for a treat held up', async ({ page }) => {
@@ -98,27 +98,33 @@ test('flinches when sprayed', async ({ page }) => {
 
   await expect(page.locator('#status')).toHaveText(/5 breeds/);
   await page.check('#live');
-  await page.waitForTimeout(1000);
+
+  /* Out of its kennel and onto the stage. */
+  await expect.poll(() => page.evaluate(drawnPixels), { timeout: 20000 }).toBeGreaterThan(1250);
+  await page.waitForTimeout(3000);
 
   const box = (await page.locator('canvas').boundingBox())!;
   await page.click('#spray-out');
 
-  /* The middle of what is drawn: the dog. */
-  const dog = await page.evaluate(() => {
-    const canvas = document.querySelector('canvas')!;
-    const { data } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
-    let [x, y, n] = [0, 0, 0];
+  /* The middle of what is drawn: the dog, once it is on the stage. */
+  const middle = () =>
+    page.evaluate(() => {
+      const canvas = document.querySelector('canvas')!;
+      const { data } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+      let [x, y, n] = [0, 0, 0];
 
-    for (let at = 3; at < data.length; at += 4) {
-      if (data[at]) {
-        x += ((at - 3) / 4) % canvas.width;
-        y += Math.floor((at - 3) / 4 / canvas.width);
-        n++;
+      for (let at = 3; at < data.length; at += 4) {
+        if (data[at]) {
+          x += ((at - 3) / 4) % canvas.width;
+          y += Math.floor((at - 3) / 4 / canvas.width);
+          n++;
+        }
       }
-    }
 
-    return { x: x / n, y: y / n, width: canvas.width };
-  });
+      return { x: x / n, y: y / n, n, width: canvas.width };
+    });
+  await expect.poll(async () => (await middle()).n, { timeout: 20000 }).toBeGreaterThan(500);
+  const dog = await middle();
   const scale = box.width / dog.width;
 
   await page.mouse.move(box.x + dog.x * scale, box.y + dog.y * scale);
@@ -160,7 +166,8 @@ test('comes when called with a double click', async ({ page }) => {
 
   await expect(page.locator('#status')).toHaveText(/5 breeds/);
   await page.check('#live');
-  await page.waitForTimeout(1000);
+  await expect.poll(() => page.evaluate(drawnPixels), { timeout: 20000 }).toBeGreaterThan(1250);
+  await page.waitForTimeout(3000);
 
   /* Far in a corner, which the dog is not in. */
   const box = (await page.locator('canvas').boundingBox())!;

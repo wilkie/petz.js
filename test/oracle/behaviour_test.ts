@@ -282,7 +282,7 @@ withOracle('the engine’s behaviour', () => {
         for (let n = 0; n < frameCount; n++, tick++) {
           act?.(n);
           const step = pet.tick((tick * 45) / 17);
-          stage.show(step, step.rotation, step.placedBy, step.pinned);
+          stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt);
           states.push(step.state);
           sounds.push(step.sounds ?? []);
         }
@@ -731,6 +731,58 @@ withOracle('the engine’s behaviour', () => {
       expect(states).toContain(STATE.fakingBall);
     });
 
+    it('comes out of its kennel beside the playpen, and into it', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      stage.kennel = { x: -226, y: -98 };
+
+      /* Started again, with the kennel known. */
+      pet.start(0);
+      run(1);
+      expect(states.at(-1)).toBe(STATE.leaveKennel);
+      expect(Math.hypot(stage.centre().x + 226, stage.centre().y + 98)).toBeLessThan(40);
+
+      let came = false;
+      run(600, () => {
+        const at = stage.where();
+        came ||= at.x > 60 && at.x < 580 && at.y > 60 && at.y < 420;
+      });
+      expect(came).toBe(true);
+    });
+
+    it('begging, follows a treat held level with it, on its hind legs', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(300);
+
+      const { width } = stage.standardSize();
+      const treat: Food = {
+        kind: FOOD.redTreat,
+        held: true,
+        x: 0,
+        y: 0,
+        servings: 0,
+        full: 0,
+        touched: 0,
+      };
+      stage.foods.push(treat);
+
+      /* Held level with its middle, ahead of it the way it faces, beyond its
+       * reach but not far: outside the box of its width, inside twice that. */
+      const hold = () => {
+        const centre = stage.centre();
+        const ahead = Math.sin((pet.rotation * Math.PI) / 128) > 0 ? -1 : 1;
+        Object.assign(treat, { x: centre.x + ahead * width * 1.2, y: centre.y });
+        stage.pointer = { x: treat.x, y: treat.y, button: false };
+      };
+
+      hold();
+      run(5, hold);
+      pet.foodTakenOut(treat);
+      run(1200, hold);
+
+      expect(states).toContain(STATE.begging);
+      expect(states).toContain(STATE.beggingChasingHindLegs);
+    });
+
     it('has the bowls the size of their pictures: full, half, empty and the rim', () => {
       for (const n of [0, 1, 2, 3, 10, 11, 12, 13]) {
         const picture = readPicture(engine, BOWL_PICTURE + n);
@@ -760,6 +812,9 @@ withOracle('the engine’s behaviour', () => {
       const { stage, pet, run, states } = setUp(3, 640, 480);
       run(200);
 
+      /* The cursor brought to the ball first, as a hand would be. */
+      stage.pointer = { x: 320, y: 120, button: false };
+      run(10);
       stage.ball = { x: 320, y: 120, vx: 0, vy: 0, held: true, slot: null, recorded: null };
       stage.pointer = { x: 320, y: 120, button: true };
       pet.ballPickedUp();
