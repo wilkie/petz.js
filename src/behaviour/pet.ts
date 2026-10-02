@@ -199,7 +199,14 @@ export interface PetWorld {
   rect?(): { left: number; top: number; right: number; bottom: number };
 
   /** The treat out of its box, if any: 0 blue, 1 green, 2 red. */
-  treat?: { colour: number; held: boolean; x: number; y: number } | null;
+  treat?: {
+    colour: number;
+    held: boolean;
+    x: number;
+    y: number;
+    inMouth?: boolean;
+    beingEaten?: boolean;
+  } | null;
 
   /** Takes the treat away: the dog has eaten it. */
   eatTreat?(): void;
@@ -2307,6 +2314,8 @@ export class Pet {
       this.factors[9] = Math.min(100, this.factors[9] + 4);
 
       if (this.decideIfGrabFromUser()) {
+        /* Allowed to take it from the hand (`0x96`, seg21:6b1d). */
+        this.grabFromUser = true;
         return STATE.grabbingTreat;
       }
     }
@@ -2390,6 +2399,10 @@ export class Pet {
    */
   private doEating(mode: Mode): Step | undefined {
     if (mode === 'exit') {
+      if (this.world.treat) {
+        this.world.treat.beingEaten = false;
+      }
+
       this.resetSoft();
       return undefined;
     }
@@ -2415,6 +2428,15 @@ export class Pet {
     }
 
     const { step, flags } = this.pop();
+
+    /* From cue 0 the treat is drawn with the dog, under its head, until cue 13 or eaten (seg18:1c62). */
+    if (this.cues.has(0) && this.world.treat && !this.world.treat.held) {
+      this.world.treat.beingEaten = true;
+    }
+
+    if (this.cues.has(13) && this.world.treat) {
+      this.world.treat.beingEaten = false;
+    }
 
     if (this.cues.has(10) && this.world.treat) {
       this.world.eatTreat?.();
@@ -2538,11 +2560,26 @@ export class Pet {
     return inMouth;
   }
 
-  /** `PetModule::GrabObject` (seg14:04e4): at play, the ball into a slot, unless the user holds it. */
+  /**
+   * `PetModule::GrabObject` (seg14:04e4): at play, the ball into a slot;
+   * slot 2, the food, into the mouth. Not from the user's hand, unless the
+   * dog is snatching it.
+   */
   private grabFromUser = false;
 
   private grabObject(slot: number) {
     const ball = this.world.ball;
+    const treat = this.world.treat;
+
+    if (slot === 2) {
+      if (treat && (!treat.held || this.grabFromUser)) {
+        this.grabFromUser = false;
+        treat.held = false;
+        treat.inMouth = true;
+      }
+
+      return;
+    }
 
     if (!ball || this.reducedGlobal() !== GLOBAL.fetch || (ball.held && !this.grabFromUser)) {
       return;

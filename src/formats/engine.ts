@@ -264,6 +264,14 @@ export function readBrainMap(engine: NeModule) {
  */
 export const BALL_PICTURE = 10200;
 
+/**
+ * The treats' pictures: `InitFoodSprite` (seg20:0a5e) loads bitmap
+ * `0x283a + kind` for the kinds after food and water, 2 to 4, so 10300 the
+ * blue treat, 10301 the green and 10302 the red. Food and water have four
+ * each, `10000 + 10 × kind` on, as they are eaten.
+ */
+export const TREAT_PICTURE = 10300;
+
 /** A bitmap resource of the engine's. */
 export function readPicture(engine: NeModule, id: number) {
   const resource = engine.resources().find((r) => r.type === 2 && r.id === id);

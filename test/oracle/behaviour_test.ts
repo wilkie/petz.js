@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { Brain } from '../../src/behaviour/brain.ts';
 import { GLOBAL, Pet, STATE } from '../../src/behaviour/pet.ts';
 import { borlandRand } from '../../src/behaviour/random.ts';
-import { BALL_SIZE, Stage } from '../../src/behaviour/stage.ts';
+import { BALL_SIZE, Stage, TREAT_SIZE } from '../../src/behaviour/stage.ts';
 import { findTransition, transitionTable } from '../../src/behaviour/transitions.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import {
@@ -24,6 +24,7 @@ import {
   readPicture,
   readPositionKinds,
   readTrickScripts,
+  TREAT_PICTURE,
 } from '../../src/formats/engine.ts';
 import { parseLnz, readFactors } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
@@ -336,10 +337,32 @@ describeWithOracle('the engine’s behaviour', () => {
 
       stage.treat!.held = false;
       pet.treatPutDown();
-      run(600);
+      let eaten = false;
+      run(600, () => {
+        eaten ||= !!stage.treat?.beingEaten;
+      });
 
       expect(stage.treat).toBeNull();
       expect(states).toContain(STATE.eating);
+
+      /* Drawn with the dog, under its head, as it bites. */
+      expect(eaten).toBe(true);
+    });
+
+    it('snatches a treat into its mouth, and eats it', () => {
+      const { stage, pet, run } = setUp(3);
+      run(200);
+
+      const at = stage.where();
+      stage.treat = { colour: 1, held: false, x: at.x, y: at.y };
+      pet.newGlobalState(GLOBAL.firstTreat + 1, STATE.grabbingTreat);
+      let inMouth = false;
+      run(300, () => {
+        inMouth ||= !!stage.treat?.inMouth;
+      });
+
+      expect(inMouth).toBe(true);
+      expect(stage.treat).toBeNull();
     });
 
     it('rewards the trick last done, when the treat is given before the dog has begged', () => {
@@ -353,6 +376,14 @@ describeWithOracle('the engine’s behaviour', () => {
 
       expect(stage.treat).toBeNull();
       expect(pet.brainActive).toBe(false);
+    });
+
+    it('has the treats the size of their pictures', () => {
+      for (const colour of [0, 1, 2]) {
+        const picture = readPicture(engine, TREAT_PICTURE + colour);
+        expect({ width: picture.width, height: picture.height }).toEqual(TREAT_SIZE);
+        expect(picture.pixels[0]).toBe(10);
+      }
     });
 
     it('has the ball the size of its picture, in the Windows colours, green where it is not', () => {

@@ -73,7 +73,7 @@ flowchart LR
 
 ## What the dog holds
 
-- [[read out]] Each ball may have a bonus drawing: a function and a sprite set by `Ballz::SetBonusDrawProc` (seg10:24f8). `DisplayBallzFrame` calls it with the ball's centre just after drawing that ball, before its iris, and even for a ball not drawn. The dog holds a ball or treat so, by its chin ([[topic:behaviour]], fetch). The pictures are drawn by `XPicture::XDrawPicture` (seg8:7041), every pixel but those of the colour given, 10, Windows' bright green, copied as it is; their colours are Windows' sixteen, which both of Dogz's palettes hold. `src/render/picture.ts` draws them so.
+- [[read out]] Each ball may have a bonus drawing: a function and a sprite set by `Ballz::SetBonusDrawProc` (seg10:24f8). `DisplayBallzFrame` calls it with the ball's centre just after drawing that ball, before its iris, and even for a ball not drawn. The dog holds a ball or treat so, by its chin ([[topic:behaviour]], fetch). Two more procs of the frame, at `0x40c` and `0x414`, are called just before the first ball of the breed's `[Head Balls]` is drawn (seg10:5235) and once all but the last two head balls are drawn (seg10:5334): `DoEating` sets them to draw the food the dog eats under its head, and a bowl's rim over it. The pictures are drawn by `XPicture::XDrawPicture` (seg8:7041), every pixel but those of the colour given, 10, Windows' bright green, copied as it is; their colours are Windows' sixteen, which both of Dogz's palettes hold. `src/render/picture.ts` draws them so.
 
 ## The eyes
 

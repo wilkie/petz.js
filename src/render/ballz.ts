@@ -41,6 +41,14 @@ export interface DrawOptions {
    * what the dog holds. It is given where that ball's centre is drawn.
    */
   bonus?: { ball: number; draw: (centre: { x: number; y: number }) => void };
+
+  /**
+   * Something drawn with the dog just before the first of its head balls
+   * (`[Head Balls]`), so under the head: the food it eats. `DisplayBallzFrame`
+   * calls the ball state's proc at `0x40c` there (seg10:5235), which
+   * `DoEating` sets to `FoodSprite::StaticDraw`.
+   */
+  underHead?: () => void;
 }
 
 /**
@@ -94,7 +102,7 @@ export function drawPet(
   breed: Breed,
   header: AnimationHeader,
   frame: Frame,
-  { colours, originX, originY, age = 0, yaw = 0, seed = 1, bonus }: DrawOptions
+  { colours, originX, originY, age = 0, yaw = 0, seed = 1, bonus, underHead }: DrawOptions
 ) {
   const next = random(seed);
   /* How much of a puppy: 100 less the age, as SetBallScaleFromAge asks.
@@ -121,6 +129,11 @@ export function drawPet(
     }
 
     const { ball } = mark;
+
+    if (underHead && breed.headBalls.includes(ball)) {
+      underHead();
+      underHead = undefined;
+    }
 
     fillBall(
       bitmap,

@@ -24,7 +24,19 @@ export interface Treat {
   held: boolean;
   x: number;
   y: number;
+
+  /** Snatched into the dog's mouth (`GrabObject` slot 2), and drawn with it at its chin. */
+  inMouth?: boolean;
+
+  /**
+   * Being eaten (`DoEating`, from cue 0): drawn where it lies, but with the
+   * dog, under its head.
+   */
+  beingEaten?: boolean;
 }
+
+/** The size of a treat's picture, bitmaps 10300 to 10302 of DOGZDLL.DLL. */
+export const TREAT_SIZE = { width: 32, height: 32 };
 
 /**
  * The size of the ball's picture, bitmap 10200 of DOGZDLL.DLL
@@ -33,14 +45,28 @@ export interface Treat {
 export const BALL_SIZE = { width: 31, height: 29 };
 
 /**
- * The ball's rectangle, centred on where it is as `XSprite::MoveSpritePt`
+ * The ball's rectangle, or another picture's of a size, centred on where it is as `XSprite::MoveSpritePt`
  * and `GrabSprite::Update` centre it: half the size, rounded down, to the
  * left and above.
  */
-export function ballRect({ x, y }: { x: number; y: number }) {
-  const left = x - Math.trunc(BALL_SIZE.width / 2);
-  const top = y - Math.trunc(BALL_SIZE.height / 2);
-  return { left, top, right: left + BALL_SIZE.width, bottom: top + BALL_SIZE.height };
+export function ballRect({ x, y }: { x: number; y: number }, size = BALL_SIZE) {
+  const left = x - Math.trunc(size.width / 2);
+  const top = y - Math.trunc(size.height / 2);
+  return { left, top, right: left + size.width, bottom: top + size.height };
+}
+
+/** Where a picture held is kept, its rectangle all on the stage (`GrabSprite::Update`, seg20:018c). */
+export function keepOnStage(
+  at: { x: number; y: number },
+  size: { width: number; height: number },
+  width: number,
+  height: number
+) {
+  const rect = ballRect(at, size);
+  return {
+    x: at.x + Math.max(0, -rect.left) - Math.max(0, rect.right - width),
+    y: at.y + Math.max(0, -rect.top) - Math.max(0, rect.bottom - height),
+  };
 }
 
 /**
@@ -287,10 +313,7 @@ export class Stage implements PetWorld {
       ball.x = this.pointer.x;
       ball.y = this.pointer.y;
 
-      /* Kept on the stage (`GrabSprite::Update`, seg20:018c). */
-      const rect = ballRect(ball);
-      ball.x += Math.max(0, -rect.left) - Math.max(0, rect.right - this.width);
-      ball.y += Math.max(0, -rect.top) - Math.max(0, rect.bottom - this.height);
+      Object.assign(ball, keepOnStage(ball, BALL_SIZE, this.width, this.height));
     } else if (ball && ball.slot !== null) {
       const holder = this.placed()[HOLDERS[ball.slot]];
       ball.x = holder.x;
