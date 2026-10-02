@@ -11,7 +11,7 @@
  *   node scripts/re/disasm.ts DOGZDLL.DLL --callers XDrawPort::MakeColorRamp
  *
  * A function is named as `Class::Method` or by its exported name, or given
- * as segment:offset in hexadecimal. Without `--to` or `--bytes`, it runs to
+ * as segment:offset, the segment in decimal and the offset in hexadecimal. Without `--to` or `--bytes`, it runs to
  * the next export in its segment, or 512 bytes. Reads the module from the
  * oracle's drive, by its file name anywhere on it. Needs `ndisasm` (NASM).
  *
@@ -200,10 +200,11 @@ function main() {
 
   let segment: number;
   let start: number;
-  const address = /^([0-9a-f]+):([0-9a-f]+)$/i.exec(where ?? '');
+  /* A segment in decimal, as Windows numbers them; an offset in hexadecimal. */
+  const address = /^(\d+):([0-9a-f]+)$/i.exec(where ?? '');
 
   if (address) {
-    segment = parseInt(address[1], 16);
+    segment = Number(address[1]);
     start = parseInt(address[2], 16);
   } else {
     const entry = module.entries.find(
