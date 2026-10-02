@@ -66,6 +66,13 @@ development it reads the oracle's drive, which the dev server serves under
 `DOGZ.DOG` directory instead, which never leaves the browser. The parsers are
 in `src/formats/` and the drawing in `src/render/`.
 
+## Reverse engineering
+
+`scripts/re/` holds the tools the knowledge base's Read out claims come from:
+`disasm.ts` disassembles a function of any of the oracle's modules with its
+calls named, and `decompile.mjs` decompiles one with Ghidra, which
+`fetch-tools.mjs` fetches, pinned, with a Java runtime for it.
+
 ## The knowledge base
 
 `kb/` holds the knowledge base: a page for each of the game's files and

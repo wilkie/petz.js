@@ -104,5 +104,20 @@
         "reason": "WinG keeps its timing of the display in [WinG] the first time Dogz runs, and timing varies with the host."
       }
     ]
+  },
+  "tools": {
+    "description": "What the reverse engineering runs on: Ghidra, and a Java runtime for it. Fetched by scripts/re/fetch-tools.mjs into oracle/.cache/tools/, not committed.",
+    "jdk": {
+      "version": "21.0.12.1+1",
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz",
+      "sha256": "ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94",
+      "bytes": 207473347
+    },
+    "ghidra": {
+      "version": "12.1.4",
+      "url": "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.4_build/ghidra_12.1.4_PUBLIC_20260921.zip",
+      "sha256": "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db",
+      "bytes": 569649598
+    }
   }
 }

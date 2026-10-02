@@ -13,6 +13,8 @@ build it are in `scripts/oracle/`; `pnpm oracle` runs them in order.
 | `build/screens/`    | no        | A picture of every screen the scripted installers passed through                                         |
 | `build/stages/`     | no        | The drive's hashes as each stage left it                                                                 |
 | `build/variants/`   | no        | Copies of the drive with one thing changed, to measure on                                                |
+| `build/ghidra/`     | no        | Ghidra's projects: each module imported and analysed once                                                |
+| `.cache/tools/`     | no        | Ghidra and its Java runtime                                                                              |
 | `build/play/`       | no        | The copy of the drive `pnpm oracle:run` plays on                                                         |
 
 ## The scripts

@@ -71,3 +71,12 @@ node scripts/re/disasm.ts DOGZDLL.DLL --callers Ballz::SetBallColor
 ```
 
 It disassembles with `ndisasm` (from NASM) and names what each far call and fixup reaches: an import by the name its own module gives the ordinal, read from that module on the oracle's drive, and a call within the module by the module's exports, `Class::Method` for the engine's C++. A function runs to the next export, or to `--to` or `--bytes`. `--callers` finds the far calls to an export, and the near ones within its segment; a virtual method, such as `MakeColorRamp`, is called through its class's table and has none.
+
+## Decompile it
+
+```shell
+node scripts/re/fetch-tools.mjs
+node scripts/re/decompile.mjs DOGZDLL.DLL 8:347d
+```
+
+The first command fetches Ghidra and a Java runtime for it, pinned in `oracle/manifest.json` like every other input, into `oracle/.cache/tools/`. The second decompiles a function into C with Ghidra, headless: the first time a module is asked for, Ghidra imports and analyses it into `oracle/build/ghidra/`, which takes about half a minute. Ghidra puts segment _N_ of an NE module at selector `0x1000 + 8(N - 1)`, so seg8:347d is its `1038:347d`. The C is for reading: it is Ghidra's guess at 16-bit segmented code, and the claims on this site cite the instructions, not it.

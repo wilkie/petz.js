@@ -13,8 +13,9 @@ import {
 } from '../formats/animation.js';
 import { type Breed, parseLnz } from '../formats/lnz.js';
 import { parseNe } from '../formats/ne.js';
-import { css, PALETTE_16, PALETTE_256, readPalette } from '../formats/palette.js';
+import { type Colour, PALETTE_16, PALETTE_256, readPalette } from '../formats/palette.js';
 import { drawPet } from '../render/ballz.js';
+import { IndexedBitmap } from '../render/raster.js';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -36,7 +37,10 @@ const FRAMES_PER_SECOND = 12;
 let files: GameFiles;
 let header: AnimationHeader;
 const breeds = new Map<string, Breed>();
-const palettes = new Map<256 | 16, string[]>();
+const palettes = new Map<256 | 16, Colour[]>();
+
+/** Dogz's own pixels, drawn this many times larger to be seen. */
+const ZOOM = 2;
 const animations = new Map<number, Frame[]>();
 let timer: number | undefined;
 
@@ -60,15 +64,23 @@ async function draw() {
   frameNumber.value = `${index} of ${list.length}`;
 
   const colours = Number(coloursSelect.value) as 256 | 16;
+  const bitmap = new IndexedBitmap(canvas.width / ZOOM, canvas.height / ZOOM);
 
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  drawPet(context, breed, header, list[index], {
-    palette: palettes.get(colours)!,
+  drawPet(bitmap, breed, header, list[index], {
     colours,
-    scale: 1.5,
-    originX: 320,
-    originY: 300,
+    scale: 0.75,
+    originX: bitmap.width / 2,
+    originY: (bitmap.height * 5) / 8,
+    seed: index + 1,
   });
+
+  const pixels = new ImageData(bitmap.toRgba(palettes.get(colours)!), bitmap.width, bitmap.height);
+  const small = new OffscreenCanvas(bitmap.width, bitmap.height);
+  small.getContext('2d')!.putImageData(pixels, 0, 0);
+
+  context.imageSmoothingEnabled = false;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(small, 0, 0, canvas.width, canvas.height);
 }
 
 function stop() {
@@ -103,8 +115,8 @@ async function start(found: GameFiles) {
   header = parseBhd(await files.read('DOGZ.DOG/DATA/ALL_PTZ.BHD'));
 
   const engine = parseNe(await files.read('WINDOWS/DOGZDLL.DLL'));
-  palettes.set(256, readPalette(engine, PALETTE_256, 256).map(css));
-  palettes.set(16, readPalette(engine, PALETTE_16, 16).map(css));
+  palettes.set(256, readPalette(engine, PALETTE_256, 256));
+  palettes.set(16, readPalette(engine, PALETTE_16, 16));
 
   const lnz = files
     .list()

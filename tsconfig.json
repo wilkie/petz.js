@@ -19,6 +19,10 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
 
+    /* Node runs src/ as it is, for the scripts, by stripping types: nothing
+     * may need more than that. */
+    "erasableSyntaxOnly": true,
+
     "types": ["jest", "node", "vite/client"]
   },
   "include": [

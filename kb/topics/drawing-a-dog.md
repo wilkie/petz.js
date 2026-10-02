@@ -2,7 +2,7 @@
 kind: topic
 name: Drawing a dog
 summary: How a dog is put together from a breed file, the shared animations and Dogz's own palettes; what the viewer draws so far; and what is not yet known of how Dogz draws one — its scales and its shading.
-source: [src/render/ballz.ts, src/formats/palette.ts, src/viewer/main.ts]
+source: [src/render/ballz.ts, src/render/raster.ts, src/formats/palette.ts, src/viewer/main.ts]
 topics: [installation]
 ---
 
@@ -24,7 +24,7 @@ flowchart LR
 - Sizes: the skeleton's diameter plus the breed's `Ball Size Diffs`, at one pixel and a half to the unit. Not yet measured against the game.
 - Lines: from the `Linez` section, round-ended, as thick as half the smaller end's diameter, in the first ball's colour. Not yet measured.
 - Outlines: from `Outline Type` and `Outline Color`; a half outline is drawn round the lower half of the ball. Not yet measured.
-- Colours: each ball flat in its colour, from Dogz's own palettes (below), which is how Dogz draws it; not yet its speckles, its fuzz or its outline.
+- Balls: drawn as Dogz draws them, into palette indices a row of pixels at a time, with their fuzz, speckles and outlines (below), and shown through Dogz's own palettes. Not yet the eyes' special drawing.
 
 ## The 16-colour display
 
@@ -47,9 +47,15 @@ flowchart LR
 
 - [[measured]] Close up, each ball on the oracle's 256-colour screen is one flat colour, its own number: the big dog's head and belly 131, its chest 130, its tongue 80. Across them are single pixels three entries up the ramp, 134 in the 131, and black outlines along parts of the balls' edges. There is no gradient: Dogz does not shade a ball, it fuzzes, speckles and outlines it.
 - [[read out]] `Ballz::DisplayBallzFrame` (seg10:4d28) draws each ball through `XDrawPort`'s virtual `XFillPartialCircle` (slot 5; seg10:52ea, 56ec and 573f) and joins balls with its `XDrawLine` (slot 15, seg10:5134). A ball's call passes its rectangle, two colour bytes from per-ball tables of the `Ballz` (at offsets `0xdc9` and `0x1461`), a third colour and a mode from two more (`0x1281` and `0x1371`), its diameter, and a level from another (`0x1551`) plus an adjustment. One case passes the mode -4 and the ball's own number in place of the third colour. [[inferred]] The tables are the breed's colour, outline colour, speckle colour, outline type and fuzz.
-- [[read out]] Everything reaches `XFillPartialCircleKernel` (seg8:347d, slot 7). It clamps the level to 7, looks the three colours up through seg8:002a, and chooses among five ways of filling by the mode plus 4 (a jump table at seg8:4172).
-- [[read out]] `XDrawPort::InitCircleLookup` (seg8:200f) builds, for every diameter from 1 to 119, each row's width, `sqrt(d² - (d - 2i)²)` from a table of square roots; a random column in each row (`theirCircleSpotMemory`); and eight tables of each row's left edge jittered by up to 0 to 7 pixels at random, one for each level. [[inferred]] The level is the fuzz: a fuzzier ball has raggeder edges.
+- [[read out]] Everything reaches `XFillPartialCircleKernel` (seg8:347d, slot 7). It clamps the level to 7 and looks the three colours up through seg8:002a: on a 256-colour display through a table of Dogz's colours to the screen's, on 16 colours as they are. Then, by the mode:
+  - **-1**, no outline: each row of the circle is filled in the ball's colour, and each row in its upper half has one pixel, at a random place from the row's start to one past its end, in the third colour.
+  - **0**, a half outline: the same, with each row's leftmost pixel in the second colour.
+  - **more than 0**, an outline that many pixels thick: that many whole rows at the top in the second colour, then rows with that many pixels of it at each end, the ball's colour between; no speckles.
+  - **-2** fills only the part of the circle to one side of a line at an angle, and **-4** fills it from a ramp of colours down its rows. [[inferred]] These are the eyelids and the eyes. Not yet read in full.
+- [[read out]] `XDrawPort::InitCircleLookup` (seg8:200f) builds, for every diameter from 1 to 119, each row's width, `sqrt(d² - (d - 2r)²)` for rows `r` from 1 to `d`, from a table of square roots; a random place in each row (`theirCircleSpotMemory`), where the speckle goes; and eight tables of each row's start shifted right by a random 0 to 7 pixels, one for each level. The level is the fuzz: a fuzzier ball has raggeder edges, its rows as wide as ever.
+- [[read out]] The third colour is the speckles'. `Ballz::GenerateSpeckleColors` (seg10:21da) makes it from the ball's colour, for every ball the breed gives a `Speckle Color` of 0 or more, by reflecting it within its ramp: `s + (s + R - 1 - c)`, where `s` is the first colour of `c`'s ramp. `XDrawPort::InitStaticDraw` sets the ramps on a 256-colour display at 20 of 6 colours from 16 — 16 to 21, up to 130 to 135 — and on 16 colours at one colour each.
+- [[measured]] That is what the oracle shows: the big dog's 131 speckles in 134, the far end of its ramp from 130. `src/render/raster.ts` draws by these rules, and the viewer with it.
 
 ## Still to find
 
-The kernel's five ways of filling, and so the exact speckles, fuzz and outlines; the scales (`Default Scales`, `Puppy Balls`, the extensions; `ScriptSprite::GetDefaultScale`, `PetModule::SetBallScaleFromAge`); fuzz and speckles; the extras each frame lists; which animation is which; and how fast frames are shown.
+The eyes and eyelids (the kernel's modes -4 and -2); the adjustment `DisplayBallzFrame` adds to the fuzz; how far each row's start is from the ball's centre, exactly; the scales (`Default Scales`, `Puppy Balls`, the extensions; `ScriptSprite::GetDefaultScale`, `PetModule::SetBallScaleFromAge`); fuzz and speckles; the extras each frame lists; which animation is which; and how fast frames are shown.
