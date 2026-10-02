@@ -47,6 +47,16 @@ export interface Step {
   /** An object grabbed into a slot of the dog's — 0 the mouth, 1 a paw — or let go of (`8b03`, `8b04`). */
   grab?: number;
   release?: number;
+
+  /**
+   * Where the head and eyes are to look (`PopScript`, seg7:5e98 on):
+   * `8afa` at a random point, `8afb` at the user, `8afc` ahead
+   * (`LookAtRandomPoint`, `LookAtUser`, `LookAhead`).
+   */
+  look?: 'random' | 'user' | 'ahead';
+
+  /** How far the head may turn, in hundredths (`8ae6 17 to`, the fudger `HeadTrackMaxAll`). */
+  headTrackMax?: number;
 }
 
 /** The ball a script glues by when it says none: the belly (`GetDefaultGlueBall`). */
@@ -64,6 +74,10 @@ const RELEASE = 0x8b04;
 const CUE = 0x8ae3;
 const EASE = 0x8ae6;
 const DRIFT = 0x8ae9;
+const LOOKS = { 0x8afa: 'random', 0x8afb: 'user', 0x8afc: 'ahead' } as const;
+
+/** The fudger that limits every way the head turns (`HeadTrackMaxAll`). */
+const HEAD_TRACK_MAX_ALL = 17;
 
 /** The angle the fudge opcodes name the dog's rotation by. */
 const ROTATION = 1;
@@ -196,7 +210,14 @@ export function timeline(
           case EASE:
             if (value(a) === ROTATION) {
               pending.ease = { to: value(b), frames: frames.length };
+            } else if (value(a) === HEAD_TRACK_MAX_ALL) {
+              pending.headTrackMax = value(b);
             }
+            break;
+          case 0x8afa:
+          case 0x8afb:
+          case 0x8afc:
+            pending.look = LOOKS[element.op];
             break;
           case DRIFT:
             if (value(a) === ROTATION) {

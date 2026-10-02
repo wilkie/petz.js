@@ -73,6 +73,25 @@ export interface Placed {
 }
 
 /**
+ * The head turned toward what the dog looks at, as `Ballz::HeadTrackPrep`
+ * (seg5:05ba) works it out each frame and `GetCartesianCoordinates` applies
+ * it to the breed's head balls: turned by `yaw`, `pitch` and `roll` (in
+ * 256ths of a turn) about the snout, then moved by `offset`.
+ */
+export interface Head {
+  yaw: number;
+  pitch: number;
+  roll: number;
+  offset: { x: number; y: number; z: number };
+
+  /** Added to the snout's place before it is taken as the pivot. */
+  drift: { x: number; y: number; z: number };
+}
+
+/** The ball the head turns about: the snout (offset 0x152 of a frame, `HeadTrackPrep`). */
+export const HEAD_PIVOT = 56;
+
+/**
  * Places each ball of a frame: scaled by the pet scale, turned by `yaw`
  * about the upright axis, then tilted by the pitch the game derives from
  * the yaw, `-7 - |64 - |yaw|| / 10` in 256ths of a turn; sized by
@@ -84,16 +103,44 @@ export function project(
   frame: Frame,
   scales: Scales,
   yaw = 0,
-  puppiness = 0
+  puppiness = 0,
+  head?: Head
 ): Placed[] {
   const turn = wrap(yaw);
   const pitch = -7 - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
   const [cy, sy, cp, sp] = [cosine(turn), sine(turn), cosine(pitch), sine(pitch)];
+  const heads = head ? new Set(breed.headBalls) : null;
+  const snout = frame.balls[HEAD_PIVOT];
+  const pivot = head &&
+    snout && {
+      x: Math.trunc(shift(snout.x * scales.pet) + head.drift.x),
+      y: Math.trunc(shift(snout.y * scales.pet) + head.drift.y),
+      z: Math.trunc(shift(snout.z * scales.pet) + head.drift.z),
+    };
 
   return frame.balls.map((ball, index) => {
-    const x = shift(ball.x * scales.pet);
-    const y = shift(ball.y * scales.pet);
-    const z = shift(ball.z * scales.pet);
+    let x = shift(ball.x * scales.pet);
+    let y = shift(ball.y * scales.pet);
+    let z = shift(ball.z * scales.pet);
+
+    /* The head turned about the snout (`GetCartesianCoordinates`, seg10:3c94 on): roll, then pitch, then yaw. */
+    if (head && pivot && heads?.has(index)) {
+      const [dx, dy, dz] = [x - pivot.x, y - pivot.y, z - pivot.z];
+      const [cr, sr, cq, sq, cw, sw] = [
+        cosine(head.roll),
+        sine(head.roll),
+        cosine(head.pitch),
+        sine(head.pitch),
+        cosine(head.yaw),
+        sine(head.yaw),
+      ];
+      const a = shift(cr * dy - sr * dx);
+      const b = shift(sr * dy + cr * dx);
+      const e = shift(cq * dz - sq * a);
+      x = shift(sw * e + cw * b) + head.offset.x + pivot.x;
+      y = shift(sq * dz + cq * a) + head.offset.y + pivot.y;
+      z = shift(cw * e - sw * b) + head.offset.z + pivot.z;
+    }
 
     // About the upright axis, then about the across one.
     const turnedZ = shift(cy * z - sy * x);

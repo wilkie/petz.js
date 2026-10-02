@@ -20,6 +20,7 @@ import {
 } from '../formats/engine.ts';
 import { type Script } from '../formats/script.ts';
 import { type Trick } from '../formats/tricks.ts';
+import { type Head } from '../render/project.ts';
 import { type Brain } from './brain.ts';
 import { type Ball, type Food, type Shoe, foodSize, ballRect, isTreat } from './stage.ts';
 import { type Rand } from './random.ts';
@@ -198,6 +199,33 @@ const OWNER_TOO_CLOSE = 180;
 /** How likely a begging dog chases on its hind legs, in 100 (`0x1ce4`, set by `ResetParams`). */
 const HIND_LEGS_CHANCE = 60;
 
+/**
+ * The head's wobbles (`Lube`s, set up at seg5:0d1b): for each, the range it
+ * eases about in, in the order they lie at DS:0x1ba, 0x48 apart; each
+ * eases over 3 to 20 frames, and waits up to 5000 milliseconds between.
+ */
+const LUBES = [
+  [-25, 25],
+  [-0.5, 0.5],
+  [-3, 3],
+  [-6, 6],
+  [-6, 0.75],
+  [-0.1, 0.1],
+  [-0.2, 0.2],
+  [-0.2, 0.025],
+  [-0.15, 0.15],
+  [-0.15, 0.3],
+  [-0.15, 0.0375],
+  [-0.0015, 0.0015],
+  [-0.0015, 0.0045],
+  [-0.0015, 0.000375],
+].map(([min, max]) => ({ min, max, shortest: 3, longest: 20 }));
+
+/** The angle of a point from the origin, in 256ths of a turn (seg11:1e8a, as `atan2`). */
+function angle256(y: number, x: number) {
+  return Math.trunc((Math.atan2(y, x) * 128) / Math.PI);
+}
+
 /** The neck, by which the dog is scruffed (`DoScruffHandler`). */
 const NECK = 54;
 
@@ -323,6 +351,12 @@ export interface Tick extends Step {
 
   /** The dog moved so the middle of its rectangle is at a point (`XSprite::MoveSpritePt`). */
   centredAt?: { x: number; y: number };
+
+  /** The head turned toward what the dog looks at (`HeadTrackPrep`), if it is. */
+  head?: Head;
+
+  /** Where the eyes look: 0 as the frame has them, 1 toward a point (`x`, `y` from the dog's middle), 2 at the user. */
+  eyes?: { mode: 0 | 1 | 2; x: number; y: number };
 }
 
 /** A state's handler runs as the state is entered, as it is left, and every tick between. */
@@ -335,6 +369,7 @@ type Item =
   | { goto: number }
   | { ease: number }
   | { drift: number }
+  | { headTrackMax: number }
   | { cue: number }
   | { trick: number }
   | { aim: { ball: number; at: { x: number; y: number } | null } }
@@ -573,6 +608,7 @@ export class Pet {
     this.data.brain?.pulse();
     const centredAt = this.centreAt ?? undefined;
     this.centreAt = null;
+    const head = this.headTrackPrep();
 
     return {
       ...shown,
@@ -581,6 +617,8 @@ export class Pet {
       placedBy: this.placedBy,
       pinned: this.pinned ?? undefined,
       centredAt,
+      head,
+      eyes: { mode: this.eyeMode, ...this.eyeTarget },
     };
   }
 
@@ -729,6 +767,8 @@ export class Pet {
         this.startEase(item.ease, this.framesAhead());
       } else if ('drift' in item) {
         this.drift = item.drift;
+      } else if ('headTrackMax' in item) {
+        this.headTrackMax = item.headTrackMax;
       }
     };
 
@@ -763,6 +803,8 @@ export class Pet {
       flags |= this.steerFrame();
     }
 
+    this.updateHeadTracking();
+
     if (step) {
       this.turn(step);
       this.lastStep = step;
@@ -786,6 +828,18 @@ export class Pet {
         this.grabObject(step.grab);
       }
 
+      if (step.look === 'random') {
+        this.lookAtRandomPoint();
+      } else if (step.look === 'user') {
+        this.lookAtUser();
+      } else if (step.look === 'ahead') {
+        this.lookAhead();
+      }
+
+      if (step.headTrackMax !== undefined) {
+        this.headTrackMax = step.headTrackMax;
+      }
+
       for (const cue of step.cues ?? []) {
         this.processCue(cue);
       }
@@ -799,17 +853,27 @@ export class Pet {
 
   /**
    * A cue raised (`0x8ae3`): the states see it, and `ProcessCue` (seg7:7c1d)
-   * acts on two itself: cue 2 ends a slide (`0x8af4`), and cue 3 resets the
-   * dog's easing and drift (`ResetParams`, seg7:33ae, through every `Fudger`).
+   * acts on some itself: cue 2 ends a slide (`0x8af4`), cue 3 resets the
+   * dog's easing and drift (`ResetParams`, seg7:33ae, through every
+   * `Fudger`) and what it looks at, cue 7 stops it looking at anything and
+   * cue 6 lets it again.
    */
   private processCue(cue: number) {
     this.cues.add(cue);
 
     if (cue === 2) {
       this.slide = null;
+    } else if (cue === 6) {
+      this.targetsOn = true;
+    } else if (cue === 7) {
+      this.setHeadTarget(null);
+      this.setEyeTarget(null);
+      this.targetsOn = false;
     } else if (cue === 3) {
       this.ease = null;
       this.drift = 0;
+      this.targetsOn = true;
+      this.lookAt(null);
     }
   }
 
@@ -1129,10 +1193,14 @@ export class Pet {
     if (mode === 'exit') {
       this.leftIdle = true;
       this.resetSoft();
+      /* `ExitIdle` (seg16:00b4). */
+      this.lookAt(null);
       return undefined;
     }
 
     if (mode === 'enter') {
+      this.headWobble = 100;
+
       if (this.planAt >= this.plan.length) {
         const desktop = this.checkDesktop();
 
@@ -1146,6 +1214,13 @@ export class Pet {
         this.setupIdle();
       }
       return undefined;
+    }
+
+    /* The cursor moving is watched; else, on cue 12 last frame, somewhere at random. */
+    if (this.cursorMoved(1)) {
+      this.lookAt(this.samples[0]);
+    } else if (this.cues.has(12)) {
+      this.lookAtRandomPoint();
     }
 
     const { step, flags } = this.pop();
@@ -1264,6 +1339,10 @@ export class Pet {
 
       this.waiting = false;
       return undefined;
+    }
+
+    if (this.waiting && this.cursorMoved()) {
+      this.lookAt(this.samples[0]);
     }
 
     const { step, flags } = this.pop();
@@ -1421,6 +1500,7 @@ export class Pet {
     }
 
     if (mode === 'enter') {
+      this.lookAt(null);
       this.push({ cue: 3 });
 
       if (!(this.data.positionKinds[this.position] & POSITION.onBack)) {
@@ -1675,6 +1755,7 @@ export class Pet {
 
     if (mode === 'exit') {
       this.queue = [];
+      this.lookAt(null);
       this.setTargetLocation(null);
 
       const stopping = [
@@ -2159,6 +2240,10 @@ export class Pet {
     }
 
     if (this.waiting) {
+      if (this.cursorMoved()) {
+        this.lookAt(this.samples[0]);
+      }
+
       if (!this.inRect(this.samples[0] ?? { x: -1, y: -1 }, 8)) {
         this.queue = [];
         this.newState(STATE.chasingPetting);
@@ -2542,6 +2627,7 @@ export class Pet {
   private doBegging(mode: Mode): Step | undefined {
     if (mode === 'exit') {
       this.resetScript();
+      this.lookAt(null);
       return undefined;
     }
 
@@ -2553,6 +2639,7 @@ export class Pet {
         return undefined;
       }
 
+      this.headWobble = 30;
       this.waiting = false;
       this.pushTransition(this.data.scripts[SCRIPT.sitUp].from, BELLY);
       this.push({ cue: 0 });
@@ -2608,6 +2695,7 @@ export class Pet {
       return this.pop().step;
     }
 
+    this.lookAt(this.samples[0]);
     const { step, flags } = this.pop();
 
     if (flags & 1) {
@@ -3226,16 +3314,21 @@ export class Pet {
    * steering at it from its first stride. The shoe held still, far off, it
    * prowls instead (but not charging); now and then, by its excitement, it
    * lunges if the shoe is within reach; at it, it grabs, unless the cursor
-   * is going too fast. Its head following the shoe is not yet played.
+   * is going too fast. It looks at the shoe all the while.
    */
   private doChasingChargingCursor(mode: Mode): Step | undefined {
     if (mode === 'exit') {
       this.resetSoft();
+      this.push({ ease: 0 }, { headTrackMax: 100 });
+      this.headWobble = 100;
       return undefined;
     }
 
     if (mode === 'enter') {
+      /* Its head turned at most a fifth of the way, and wobbling a fifth as much. */
+      this.push({ headTrackMax: 20 });
       this.pushStored(SCRIPT.run);
+      this.headWobble = 20;
       this.going = false;
       return undefined;
     }
@@ -3261,6 +3354,7 @@ export class Pet {
       return this.pop().step;
     }
 
+    this.lookAt(shoe);
     const { step, flags } = this.pop();
 
     if (flags & 1) {
@@ -3427,6 +3521,7 @@ export class Pet {
       );
     }
 
+    this.lookAt(this.shoeAt());
     const { step, flags } = this.pop();
 
     if (this.cues.has(0)) {
@@ -3491,6 +3586,7 @@ export class Pet {
       return this.pop().step;
     }
 
+    this.lookAt(this.shoeAt());
     const { step, flags } = this.pop();
 
     if (this.cues.has(0)) {
@@ -3535,6 +3631,7 @@ export class Pet {
       return undefined;
     }
 
+    this.lookAt(this.shoeAt());
     const shoe = this.world.shoe;
     const { step, flags } = this.pop();
 
@@ -3810,6 +3907,7 @@ export class Pet {
   private doGuardingBall(mode: Mode): Step | undefined {
     if (mode === 'exit') {
       this.resetScript();
+      this.lookAt(null);
       return undefined;
     }
 
@@ -3822,6 +3920,10 @@ export class Pet {
     if (!this.isOnscreen()) {
       this.newState(this.isBallGrabbable() ? STATE.returningBallIndirect : STATE.chasingBall);
       return this.pop().step;
+    }
+
+    if (this.cursorMoved()) {
+      this.lookAt(this.samples[0]);
     }
 
     if (this.called && !this.decideIfNaughty()) {
@@ -3913,6 +4015,215 @@ export class Pet {
     }
 
     return step;
+  }
+
+  // Where the dog looks.
+
+  /** Whether it may look at anything (`-0x720c`): cue 7 stops it, cue 6 lets it again. */
+  private targetsOn = true;
+
+  /** What the head looks toward, from the dog's middle when it was set (`-0x720a`), and the eyes. */
+  private headTarget: { x: number; y: number } | null = null;
+  private eyeMode: 0 | 1 | 2 = 0;
+  private eyeTarget = { x: 0, y: 0 };
+
+  /** How surely the head looks (`-0x7204`): toward 1 while it has a target, back to 0 without. */
+  private headWeight = 0;
+
+  /** The head's turn and nod, this frame and the last (`0x534`, `0x106`), and whether it tracks at all. */
+  private headYaw = 0;
+  private headPitch = 0;
+  private headTracking = false;
+
+  /** How far the head may turn, in hundredths of its reach (`HeadTrackMaxAll`, `8ae6 17`). */
+  private headTrackMax = 100;
+
+  /** How much the head wobbles, in hundredths, 0 for all of it (`0x550`). */
+  headWobble = 0;
+
+  /** The head's wobbles (`Lube`s, DS:0x1ba on). */
+  private lubes = LUBES.map((range) => ({ ...range, current: 0, from: 0, to: 0, frames: 0, count: -1, next: 1 }));
+
+  /** `ScriptSprite::SetHeadTarget` (seg5:0000): a point to look toward, kept from the dog's middle now. */
+  setHeadTarget(point: { x: number; y: number } | null) {
+    if (!this.targetsOn) {
+      return;
+    }
+
+    if (!point) {
+      this.headTarget = null;
+      return;
+    }
+
+    const centre = this.world.centre?.() ?? this.world.where();
+    this.headTarget = { x: Math.trunc(point.x - centre.x), y: Math.trunc(point.y - centre.y) };
+
+    if (this.headWeight === 0) {
+      this.headYaw = this.headPitch = 0;
+    }
+  }
+
+  /** `ScriptSprite::SetEyeTarget` (seg7:29fc): the eyes toward a point, or as the frame has them. */
+  setEyeTarget(point: { x: number; y: number } | null) {
+    if (!point || !this.targetsOn) {
+      this.eyeMode = 0;
+      this.eyeTarget = { x: 0, y: 0 };
+      return;
+    }
+
+    const centre = this.world.centre?.() ?? this.world.where();
+    this.eyeMode = 1;
+    this.eyeTarget = { x: Math.trunc(point.x - centre.x), y: Math.trunc(point.y - centre.y) };
+  }
+
+  /** `LookAtUser` (seg7:2a78): the head toward just past its nose, the eyes at the user. */
+  private lookAtUser() {
+    const nose = this.world.ballOnStage?.(NOSE);
+
+    if (nose) {
+      this.setHeadTarget({ x: Math.trunc(nose.x) + this.rotation, y: Math.trunc(nose.y) + 10 });
+    }
+
+    this.setEyeTarget(null);
+    this.eyeMode = 2;
+  }
+
+  /** `LookAtRandomPoint` (seg7:2b1c): the eyes and head toward somewhere on the stage. */
+  private lookAtRandomPoint() {
+    const point = { x: this.rand() % this.world.width, y: this.rand() % this.world.height };
+    this.setEyeTarget(point);
+    this.setHeadTarget(point);
+  }
+
+  /** The head and eyes toward a point, as the states set them both; or, with none, ahead. */
+  private lookAt(point: { x: number; y: number } | null | undefined) {
+    this.setHeadTarget(point ?? null);
+    this.setEyeTarget(point ?? null);
+  }
+
+  /** Whether the cursor moved over a frame, so many back (`0x19e` this frame, `0x1a0` the last). */
+  private cursorMoved(frames = 0) {
+    const [a, b] = [this.samples[frames], this.samples[frames + 1]];
+    return !!a && !!b && Math.trunc(Math.hypot(a.x - b.x, a.y - b.y)) !== 0;
+  }
+
+  /** `LookAhead` (seg7:2b8f): nothing in particular. */
+  private lookAhead() {
+    this.setHeadTarget(null);
+    this.setEyeTarget(null);
+  }
+
+  /**
+   * `ScriptSprite::UpdateHeadTracking` (seg5:00c2), each frame: the head
+   * turns toward the target, as if it were 100 away, less the dog's own
+   * turn, nodding to its height, at most 13 in 256ths of a turn a frame;
+   * kept within about half its reach (51 in 100 across, 42 up and down);
+   * and straightens again without one.
+   */
+  private updateHeadTracking() {
+    const was = { yaw: this.headYaw, pitch: this.headPitch };
+
+    /* Tracking carries on from the frame before (`0x10a`), or starts with a target. */
+    if (!this.headTarget && !this.headTracking) {
+      return;
+    }
+
+    this.headTracking = true;
+    const target = this.headTarget ?? { x: 0, y: 0 };
+    let yaw = angle256(-target.x, 100);
+    let pitch = angle256(-target.y, 100);
+
+    if (this.headTarget) {
+      yaw -= this.rotation;
+    }
+
+    const most = Math.max(Math.abs(yaw - was.yaw), Math.abs(pitch - was.pitch));
+
+    if (most > 13) {
+      yaw = Math.trunc(was.yaw + ((yaw - was.yaw) * 13) / most);
+      pitch = Math.trunc(was.pitch + ((pitch - was.pitch) * 13) / most);
+    }
+
+    const across = Math.trunc((this.headTrackMax * 0x33) / 100);
+    const updown = Math.trunc((this.headTrackMax * 0x2a) / 100);
+    this.headYaw = Math.max(-across, Math.min(across, yaw));
+    this.headPitch = Math.max(-updown, Math.min(updown, pitch));
+
+    if (this.headTarget) {
+      this.headWeight = 1 - (1 - this.headWeight) * 0.8;
+    } else {
+      this.headWeight *= 0.95;
+
+      if (this.headWeight < 0.1) {
+        this.headWeight = 0;
+      }
+    }
+
+    if (!this.headTarget && this.headYaw === 0 && this.headPitch === 0) {
+      this.headTracking = false;
+    }
+  }
+
+  /**
+   * `Ballz::HeadTrackPrep` (seg5:05ba), each frame drawn: tracking, the
+   * head's turn and nod, a roll, a drift of the snout it turns about and
+   * an offset, each a wobble (`Lube::Next`, seg5:0468) — waiting a while,
+   * then easing to somewhere in its range — some in proportion to the turn,
+   * scaled by `headWobble`; not tracking, the wobbles are put back.
+   */
+  private headTrackPrep(): Head | undefined {
+    if (!this.headTracking) {
+      for (const lube of this.lubes) {
+        Object.assign(lube, { current: 0, count: -1, next: 1 });
+      }
+
+      return undefined;
+    }
+
+    const scale = this.headWobble === 0 ? 1 : this.headWobble / 100;
+    const now = Math.trunc(this.time * 17);
+    const next = (n: number) => this.nextLube(this.lubes[n], now) * scale;
+    const yaw = this.headYaw;
+
+    /* In the engine's order, each pair a share of the turn and a wobble. */
+    const roll = Math.max(-42, Math.min(42, Math.trunc(next(1) * yaw + next(0))));
+    const drift = {
+      x: next(11) * yaw + next(8),
+      y: next(12) * yaw + next(9),
+      z: next(13) * yaw + next(10),
+    };
+    const offsetX = Math.trunc(next(5) * yaw + next(2));
+    const offsetY = Math.trunc(next(6) * yaw + next(3));
+    const offsetZ = Math.trunc(next(7) * yaw + next(4)) - Math.trunc(Math.abs(offsetY) / 2);
+
+    return {
+      yaw,
+      pitch: this.headPitch,
+      roll,
+      offset: { x: offsetX, y: offsetY, z: offsetZ },
+      drift,
+    };
+  }
+
+  private nextLube(lube: (typeof this.lubes)[number], now: number) {
+    if (lube.count === -1) {
+      if (lube.next <= now) {
+        lube.from = lube.current;
+        lube.to = lube.min + ((lube.max - lube.min) * (this.rand() % 1000)) / 1000;
+        lube.frames = (this.rand() % (lube.longest - lube.shortest + 1)) + lube.shortest;
+        lube.count = 0;
+      }
+    } else {
+      lube.count++;
+      lube.current = lube.from + (lube.count * (lube.to - lube.from)) / lube.frames;
+
+      if (lube.count >= lube.frames) {
+        lube.count = -1;
+        lube.next = now + (this.rand() % 5000);
+      }
+    }
+
+    return lube.current;
   }
 
   // The kennel.
@@ -4681,6 +4992,7 @@ export class Pet {
    */
   private doAnticipatingBall(mode: Mode): Step | undefined {
     if (mode === 'exit') {
+      this.lookAt(null);
       return undefined;
     }
 
@@ -4702,6 +5014,10 @@ export class Pet {
 
     if (this.waiting) {
       const cursor = this.samples[0];
+
+      if (this.cursorMoved()) {
+        this.lookAt(cursor);
+      }
 
       if (!this.isOnscreen() || !cursor || !this.inFocusBox(cursor, 1.8)) {
         this.queue = [{ glue: 36 }];
@@ -4749,6 +5065,8 @@ export class Pet {
       for (let times = (this.rand() % 5) + 5; times >= 0; times--) {
         this.pushStored(SCRIPT.sitPant);
       }
+
+      this.lookAt(this.world.ball);
 
       return undefined;
     }

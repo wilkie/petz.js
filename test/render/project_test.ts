@@ -105,3 +105,31 @@ describe('a ball’s size', () => {
     expect(ballSize(sized, header, 0, 50)).toBe(12);
   });
 });
+
+describe('turning the head', () => {
+  /* Ball 0 is of the head, ball 1 is not; ball 56, the snout, is what it turns about. */
+  const withHead = { ...breed, headBalls: [0] } as unknown as Breed;
+  const balls = frame(
+    Array.from({ length: 57 }, (_, n): [number, number, number] => (n < 2 ? [40, 0, 0] : [0, 0, 0]))
+  );
+  const still = { yaw: 0, pitch: 0, roll: 0, offset: { x: 0, y: 0, z: 0 }, drift: { x: 0, y: 0, z: 0 } };
+  const place = (head?: typeof still) =>
+    project(withHead, header, balls, { pet: 256, ball: 256 }, 0, 0, head);
+
+  it('leaves the head where it is when it is not turned', () => {
+    expect(place(still)).toEqual(place());
+  });
+
+  it('turns the head’s balls about the snout, and no others', () => {
+    const turned = place({ ...still, yaw: 64 });
+    const [head, body] = place();
+
+    expect(turned[1]).toEqual(body);
+    expect(Math.abs(turned[0].x - turned[56].x)).toBeLessThan(Math.abs(head.x - turned[56].x));
+  });
+
+  it('moves the head by its offset', () => {
+    const moved = place({ ...still, offset: { x: 5, y: 0, z: 0 } });
+    expect(moved[0].x).toBe(place()[0].x + 5);
+  });
+});

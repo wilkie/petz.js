@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { Brain } from '../../src/behaviour/brain.ts';
-import { GLOBAL, Pet, STATE } from '../../src/behaviour/pet.ts';
+import { GLOBAL, Pet, STATE, type Tick } from '../../src/behaviour/pet.ts';
 import { borlandRand } from '../../src/behaviour/random.ts';
 import {
   BALL_SIZE,
@@ -39,6 +39,8 @@ import {
 } from '../../src/formats/engine.ts';
 import { parseLnz, readFactors } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
+import { drawPet } from '../../src/render/ballz.ts';
+import { IndexedBitmap } from '../../src/render/raster.ts';
 import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/script.ts';
 import { parseTricks } from '../../src/formats/tricks.ts';
 import { parseBrain, writeBrain } from '../../src/formats/brain.ts';
@@ -277,20 +279,64 @@ withOracle('the engine’s behaviour', () => {
       let tick = 0;
       const states: number[] = [];
       const sounds: number[][] = [];
+      const looks: Pick<Tick, 'head' | 'eyes'>[] = [];
 
       const run = (frameCount: number, act?: (n: number) => void) => {
         for (let n = 0; n < frameCount; n++, tick++) {
           act?.(n);
           const step = pet.tick((tick * 45) / 17);
-          stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt);
+          stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt, step.head);
           states.push(step.state);
           sounds.push(step.sounds ?? []);
+          looks.push({ head: step.head, eyes: step.eyes });
         }
       };
 
       pet.start(0);
-      return { stage, pet, run, states, sounds, tricks: dogTricks };
+      return { stage, pet, run, states, sounds, looks, tricks: dogTricks };
     };
+
+    it('eases the irises 0.6 pixels for each eye drawn toward where the eyes look', () => {
+      const iris = { x: 3, y: -3 };
+      drawPet(new IndexedBitmap(320, 240), breed, header, frames[0], {
+        colours: 256,
+        originX: 160,
+        originY: 120,
+        eyes: { mode: 2, x: 0, y: 0 },
+        iris,
+      });
+
+      /* Straight out, from 3 and -3, two eyes drawn. */
+      expect(iris.x).toBeCloseTo(1.8);
+      expect(iris.y).toBeCloseTo(-1.8);
+    });
+
+    it('turns its head and eyes to the cursor moving about, but only so far', () => {
+      const { stage, pet, run, states, looks } = setUp(3);
+      run(300);
+      expect(pet.global).toBe(GLOBAL.idle);
+
+      const from = looks.length;
+      run(120, (n) => {
+        const centre = stage.centre();
+        stage.pointer = { x: centre.x + 80 * Math.cos(n / 8), y: centre.y - 60, button: false };
+      });
+      const turned = looks.slice(from).filter(({ head }) => head);
+
+      expect(states.slice(from)).toContain(STATE.idle);
+      expect(turned.length).toBeGreaterThan(20);
+      expect(turned.some(({ head }) => head!.yaw !== 0)).toBe(true);
+      expect(turned.some(({ eyes }) => eyes?.mode === 1)).toBe(true);
+
+      for (const { head } of turned) {
+        expect(Math.abs(head!.yaw)).toBeLessThanOrEqual(51);
+        expect(Math.abs(head!.pitch)).toBeLessThanOrEqual(42);
+        expect(Math.abs(head!.roll)).toBeLessThanOrEqual(42);
+      }
+
+      /* Looking up at it: the nod is upward. */
+      expect(turned.some(({ head }) => head!.pitch > 0)).toBe(true);
+    });
 
     it('takes stroking the chest for petting, enjoys it more and more, and rolls over', () => {
       const { stage, pet, run, states } = setUp(3);
@@ -750,7 +796,7 @@ withOracle('the engine’s behaviour', () => {
     });
 
     it('begging, follows a treat held level with it, on its hind legs', () => {
-      const { stage, pet, run, states } = setUp(3, 640, 480);
+      const { stage, pet, run, states } = setUp(4, 640, 480);
       run(300);
 
       const { width } = stage.standardSize();
@@ -766,9 +812,15 @@ withOracle('the engine’s behaviour', () => {
       stage.foods.push(treat);
 
       /* Held level with its middle, ahead of it the way it faces, beyond its
-       * reach but not far: outside the box of its width, inside twice that. */
+       * reach but not far: outside the box of its width, inside twice that.
+       * Its middle is kept from where it is, as its head turning moves it. */
+      const start = { centre: stage.centre(), at: stage.where() };
       const hold = () => {
-        const centre = stage.centre();
+        const at = stage.where();
+        const centre = {
+          x: at.x + start.centre.x - start.at.x,
+          y: at.y + start.centre.y - start.at.y,
+        };
         const ahead = Math.sin((pet.rotation * Math.PI) / 128) > 0 ? -1 : 1;
         Object.assign(treat, { x: centre.x + ahead * width * 1.2, y: centre.y });
         stage.pointer = { x: treat.x, y: treat.y, button: false };

@@ -137,7 +137,14 @@ let bowlPictures: Dib[][] = [];
 /** The brain, as the game's file has it, then as the live dog has learned; and how the engine maps it. */
 let brainFile: BrainFile | null = null;
 let brainMap: BrainMapping[] = [];
-let live: { pet: Pet; stage: Stage; started: number } | null = null;
+let live: {
+  pet: Pet;
+  stage: Stage;
+  started: number;
+  /** Where the eyes look, and the irises' eased offset, which the dog's `Ballz` keeps. */
+  eyes?: { mode: 0 | 1 | 2; x: number; y: number };
+  iris: { x: number; y: number };
+} | null = null;
 
 /** The stage, in Dogz's own pixels. */
 const STAGE = { width: canvas.width / zoom, height: canvas.height / zoom };
@@ -272,6 +279,9 @@ function drawDog(
     bonus: { ball: 51, draw: inMouth },
     underHead,
     overHead,
+    head: stage?.head,
+    eyes: live?.eyes,
+    iris: live?.iris,
   });
 
   if (front) {
@@ -454,7 +464,7 @@ function startLive() {
   );
 
   pet.start(0);
-  live = { pet, stage, started: performance.now() };
+  live = { pet, stage, started: performance.now(), iris: { x: 0, y: 0 } };
 }
 
 /** A tick of the live dog: the engine's clock is milliseconds over 17. */
@@ -463,7 +473,8 @@ function tickLive() {
   const breed = breeds.get(breedSelect.value)!;
   const step = pet.tick((performance.now() - started) / 17);
 
-  stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt);
+  stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt, step.head);
+  live!.eyes = step.eyes;
   drawDog(step.frame, stage.x, stage.y, step.rotation, stage);
 
   if (soundInput.checked) {
