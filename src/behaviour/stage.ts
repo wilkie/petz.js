@@ -26,8 +26,22 @@ export interface Treat {
   y: number;
 }
 
-/** The size of the ball, in Dogz's pixels: its picture is not yet read, so this is a guess. */
-export const BALL_SIZE = 12;
+/**
+ * The size of the ball's picture, bitmap 10200 of DOGZDLL.DLL
+ * (`BALL_PICTURE`), in Dogz's pixels: its rectangle on the stage.
+ */
+export const BALL_SIZE = { width: 31, height: 29 };
+
+/**
+ * The ball's rectangle, centred on where it is as `XSprite::MoveSpritePt`
+ * and `GrabSprite::Update` centre it: half the size, rounded down, to the
+ * left and above.
+ */
+export function ballRect({ x, y }: { x: number; y: number }) {
+  const left = x - Math.trunc(BALL_SIZE.width / 2);
+  const top = y - Math.trunc(BALL_SIZE.height / 2);
+  return { left, top, right: left + BALL_SIZE.width, bottom: top + BALL_SIZE.height };
+}
 
 /**
  * A ball: where it is, how fast it rolls, and who has it — the user, on
@@ -52,7 +66,7 @@ const HOLDERS = [51, 45];
 /**
  * `BallSprite::UpdateLocation` (seg20:2634): a frame of rolling. The speed
  * loses a fortieth of itself, stops within a pixel a frame, and turns back
- * at the stage's edges. Returns whether it bounced.
+ * when its rectangle is past the stage's edges. Returns whether it bounced.
  */
 export function rollBall(ball: Ball, width: number, height: number) {
   if (ball.vx === 0 && ball.vy === 0) {
@@ -73,15 +87,15 @@ export function rollBall(ball: Ball, width: number, height: number) {
   ball.x += Math.trunc(ball.vx);
   ball.y += Math.trunc(ball.vy);
 
-  const half = BALL_SIZE / 2;
+  const rect = ballRect(ball);
   let bounced = false;
 
-  if ((ball.x - half < 0 && ball.vx < 0) || (ball.x + half > width && ball.vx > 0)) {
+  if ((rect.left < 0 && ball.vx < 0) || (rect.right > width && ball.vx > 0)) {
     ball.vx = -ball.vx;
     bounced = true;
   }
 
-  if ((ball.y - half < 0 && ball.vy < 0) || (ball.y + half > height && ball.vy > 0)) {
+  if ((rect.top < 0 && ball.vy < 0) || (rect.bottom > height && ball.vy > 0)) {
     ball.vy = -ball.vy;
     bounced = true;
   }
@@ -272,6 +286,11 @@ export class Stage implements PetWorld {
       ball.vy = Math.trunc((this.pointer.y - this.lastPointer.y) / 2);
       ball.x = this.pointer.x;
       ball.y = this.pointer.y;
+
+      /* Kept on the stage (`GrabSprite::Update`, seg20:018c). */
+      const rect = ballRect(ball);
+      ball.x += Math.max(0, -rect.left) - Math.max(0, rect.right - this.width);
+      ball.y += Math.max(0, -rect.top) - Math.max(0, rect.bottom - this.height);
     } else if (ball && ball.slot !== null) {
       const holder = this.placed()[HOLDERS[ball.slot]];
       ball.x = holder.x;
@@ -320,8 +339,8 @@ export class Stage implements PetWorld {
   }
 
   /**
-   * `PetModule::ReleaseObject`: the ball put down where the dog held it,
-   * at rest; from the mouth, recorded there (`RecordPosition`).
+   * `PetModule::ReleaseObject`: the ball put down at the dog's chin, at
+   * rest; from the mouth, recorded there (`RecordPosition`).
    */
   releaseBall(slot: number) {
     const ball = this.ball;
@@ -330,10 +349,11 @@ export class Stage implements PetWorld {
       return;
     }
 
-    const holder = this.placed()[HOLDERS[slot]];
+    /* Put down at the chin, whichever slot held it (`ActualReleaseObject`, seg14:0df1). */
+    const holder = this.placed()[HOLDERS[0]];
     ball.slot = null;
-    ball.x = holder.x;
-    ball.y = holder.y;
+    ball.x = Math.trunc(holder.x);
+    ball.y = Math.trunc(holder.y);
     ball.vx = ball.vy = 0;
     ball.recorded = slot === 0 ? { x: ball.x, y: ball.y, chinX: holder.x, chinY: holder.y } : null;
   }

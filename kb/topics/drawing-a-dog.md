@@ -71,6 +71,10 @@ flowchart LR
 - [[read out]] The third colour is the speckles'. `Ballz::GenerateSpeckleColors` (seg10:21da) makes it from the ball's colour, for every ball the breed gives a `Speckle Color` of 0 or more, by reflecting it within its ramp: `s + (s + R - 1 - c)`, where `s` is the first colour of `c`'s ramp. `XDrawPort::InitStaticDraw` sets the ramps on a 256-colour display at 20 of 6 colours from 16 — 16 to 21, up to 130 to 135 — and on 16 colours at one colour each.
 - [[measured]] That is what the oracle shows: the big dog's 131 speckles in 134, the far end of its ramp from 130. `src/render/raster.ts` draws by these rules, and the viewer with it.
 
+## What the dog holds
+
+- [[read out]] Each ball may have a bonus drawing: a function and a sprite set by `Ballz::SetBonusDrawProc` (seg10:24f8). `DisplayBallzFrame` calls it with the ball's centre just after drawing that ball, before its iris, and even for a ball not drawn. The dog holds a ball or treat so, by its chin ([[topic:behaviour]], fetch). The pictures are drawn by `XPicture::XDrawPicture` (seg8:7041), every pixel but those of the colour given, 10, Windows' bright green, copied as it is; their colours are Windows' sixteen, which both of Dogz's palettes hold. `src/render/picture.ts` draws them so.
+
 ## The eyes
 
 - [[read out]] The irises are not drawn with the other balls. After drawing each eye, `DisplayBallzFrame` draws its iris inside it (seg10:5440 to 573f): where the iris is relative to its eye in the frame, or toward a point the dog looks at, or in the middle, by the dog's state; eased toward that place 0.6 pixels a frame (`ds:1d36`); and kept within the eye, on each axis, by the eye's radius less 0.8 of the iris's (`ds:1d3e`).

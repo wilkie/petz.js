@@ -9,17 +9,19 @@ import { join } from 'node:path';
 import { Brain } from '../../src/behaviour/brain.ts';
 import { GLOBAL, Pet, STATE } from '../../src/behaviour/pet.ts';
 import { borlandRand } from '../../src/behaviour/random.ts';
-import { Stage } from '../../src/behaviour/stage.ts';
+import { BALL_SIZE, Stage } from '../../src/behaviour/stage.ts';
 import { findTransition, transitionTable } from '../../src/behaviour/transitions.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import {
   AREA,
+  BALL_PICTURE,
   FIRST_TRICK,
   POSITION,
   readBodyAreas,
   readBrainMap,
   readEngineScripts,
   readEngineStateNames,
+  readPicture,
   readPositionKinds,
   readTrickScripts,
 } from '../../src/formats/engine.ts';
@@ -351,6 +353,15 @@ describeWithOracle('the engine’s behaviour', () => {
 
       expect(stage.treat).toBeNull();
       expect(pet.brainActive).toBe(false);
+    });
+
+    it('has the ball the size of its picture, in the Windows colours, green where it is not', () => {
+      const picture = readPicture(engine, BALL_PICTURE);
+
+      expect({ width: picture.width, height: picture.height }).toEqual(BALL_SIZE);
+      expect(picture.colours[10]).toEqual([0, 255, 0]);
+      expect(picture.pixels[0]).toBe(10);
+      expect(picture.pixels[picture.pixels.length - 1]).toBe(10);
     });
 
     /* On Dogz's own 640 by 480 screen: a dog runs too far for a smaller one. */

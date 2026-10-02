@@ -28,6 +28,10 @@ source: [src/formats/palette.ts, src/formats/script.ts, src/formats/engine.ts]
 
 [[read out]] Besides 87 bitmaps and its icons, cursors and dialogs, it holds Dogz's two palettes as resources of type 32513: 10256, 256 colours, and 10016, 16, each RGB triples ([[topic:drawing-a-dog]]). A resource of type 123, id 454, is the trick weights' defaults: 59 records of twelve words, then the word `0xd45`, which `PetModule::LoadTrickData` checks, used where there is no [[format:tdt]] file. [[measured]] It is byte for byte the defaults in the oracle's `TRICKS.TDT`.
 
+[[read out]] The bitmaps are Windows device-independent bitmaps, 4 bits a pixel but for the playpen's wood (2000), the moon (10120, 10121) and the logo (10102) at 8, and two spray bottles (1030, 1031) at 24 (`src/formats/dib.ts`). Sprites' pictures are drawn transparent where they are bright green, colour 10 ([[topic:drawing-a-dog]]). The ball's is 10200 ([[topic:behaviour]]).
+
+[[inferred]] The rest, by how they look: 1000 to 1023 buttons — adoption, the camera, the quiz — in four states; 1030 to 1113 the toy box's tools and toys, four states each — spray bottle, brush, shoe, food bowl, water bowl, ball and three treats; 3127 to 3140 the doghouse, the adoption and quiz signs and paw prints; 10000 to 10013 the food and water bowls emptying; 10100 a rug; 10201 the red ball again and 10210 a blue one; 10300 to 10302 three treats, a doughnut, a triangle and a bone; 10400 to 10600 the spray bottle, brush and shoe.
+
 ## Behaviour tables
 
 [[read out]] Compiled into its data segment, and read by `src/formats/engine.ts` ([[topic:behaviour]]):

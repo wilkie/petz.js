@@ -6,6 +6,7 @@
  * kb/topics/behaviour.md.
  */
 
+import { parseDib } from './dib.ts';
 import { dataSegment, type NeModule } from './ne.ts';
 
 /** How many tricks there are: engine states 0x2b to 0x65. */
@@ -254,4 +255,22 @@ export function readBrainMap(engine: NeModule) {
 
     map.push({ verb: verbs[verb], object: objects[object], state, flag, delay });
   }
+}
+
+/**
+ * The ball's picture: `InitBallSprite` (seg20:1c68) loads bitmap
+ * `10200 + 10 × kind`, and `InitPetModule` makes one ball, of kind 0, so
+ * 10200, a red ball. 10201 and 10210, a blue one, go unused.
+ */
+export const BALL_PICTURE = 10200;
+
+/** A bitmap resource of the engine's. */
+export function readPicture(engine: NeModule, id: number) {
+  const resource = engine.resources().find((r) => r.type === 2 && r.id === id);
+
+  if (!resource) {
+    throw new Error(`no bitmap ${id}`);
+  }
+
+  return parseDib(resource.data);
 }

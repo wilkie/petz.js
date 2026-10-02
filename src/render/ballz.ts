@@ -34,6 +34,13 @@ export interface DrawOptions {
 
   /** The seed of the fuzz and speckles, which Dogz draws at random. */
   seed?: number;
+
+  /**
+   * Something drawn with a ball, just after it and before the balls nearer
+   * (`Ballz::SetBonusDrawProc`, called by `DisplayBallzFrame`, seg10:4d28):
+   * what the dog holds. It is given where that ball's centre is drawn.
+   */
+  bonus?: { ball: number; draw: (centre: { x: number; y: number }) => void };
 }
 
 /**
@@ -87,7 +94,7 @@ export function drawPet(
   breed: Breed,
   header: AnimationHeader,
   frame: Frame,
-  { colours, originX, originY, age = 0, yaw = 0, seed = 1 }: DrawOptions
+  { colours, originX, originY, age = 0, yaw = 0, seed = 1, bonus }: DrawOptions
 ) {
   const next = random(seed);
   /* How much of a puppy: 100 less the age, as SetBallScaleFromAge asks.
@@ -135,6 +142,10 @@ export function drawPet(
     );
 
     const eye = breed.eyes.indexOf(ball);
+
+    if (bonus?.ball === ball) {
+      bonus.draw(at(ball));
+    }
 
     if (eye !== -1) {
       drawIris(bitmap, breed, placed, ball, breed.irises[eye], at, colours);

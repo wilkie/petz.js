@@ -8,7 +8,7 @@
 import { Brain, type BrainMapping } from '../behaviour/brain.ts';
 import { Pet, type PetData } from '../behaviour/pet.ts';
 import { borlandRand } from '../behaviour/random.ts';
-import { BALL_SIZE, Stage } from '../behaviour/stage.ts';
+import { ballRect, Stage } from '../behaviour/stage.ts';
 import { DEFAULT_GLUE, type Step, timeline } from '../behaviour/timeline.ts';
 import { transitionTable } from '../behaviour/transitions.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
@@ -19,13 +19,16 @@ import {
   parseBhd,
 } from '../formats/animation.ts';
 import {
+  BALL_PICTURE,
   readBodyAreas,
   readBrainMap,
   readEngineScripts,
   readEngineStateNames,
+  readPicture,
   readPositionKinds,
   readTrickScripts,
 } from '../formats/engine.ts';
+import type { Dib } from '../formats/dib.ts';
 import { type Breed, parseLnz, readFactors } from '../formats/lnz.ts';
 import { parseNe } from '../formats/ne.ts';
 import { type Colour, PALETTE_16, PALETTE_256, readPalette } from '../formats/palette.ts';
@@ -33,6 +36,7 @@ import { parseScripts, readOpcodes, readStateNames, type Script } from '../forma
 import { type BrainFile, parseBrain } from '../formats/brain.ts';
 import { parseTricks } from '../formats/tricks.ts';
 import { drawPet } from '../render/ballz.ts';
+import { drawPicture, mapColours } from '../render/picture.ts';
 import { IndexedBitmap, random } from '../render/raster.ts';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -93,6 +97,7 @@ let gameFiles: GameFiles;
 let petData: Omit<PetData, 'flags'>;
 let engineStateNames: string[] = [];
 let bodyAreas: number[] = [];
+let ballPicture: Dib;
 
 /** The brain, as the game's file has it, then as the live dog has learned; and how the engine maps it. */
 let brainFile: BrainFile | null = null;
@@ -136,11 +141,38 @@ function draw() {
   );
 }
 
-/** Draws a frame at a place on the stage, turned so far, and shows it. */
-function drawDog(frameNumber: number, originX: number, originY: number, yaw: number) {
+/**
+ * Draws a frame at a place on the stage, turned so far, and shows it; live,
+ * with the ball, in front of the dog or behind it as the engine orders them.
+ */
+function drawDog(
+  frameNumber: number,
+  originX: number,
+  originY: number,
+  yaw: number,
+  stage?: Stage
+) {
   const breed = breeds.get(breedSelect.value)!;
   const colours = Number(coloursSelect.value) as 256 | 16;
   const bitmap = new IndexedBitmap(STAGE.width, STAGE.height);
+  const ball = stage?.ball;
+  const pictureColours = mapColours(ballPicture, palettes.get(colours)!);
+  const drawBall = (at: { x: number; y: number }) => {
+    const { left, top } = ballRect({ x: Math.trunc(at.x), y: Math.trunc(at.y) });
+    drawPicture(bitmap, ballPicture, pictureColours, left, top);
+  };
+
+  /*
+   * Facing the user, within 0x41 of it, the dog is drawn under the ball;
+   * otherwise over it (`GrabSprite::Update`, seg20:018c). A ball held in
+   * the mouth is drawn with the chin, at the chin, or under a paw at the
+   * toe (`BallSprite::StaticDrawMouth`, `StaticDrawFoot`).
+   */
+  const front = Math.abs(yaw) < 0x41;
+
+  if (ball && ball.slot === null && !front) {
+    drawBall(ball);
+  }
 
   drawPet(bitmap, breed, header, allFrames[frameNumber], {
     colours,
@@ -149,7 +181,18 @@ function drawDog(frameNumber: number, originX: number, originY: number, yaw: num
     age: Number(ageInput.value),
     yaw,
     seed: frameNumber + 1,
+    bonus:
+      ball && ball.slot !== null
+        ? {
+            ball: 51,
+            draw: (chin) => drawBall(ball.slot === 0 ? chin : stage!.ballOnStage(45)),
+          }
+        : undefined,
   });
+
+  if (ball && ball.slot === null && front) {
+    drawBall(ball);
+  }
 
   const pixels = new ImageData(bitmap.toRgba(palettes.get(colours)!), bitmap.width, bitmap.height);
   const small = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -322,9 +365,8 @@ function tickLive() {
   const step = pet.tick((performance.now() - started) / 17);
 
   stage.show(step, step.rotation, step.placedBy);
-  drawDog(step.frame, stage.x, stage.y, step.rotation);
+  drawDog(step.frame, stage.x, stage.y, step.rotation, stage);
   drawTreat(stage);
-  drawBall(stage);
 
   if (soundInput.checked) {
     for (const sound of step.sounds ?? []) {
@@ -353,23 +395,6 @@ function drawTreat(stage: Stage) {
   context.beginPath();
   context.arc(treat.x * zoom, treat.y * zoom, 4 * zoom, 0, 2 * Math.PI);
   context.fill();
-}
-
-/** The ball, not yet the game's own picture of it. */
-function drawBall(stage: Stage) {
-  const ball = stage.ball;
-
-  if (!ball) {
-    return;
-  }
-
-  context.fillStyle = '#e8c21a';
-  context.strokeStyle = '#000';
-  context.lineWidth = zoom;
-  context.beginPath();
-  context.arc(ball.x * zoom, ball.y * zoom, (BALL_SIZE / 2) * zoom, 0, 2 * Math.PI);
-  context.fill();
-  context.stroke();
 }
 
 /** Where the cursor is over the stage, in Dogz's pixels. */
@@ -417,7 +442,18 @@ canvas.addEventListener('mousedown', (event) => {
 
   const ball = stage.ball;
 
-  if (ball && !ball.held && Math.hypot(ball.x - point.x, ball.y - point.y) < BALL_SIZE) {
+  const rect = ball && ballRect(ball);
+
+  /* Anywhere on its picture's rectangle (`GrabSprite::Update`, `XPointInXRect`). */
+  if (
+    ball &&
+    rect &&
+    !ball.held &&
+    point.x >= rect.left &&
+    point.x < rect.right &&
+    point.y >= rect.top &&
+    point.y < rect.bottom
+  ) {
     /* Picked up, even out of the dog's mouth. */
     ball.held = true;
     ball.slot = null;
@@ -555,6 +591,7 @@ async function start(files: GameFiles) {
   const tricks = parseTricks(await files.read('DOGZ.DOG/TRICKS.TDT'));
   engineStateNames = readEngineStateNames(engine);
   bodyAreas = readBodyAreas(engine, header.ballCount);
+  ballPicture = readPicture(engine, BALL_PICTURE);
   brainMap = readBrainMap(engine);
 
   try {
