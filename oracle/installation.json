@@ -1,0 +1,2165 @@
+{
+  "description": "Every file of the oracle drive after `pnpm oracle`: Windows 3.1, then Dogz installed and registered. A file's stage is the first that left it as it is: windows (Windows Setup), setup (Dogz Setup) or adoption (adopting a puppy). See scripts/oracle/fingerprint.mjs.",
+  "files": {
+    "DOGZ.DOG/ADOPT/ADOPT.INS": {
+      "bytes": 9476,
+      "sha256": "0376b98513c6eb198987b0debc5db047035a5434eed56a54e702fc9bfc871c85",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/AT3D.SYS": {
+      "bytes": 46072,
+      "sha256": "198c9c9c46e17354cd82518007a21637b2af29381aaff54e08f83643b56581df",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/AUTORUN.INF": {
+      "bytes": 11,
+      "sha256": "bc4d8fb96a7335d4ecc4ea8e331eaf1f73715c9a999e435aa92b4d9542139b6b",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/DOGZ.1": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/DOGZ.2": {
+      "bytes": 1,
+      "sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/DOGZ1.LIB": {
+      "bytes": 840488,
+      "sha256": "2347265d1da33c8322ef3f27481c27bc6e501c3b319f545484c9b6012739023d",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/DOGZ2.LIB": {
+      "bytes": 889161,
+      "sha256": "2383450a4a58f8da315c80df8c7b6d645030a641bfdeea32bc7418217b655baa",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/README.TXT": {
+      "bytes": 619,
+      "sha256": "07938ab41c89247d93d61ca5698dc8a05720ad7f20c4a2e9c5d74b4f2e97b7c3",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/SCRNSAVE.LIB": {
+      "bytes": 271878,
+      "sha256": "5391e2e7d74245e55d6f99be683268ea512af6d3942d611cbb07f5e1d522f794",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/SETUP.BMP": {
+      "bytes": 73918,
+      "sha256": "59a944f2e1f1d53bf44c331d7086b63cb21578dd8ad5734a68ec177042a9a159",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/SETUP.EXE": {
+      "bytes": 274432,
+      "sha256": "04de2f83feb8d5287c711b0c4cbe0436e0ac293eec09f109415968f056b3a0ab",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/SETUP.INI": {
+      "bytes": 26,
+      "sha256": "35597eaa29937ff615bc1bfb75c6ef3012fdd1dc0e32e2ba1e7231c72f9bf3cd",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/SETUP.INS": {
+      "bytes": 22887,
+      "sha256": "d8a6065bdb5a62b64522860df41ff8884c6179ee3bfc37b2317fd6d583306259",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/SETUP.PKG": {
+      "bytes": 4244,
+      "sha256": "ca0151e95e546f286ea7e84b6df4d537d9729a377ef680ec2281f9ca9f76a602",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/SIXTEEN.LIB": {
+      "bytes": 57059,
+      "sha256": "9b121f97ba6081ec5faed4f71e63f50178fc329ba690ae55459d855148093caf",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/THINK.DLL": {
+      "bytes": 53589,
+      "sha256": "e71d0dd56083d862e51a829dee0e41996465b4348709234ffb05e68934a5729a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/THIRTY2.LIB": {
+      "bytes": 322,
+      "sha256": "2cd3654f4aada085edf23035e447fd6b7861600b5bd2581f3c6025f451c3588c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/WING.LIB": {
+      "bytes": 163047,
+      "sha256": "0d9eb85b8e7f98b6cd741581a43eee7302023e4a71808939e59baa8bfadcb24b",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/_SETUP.DLL": {
+      "bytes": 10240,
+      "sha256": "1eb7dc5079b08d0ea598f84a9b3201e11a4bea088df53e7c992a1b9d530cf3fb",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ADOPT/~INS0762.LIB": {
+      "bytes": 38014,
+      "sha256": "eb9af4e91b9c85efeee3bc12085e9077e8e0676ebc8b5a8cdbeff9e1af21d691",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/ADOPT/PAW.BMP": {
+      "bytes": 230,
+      "sha256": "20d86ca673a093b47665cea770ad4daa68e0216f2f4b02c72fb1a42f569182ad",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DLAUGH.BMP": {
+      "bytes": 918,
+      "sha256": "0bc7d59b9431b05ac9a92eb0b045a6de877477507da3564a63411c2716312011",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DLAUGH3Q.BMP": {
+      "bytes": 918,
+      "sha256": "a17933e6c73b4df1608b55ecb427394766b02fe5e22f49a22a5fe2aedd81aaed",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DPEER.BMP": {
+      "bytes": 918,
+      "sha256": "7c9de01b0c5960e7490ecd82a75fc2fda9e03d453ce32f4ae360050cc3a4fbc2",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DPEER3QV.BMP": {
+      "bytes": 918,
+      "sha256": "8425d72899fe0144b31fac74a2dc2fbc424f6c610e79d2fa746d9ca7e6963429",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DPEEV3QV.BMP": {
+      "bytes": 918,
+      "sha256": "e6216494eec1cfbf9302f78416ebad70da0c7ff6d9bb0c81300248925ecaf306",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DPEEVED.BMP": {
+      "bytes": 918,
+      "sha256": "c5115fa0b94abe2d7d9198df94ace3bfebba70856392124eaacb05fd1c0a1f2f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DPROFILE.BMP": {
+      "bytes": 918,
+      "sha256": "ab33c6cb1f676f43016967d6ceb95d2e754b8b7e637a45396e9802f1e743781e",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DQUIZZCL.BMP": {
+      "bytes": 918,
+      "sha256": "f885387f08b35071f230244404ca961ee9890b651940d9a7e9589f58dd761792",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DSAD.BMP": {
+      "bytes": 918,
+      "sha256": "a1cf43e04507ddaaa7c6b685870f1aab71f94d5807f7969e119ff4a3b67f0588",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DSAD3QV.BMP": {
+      "bytes": 918,
+      "sha256": "939ec8e6ae1e98fbdf469e5629772bb49e6f8a7a99875da202dcf8e49bded557",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DSMILING.BMP": {
+      "bytes": 918,
+      "sha256": "562e5b388808f2520fcd892507d3f1b503bfa3c6d350fe005d6de4a0fc3152eb",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DSMIRK.BMP": {
+      "bytes": 918,
+      "sha256": "963aa94ef784cf27f3400f8e834a407eded918345f75657b7e656328c4f1b391",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/DAPHNE/DSURPR.BMP": {
+      "bytes": 918,
+      "sha256": "830f1ac477dfa5349b69bffd29e675dbfc0994f7b8ea6ee9b96c6283db1b705e",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/ABUTTON.BMP": {
+      "bytes": 1056,
+      "sha256": "db96e4ddfd1e223f6ee16205650a5bd661d319f8f37f7325e326a55f08933182",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/BALL.BMP": {
+      "bytes": 582,
+      "sha256": "a75f25e38548973a7c2ab199a0f2303ee88abdb7129ba484c771c4b623ff81ad",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/BBUTTON.BMP": {
+      "bytes": 1056,
+      "sha256": "158c6d9eda110f941bf5ee8ce85be765644076c04df4359ecea6561ae9cef09d",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/BULBANDW.BMP": {
+      "bytes": 2840,
+      "sha256": "71b6d4217141ae9ede43e677f5334519ebfd4d4890c39eeb68394bd240f715e5",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/CBUTTON.BMP": {
+      "bytes": 1056,
+      "sha256": "66621b9f607d56c6cbc0aa67b4730e31d0e7490b5c4a276156c937c425d66f60",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/CHIBANDW.BMP": {
+      "bytes": 2904,
+      "sha256": "5aba0178b35e5d49e826dbac53bb73791d7bab9ffd1b058fbf3fc3e73a2e6f31",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/LOGO.BMP": {
+      "bytes": 15778,
+      "sha256": "e5af410e32ea519fcd219f2bdc03742ec6a37f4a45156563d050c99637bf8df8",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/LOGOW.BMP": {
+      "bytes": 15778,
+      "sha256": "6e79e8c87710a0622a5bbbaa941d70711b1479ef883d589136f018b48a5542f2",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/MASBANDW.BMP": {
+      "bytes": 4488,
+      "sha256": "b91e0f5e5b1da8bdb1999f4ec8ee2999b04096f19177922a05df6b9acfcaf8d4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/PFMAGIC.BMP": {
+      "bytes": 2330,
+      "sha256": "ed216b4fb4709dc1af785891690d7984e4c28e744701553e9bb74aab949f6877",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/PFMAGICW.BMP": {
+      "bytes": 2330,
+      "sha256": "ca0b60c8f606c00a727f2e6995c0e671e37d64f0ee13f652692bc77819511510",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/SCTBANDW.BMP": {
+      "bytes": 2808,
+      "sha256": "c03d9a8d794232252ca74c4dcfc9d427177f65a8bc6af950190e5323bd330888",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/TERBANDW.BMP": {
+      "bytes": 3096,
+      "sha256": "a93ddee49b9f2af1e9b5ee78ede884e4f6838dcb86e6dc6ce4c3be6f62f853dc",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/MISC/TEXTBOX.BMP": {
+      "bytes": 7126,
+      "sha256": "53daf2c119126df147ca65549c65dcbffe869d57af76375bc7afbcd5723b30ba",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/PHOTO.ART": {
+      "bytes": 50,
+      "sha256": "b7bd5d0ec73913bcfd7d7d06b129dc23a295020d270ee972b5bb01d1d43ba79c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/ART/PICTURE.ART": {
+      "bytes": 50,
+      "sha256": "b7bd5d0ec73913bcfd7d7d06b129dc23a295020d270ee972b5bb01d1d43ba79c",
+      "stage": "adoption"
+    },
+    "DOGZ.DOG/BRAIN.BAK": {
+      "bytes": 1879,
+      "sha256": "b7639e420187ee5f5f67d2597a3000147da8639f4c68b9ab9b0ec022d1db4873",
+      "stage": "adoption"
+    },
+    "DOGZ.DOG/BRAIN.PBT": {
+      "bytes": 1879,
+      "sha256": "b7639e420187ee5f5f67d2597a3000147da8639f4c68b9ab9b0ec022d1db4873",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/0.BDT": {
+      "bytes": 56482,
+      "sha256": "ffc9f5a8fcf00b08d4bcf010eb0f0ed8397747cf3ec05607d406ed008233b29e",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/1.BDT": {
+      "bytes": 54011,
+      "sha256": "e6a41e0a3243d6881b4451b176d4de9b526cd46f8fea9948c25045c2fc078d93",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/10.BDT": {
+      "bytes": 15542,
+      "sha256": "a16f8e01f07ac4824180fa18d948619e3f5ad3183d13017143c2eaac3c86b880",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/11.BDT": {
+      "bytes": 57270,
+      "sha256": "3a178161921d0aec6c12aba2fdd36f709d8d20e621d6f5f49b1106316b22742f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/12.BDT": {
+      "bytes": 63681,
+      "sha256": "c5b0970f8b9b92dd53bac0c748e9c034bf3811e2d04268a70fec190c6f71c2bd",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/13.BDT": {
+      "bytes": 48318,
+      "sha256": "ccd88715c48bf9c63bec1be773224574ca94c72b0129e1bc94a943278b0709eb",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/14.BDT": {
+      "bytes": 46163,
+      "sha256": "5bb68a0e73fc3c0838203edae5010edf6e359b1aa37fa6ff0166035ae325d1d5",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/15.BDT": {
+      "bytes": 56023,
+      "sha256": "26086b4728d08b6de003a0e51cbe76fd82fb706d8030eddc9702aed4d14e46a3",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/16.BDT": {
+      "bytes": 32768,
+      "sha256": "c9f6e40799e18362ee069c90e5e7d2f657ed13e75d8faaee892c3482912d1794",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/17.BDT": {
+      "bytes": 52510,
+      "sha256": "5ae803b7b0522b70c2e9c4336047df648c2752cb9e5f1be0021e467521b9fa10",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/18.BDT": {
+      "bytes": 37371,
+      "sha256": "eda72ca41b33772de49c4d15a0e2e21e123a5e6c08f68961321ca8e751a251f3",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/19.BDT": {
+      "bytes": 31192,
+      "sha256": "4a22229074f7c6b3eae10158a9c96d5cb7c70bfe41a772bb5841be9bdd48ee23",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/2.BDT": {
+      "bytes": 35851,
+      "sha256": "13faddaf1f4e2d7b405470d6aee733eb4c61922370ba93479218eba35dc403fa",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/20.BDT": {
+      "bytes": 39054,
+      "sha256": "31f7000e8d6560c9b3a4a7d96383507b938ce5507e03f4e469499b78743341bf",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/21.BDT": {
+      "bytes": 32722,
+      "sha256": "d4cc7118215eca925ef5ca7a9c6c241ac604a6166d2ad4236e74a6804b79f84a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/22.BDT": {
+      "bytes": 47901,
+      "sha256": "2eee278cdb6cb6f6d976abb3bf90c1ca5a7b79aaf44a2d7e189c996eb6e69c66",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/23.BDT": {
+      "bytes": 45790,
+      "sha256": "51e254383126fd8dfcff0f071e90bbe71dce6461b3d246b2290185e72880c879",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/24.BDT": {
+      "bytes": 50464,
+      "sha256": "a1d389ee3406fb6c0221842c97d80146455a23baff93161ed6fe8306685929ce",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/25.BDT": {
+      "bytes": 54293,
+      "sha256": "ac1a1679332a79637c8cf3af61ce5763730ddb8f724260a78c9b2d6debfacae5",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/26.BDT": {
+      "bytes": 62886,
+      "sha256": "eb248ce285285325db9a68cfbe9e3aaa03d52f503c679809a9225b1bba40eb8f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/27.BDT": {
+      "bytes": 30645,
+      "sha256": "7b7c114e66fba15492a6f9b25bb599bcc38306b09291db35bfed4e4ab0c619f2",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/28.BDT": {
+      "bytes": 50519,
+      "sha256": "7f12436a8554040b26d11a50b154b466bbc070da3f62c6b44f916cabddb79892",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/29.BDT": {
+      "bytes": 33398,
+      "sha256": "47dda33b7a4121c68fc29d1693e166ab90b88a07b391986faa41bf48104bcf60",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/3.BDT": {
+      "bytes": 50848,
+      "sha256": "d9152798d6c89092bda128b9239a17246c8f9f81d5eb00728874bd882371a83e",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/30.BDT": {
+      "bytes": 44938,
+      "sha256": "2f2494fa6ee40d2d991f5609cb872e267a9b011ad1715ce249019fbbe8fd6ff7",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/31.BDT": {
+      "bytes": 36904,
+      "sha256": "be15a8b8e226d89df24360b711ed0d34e9d3de758265fcafdd591e38b63a5b42",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/32.BDT": {
+      "bytes": 47424,
+      "sha256": "9c295dcbdfe160f24ac0a2dfa3cf5300bb4326bda52d23c39106d0c54d02c0fc",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/33.BDT": {
+      "bytes": 45316,
+      "sha256": "07c9bd746bad0f6cf81dbfde2a500ab99c70f004e1e9602275b62622f8f508a9",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/34.BDT": {
+      "bytes": 51747,
+      "sha256": "d43e6fbd151479f326ed09ad8fb413de270e67937acb2b4ef5a417376f8bf6b9",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/35.BDT": {
+      "bytes": 45458,
+      "sha256": "18d5bdc4b2b20fe9e654e1b7acd187a320a9859ee1c8a347c6e9fd7014252cd9",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/4.BDT": {
+      "bytes": 22663,
+      "sha256": "d72e4e7c0a62241ab188e556b42b53d0fe996c57a02b2de6e83ad69aa09397b7",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/5.BDT": {
+      "bytes": 31834,
+      "sha256": "96614acbd96006cff0ec5d0cb466e61ad53c593c206da5047c3014d45dffdfff",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/6.BDT": {
+      "bytes": 27796,
+      "sha256": "3f6749e8523687e96453291f5a10ae2b42ca02e97287207338aa9401f739498f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/7.BDT": {
+      "bytes": 32363,
+      "sha256": "937dc8c06e8d424d742f299bacf39347c77b18d0ecc641ef075de3ef8b403cb9",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/8.BDT": {
+      "bytes": 57440,
+      "sha256": "76836d3c31db05787611bb81218248b154560fe35a28ecb76d2371a80737a532",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/9.BDT": {
+      "bytes": 50305,
+      "sha256": "fcb1348042de88869f1c2f38a9328d3adcad38da4806004ad9e1ab4b76242d02",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/ADOPT01.DAT": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/ALL_PTZ.BHD": {
+      "bytes": 16158,
+      "sha256": "868fdf3b32fd4af229898642f88290a4f28a4979362934df8f2e39f1a6149ca6",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/ALL_PTZ.SCP": {
+      "bytes": 21497,
+      "sha256": "94e6b09a5cdf1ce4c663618c7db87ad1b504ed25f09f055970dbf14f4bc3b138",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/BIGDOG.LNZ": {
+      "bytes": 13902,
+      "sha256": "977295b1d8cff5b59e353d1a66c67c7fa9cb6ad89cc1a0ff334450984ad09697",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/BRAIN.PBT": {
+      "bytes": 1879,
+      "sha256": "b7639e420187ee5f5f67d2597a3000147da8639f4c68b9ab9b0ec022d1db4873",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/BULLDOG.LNZ": {
+      "bytes": 13943,
+      "sha256": "94209f91bae331d025ed2c232ce698dac6a34d6c83928c478fcd6a6c7897916f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/CHIUA.LNZ": {
+      "bytes": 13973,
+      "sha256": "478dcec06c0e04c5fe3456750e5462d24c9f406ca1d611ad1ae176669cb597c4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/POLY.DAT": {
+      "bytes": 1957,
+      "sha256": "c54402aa23b9f8dd29eb5f7b8d808c0b00e0033fd6b1f7275bb7bf2ee202adf2",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/SCOTTY.LNZ": {
+      "bytes": 14080,
+      "sha256": "c2581a4486ba110358ff01fc8510892caf6051dea37096d3cddca294aa959921",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/SCREENS.TXT": {
+      "bytes": 59697,
+      "sha256": "9c8324a91c16b96dfbb67395fbfd7d14292a26c43cac23e7d1b9f311c4a1cf69",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DATA/TERRIER.LNZ": {
+      "bytes": 14096,
+      "sha256": "541ab746cd961bf70891587fc72de39eee369b49df05a47c2f835adbfdaa57dd",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DOGZ.EXE": {
+      "bytes": 54802,
+      "sha256": "9962945920ef2ea6a451106588a2a4226ffba1a1cf0da9429b1083906a88a685",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DOGZ.HLP": {
+      "bytes": 50261,
+      "sha256": "197f3416fa6a206a659d0c195083e2b599b45c71264f7ba82b8d7ce75434d714",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/DOGZ.INI": {
+      "bytes": 454,
+      "sha256": "43c6da55be2f2204fa202ecf87369586f73ac4bb7d52672dc2a8c1cd12a5adec",
+      "stage": "adoption"
+    },
+    "DOGZ.DOG/DOGZ.WAD": {
+      "bytes": 187788,
+      "sha256": "870df1790f6a87fac2ab5cb5f5dcf1c6de3a4960b266814c10793ed2f978dda6",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/EREG/EREGLIB.DLL": {
+      "bytes": 35632,
+      "sha256": "bd3a55dd743fffb97c8f3b9abc21dd87e8ea3e80486b9158d771ed726e9111dd",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/EREG/EREGREG1.DLL": {
+      "bytes": 32016,
+      "sha256": "70833a4fc3d6509fd334495b14002746d7cd7155174e1eea6ce5312aa644eadf",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/EREG/EREGREG1.~DL": {
+      "bytes": 32016,
+      "sha256": "8110331b5e592c8781f9df82a22419b6de9a2a69a52b084097e8fcfc476f13c6",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/EREG/REGISTR1.EXE": {
+      "bytes": 5008,
+      "sha256": "1e6fb47105f8a8e602361e01e85055fc9457d2b2a1b0797f5df107e4f653bc1b",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/NEURON.DAT": {
+      "bytes": 50,
+      "sha256": "b7bd5d0ec73913bcfd7d7d06b129dc23a295020d270ee972b5bb01d1d43ba79c",
+      "stage": "adoption"
+    },
+    "DOGZ.DOG/NEURON.DLL": {
+      "bytes": 13456,
+      "sha256": "c738f402584f653884d10d357ae51fe2b1c80f5496f02138c6fa2f74ee18ebaf",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_BONE.BMP": {
+      "bytes": 2166,
+      "sha256": "fdd6e14a11682c47046f23be6db58400b26130f484b560adc204a713562209fe",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_BUMP.BMP": {
+      "bytes": 2168,
+      "sha256": "604de38d74e480d7d01bae1fc39a56109b9eee217ad014f969055fbf9c5402bb",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_COMIC.BMP": {
+      "bytes": 2166,
+      "sha256": "91b473f6acbbdfbf50675cfae3948a9f0d5457e5b3125bf123ac3ae8eaae0815",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_GOLD.BMP": {
+      "bytes": 632,
+      "sha256": "a4f4e069d5c83b98bb38af171a0346f6d94499db597ce7da4d0e70a689742deb",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_GRAS1.BMP": {
+      "bytes": 5174,
+      "sha256": "fa26f937d2d17406f2e363cdc35482763c13697a74987ae7a09bf35e0bda38ec",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_GRAS2.BMP": {
+      "bytes": 5174,
+      "sha256": "b7bf07c8a404f3e9da7e534d3d6339ab09b3130e6f000b5a0fdb315ff7fc83dd",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_GRAY.BMP": {
+      "bytes": 632,
+      "sha256": "1bbad030e04320612cfc80579c1848acd207339e7ebc23bc09cd38d2ac6174ea",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_PAW.BMP": {
+      "bytes": 2166,
+      "sha256": "bff66d106381645e1821ec66e94cb24a40e068be31f8b157bc323a07d7416c71",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_PAWZ.BMP": {
+      "bytes": 8312,
+      "sha256": "7dfb0672e9a545e186b9e13e077ec1de2addfe71a1727f170e6fede6ee20a6b7",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/16_RED.BMP": {
+      "bytes": 632,
+      "sha256": "9ba0ed91d0df56b3ddeec58e703444b8b20bfa2aebbb0c2d20650a2516489703",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/256BONE.BMP": {
+      "bytes": 5198,
+      "sha256": "09a7cce4c8ee1b4e831db6a247ef0d479cce7e931701b34e714a3b70c496049d",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/256GRASS.BMP": {
+      "bytes": 5198,
+      "sha256": "69eb9b4b41145e20668a3f9303fceba9dc553adf4d2a4f0237ac26064471cf4f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/256NEWS.BMP": {
+      "bytes": 12316,
+      "sha256": "a794d3e2aea805668a3887ed61c518eae8b1e8709d4f41eb1f944ffa4ee0e0c3",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/256PFM.BMP": {
+      "bytes": 17486,
+      "sha256": "0d45bc587383ad6408b11b0670b092948c0803c4b51def706abc45dc4b9b9110",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PLAYPENZ/256WOOD.BMP": {
+      "bytes": 5198,
+      "sha256": "2e1acbf5b39d2ebb1706f32f97c7b561c90fd00592d95c38819f2cf3a31b2265",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/PUPPY.AGE": {
+      "bytes": 50,
+      "sha256": "b7bd5d0ec73913bcfd7d7d06b129dc23a295020d270ee972b5bb01d1d43ba79c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/README.TXT": {
+      "bytes": 5421,
+      "sha256": "ab8a41d576af14718a15ae781992300a04adc6476823ef4a27d3c3e13943d724",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SAVED.LNZ": {
+      "bytes": 562,
+      "sha256": "a5c4659f21fb358dd3434e3a0e3db897564dbf7f16dc3cc35e44fff8fa674580",
+      "stage": "adoption"
+    },
+    "DOGZ.DOG/SOUNDS/ASCRTCH1.WAV": {
+      "bytes": 1816,
+      "sha256": "7e3aed2941ad86a8d7ad15e531fdf26fb0a72ca102dbea1b968a6c7e2f4e2233",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/ASCRTCH2.WAV": {
+      "bytes": 2728,
+      "sha256": "e5cf24301f9ab402644fc0babdc74252d97c513e982377ae87bae75f6f14a3f4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/ASCRTCH3.WAV": {
+      "bytes": 2344,
+      "sha256": "f2658d5c5353d3b8fb066fba68fe4cc34b9a3c85dc86cb03c02f2e7a55d2ab39",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/ASCRTCH4.WAV": {
+      "bytes": 1704,
+      "sha256": "bd194a5184668c141ceedb282a21113acf4213fa395d8a44aa67a2204a47e832",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BALL.WAV": {
+      "bytes": 2220,
+      "sha256": "40cd1f3fb87fe04e5d4de21bd75ad499e5d7e47c3a2844ff5e7f464b0758b791",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BALLHONK.WAV": {
+      "bytes": 2154,
+      "sha256": "03897a2ebea3d2097d248cf39ee83b0685229a7771459c565737b0a1052a6986",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BARK_A.WAV": {
+      "bytes": 6872,
+      "sha256": "1571fa8fa3c9ac8db870a0454fcde1f180177436fdeea6a782e18b1eb0e6d907",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BARK_H.WAV": {
+      "bytes": 5928,
+      "sha256": "c55dc1c20c4507330d5d6ffa7f6b7f9d98bc90b32ccd58b9504cd8cbed14534c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BASNDLST.TXT": {
+      "bytes": 1033,
+      "sha256": "874a40a235ce75df02ddceac3b2388d8503cc0610924efe54549880be3a35fe5",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BEG1.WAV": {
+      "bytes": 7656,
+      "sha256": "62f70fb4baad1842ba4e7457537749b658a58cded4a2170cc48c512dcdf51817",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BEG2.WAV": {
+      "bytes": 14268,
+      "sha256": "7a334ae11d79932bd90588857eea3942bc4aedd6875e3d1d60b991346cd2409a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BOING.WAV": {
+      "bytes": 4842,
+      "sha256": "136451a644151c1ba8fb319df223b5925bc75dbd0e96736b2c06f20350cf45dd",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BONK.WAV": {
+      "bytes": 3464,
+      "sha256": "45b00229a900bab68d8c36d6f6f7aebb32adebb4a96c4f696b88a44a5262260d",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BPSNDLST.TXT": {
+      "bytes": 1033,
+      "sha256": "874a40a235ce75df02ddceac3b2388d8503cc0610924efe54549880be3a35fe5",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/BURP.WAV": {
+      "bytes": 2346,
+      "sha256": "8d3cb1423d093d7b3ac3e029ea7f4c212cb6aa66facf0bd1d30c2a0b42eb95d1",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CAMERA.WAV": {
+      "bytes": 5122,
+      "sha256": "1a7b5c5edaff07d47dc5b1ea3f9e0fd3bcd7c35f7a603516a4dd7367c9ef0acf",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CASNDLST.TXT": {
+      "bytes": 961,
+      "sha256": "45ef4053ef626e768647b759f9847cddee788a5c7181ebb1b356f1c6444b8d15",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CHEWHI_1.WAV": {
+      "bytes": 4906,
+      "sha256": "14b3376394079f4d146f6e93932a2cf6a530354d95252f27e88b322767fe1f66",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CHEWHI_2.WAV": {
+      "bytes": 4842,
+      "sha256": "c725475eb5433e4d513784f681d755dce4650f160eb553d6b78449efc403f7f4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CHEWHI_3.WAV": {
+      "bytes": 2920,
+      "sha256": "74db70a9a4d233ec63309a2239e889fbe861e3d0962e9b5923fbdebba463c5d4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CHEWHI_4.WAV": {
+      "bytes": 3050,
+      "sha256": "59342f23af791eaca8e633c208005eb135a429b135f191a33213a2bfdfa72b39",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CHEWLO_1.WAV": {
+      "bytes": 4906,
+      "sha256": "42af932522fbfd5c673ed49065777550996ad9b015fec06b0144fa57ee5eee2e",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CHEWLO_2.WAV": {
+      "bytes": 4842,
+      "sha256": "15228757c74ff9ed994ea54df7313b2218dea2a501ef400978932b9a520543df",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CHOMP.WAV": {
+      "bytes": 8960,
+      "sha256": "79aadeb42187608ebcea97bebc5e788dba8f87e6e9e55237ccf447d11048a3cc",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CNFSD.WAV": {
+      "bytes": 5498,
+      "sha256": "3b6f9f1eed33c857f1417c3fc7d424cb8d9e0d0e92a44657f6a0a2147b72114b",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/COUGH.WAV": {
+      "bytes": 15806,
+      "sha256": "aef790dc5875b5b4d3a6d353becd71c3a8fc048aeff26897fac26e364b3b497f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CPSNDLST.TXT": {
+      "bytes": 961,
+      "sha256": "45ef4053ef626e768647b759f9847cddee788a5c7181ebb1b356f1c6444b8d15",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CRUNCH.WAV": {
+      "bytes": 4478,
+      "sha256": "b5a1f64fb048de55f275f4a5cd596ff4091f8cab1057a651b75464c01c37eca9",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CRY1.WAV": {
+      "bytes": 12968,
+      "sha256": "2518f0314f205ef28ee7195cd5c1cd7f36a034db5d81ccd29428d65de618ba2c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/CRY2.WAV": {
+      "bytes": 9512,
+      "sha256": "0044d29ff94353cb7bef84b719f129edc3208053db95a67b3b4188aa01e4bfc1",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/DOING2.WAV": {
+      "bytes": 5450,
+      "sha256": "ce778f900ede6b8ee19dc9c4ef9c54e78f055806c4bc4655791975535ee403fa",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/DREAM1.WAV": {
+      "bytes": 12060,
+      "sha256": "c1d679d057c253667ef78df8095bd761724a2411c7d7a12020661a9fb9c3c8ca",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/DREAM2.WAV": {
+      "bytes": 3786,
+      "sha256": "10367d6d6d92d2998641e425cd0f672c7ff3497836298c9f7a9496a907fa48c9",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/DREAM3.WAV": {
+      "bytes": 18098,
+      "sha256": "9adc1b53c6761811a5d5e78f4b0f6cb6e26a46c9592f305e495c279e1b1fce15",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/DRINK.WAV": {
+      "bytes": 12970,
+      "sha256": "d016290fc6f1a5ca70b1efc96a6f2fe90650d09a5a7260f990dcfcbe4b989117",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/DSCMFT.WAV": {
+      "bytes": 9000,
+      "sha256": "30f6c0553598ce275164003adf1c7ab96190fbe571ca972493915260fd920e96",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/DSGUST.WAV": {
+      "bytes": 5674,
+      "sha256": "24b19b565b161504b9b19911cd78a4505bfb5ad8ae2a36a235044164524a3931",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/FLY.WAV": {
+      "bytes": 4380,
+      "sha256": "d897b706bc71d2fbd878ea55632c7fac1be429b508b733bde6283f2ebe08be8b",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/GROWL1.WAV": {
+      "bytes": 10060,
+      "sha256": "9063b9db7f14f8ceacc076b528b8cb4f4884658602ef8a004b9f1642a03a84db",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/GROWL2.WAV": {
+      "bytes": 7530,
+      "sha256": "f219ee443ee59588c722e5e193d025efe9d79475abae22e3b0d390f03b8fe323",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/GRRR.WAV": {
+      "bytes": 6936,
+      "sha256": "882b4c0ac92273ca4edcb67880c839dfcf73ddbbc2bfc58cd151f08f0c271b2e",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/HICCUP.WAV": {
+      "bytes": 3304,
+      "sha256": "34b5d4bd1d3ade153be8c1867027bd7f05166fd154ce03d92ab3ac27340022dd",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/HOWL1.WAV": {
+      "bytes": 49380,
+      "sha256": "3f28d5d6406fb7c8eb088fceda87d68d1d485cd6b0e413a2b45d363d6808eb56",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/HOWL3.WAV": {
+      "bytes": 70116,
+      "sha256": "66fa48ca5d658a22c32215b19b29526a094fb5ebf2a497dbf281af1c18628203",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/KISS.WAV": {
+      "bytes": 7358,
+      "sha256": "059b0cbb3e14a782b8a27bb9e6dcf2faed6b9ddaa27d30857782f33c6dc1447c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/LAND.WAV": {
+      "bytes": 6412,
+      "sha256": "f04112cb232975bea9e8cdd37ea725768035f17438df59f7dcebe18a5a226519",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/BARK_A.WAV": {
+      "bytes": 3754,
+      "sha256": "5c0563b493ac7c09fb8f891d704b72ec58ebe2fec714acd53f8dfa64798dadac",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/BARK_H.WAV": {
+      "bytes": 3434,
+      "sha256": "1b63d59588545c4f1de41e1b038905bb206e4829699fc39bda9ac5275bcea3f4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/BEG1.WAV": {
+      "bytes": 3722,
+      "sha256": "6e06c5f9668bf0c5b3fc329c18abb24cb4d19db4812ce53367df050ebca8627f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/BEG2.WAV": {
+      "bytes": 7274,
+      "sha256": "a561c3f42d2c289fd04d8e03b8905ba2779b897dc368458cf3535bb4ff05e402",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/CRY1.WAV": {
+      "bytes": 16808,
+      "sha256": "6a7302299f6cab2b163b1b816549fa3b412747a410189a3afafc196ea774d135",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/CRY2.WAV": {
+      "bytes": 13352,
+      "sha256": "667539e9769b27a31a7da69c4f11ba5b8167439ca02c4ca9f8e03c26cc86106a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/DREAM1.WAV": {
+      "bytes": 11330,
+      "sha256": "b3a93ffdd34fa7d27b7936a20e6ade2ae5df3cac6aac25f3cedcf9bb1fd92d5b",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/DSCMFT.WAV": {
+      "bytes": 3626,
+      "sha256": "d513000b59f8bb038bc8b5a1e7b64ddb695dddd4bdc80c807a9e1c2530e27ccb",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/GROWL1.WAV": {
+      "bytes": 9396,
+      "sha256": "41553072739ffdd37242e2cdc36a63bce7f7cb8a9da8b1407fea83f3bd99826c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/GROWL2.WAV": {
+      "bytes": 9034,
+      "sha256": "5cc5263e49d2908046e64e44f08f0be6725241be3195e46c71c92d61f7f03ba2",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/GRRR.WAV": {
+      "bytes": 13098,
+      "sha256": "d3cf07f3ce6c58dbade1ca437aae531e41651c2dfa595df0d1d74601812623f6",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/HOWL1.WAV": {
+      "bytes": 62572,
+      "sha256": "33113858f9f9fc7b2d0639d94f50096654d2ebc40421c21a44f0e33b6e0b4707",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/HOWL3.WAV": {
+      "bytes": 80492,
+      "sha256": "b4ac8be66d1d56a2302b5525353ed6919a7bbdcc2b5ad7961f4044451d29326c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/PANT1.WAV": {
+      "bytes": 5672,
+      "sha256": "d86c3b66444f7bf4bed19face5a20d5880df11d976ff205472baff24f4bb941a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/PANT2.WAV": {
+      "bytes": 3306,
+      "sha256": "40aff0cebd53b2f82c6df5e987676e1872fbeaf9ec3f3f0c570c2f343c867903",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/PURMON.WAV": {
+      "bytes": 10724,
+      "sha256": "cfccab211e1b9c16d18dd6d1c1f59c78201deb70d9ebaf83764ee65191c698c7",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/PURR1.WAV": {
+      "bytes": 15976,
+      "sha256": "6f65043b4e3dc1bb863bda6411188b74d357b78a01624f1d61735185d128345e",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/PURR3.WAV": {
+      "bytes": 20008,
+      "sha256": "36e8d2d1a1571bd8cc0a72530b2a1f9e1f17edaea25438ce9ad65823e73c5e8f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MAS/WHINE1.WAV": {
+      "bytes": 29604,
+      "sha256": "636318ec3cdabf93f4cf6f9f605f5b1536d579bd7618bf2c283227b9f3ad4368",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MASNDLST.TXT": {
+      "bytes": 1037,
+      "sha256": "a6176eae1df59bd3739abab5966cb37637112b08e15073bcd34582abb512b1e0",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/MPSNDLST.TXT": {
+      "bytes": 1037,
+      "sha256": "a6176eae1df59bd3739abab5966cb37637112b08e15073bcd34582abb512b1e0",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/PANT1.WAV": {
+      "bytes": 3434,
+      "sha256": "67ab84894ba83c28291d88dc66f49c0c90a421e15a8db8bbe12811fdc6413239",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/PANT2.WAV": {
+      "bytes": 2910,
+      "sha256": "900ce72ced447a894ed8156e8e33ffdd04766ad8886c94ee784d2ae66cf52b63",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/PAW1.WAV": {
+      "bytes": 1884,
+      "sha256": "72ffa7d3e87dc808eeffd664a4463b31736ab3704505b46119c1fdb6641968f7",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/PAW2.WAV": {
+      "bytes": 914,
+      "sha256": "87c0e90b2fb8434b92362a8a99349b7eb1ea463c9a32fb34212bd05eab72a39c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/PNOS.WAV": {
+      "bytes": 13356,
+      "sha256": "db5034f1f929e5a8591916d82b7f37e324b9026ff9b848d353ab9849860e28a0",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/POP.WAV": {
+      "bytes": 2378,
+      "sha256": "a67536bea21f7b0d99a226405f39f40ffa9ff9d13ea039459cf4cdc6dcba79c8",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/PURMON.WAV": {
+      "bytes": 23848,
+      "sha256": "189c255f8822f0fb966ed5f841f4fd0bc62a800dad980edbc05d948958950e35",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/PURR1.WAV": {
+      "bytes": 20904,
+      "sha256": "779af6c5d5f003e5e5d37a4b639f821f9878958459832efb42ca96ffb0752c9f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/PURR2.WAV": {
+      "bytes": 17274,
+      "sha256": "0045f87aa3ef1a933e50ea0ef31c6b37112877c086da5203225979c3e2221922",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/PURR3.WAV": {
+      "bytes": 20008,
+      "sha256": "36e8d2d1a1571bd8cc0a72530b2a1f9e1f17edaea25438ce9ad65823e73c5e8f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/RUB2.WAV": {
+      "bytes": 6280,
+      "sha256": "98183bbad17ec4e6f1b04dbf91c59ba5220d59ad61165b4b2bb5fd90cb48ba43",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SASNDLST.TXT": {
+      "bytes": 969,
+      "sha256": "d2cc4ac98408591cdba7de328ea233359fbff89d3358b461904cf5857882f8b4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SHAKE.WAV": {
+      "bytes": 12722,
+      "sha256": "a1304d4790b94854a7a967577a59d1292146709fa3ac366b84817b54f83e1a8a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SIGH.WAV": {
+      "bytes": 12200,
+      "sha256": "831e17a082bd3df073fe1715aec458fcb014703a62131482b8754567e947541a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SKID.WAV": {
+      "bytes": 13068,
+      "sha256": "b6cdbe4553764ae449d70da01019fe9ef3c3a3b6722fb2335da7a050d510afd7",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNDLST.TXT": {
+      "bytes": 959,
+      "sha256": "713359b08569281dc89377c387da9a9bb6368248553c0c05d91f0e45a5c63b00",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNEEZE.WAV": {
+      "bytes": 2264,
+      "sha256": "4115fc91eabf9c8827ddebc403ca9113ddc33871856e5f2cdb8342dc9fcc8e5a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNIFF_1.WAV": {
+      "bytes": 1544,
+      "sha256": "1366d7c2858b9ef3489daa0fa0b0e54efbe4692359770573a739285039e8b3f9",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNIFF_2.WAV": {
+      "bytes": 1614,
+      "sha256": "e1618c513e646857a6ddaa9d879df488f7cc8ed94db2628a532dd5ed2f913d09",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNIFF_3.WAV": {
+      "bytes": 1952,
+      "sha256": "4a9ff79d73d8a8405b17b2490022a56e876b70d138d91d3bd4c3339890a4680e",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNIFF_4.WAV": {
+      "bytes": 1944,
+      "sha256": "52c4e7a4860cd51cf47b6f68c6df9f055e8c405a8f8b3fc56fcc6b901a5250db",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNORE_1.WAV": {
+      "bytes": 9544,
+      "sha256": "59b593e662278dbfdd8be1cbc27293743b8406374fae47d1ba122d3d98e6e0a7",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNORE_2.WAV": {
+      "bytes": 11130,
+      "sha256": "1bef7e4e08411f92861b59f1deebc737cdee5f3ab7ce1f9d89e1ea07c9c5a3bc",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNORE_3.WAV": {
+      "bytes": 9302,
+      "sha256": "83c5393fbc11859e80685cc5b0314d9556c9d56a7ebe06723e591f0b06e5c873",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SNORE_4.WAV": {
+      "bytes": 13882,
+      "sha256": "9472f56ec8b2bd7ce6191c21695d28ac1c4abd0f6a44258f7bc7f617f8e90b98",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SOUND.DAT": {
+      "bytes": 50,
+      "sha256": "b7bd5d0ec73913bcfd7d7d06b129dc23a295020d270ee972b5bb01d1d43ba79c",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SOUND.INF": {
+      "bytes": 50,
+      "sha256": "b7bd5d0ec73913bcfd7d7d06b129dc23a295020d270ee972b5bb01d1d43ba79c",
+      "stage": "adoption"
+    },
+    "DOGZ.DOG/SOUNDS/SPIT_UP.WAV": {
+      "bytes": 5060,
+      "sha256": "28cb2ab86f7709d63ef50d34fd68fe1eaf45d3feb012027578d1412de1665203",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SPRAY.WAV": {
+      "bytes": 4008,
+      "sha256": "7f5ba6da76737790e97ff261f970d2351d9ab9b7a29c188512d4d34586db3b8b",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SPRAYEMT.WAV": {
+      "bytes": 3116,
+      "sha256": "0541d246037210d575eabbbad6ed547d3fd82ec344cf6c9e80277deddaa15f66",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SPSNDLST.TXT": {
+      "bytes": 969,
+      "sha256": "d2cc4ac98408591cdba7de328ea233359fbff89d3358b461904cf5857882f8b4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SQUEEZE.WAV": {
+      "bytes": 10804,
+      "sha256": "42e39cea44f8ecf8c4d4c6d14fcc5d29650e05d1e2fbb45121f867dccacefcf1",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SWALLOW1.WAV": {
+      "bytes": 2074,
+      "sha256": "1edf8f0d567be21f35a4ac7ca1dd625621cf960a0b0d2517dfbbc33b09f974a4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/SWALLOW2.WAV": {
+      "bytes": 3082,
+      "sha256": "4f70f241e204a9a24b1aa1e27e3077a46998d0167f9ffb0aefeb61552ade82b4",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/TASNDLST.TXT": {
+      "bytes": 997,
+      "sha256": "c0fb201dd1cb77c24568308dbd4c6aa61a32a25bae48f95f816cd7e91c779724",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/TER/BEG2.WAV": {
+      "bytes": 6952,
+      "sha256": "b85fab9f35735ed801ccdb55362c4d335aaac282e5e92a5cbe6deca2b6ceb223",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/TER/CRY2.WAV": {
+      "bytes": 9288,
+      "sha256": "e39c7e3b71a152f357ffa0932d365c45593a0a6204bb31d4fda2e9b41af287e5",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/TER/PURR3.WAV": {
+      "bytes": 10724,
+      "sha256": "cfccab211e1b9c16d18dd6d1c1f59c78201deb70d9ebaf83764ee65191c698c7",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/TLKDOG.WAV": {
+      "bytes": 20522,
+      "sha256": "9615fd2d9e35d100b3213f4c999056a15dca065458d1759230280264b2447dba",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/TPSNDLST.TXT": {
+      "bytes": 997,
+      "sha256": "c0fb201dd1cb77c24568308dbd4c6aa61a32a25bae48f95f816cd7e91c779724",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/TWINKLE.WAV": {
+      "bytes": 4640,
+      "sha256": "d012089ba40aeecc51a4e5fa626aca91292d60bfe0c1a5e3af80fa29cc3ef578",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/WHINE1.WAV": {
+      "bytes": 9512,
+      "sha256": "0044d29ff94353cb7bef84b719f129edc3208053db95a67b3b4188aa01e4bfc1",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/WHINE2.WAV": {
+      "bytes": 20816,
+      "sha256": "598ce9835badba0cd0be505a6b9d5515c352906e94c6816be2019549ef4b94bf",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/WHISTLE1.WAV": {
+      "bytes": 10508,
+      "sha256": "8179510657e0ec84f822a151ceffe52e3d23cca6db83443c62c7f84ebe02393f",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/YAWN_1.WAV": {
+      "bytes": 6056,
+      "sha256": "b07c33ab023bd64648ea3e0d1bf2c2ddbe4ae47dfd32bd4a20c49eb6b2928f49",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/YAWN_2.WAV": {
+      "bytes": 6378,
+      "sha256": "9da2f6a1c842dfbe4bd9cc1c3fa58875f6a5063f34bc64e81a0a45f839eca557",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/YAWN_3.WAV": {
+      "bytes": 7302,
+      "sha256": "04681aa88c38d4ac325d45f9dd719a44136349ca3db507009be6464cf41f600b",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/YELP1.WAV": {
+      "bytes": 8232,
+      "sha256": "fad4fec9fb42145f63506bc77df65a5fdea6fcf8370af87a5d5f00a151f40b5a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/SOUNDS/YELP2.WAV": {
+      "bytes": 9896,
+      "sha256": "0206d88bf423639d211fb196fe5ace7b073208af5476246a25c27a23f96b5e85",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/THINK.DLL": {
+      "bytes": 53589,
+      "sha256": "e71d0dd56083d862e51a829dee0e41996465b4348709234ffb05e68934a5729a",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/THINK.MFG": {
+      "bytes": 29,
+      "sha256": "99b17b83f0bd7b78a994ee8be7fd612c880fe9144d94c0095ab4c7755d8d1874",
+      "stage": "setup"
+    },
+    "DOGZ.DOG/TRICKS.TDT": {
+      "bytes": 2880,
+      "sha256": "78b77c6be1931fb61e42dd4fec98fb95bbe8ed33f273b69c307601e76fb4c5b2",
+      "stage": "adoption"
+    },
+    "WINDOWS/ACCESSOR.GRP": {
+      "bytes": 16103,
+      "sha256": "0ab8ead6d8573be40280a74e6229a242f8382daf514141e00efe95cc5818c39b",
+      "stage": "windows"
+    },
+    "WINDOWS/AUTOEXEC.WIN": {
+      "bytes": 69,
+      "sha256": "917e879b072153e7c57c9ad595cf5bfe225ace1056fe2d00ee535fce2c3d3c89",
+      "stage": "windows"
+    },
+    "WINDOWS/BOOTLOG.TXT": {
+      "bytes": 1189,
+      "sha256": "bffac7b336fe3769b5997658ba61398dbe47d5c56eea71402e311c7f678d8c05",
+      "stage": "windows"
+    },
+    "WINDOWS/CALC.EXE": {
+      "bytes": 43072,
+      "sha256": "09b5e717589598b9df943a690a78b5f5f0a586468cf08beb8ced58623c49bcc7",
+      "stage": "windows"
+    },
+    "WINDOWS/CALC.HLP": {
+      "bytes": 18076,
+      "sha256": "eaeaacbbd768a9f7239cb7b2b8380e9ac6ceff4c1b69c25ba51b291e70ba1000",
+      "stage": "windows"
+    },
+    "WINDOWS/CALENDAR.EXE": {
+      "bytes": 59824,
+      "sha256": "83d5c8d7c81c93fe09c7b202ba28eb558e92308c7c3f90f910ab731de849e0ce",
+      "stage": "windows"
+    },
+    "WINDOWS/CALENDAR.HLP": {
+      "bytes": 20656,
+      "sha256": "42edf405d2827d44372a772b2af5bbc27fdebff7a6ffaf504ec099d85e12cb5d",
+      "stage": "windows"
+    },
+    "WINDOWS/CARDFILE.EXE": {
+      "bytes": 93184,
+      "sha256": "e77dc9767b97ccc0d8186b6281606163c58780009dea173113de535a816449f4",
+      "stage": "windows"
+    },
+    "WINDOWS/CARDFILE.HLP": {
+      "bytes": 24810,
+      "sha256": "b35e0681cea68125398b29f0fd39f6bce72bfaad4e7a8673a13232e4efa83e54",
+      "stage": "windows"
+    },
+    "WINDOWS/CHARMAP.EXE": {
+      "bytes": 22016,
+      "sha256": "e709c65d7972450d98cfcef88f9c3ddd1d188ca0e821ff9a7e9d634cccb721b1",
+      "stage": "windows"
+    },
+    "WINDOWS/CHARMAP.HLP": {
+      "bytes": 10797,
+      "sha256": "a88339d4722c177e77e50abc1e914f671db6737484ae2776cdd72c16b498efa9",
+      "stage": "windows"
+    },
+    "WINDOWS/CLIPBRD.EXE": {
+      "bytes": 18512,
+      "sha256": "5773a82995d288fb50cf56a0a40549bb090c99acea41e84464803e4972bfc6db",
+      "stage": "windows"
+    },
+    "WINDOWS/CLIPBRD.HLP": {
+      "bytes": 13071,
+      "sha256": "698914b98638f23a40cd347b31b7c7ef38cb3385e014983ae1010b5d18402202",
+      "stage": "windows"
+    },
+    "WINDOWS/CLOCK.EXE": {
+      "bytes": 16416,
+      "sha256": "5f9b99acabc9c4d57e6cf984be9013df94c2582729f355417600f019148bf2f0",
+      "stage": "windows"
+    },
+    "WINDOWS/CONFIG.WIN": {
+      "bytes": 112,
+      "sha256": "8225587cde3118ee44a8ed047ad3c53cde9dc0796ce36c7063998b6bcbb5f05d",
+      "stage": "windows"
+    },
+    "WINDOWS/CONTROL.EXE": {
+      "bytes": 15872,
+      "sha256": "baff2415103219aef517e1e9b1b06e77c0155ff9c2317ed713454f27ebd671c4",
+      "stage": "windows"
+    },
+    "WINDOWS/CONTROL.HLP": {
+      "bytes": 121672,
+      "sha256": "5b1c180242a41d420207b9ba69618c63aca9648f07dc5ff19cdd820d9e05fa84",
+      "stage": "windows"
+    },
+    "WINDOWS/CONTROL.INI": {
+      "bytes": 3609,
+      "sha256": "35d14dcd836a4267252dd470f15a96c85027de32e75ba24ad8e5d1863da39597",
+      "stage": "windows"
+    },
+    "WINDOWS/DOGZDLL.DLL": {
+      "bytes": 742725,
+      "sha256": "b865bbe812141935d6114e4b8889eaab4bec166cd09c7ec9432263d98ab47dda",
+      "stage": "setup"
+    },
+    "WINDOWS/DOGZSDOG.GRP": {
+      "bytes": 3858,
+      "sha256": "610af2d2cbfdc32e5a0981fe4b908b1390e82c5630e0757334c03c8c5f91dc1d",
+      "stage": "setup"
+    },
+    "WINDOWS/DOSPRMPT.PIF": {
+      "bytes": 545,
+      "sha256": "ad051c987158faf89c670496b8d0c10641e4f408673009c6807a8f55e8d60820",
+      "stage": "windows"
+    },
+    "WINDOWS/DRWATSON.EXE": {
+      "bytes": 26864,
+      "sha256": "0fa17b12826ae22af03c579b5d15e117ca6f60e33e5e688d02de6af8eddc9414",
+      "stage": "windows"
+    },
+    "WINDOWS/EMM386.EXE": {
+      "bytes": 110174,
+      "sha256": "232bd85ff9b2802805fafc755f18aa0310af20d21dd72ef749d9182c5a24462d",
+      "stage": "windows"
+    },
+    "WINDOWS/EXPAND.EXE": {
+      "bytes": 15285,
+      "sha256": "3859d2c671f075f7e6b18cd967487506784fc77147cb57b5a997139671a748d0",
+      "stage": "windows"
+    },
+    "WINDOWS/GLOSSARY.HLP": {
+      "bytes": 46570,
+      "sha256": "610a3ac1c59c5813d21c783082ccfd18d6adb1c0408410a9fa5a5effb0666794",
+      "stage": "windows"
+    },
+    "WINDOWS/GUARDDOG.DLL": {
+      "bytes": 56977,
+      "sha256": "b572bc50f34d248417175111161a1ecd87d36ee529cf70bf12630394bf8ad6fc",
+      "stage": "setup"
+    },
+    "WINDOWS/GUARDDOG.INI": {
+      "bytes": 26,
+      "sha256": "befe84091a6c9048968d9170dbecdaa4f05112470f8f4000c21e203187159f45",
+      "stage": "setup"
+    },
+    "WINDOWS/GUARDDOG.SCR": {
+      "bytes": 16656,
+      "sha256": "4ddf1b34e7b91e82e041f0e17495021b7b5b0e1483ce16c37c00a26213685615",
+      "stage": "setup"
+    },
+    "WINDOWS/HIMEM.SYS": {
+      "bytes": 13824,
+      "sha256": "47efed8a4d54bec75e265be2fa9803e7c6500e4e2008679df0f04c9880745bb4",
+      "stage": "windows"
+    },
+    "WINDOWS/MAIN.GRP": {
+      "bytes": 8699,
+      "sha256": "bf2dc84bf7d408b48a46312fb8e0f23b30b32510f50c07bd77f55e0db1309146",
+      "stage": "windows"
+    },
+    "WINDOWS/MORICONS.DLL": {
+      "bytes": 118864,
+      "sha256": "7ea75f55e177a10ac86ae1b7299fa11081bea17364945ca002770adb90a10aa5",
+      "stage": "windows"
+    },
+    "WINDOWS/MOUSE.INI": {
+      "bytes": 24,
+      "sha256": "823533200e34997f67d17473a58057cb43a595e9ff36b3b22b0afcea5d4fee06",
+      "stage": "windows"
+    },
+    "WINDOWS/MPLAYER.EXE": {
+      "bytes": 33312,
+      "sha256": "a9b821cde9eabf72d50e4a730c64e5793c06d55274d9c4c5a0b7c604a30b207a",
+      "stage": "windows"
+    },
+    "WINDOWS/MPLAYER.HLP": {
+      "bytes": 12896,
+      "sha256": "fba8f4fec8b32da982fada3c26bff3ace4d31c539c9fd6f374d2129c87c19df2",
+      "stage": "windows"
+    },
+    "WINDOWS/MSD.EXE": {
+      "bytes": 155538,
+      "sha256": "c1d72c3deb0053fea2164b091008a1522279487ff360ea55389d149508cce9de",
+      "stage": "windows"
+    },
+    "WINDOWS/MSD.INI": {
+      "bytes": 620,
+      "sha256": "d2dd082f918ea626b1216feb832e60f2f130407e08934b5fe47a05949925732b",
+      "stage": "windows"
+    },
+    "WINDOWS/NOTEPAD.EXE": {
+      "bytes": 32736,
+      "sha256": "250a4a99fa40e775121d3e5b30f2a9ec7f2be48748efb2937a1d16e5e79e8de3",
+      "stage": "windows"
+    },
+    "WINDOWS/NOTEPAD.HLP": {
+      "bytes": 13894,
+      "sha256": "6ce28484e12d400c6eaa265f17c198df903b8923f62db3d1b98447594843b8e8",
+      "stage": "windows"
+    },
+    "WINDOWS/PACKAGER.EXE": {
+      "bytes": 76480,
+      "sha256": "3dc30a6b2314358c07879e5bfa811a0f750ee860a0a557f6a8cd12698bc1e3c9",
+      "stage": "windows"
+    },
+    "WINDOWS/PACKAGER.HLP": {
+      "bytes": 21156,
+      "sha256": "364d95daf90358144a3d7d579a97debd6373e06586b71fdda472cfa6ce7c2d12",
+      "stage": "windows"
+    },
+    "WINDOWS/PBRUSH.DLL": {
+      "bytes": 6766,
+      "sha256": "8304e5823eb1971beaf53f790129cbb760090655a848d4374f5eb73e445379ba",
+      "stage": "windows"
+    },
+    "WINDOWS/PBRUSH.EXE": {
+      "bytes": 183376,
+      "sha256": "425a5c38bd24fcb2733304579ba8d9880c9c0d1194a95b3783568d262b974ca8",
+      "stage": "windows"
+    },
+    "WINDOWS/PBRUSH.HLP": {
+      "bytes": 40269,
+      "sha256": "8a78314ed84c0fc3f5dedc468e6e8ffb2d9c324b3129299c548eb9593d145572",
+      "stage": "windows"
+    },
+    "WINDOWS/PIFEDIT.EXE": {
+      "bytes": 55168,
+      "sha256": "3b2a9212a951241801d4b59f029bf6dbf151a46844beed4565259ba679a601ad",
+      "stage": "windows"
+    },
+    "WINDOWS/PIFEDIT.HLP": {
+      "bytes": 33270,
+      "sha256": "a9b348f0b2f163e32614451b9e2cc699124bc69285e80263761d1d6a23204a14",
+      "stage": "windows"
+    },
+    "WINDOWS/PRINTMAN.EXE": {
+      "bytes": 43248,
+      "sha256": "4a1854ed330a3e5e87dc324a4a835050c1fbbb8acd47df77fbf4b82a49509c8e",
+      "stage": "windows"
+    },
+    "WINDOWS/PRINTMAN.HLP": {
+      "bytes": 40880,
+      "sha256": "37da78e9d3915ef6c6fb8a8e5560c4429cd667ddd00fbe4e78895b3ce6300b95",
+      "stage": "windows"
+    },
+    "WINDOWS/PROGMAN.EXE": {
+      "bytes": 115312,
+      "sha256": "81ab580d6fb9a22d727a58c77125deb4825186c6656f7368375ad429463d67e4",
+      "stage": "windows"
+    },
+    "WINDOWS/PROGMAN.HLP": {
+      "bytes": 30911,
+      "sha256": "d373f42b213e957e5eeb2ab988cd0f0ec1c8c6da948cb3c20fa7b3b04818d611",
+      "stage": "windows"
+    },
+    "WINDOWS/PROGMAN.INI": {
+      "bytes": 212,
+      "sha256": "560bc03c58576ea7cdf78ef1ec5f9c9cbaf924b51dbdccc75d7b046d50936e0f",
+      "stage": "setup"
+    },
+    "WINDOWS/RAMDRIVE.SYS": {
+      "bytes": 5873,
+      "sha256": "519acc99dd6018ca1ff6cf5f741100e5271516304138dba2a6b163e21b7e76b8",
+      "stage": "windows"
+    },
+    "WINDOWS/RECORDER.DLL": {
+      "bytes": 10414,
+      "sha256": "0cad4a682bc9bcab61b19f6558d582062721e4054734a5fbb65a3468e42b342a",
+      "stage": "windows"
+    },
+    "WINDOWS/RECORDER.EXE": {
+      "bytes": 39152,
+      "sha256": "5fe6ca139778e58c24600d79af2e7419448e77109396652413d16802336463f2",
+      "stage": "windows"
+    },
+    "WINDOWS/RECORDER.HLP": {
+      "bytes": 18200,
+      "sha256": "ca9a8e874c7761ba301566753f573099d339120dd2bac5b8a07ce1abedd1e534",
+      "stage": "windows"
+    },
+    "WINDOWS/REG.DAT": {
+      "bytes": 2556,
+      "sha256": "c8d62846d64b27582237c2274ac2624c24243438822944dcdc83ffee83200e3c",
+      "stage": "windows"
+    },
+    "WINDOWS/REGEDIT.EXE": {
+      "bytes": 32336,
+      "sha256": "6467a2e65aa8b7d0d75b049a83cbe770f83e15234ef2a03d93724faa11fc3f4a",
+      "stage": "windows"
+    },
+    "WINDOWS/REGEDIT.HLP": {
+      "bytes": 22681,
+      "sha256": "1e857dcc7e9ea31b6b8232c8b5f973cbe2dffbdbca649756d2a77c520b1020e6",
+      "stage": "windows"
+    },
+    "WINDOWS/REGEDITV.HLP": {
+      "bytes": 15731,
+      "sha256": "631789ddc90e8added2fb6ec096f5573df6683a93fe8c623049c0cc90f6892e5",
+      "stage": "windows"
+    },
+    "WINDOWS/SETUP.EXE": {
+      "bytes": 422080,
+      "sha256": "dd5a9288a0267d0476da5b7697963708b27611b10134410496025d6e4f1fd7cb",
+      "stage": "windows"
+    },
+    "WINDOWS/SETUP.HLP": {
+      "bytes": 41453,
+      "sha256": "f38f7e30e16e9013757df506121b94e7c34101502811a0a7b27c9b543791a91b",
+      "stage": "windows"
+    },
+    "WINDOWS/SETUP.TXT": {
+      "bytes": 41724,
+      "sha256": "8fcfaeb2d613b47039073474a07dd2560875477ae091f86affbb19533181f8b1",
+      "stage": "windows"
+    },
+    "WINDOWS/SMARTDRV.EXE": {
+      "bytes": 43609,
+      "sha256": "9ced9e19df9e52918f5d37e0273a2985a7a24cc2958f7ce591f32abf464886ed",
+      "stage": "windows"
+    },
+    "WINDOWS/SOUNDREC.EXE": {
+      "bytes": 51305,
+      "sha256": "0236fa2204dde59067b963be2c4fb7c09ea71f1af65186dc4f84998a2599ceee",
+      "stage": "windows"
+    },
+    "WINDOWS/SOUNDREC.HLP": {
+      "bytes": 17686,
+      "sha256": "04c10521117880975269442a51b187fa1ae8c9331ae4c4c9a3c50ae4318de724",
+      "stage": "windows"
+    },
+    "WINDOWS/STARTUP.GRP": {
+      "bytes": 44,
+      "sha256": "d27a91d36225eebc5f472b7cf6326840b6cbd341bcec0c1e2b5c02b3c63d8856",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM.INI": {
+      "bytes": 1646,
+      "sha256": "43f3884a768ef3140f8fdb69b65fdcac3e0259baf49bbddd10ff604c1e840116",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/APPS.INF": {
+      "bytes": 57475,
+      "sha256": "b2fbc2966eedf4fe7f96a50279778d29a7ac28747c4fef79ec138aba013789ec",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/ARIAL.FOT": {
+      "bytes": 1306,
+      "sha256": "7e60fb4593444e5578497ecffca1d0fa07a8516fbf025cd1cbbc8f70c03c0987",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/ARIAL.TTF": {
+      "bytes": 65692,
+      "sha256": "0a11b9de6e94e190c0b126c7506903241730e8be54c2cc45ea79dbb27523b25f",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/ARIALBD.FOT": {
+      "bytes": 1308,
+      "sha256": "0467b8878afb62afbf158a36eed5fb1f69a611f8a0f00a0b068e437319bb0965",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/ARIALBD.TTF": {
+      "bytes": 66080,
+      "sha256": "de176134ac01c1f860c64e1342fd60565cfe74712d76c44734d827ee6533dd1e",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/ARIALBI.FOT": {
+      "bytes": 1322,
+      "sha256": "5e28e3d2f694beae7b36348959813d701f5892107c46642aca056af98bfabcd6",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/ARIALBI.TTF": {
+      "bytes": 71880,
+      "sha256": "5a611c815a7fa44b1e4f2cdd90f8aadd5532510e062b6f74e077f2006d312fb8",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/ARIALI.FOT": {
+      "bytes": 1312,
+      "sha256": "71fc97d4e57dfb2378e710a354c4cd4688265154e5992b5c382cbda411bae774",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/ARIALI.TTF": {
+      "bytes": 61656,
+      "sha256": "221864f0c6f806a823b1e32d540672bbd90d369fb5a6d8096506fa5f168337ab",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/CGA40WOA.FON": {
+      "bytes": 6336,
+      "sha256": "32482989159a4d10af71599300b99e7c618d768e97832bf7013b78e52fcea4e9",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/CGA80WOA.FON": {
+      "bytes": 4304,
+      "sha256": "93e7c6c123d9b53a2d933f63093b4b85302023517f56abf057f9ef8a94d83b8b",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COMM.DRV": {
+      "bytes": 9280,
+      "sha256": "5d320cb5eaf6c2ccaa8bd71ade1a04bca810a57f41db691ae0b6454fe81f0dbf",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COMMDLG.DLL": {
+      "bytes": 89248,
+      "sha256": "853574d46a8e0103028354883cc597e762bafd034b60c15aedc8cdc097629ec8",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/CONTROL.INF": {
+      "bytes": 20993,
+      "sha256": "882d6a3b00c36f3f4bbd11a8e7ae2fdf833a7da0252c25029a6fde128fb5289c",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COUR.FOT": {
+      "bytes": 1318,
+      "sha256": "0ded7b4c8ed65e0c26e42147e06aadc6a7c85fb38da62f02e5a27d895da9cc0a",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COUR.TTF": {
+      "bytes": 72356,
+      "sha256": "f06c736f7bc00b131437a13facd9e59978b7e90f58fa64c7c9c480e73d0f57ad",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COURBD.FOT": {
+      "bytes": 1320,
+      "sha256": "74fdfa197ac27ebef91a72ae22183571463e197eaeb13bf2fedc05a32f47825f",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COURBD.TTF": {
+      "bytes": 78564,
+      "sha256": "45dd3e0080442c5ae43c70a0eb9a0e5bc8c3cb182fef7b72ec20b6ed4d4c0997",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COURBI.FOT": {
+      "bytes": 1334,
+      "sha256": "8954ef9f745ccd92e59d841b660e4b443d44f81635d421cecd4d4b9b9d1e24ab",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COURBI.TTF": {
+      "bytes": 84436,
+      "sha256": "2dcc01b113e9bf8b1c2c817bd10349f36baca4ea8532adcacb163153806660bc",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COURE.FON": {
+      "bytes": 23408,
+      "sha256": "e81d15ef094f997d48cb144375866fb2f5d988b0b93b43c38cf58985e27acf45",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COURI.FOT": {
+      "bytes": 1324,
+      "sha256": "12aa98fae4777aedac1f222ae8fde2aa8ab4e97fd94d22095223c25b1975eb96",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/COURI.TTF": {
+      "bytes": 80588,
+      "sha256": "71354c3b5efb76571a0acff2734135d5c02ecd40a70d2b8e4e76b8ba0c84fd2a",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/CPWIN386.CPL": {
+      "bytes": 104816,
+      "sha256": "154fdb4cc30415eb8ee1b5c371efc9f858482ebacf5886bf1c89be7d3a27ebb4",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/CTL3D.DLL": {
+      "bytes": 21008,
+      "sha256": "de6ae72b0795ae2eebd864d3aafacbbb629ce0f9fd20cb20cba5f822be0f420d",
+      "stage": "setup"
+    },
+    "WINDOWS/SYSTEM/CTL3D32.DLL": {
+      "bytes": 25088,
+      "sha256": "ba7242991fa42acc4e601d5fd5f81c21814596159ede13c8b465e0cc9ff3d0d5",
+      "stage": "setup"
+    },
+    "WINDOWS/SYSTEM/CTL3DV2.DLL": {
+      "bytes": 21648,
+      "sha256": "765b48cf073bc86d36148fe62694b19243268cb48b402a89d4758f4d3dbcc795",
+      "stage": "setup"
+    },
+    "WINDOWS/SYSTEM/DDEML.DLL": {
+      "bytes": 36864,
+      "sha256": "6d86de3a979ab3f4eeac37ebfd8f43b33f7dc80e50ede7112903e41da77fc95b",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/DOSAPP.FON": {
+      "bytes": 36656,
+      "sha256": "0da0d4ed89fd1e8810c7f2cdb5372abfb02cb3d031acacc1a5bbc853f879c2bd",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/DOSX.EXE": {
+      "bytes": 32682,
+      "sha256": "dfe36cae683da95781032811c3ad7951e204ee4408bf7cb731a445dd08584077",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/DRIVERS.CPL": {
+      "bytes": 41440,
+      "sha256": "04c72b1c5403d033b823be118109883416e8ea276c4c45965d1c587d9a8474e6",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/DSWAP.EXE": {
+      "bytes": 27474,
+      "sha256": "ad3b84526dd856c68cfff8cd4820d7945af82c27b16934555d798a2d4efafcaa",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/DVA.386": {
+      "bytes": 1966,
+      "sha256": "19f9c5a1d8dd6a93758741b82578c126263b2892e2b219d6f92ef17f0848bfa7",
+      "stage": "setup"
+    },
+    "WINDOWS/SYSTEM/EGA40WOA.FON": {
+      "bytes": 8368,
+      "sha256": "a0e5dbe96d1cae29501b481cd98a1eac5f0f662aa367aa9712a419c3c32f4284",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/EGA80WOA.FON": {
+      "bytes": 5312,
+      "sha256": "6e7a86167874f989433a264345e5ea6c0e000861cbca8153858b23d7d35d5ecc",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/GDI.EXE": {
+      "bytes": 220800,
+      "sha256": "6d28146961ab4733e167b1657289206ce16a856e431f843e4ee3d504836dfb6f",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/KEYBOARD.DRV": {
+      "bytes": 7568,
+      "sha256": "79b053607b314cf068a524ede0ad27816ffd3cf026a7cd56525ed122e64b40f2",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/KRNL286.EXE": {
+      "bytes": 71730,
+      "sha256": "09a8119b4140b9350c7d79bdd6b3ba7434f3f523dfb3d7d11b2a0a78fce163dd",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/KRNL386.EXE": {
+      "bytes": 75490,
+      "sha256": "fbeaf672ee9e917318ce8fcd1d560db805dbfadf4777039abbaaff1a9c75b980",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/LZEXPAND.DLL": {
+      "bytes": 9936,
+      "sha256": "faf467ce496dd59655ccd91c26c8ea694551f54fa6bbf5f480f398fc54d12fdd",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MAIN.CPL": {
+      "bytes": 148560,
+      "sha256": "c00b2dbfb876b85ea8bdbc9850e2b2c792c9623ab4e0e0e3ba69b93817901155",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MCISEQ.DRV": {
+      "bytes": 25264,
+      "sha256": "0fde2d8ecd6f6a852f81c13c93602505d07361dc7ba970cfa696d10d8e20aa15",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MCIWAVE.DRV": {
+      "bytes": 28160,
+      "sha256": "f9a131de7acd1f5b6eab7e8d941dc929b647dc20e5fc6f2f1771c1b31e1b2bf8",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MIDIMAP.CFG": {
+      "bytes": 34522,
+      "sha256": "3dbcbf55af144d1484a6fd443a4ce28475ac744325fe5e40d72204f9909af1ea",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MIDIMAP.DRV": {
+      "bytes": 52784,
+      "sha256": "d2653a1275b57a8181317793bfce4db19bd117d1f6ab0e030d1d218539dc2d3b",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MMSOUND.DRV": {
+      "bytes": 3440,
+      "sha256": "b95e240396ccab42411eeb4447fae21318d8411c5bc308eaf2ca54f1bdfd300e",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MMSYSTEM.DLL": {
+      "bytes": 61648,
+      "sha256": "4ba0b19b64b3de4e8c86a4412a8829741f25367d235f363e57508d9579094c86",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MMTASK.TSK": {
+      "bytes": 1104,
+      "sha256": "3a7f024e2afa38dccc916bb60a0a507da2f1e344aacc68beadd7274946a3eb2a",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MODERN.FON": {
+      "bytes": 8704,
+      "sha256": "b532bc33388b2aa350f1a497485fb63385adfc9d25094725e4c00bb0bf77628c",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/MOUSE.DRV": {
+      "bytes": 10672,
+      "sha256": "b4f0b9de8043071fa2b82b16373bf5188bbe8162c3ef24c8c3d1b01f86b96b07",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/OLECLI.DLL": {
+      "bytes": 83456,
+      "sha256": "f3a76752b6a257056ec43cd6d43da5a65244fc5c41f89e2162ef27634ece54b4",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/OLESVR.DLL": {
+      "bytes": 24064,
+      "sha256": "ed3b0e6c69cefcdcf085661bf6a62c7466b108d05e314b0dd173c82f2e505f69",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/ROMAN.FON": {
+      "bytes": 13312,
+      "sha256": "25733f3e5dddebea00c32382d6e40438282ea740f23955010cb38c4b1e312297",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SCRIPT.FON": {
+      "bytes": 12288,
+      "sha256": "eacbfca9a5ef05a108ef5337c773d82a43398bb8ea177e5ebeef62934dd75811",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SERIFE.FON": {
+      "bytes": 57936,
+      "sha256": "19bfe5865332ca1f1392bf77950f79dbb7d9e5600f79bc546397567310364fe2",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SETUP.INF": {
+      "bytes": 59636,
+      "sha256": "806ec7ed03eefbbf8342c883228af47231af777d5b6bdfcf600366c2ee47ec17",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SETUP.REG": {
+      "bytes": 3508,
+      "sha256": "d3cc4e49b6506cd74c93dd21d776cd4e35146b4a3f03de7415e5649b80085067",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SHELL.DLL": {
+      "bytes": 41600,
+      "sha256": "667422428e0934d947c9b56d622cffe6acd576f8014ca3692d7639d5457044d6",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SMALLE.FON": {
+      "bytes": 26112,
+      "sha256": "de416395301da32c96bf34625483ea6ecdcdaaeb9ff72cdca00b5af4d7092da9",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SND.CPL": {
+      "bytes": 8192,
+      "sha256": "ca9ff82e72678555bf49f154ad1a3a24cd6b71f9e82b865909d18983ab83a2ae",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SOUND.DRV": {
+      "bytes": 3440,
+      "sha256": "b95e240396ccab42411eeb4447fae21318d8411c5bc308eaf2ca54f1bdfd300e",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SSERIFE.FON": {
+      "bytes": 64544,
+      "sha256": "9b2658673e3c017847f7f6b272d2ec57dff7c1137567a0643e2057450859a5ce",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SVGA256.3GR": {
+      "bytes": 13824,
+      "sha256": "386957c03de74bfb9951995aced7b0a01098df63046ada7e56ebea6aa42825c1",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SVGA256.DRV": {
+      "bytes": 117312,
+      "sha256": "440acc337733f6f3be7e8f4e6cb4a305a8bd62dfe6f6dea79898f81b9637e95d",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SYMBOL.FOT": {
+      "bytes": 1308,
+      "sha256": "b959d5094670384fde60c65f04eb1e0cdceb8208c23b61c2baba8f1a3921e54f",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SYMBOL.TTF": {
+      "bytes": 64516,
+      "sha256": "156026fc0abe5b03d0bf13f20be2d9b4e801c572337f41c230b3cf3678f219a0",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SYMBOLE.FON": {
+      "bytes": 56336,
+      "sha256": "85ea10f38c3d4c7035d958af6fef01d9ceac1faad107cbcacdc4b3aaa24afe81",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SYSEDIT.EXE": {
+      "bytes": 18896,
+      "sha256": "f614d8dc0d46206a5c90a85e5f1d842a04dbe78cf7e67f1263ea615bf94cdf7a",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/SYSTEM.DRV": {
+      "bytes": 2304,
+      "sha256": "48badb96fe21a6e6cbf33f97889641443139b082bf78a8d52c0aaf6eae5612cc",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TIMER.DRV": {
+      "bytes": 4192,
+      "sha256": "31d554cb5d21a9efff204beaf3759ce9efbe8a6e6445edff4e0cfd6ba7d4deb8",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TIMES.FOT": {
+      "bytes": 1326,
+      "sha256": "095ba48c9721c031b0d32bce98815c99cccd931a0577a883f6775c9db19426f3",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TIMES.TTF": {
+      "bytes": 83260,
+      "sha256": "bf4da6ea8aa6adbd0514cfa0266068b0363ddbfa185fb41e458c52242a1196e6",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TIMESBD.FOT": {
+      "bytes": 1328,
+      "sha256": "e332d751241d7b650e77515e825cf37a5218902806c000c55ce836efea86ba1e",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TIMESBD.TTF": {
+      "bytes": 79804,
+      "sha256": "1067890da1b841bade2af4cd77d44f0c9e43adc970159095ebe00e23405cacf3",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TIMESBI.FOT": {
+      "bytes": 1342,
+      "sha256": "2aa6893d65b224d8cd42339d4add6e68d9647ac38f83ffd547edcdd0d2dc451d",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TIMESBI.TTF": {
+      "bytes": 76452,
+      "sha256": "1e33623a0096f9f779e87851365c8367199b834be9bf2b5c960b383ef8d0cbd0",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TIMESI.FOT": {
+      "bytes": 1332,
+      "sha256": "02a6328eeb78ce6728c54430cb763d69f616849b271210883e826240cafd6eeb",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TIMESI.TTF": {
+      "bytes": 78172,
+      "sha256": "26c415a819b299bd6aebd80a90355bee7710018852357b728141004235b5ed41",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/TOOLHELP.DLL": {
+      "bytes": 14128,
+      "sha256": "274568f7b811539c2d85700617d3624fd63ad6724419295174bd73fd72a1c291",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/USER.EXE": {
+      "bytes": 264016,
+      "sha256": "433fb641058d852e3d82a5a62f810842da789f611ed9d026487cde3165af3a7f",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/VDDTLI4.386": {
+      "bytes": 39996,
+      "sha256": "eb3d54c2c53ae8a98771dc8e32c1261e6e211dd8d90f7fa35abde85bb495e3db",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/VER.DLL": {
+      "bytes": 9008,
+      "sha256": "6d03cf1e31748149b6d34725e293c5ee4f3bd7ddebe526285fe7ba41a1d1f5b4",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/VGACOLOR.2GR": {
+      "bytes": 4484,
+      "sha256": "6776463cb0c5d8993add49b5fe78d945c930f7208799970bc95bfee3c49b0f6b",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/VGAFIX.FON": {
+      "bytes": 5360,
+      "sha256": "57402d1e89dc0d8368cde612d720ab4a6a813bfe5e243e9da2775013e06f2b0f",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/VGALOGO.LGO": {
+      "bytes": 1280,
+      "sha256": "051b595494db5d2f531386a8a224f52d5e371589ce5d8b7298a5e0c5c4820d64",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/VGALOGO.RLE": {
+      "bytes": 26778,
+      "sha256": "a34ef5d705bbd0d94575b5f1f9ee0d8c4c325fee1e4ef47212fead5425172945",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/VGAOEM.FON": {
+      "bytes": 5168,
+      "sha256": "011326f65e151d83c157ef6fdd23a2d851e8d0f2662d8409ea0b4a142e343a13",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/VGASYS.FON": {
+      "bytes": 7280,
+      "sha256": "7baefa14ef8ef2355374d0b5061043dd5f4f8c33ff57680366e4a725f91646f8",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/VTDAPI.386": {
+      "bytes": 5245,
+      "sha256": "ef26b17aa9de66ae9dbbd43a2694aa62ff6b92945bd917b31421756b1de231fa",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/WIN.CNF": {
+      "bytes": 16112,
+      "sha256": "b4b781bb4382fed4d3154a3a43c8827fce2b1d91d35a11df1d18a7b536c3f6c4",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/WIN386.EXE": {
+      "bytes": 544789,
+      "sha256": "6006860ae1003114583d70a1c6447247e1280a99633202912092a5f06a0c22a5",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/WIN386.PS2": {
+      "bytes": 852,
+      "sha256": "94596c841bcd547566814b4502ac077037a2a4230b0699cae1acb7192f220aa7",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/WIN87EM.DLL": {
+      "bytes": 12800,
+      "sha256": "30d6b965d45eddf306268c9526b01494df4841b8b530bab2654c379e1cf49db2",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/WING.DLL": {
+      "bytes": 92208,
+      "sha256": "4d21333b4997beecb667181bee4c1081b32be8f1d54ce0e71eeee173fecd3f52",
+      "stage": "setup"
+    },
+    "WINDOWS/SYSTEM/WING32.DLL": {
+      "bytes": 12800,
+      "sha256": "bb1f552e2525e784b61d2fe0ca23f3402adec05aa5f92f4c1dfbea3966a84cbb",
+      "stage": "setup"
+    },
+    "WINDOWS/SYSTEM/WINGDE.DLL": {
+      "bytes": 188960,
+      "sha256": "e3fdd4ee8cb81c4a88371c84364d9aabe90ea0b4286a0a7705929b4189a54fb5",
+      "stage": "setup"
+    },
+    "WINDOWS/SYSTEM/WINGDIB.DRV": {
+      "bytes": 6736,
+      "sha256": "26e2296e247eb7065a90eca42ee82bdb2df8d67d65b9f8f269ae6977223abf81",
+      "stage": "setup"
+    },
+    "WINDOWS/SYSTEM/WINGDING.FOT": {
+      "bytes": 1314,
+      "sha256": "28104a851dd77befaa561d186295c0756376eed398611615bedc097179903a6c",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/WINGDING.TTF": {
+      "bytes": 71052,
+      "sha256": "98152095c6e732083de5a91780fde8ccde66a8c7f2ec7c8505906f550058e3ef",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/WINGPAL.WND": {
+      "bytes": 5024,
+      "sha256": "d845868b8dc3551b2b9a3a1c3cd21ec9b7148ef79eed30c82cba83a1d09547a7",
+      "stage": "setup"
+    },
+    "WINDOWS/SYSTEM/WINOA386.MOD": {
+      "bytes": 49248,
+      "sha256": "20b0c544e692cd4a5f244a71a06895b401d5239a353bdd640646d60f785c076c",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/WINOLDAP.MOD": {
+      "bytes": 31232,
+      "sha256": "80657da18efe1f24c82d8ee9e33f3f99e9b131e0cb0c324089d6ea6f3affbbcd",
+      "stage": "windows"
+    },
+    "WINDOWS/SYSTEM/WSWAP.EXE": {
+      "bytes": 16302,
+      "sha256": "0a855d60e7a50d94933e6cc29138ed9c14d288cff048538ce4f291d436c74262",
+      "stage": "windows"
+    },
+    "WINDOWS/TASKMAN.EXE": {
+      "bytes": 3744,
+      "sha256": "57979d822ca64138c8f8da38ce02916f814dd452491541e9f11c8021a1102b44",
+      "stage": "windows"
+    },
+    "WINDOWS/TERMINAL.EXE": {
+      "bytes": 148160,
+      "sha256": "6cf539af3ce4c1a38455856ba0b6b41b52b8357bbd29e193d606db480ed1ef65",
+      "stage": "windows"
+    },
+    "WINDOWS/TERMINAL.HLP": {
+      "bytes": 36279,
+      "sha256": "57dbf44b753d98ce830fdc7d4e40005cee16fca4720334222d7fd7d28ae83621",
+      "stage": "windows"
+    },
+    "WINDOWS/WIN.COM": {
+      "bytes": 44170,
+      "sha256": "0e34b06601b2c9056186c937e2baa8adf14bd572fd15bc72b8b7fff679aa2e47",
+      "stage": "windows"
+    },
+    "WINDOWS/WIN.INI": {
+      "bytes": 3425,
+      "sha256": "fa56b81490a61bf23182da671b3dbef183897c99bb9faf486d73e25e5b7d094d",
+      "stage": "adoption"
+    },
+    "WINDOWS/WINFILE.EXE": {
+      "bytes": 146864,
+      "sha256": "fb20b6f0723f1ccd96fc65a6644ca0db450838a4e7151cfd40057c30914e77e7",
+      "stage": "windows"
+    },
+    "WINDOWS/WINFILE.HLP": {
+      "bytes": 76855,
+      "sha256": "42869b3c427b2b66b7946b830d5cb1b7e2d00e4f311345199815a0f37ce4972b",
+      "stage": "windows"
+    },
+    "WINDOWS/WINHELP.EXE": {
+      "bytes": 256192,
+      "sha256": "47626dffe7795d7ee6ef9bfb057c398b37b21d397caa5ab0cad7e7dffb643170",
+      "stage": "windows"
+    },
+    "WINDOWS/WINHELP.HLP": {
+      "bytes": 26960,
+      "sha256": "10560763b50ddc9026a7440b6d33a7bab6f964da7767938a96dc7f34af4025c3",
+      "stage": "windows"
+    },
+    "WINDOWS/WINMATIC.SHH": {
+      "bytes": 384,
+      "sha256": "2efea940072e850e7dfa94c16c191f7f4737df55be76f8abc92e7a3020305b40",
+      "stage": "windows"
+    },
+    "WINDOWS/WINTUTOR.DAT": {
+      "bytes": 57356,
+      "sha256": "82e9242e6931a066b372c9eae2b85330ffebc9e7a941662cba10d022b0041044",
+      "stage": "windows"
+    },
+    "WINDOWS/WINTUTOR.EXE": {
+      "bytes": 124416,
+      "sha256": "9cc9d0b5ce8ea517ffcbf9cc1f0d2e4992379d5247526e419604849bccf4003a",
+      "stage": "windows"
+    },
+    "WINDOWS/WINVER.EXE": {
+      "bytes": 3904,
+      "sha256": "4cddd144dda2526a446fac5956f9e604d0d7b101cf6dc37a674e90e63007a03b",
+      "stage": "windows"
+    },
+    "WINDOWS/WRITE.EXE": {
+      "bytes": 244976,
+      "sha256": "eb44b5d5f5a405b6a8cd018b9f790bca2e7e895dad4f7e1f5462ec14ccdaa87a",
+      "stage": "windows"
+    },
+    "WINDOWS/WRITE.HLP": {
+      "bytes": 36971,
+      "sha256": "c9606bf99b6e5ce0a72f7336adb593e3a7080a191d9428d01955cdb0b5824f11",
+      "stage": "windows"
+    },
+    "WINDOWS/_DEFAULT.PIF": {
+      "bytes": 545,
+      "sha256": "f1982d78571cd4d87b80ed5015fe9e77527fcf11f9cdbe39de8fb1c902deb57d",
+      "stage": "windows"
+    },
+    "WINDOWS/~INS0363.~MP": {
+      "bytes": 10240,
+      "sha256": "fb0c2c301d5d767f4322733bec6e44c60e9e207c8cfa51ae93e797f002a741f6",
+      "stage": "setup"
+    }
+  }
+}

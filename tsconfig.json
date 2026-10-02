@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "useDefineForClassFields": true,
+
+    /* A new codebase: strict from the first line, so there is no debt to pay
+     * down later. */
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "types": ["jest", "node", "vite/client"]
+  },
+  "include": ["src", "test", "scripts/kb", "*.config.ts", "*.config.js"],
+  "exclude": ["node_modules", "dist"]
+}

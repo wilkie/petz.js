@@ -1,0 +1,108 @@
+{
+  "windows": {
+    "description": "Microsoft Windows 3.1 (3.10.103), the retail 3.5-inch set, from WinWorld's library",
+    "product": "https://winworldpc.com/product/windows-3/31",
+    "edition": "Windows 3.1 (Retail) (3.5-1.44mb)",
+    "archive": {
+      "sha256": "1669bd0a505024ed1b852c1d77a71fcbcbd6dcf4fddd78163e780c7778225cd5",
+      "bytes": 6694673
+    },
+    "images": [
+      {
+        "path": "Microsoft Windows 3.1 (3.10.103) (3.5)/Disk01.img",
+        "sha256": "86a56b7068993037ae950d0c81b29029b154e8c068c3f72f5e5e51a5833be8e2"
+      },
+      {
+        "path": "Microsoft Windows 3.1 (3.10.103) (3.5)/Disk02.img",
+        "sha256": "c8343fd2b8be589df1d3634cd73c7e6eb493e1009a7b58fdbaf856db113665c7"
+      },
+      {
+        "path": "Microsoft Windows 3.1 (3.10.103) (3.5)/Disk03.img",
+        "sha256": "1f5e2bd0d96d1aabd4e83690f208f4b0b637f029bf53c93f0823291fe1fb6f0f"
+      },
+      {
+        "path": "Microsoft Windows 3.1 (3.10.103) (3.5)/Disk04.img",
+        "sha256": "ba4f934f75b80d8e7652a077b49724db67c7daa5c529cc877cb91a32f99ae576"
+      },
+      {
+        "path": "Microsoft Windows 3.1 (3.10.103) (3.5)/Disk05.img",
+        "sha256": "4560f34f960b54bec30a4d8cd90c94fc4e6d1f45814c8659d1e5626afce9c8c3"
+      },
+      {
+        "path": "Microsoft Windows 3.1 (3.10.103) (3.5)/Disk06.img",
+        "sha256": "3747b2670dfbc5c5e91396853f372a1ffd6aa876e5af442518172bfb59a4ad15"
+      }
+    ]
+  },
+  "display": {
+    "description": "Microsoft's Super VGA 256-colour driver from the Windows Driver Library, for the ET4000 DOSBox emulates",
+    "url": "https://archive.org/download/Windows3.1256ColorDisplayDriver/svga.exe",
+    "sha256": "2810f2312a183928c74cdae77c5475ffab071b22a0affb6806df8b2bf279f23b",
+    "bytes": 432405
+  },
+  "dogz": {
+    "description": "Dogz, Your Computer Pet (PF.Magic, 1995), the two-disk adoption kit",
+    "item": "https://archive.org/details/Dogz-ComputerPet",
+    "disks": [
+      {
+        "url": "https://archive.org/download/Dogz-ComputerPet/Dogz-disk1.img",
+        "sha256": "abf3c26c655780cc9cc7363f5540f12a90adb0959a9c8dae9eccb9a07213ea8a",
+        "bytes": 1474560
+      },
+      {
+        "url": "https://archive.org/download/Dogz-ComputerPet/Dogz-disk2.img",
+        "sha256": "ce83d2a59d102423767591fbeec3018b745a65fa1ef34e0396ed77ef37a9503e",
+        "bytes": 1474560
+      }
+    ]
+  },
+  "install": {
+    "firstName": "Dogz",
+    "lastName": "Oracle"
+  },
+  "registration": {
+    "puppy": "Bootz",
+    "petName": "Bootz",
+    "unlockTail": "0000"
+  },
+  "fingerprint": {
+    "volatile": [
+      {
+        "path": "DOGZ.DOG/NEURON.DLL",
+        "reason": "Setup writes this installation's encoded validation code into its data segment, from the clock (kb/topics/adoption-unlock.md)."
+      },
+      {
+        "path": "DOGZ.DOG/PUPPY.AGE",
+        "reason": "A marker file of the copy protection: nine of its 50 digits are written from the clock, at Setup or at adoption (kb/formats/marker.md)."
+      },
+      {
+        "path": "DOGZ.DOG/ART/PHOTO.ART",
+        "reason": "A marker file of the copy protection: nine of its 50 digits are written from the clock, at Setup or at adoption (kb/formats/marker.md)."
+      },
+      {
+        "path": "DOGZ.DOG/SOUNDS/SOUND.DAT",
+        "reason": "A marker file of the copy protection: nine of its 50 digits are written from the clock, at Setup or at adoption (kb/formats/marker.md)."
+      },
+      {
+        "path": "DOGZ.DOG/NEURON.DAT",
+        "reason": "A marker file of the copy protection: nine of its 50 digits are written from the clock, at Setup or at adoption (kb/formats/marker.md)."
+      },
+      {
+        "path": "DOGZ.DOG/ART/PICTURE.ART",
+        "reason": "A marker file of the copy protection: nine of its 50 digits are written from the clock, at Setup or at adoption (kb/formats/marker.md)."
+      },
+      {
+        "path": "DOGZ.DOG/SOUNDS/SOUND.INF",
+        "reason": "A marker file of the copy protection: nine of its 50 digits are written from the clock, at Setup or at adoption (kb/formats/marker.md)."
+      },
+      {
+        "path": "DOGZ.DOG/DOGZ.INI",
+        "reason": "Adoption writes the installation's validation code as Serial Number, and a Hiccup Proclivity that differs from one adoption to the next."
+      },
+      {
+        "path": "WINDOWS/WIN.INI",
+        "reason": "WinG keeps its timing of the display in [WinG] the first time Dogz runs, and timing varies with the host."
+      }
+    ]
+  }
+}

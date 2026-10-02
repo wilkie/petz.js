@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# The knowledge base must build before anything is committed. Its build holds
+# every page to the record of the installation -- a page about a file that is
+# not installed, or a reference to a page that is not there, stops here.
+#
+# It builds from the working tree, as it stands, not from what is staged.
+# Skip it for one commit with `git commit --no-verify`.
+
+output=$(pnpm -s kb 2>&1)
+
+if [ $? -ne 0 ]; then
+  echo "pre-commit: the knowledge base does not build:" >&2
+  echo "$output" | grep -v -e '^\s*at ' -e '^\s*$' | tail -20 >&2
+  exit 1
+fi

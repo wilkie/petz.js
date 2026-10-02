@@ -1,0 +1,17 @@
+# The registration key for the oracle's copy of Dogz. It is ours to use, not
+# to publish: register-dogz.mjs reads it, and oracle/manifest.json records
+# only its hash, so a clone can tell whether it was given the same key.
+serial.txt
+
+node_modules/
+dist/
+coverage/
+
+# Turbo
+.turbo/
+
+# The oracle's media and installations: fetched and built by the scripts in
+# scripts/oracle/, never stored here. What is ours is the manifest that says
+# where each comes from and what the installation must come out as.
+oracle/.cache/
+oracle/build/

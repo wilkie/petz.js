@@ -1,0 +1,30 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "tasks": {
+    "typecheck": {
+      "inputs": ["src/**", "test/**", "scripts/kb/**", "tsconfig.json"],
+      "outputs": []
+    },
+    "lint": {
+      "inputs": ["src/**", "test/**", "scripts/**", "eslint.config.js", ".prettierrc.json"],
+      "outputs": []
+    },
+    "test": {
+      "inputs": [
+        "src/**",
+        "test/**",
+        "scripts/kb/**",
+        "kb/**",
+        "oracle/*.json",
+        "jest.config.js",
+        "tsconfig.json"
+      ],
+      "outputs": ["coverage/**"]
+    },
+    "kb": {
+      "inputs": ["kb/**", "scripts/kb/**", "oracle/*.json", "oracle/README.md"],
+      "outputs": ["dist/kb/**"]
+    }
+  }
+}
