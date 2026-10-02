@@ -61,4 +61,13 @@ The first copies the installation to `oracle/build/variants/terrier16/` with one
 
 ## Check a Read out claim
 
-A **Read out** claim gives a file, a segment and an offset: `THINK.DLL` seg2:031a. The files are 16-bit Windows NE executables. Any disassembler that reads NE files will show the code there. For one that does not, the segment table in the NE header gives each segment's offset in the file. Segments are numbered from 1, as Windows numbers them.
+A **Read out** claim gives a file, a segment and an offset: `THINK.DLL` seg2:031a. The files are 16-bit Windows NE executables ([[format:ne]]), and segments are numbered from 1, as Windows numbers them. With the oracle built:
+
+```shell
+node scripts/re/disasm.ts THINK.DLL 2:031a
+node scripts/re/disasm.ts DOGZDLL.DLL XDrawPort::MakeColorRamp
+node scripts/re/disasm.ts DOGZDLL.DLL --exports
+node scripts/re/disasm.ts DOGZDLL.DLL --callers Ballz::SetBallColor
+```
+
+It disassembles with `ndisasm` (from NASM) and names what each far call and fixup reaches: an import by the name its own module gives the ordinal, read from that module on the oracle's drive, and a call within the module by the module's exports, `Class::Method` for the engine's C++. A function runs to the next export, or to `--to` or `--bytes`. `--callers` finds the far calls to an export, and the near ones within its segment; a virtual method, such as `MakeColorRamp`, is called through its class's table and has none.

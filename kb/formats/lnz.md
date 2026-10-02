@@ -37,7 +37,7 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 | `Head Balls`         | 28       | The balls of the head                                                                                                                               |
 | `Omissions`          | 0        | Balls not drawn; empty in every breed                                                                                                               |
 | `Linez`              | 29 to 34 | "start ball, end ball, fuzz amount": thick lines between balls, such as `snout, head` and the tail's                                                |
-| `256 Ball Color`     | 65       | A colour number for each ball on the 256-colour display ([[topic:drawing-a-dog]])                                                                   |
+| `256 Ball Color`     | 65       | An index into Dogz's 256-colour palette for each ball: a coat is a ramp of them ([[topic:drawing-a-dog]])                                           |
 | `16 Ball Color`      | 65       | On the 16-colour display: "0blk, 1dkRed, 2dkGrn, 3dkYel, 4dkBlu, 5dkMag, 6dkCyan, 7dkGry, 8ltGry, 9Rd, 10Grn, 11Yel, 12Blu, 13Mag, 14Cyan, 15White" |
 | `Speckle Color`      | 65       | -1, or a colour for speckles on the ball                                                                                                            |
 | `Ball Size Diffs`    | 65       | How much larger or smaller the breed draws each ball than the skeleton's size                                                                       |
@@ -50,4 +50,4 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 
 - [[measured]] The ball names come from the per-ball sections' comments, `eBall_Lankle, // 0` to `eBall_tongue2, // 64`, in the order of the skeleton. They are C enumerators, so the game's source called its balls this.
 - [[measured]] The bulldog has 29 lines where the others have 34.
-- Not yet known: what the numbers of `256 Ball Color` index, since they are not the palette's indices ([[topic:drawing-a-dog]]); how the scales and the extensions are applied; and the behaviour factors.
+- Not yet known: how the scales and the extensions are applied, and the behaviour factors.

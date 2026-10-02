@@ -9,8 +9,11 @@ import { join } from 'node:path';
 
 import { parseAnimation, parseBhd } from '../../src/formats/animation.js';
 import { parseLnz } from '../../src/formats/lnz.js';
+import { parseNe } from '../../src/formats/ne.js';
+import { PALETTE_16, PALETTE_256, readPalette } from '../../src/formats/palette.js';
 
 const DATA = join(process.cwd(), 'oracle', 'build', 'drive-c', 'DOGZ.DOG', 'DATA');
+const ENGINE = join(process.cwd(), 'oracle', 'build', 'drive-c', 'WINDOWS', 'DOGZDLL.DLL');
 const describeWithOracle = existsSync(DATA) ? describe : describe.skip;
 
 const read = (name: string) => new Uint8Array(readFileSync(join(DATA, name)));
@@ -104,4 +107,53 @@ describeWithOracle("the oracle's game files", () => {
       expect(breed.ballNames[52]).toBe('eBall_head');
     }
   );
+});
+
+describeWithOracle("the oracle's DOGZDLL.DLL", () => {
+  const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
+
+  it('exports 525 entries, every one named, MakeColorRamp at 8:1a71', () => {
+    expect(engine.entries).toHaveLength(525);
+    expect(engine.entries.every((entry) => entry.name)).toBe(true);
+    expect(
+      engine.entries.find((entry) => entry.name?.startsWith('@XDrawPort@0MakeColorRamp'))
+    ).toMatchObject({ segment: 8, offset: 0x1a71 });
+  });
+
+  it('has the 16 colours of Windows, 7 the dark grey and 8 the light', () => {
+    expect(readPalette(engine, PALETTE_16, 16)).toEqual([
+      [0, 0, 0],
+      [128, 0, 0],
+      [0, 128, 0],
+      [128, 128, 0],
+      [0, 0, 128],
+      [128, 0, 128],
+      [0, 128, 128],
+      [128, 128, 128],
+      [192, 192, 192],
+      [255, 0, 0],
+      [0, 255, 0],
+      [255, 255, 0],
+      [0, 0, 255],
+      [255, 0, 255],
+      [0, 255, 255],
+      [255, 255, 255],
+    ]);
+  });
+
+  it('has 256 colours where each breed’s coat is a ramp, one way or the other', () => {
+    const palette = readPalette(engine, PALETTE_256, 256);
+    const brightness = ([red, green, blue]: number[]) => red + green + blue;
+
+    for (const [name, first, last] of [
+      ['big dog', 130, 135],
+      ['chihuahua', 64, 69],
+      ['scottie', 100, 105],
+    ] as const) {
+      const ramp = palette.slice(first, last + 1).map(brightness);
+      const rising = [...ramp].sort((a, b) => a - b);
+
+      expect([name, ramp]).toEqual([name, ramp[0] < ramp[1] ? rising : rising.reverse()]);
+    }
+  });
 });

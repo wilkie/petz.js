@@ -89,7 +89,8 @@
     <main>
       <p id="choose" hidden>
         <label
-          >Choose your <code>DOGZ.DOG</code> directory:
+          >Choose the drive Dogz is installed on, or a directory holding its
+          <code>DOGZ.DOG</code> and <code>WINDOWS\DOGZDLL.DLL</code>:
           <input id="picker" type="file" webkitdirectory />
         </label>
         Nothing leaves this browser.
@@ -103,15 +104,22 @@
           >Animation
           <select id="animation"></select
         ></label>
+        <label
+          >Colours
+          <select id="colours">
+            <option value="256">256</option>
+            <option value="16">16</option>
+          </select></label
+        >
         <label>Frame <input id="frame" type="range" min="0" value="0" /></label>
         <output id="frame-number" for="frame">0</output>
         <button id="play" type="button">Play</button>
       </div>
       <canvas id="stage" width="640" height="480" aria-label="The dog, drawn"></canvas>
       <p class="note">
-        Drawn from the breed's <code>.LNZ</code> and the shared animations, in the colours of the
-        16-colour display. How Dogz scales the balls and shades them is not yet known, so this is
-        not yet how the game looks: see the knowledge base's page on drawing a dog.
+        Drawn from the breed's <code>.LNZ</code>, the shared animations and Dogz's own palettes,
+        each ball flat in its colour. How Dogz scales the balls and shades them is not yet known, so
+        this is not yet how the game looks: see the knowledge base's page on drawing a dog.
       </p>
     </main>
     <script type="module" src="/src/viewer/main.ts"></script>

@@ -12,6 +12,8 @@ import {
   parseBhd,
 } from '../formats/animation.js';
 import { type Breed, parseLnz } from '../formats/lnz.js';
+import { parseNe } from '../formats/ne.js';
+import { css, PALETTE_16, PALETTE_256, readPalette } from '../formats/palette.js';
 import { drawPet } from '../render/ballz.js';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -20,6 +22,7 @@ const status = element<HTMLParagraphElement>('status');
 const choose = element<HTMLParagraphElement>('choose');
 const picker = element<HTMLInputElement>('picker');
 const breedSelect = element<HTMLSelectElement>('breed');
+const coloursSelect = element<HTMLSelectElement>('colours');
 const animationSelect = element<HTMLSelectElement>('animation');
 const frameInput = element<HTMLInputElement>('frame');
 const frameNumber = element<HTMLOutputElement>('frame-number');
@@ -33,6 +36,7 @@ const FRAMES_PER_SECOND = 12;
 let files: GameFiles;
 let header: AnimationHeader;
 const breeds = new Map<string, Breed>();
+const palettes = new Map<256 | 16, string[]>();
 const animations = new Map<number, Frame[]>();
 let timer: number | undefined;
 
@@ -40,7 +44,7 @@ async function frames(index: number) {
   let list = animations.get(index);
 
   if (!list) {
-    list = parseAnimation(header, index, await files.read(`DATA/${index}.BDT`));
+    list = parseAnimation(header, index, await files.read(`DOGZ.DOG/DATA/${index}.BDT`));
     animations.set(index, list);
   }
 
@@ -55,8 +59,16 @@ async function draw() {
   frameInput.max = String(list.length - 1);
   frameNumber.value = `${index} of ${list.length}`;
 
+  const colours = Number(coloursSelect.value) as 256 | 16;
+
   context.clearRect(0, 0, canvas.width, canvas.height);
-  drawPet(context, breed, header, list[index], { scale: 1.5, originX: 320, originY: 300 });
+  drawPet(context, breed, header, list[index], {
+    palette: palettes.get(colours)!,
+    colours,
+    scale: 1.5,
+    originX: 320,
+    originY: 300,
+  });
 }
 
 function stop() {
@@ -79,6 +91,7 @@ play.addEventListener('click', () => {
 });
 
 breedSelect.addEventListener('change', () => void draw());
+coloursSelect.addEventListener('change', () => void draw());
 frameInput.addEventListener('input', () => void draw());
 animationSelect.addEventListener('change', () => {
   frameInput.value = '0';
@@ -87,11 +100,15 @@ animationSelect.addEventListener('change', () => {
 
 async function start(found: GameFiles) {
   files = found;
-  header = parseBhd(await files.read('DATA/ALL_PTZ.BHD'));
+  header = parseBhd(await files.read('DOGZ.DOG/DATA/ALL_PTZ.BHD'));
+
+  const engine = parseNe(await files.read('WINDOWS/DOGZDLL.DLL'));
+  palettes.set(256, readPalette(engine, PALETTE_256, 256).map(css));
+  palettes.set(16, readPalette(engine, PALETTE_16, 16).map(css));
 
   const lnz = files
     .list()
-    .filter((path) => /^DATA[\\/][^\\/]+\.LNZ$/i.test(path))
+    .filter((path) => /(^|[\\/])DATA[\\/][^\\/]+\.LNZ$/i.test(path))
     .sort();
 
   for (const path of lnz) {
