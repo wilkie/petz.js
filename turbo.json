@@ -3,11 +3,20 @@
   "ui": "stream",
   "tasks": {
     "typecheck": {
-      "inputs": ["src/**", "test/**", "scripts/kb/**", "tsconfig.json"],
+      "inputs": ["src/**", "test/**", "e2e/**", "scripts/kb/**", "*.config.ts", "tsconfig.json"],
       "outputs": []
     },
     "lint": {
-      "inputs": ["src/**", "test/**", "scripts/**", "eslint.config.js", ".prettierrc.json"],
+      "inputs": [
+        "src/**",
+        "test/**",
+        "e2e/**",
+        "scripts/**",
+        "*.config.ts",
+        "*.config.js",
+        "eslint.config.js",
+        ".prettierrc.json"
+      ],
       "outputs": []
     },
     "test": {

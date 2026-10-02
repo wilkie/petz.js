@@ -21,6 +21,15 @@
 
     "types": ["jest", "node", "vite/client"]
   },
-  "include": ["src", "test", "scripts/kb", "*.config.ts", "*.config.js"],
+  "include": [
+    "src",
+    "test",
+    "scripts/kb",
+    "*.config.ts",
+    "*.config.js",
+    "vite.config.ts",
+    "playwright.config.ts",
+    "e2e"
+  ],
   "exclude": ["node_modules", "dist"]
 }

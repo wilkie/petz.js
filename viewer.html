@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dogz viewer</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f4f6;
+        --fg: #1b1b1f;
+        --muted: #5b5b66;
+        --line: #d9d9e0;
+        --stage: #c0c0c0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #16161a;
+          --fg: #e8e8ee;
+          --muted: #a2a2ae;
+          --line: #33333b;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+      }
+      header,
+      main {
+        max-width: 60rem;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+      h1 {
+        font-size: 1.4rem;
+        margin: 1rem 0 0.25rem;
+      }
+      #status {
+        color: var(--muted);
+        margin: 0 0 1rem;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+      .controls label {
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+      }
+      #frame {
+        width: 14rem;
+        max-width: 100%;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        max-width: 640px;
+        aspect-ratio: 4 / 3;
+        background: var(--stage);
+        border: 1px solid var(--line);
+        image-rendering: pixelated;
+      }
+      .note {
+        color: var(--muted);
+        font-size: 0.85rem;
+        max-width: 640px;
+      }
+      #choose[hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Dogz viewer</h1>
+      <p id="status" role="status" aria-live="polite">Looking for the game's files…</p>
+    </header>
+    <main>
+      <p id="choose" hidden>
+        <label
+          >Choose your <code>DOGZ.DOG</code> directory:
+          <input id="picker" type="file" webkitdirectory />
+        </label>
+        Nothing leaves this browser.
+      </p>
+      <div class="controls">
+        <label
+          >Breed
+          <select id="breed"></select
+        ></label>
+        <label
+          >Animation
+          <select id="animation"></select
+        ></label>
+        <label>Frame <input id="frame" type="range" min="0" value="0" /></label>
+        <output id="frame-number" for="frame">0</output>
+        <button id="play" type="button">Play</button>
+      </div>
+      <canvas id="stage" width="640" height="480" aria-label="The dog, drawn"></canvas>
+      <p class="note">
+        Drawn from the breed's <code>.LNZ</code> and the shared animations, in the colours of the
+        16-colour display. How Dogz scales the balls and shades them is not yet known, so this is
+        not yet how the game looks: see the knowledge base's page on drawing a dog.
+      </p>
+    </main>
+    <script type="module" src="/src/viewer/main.ts"></script>
+  </body>
+</html>

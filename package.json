@@ -11,6 +11,9 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -26,11 +29,13 @@
     "oracle:fingerprint": "node scripts/oracle/fingerprint.mjs",
     "oracle:run": "node scripts/oracle/run.mjs",
     "oracle": "pnpm oracle:fetch && pnpm oracle:install && pnpm oracle:register && pnpm oracle:fingerprint --check",
-    "ci": "turbo run lint typecheck test"
+    "ci": "turbo run lint typecheck test",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "7zip-bin": "^5.2.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@swc/core": "^1.15.47",
     "@swc/jest": "^0.2.39",
     "@types/jest": "^30.0.0",

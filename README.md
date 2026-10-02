@@ -21,16 +21,19 @@ corepack enable pnpm
 pnpm install
 ```
 
-| Command           | What it does                                               |
-| ----------------- | ---------------------------------------------------------- |
-| `pnpm test`       | Jest unit tests, including the knowledge base's checks     |
-| `pnpm typecheck`  | `tsc --noEmit`                                             |
-| `pnpm lint`       | ESLint                                                     |
-| `pnpm format`     | Prettier over the repository                               |
-| `pnpm run ci`     | Lint, typecheck and test, through Turbo, which caches each |
-| `pnpm kb`         | The knowledge base site, into `dist/kb/`                   |
-| `pnpm oracle`     | Fetch, install and register the oracle, and check it       |
-| `pnpm oracle:run` | Play the oracle's Dogz in a DOSBox window                  |
+| Command           | What it does                                                         |
+| ----------------- | -------------------------------------------------------------------- |
+| `pnpm dev`        | The dev server; `/viewer.html` draws the dog from the oracle's files |
+| `pnpm build`      | The viewer as static pages, into `dist/app/`, asking for the files   |
+| `pnpm test:e2e`   | Playwright tests of the viewer, in Chromium                          |
+| `pnpm test`       | Jest unit tests, including the knowledge base's checks               |
+| `pnpm typecheck`  | `tsc --noEmit`                                                       |
+| `pnpm lint`       | ESLint                                                               |
+| `pnpm format`     | Prettier over the repository                                         |
+| `pnpm run ci`     | Lint, typecheck and test, through Turbo, which caches each           |
+| `pnpm kb`         | The knowledge base site, into `dist/kb/`                             |
+| `pnpm oracle`     | Fetch, install and register the oracle, and check it                 |
+| `pnpm oracle:run` | Play the oracle's Dogz in a DOSBox window                            |
 
 ## The oracle
 
@@ -53,6 +56,15 @@ which are not committed. The manifest and the installation record are, so a
 clone anywhere either builds the same installation, file for file, or is told
 where it differs. [`oracle/README.md`](oracle/README.md) and the knowledge
 base's guide to building the oracle say more.
+
+## The viewer
+
+`pnpm dev` serves `/viewer.html` (on port 5791), which draws any of the five
+breeds in any frame of the 36 animations, from the game's own files. In
+development it reads the oracle's drive, which the dev server serves under
+`/oracle/` and never puts in a build; built with `pnpm build`, it asks for a
+`DOGZ.DOG` directory instead, which never leaves the browser. The parsers are
+in `src/formats/` and the drawing in `src/render/`.
 
 ## The knowledge base
 
