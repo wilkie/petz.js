@@ -31,7 +31,7 @@ flowchart LR
 - Sizes and places: as Dogz places a ball, for the breed's scales at an age and a way the dog is turned (below), shown twice the size.
 - Lines: from the `Linez` section, in the first ball's colour, each end as thick as `DisplayBallzFrame` works out for it (below). How `XDrawLine` draws them is not yet read.
 - Outlines: from `Outline Type` and `Outline Color`; a half outline is drawn round the lower half of the ball. Not yet measured.
-- Balls: drawn as Dogz draws them, into palette indices a row of pixels at a time, with their fuzz, speckles and outlines (below), and shown through Dogz's own palettes. Not yet the eyes' special drawing.
+- Balls: drawn as Dogz draws them, into palette indices a row of pixels at a time, with their fuzz, speckles and outlines (below), and shown through Dogz's own palettes; the irises and pupils in their eyes, but not yet the eyelids.
 
 ## The 16-colour display
 
@@ -53,7 +53,7 @@ flowchart LR
 ## Where a ball is drawn
 
 - [[read out]] `Ballz::GetCartesianCoordinates` (seg10:367a) places each ball of a frame. Each coordinate is multiplied by a scale of the dog's state and shifted right by 8, so the scales are in 256ths. The ball is then turned about the upright axis by the way the dog faces, and tilted by a pitch made from that: `-7 - |64 - |yaw|| / 10`, so more from above when the dog faces out (13) than side-on (7). Angles are in 256ths of a turn, from tables of sines and cosines times 256 for -128 to 128 that seg11:1c27 builds. Head tracking and three more turns of the state come between, not yet read.
-- [[read out]] A ball's radius is its size times the dog's ball scale, shifted right by 9 (seg10:367a): its diameter is its size times the ball scale in 256ths. [[inferred]] The size is the skeleton's ([[format:bhd]]) with the breed's `Ball Size Diffs`.
+- [[read out]] A ball's radius is its size times the dog's ball scale, shifted right by 9 (seg10:367a): its diameter is its size times the ball scale in 256ths. `Ballz::LoadSpecialBallInfo` (seg10:1421) makes the size the skeleton's ([[format:bhd]]) with **half** the breed's `[Ball Size Diffs]`, and `Ballz::SetPuppiness` (seg10:2469) adds half its `[Puppy Balls]` times the dog's puppiness in hundredths. [[inferred]] The puppiness is 100 less the age: `SetBallScaleFromAge` passes that to a setter of the same shape.
 - [[read out]] `PetModule::SetBallScaleFromAge` (seg21:4c4c) sets the scales from the breed's `[Default Scales]` by the dog's age, its factor 10 of 100: `age × (adult - puppy) / 100 + puppy`, for the pet scale from the first and third numbers and the ball scale from the second and fourth. The big dog's 220, 220, 140 and 200 make a puppy's positions 140 256ths and its balls 200: smaller, with bigger balls for its size.
 - [[read out]] `DisplayBallzFrame` gives `XDrawLine` each end of a line as thick as its ball's radius × 256 / 300 (seg10:5134).
 - By eye, the viewer's terrier turned side-on is the size and shape of the oracle's, [[guide:reproducing|shot]] on the 16-colour display: `src/render/project.ts` places balls by these rules. Not yet measured pixel for pixel; the dogs' poses on the oracle are not known frame for frame.
@@ -71,6 +71,14 @@ flowchart LR
 - [[read out]] The third colour is the speckles'. `Ballz::GenerateSpeckleColors` (seg10:21da) makes it from the ball's colour, for every ball the breed gives a `Speckle Color` of 0 or more, by reflecting it within its ramp: `s + (s + R - 1 - c)`, where `s` is the first colour of `c`'s ramp. `XDrawPort::InitStaticDraw` sets the ramps on a 256-colour display at 20 of 6 colours from 16 — 16 to 21, up to 130 to 135 — and on 16 colours at one colour each.
 - [[measured]] That is what the oracle shows: the big dog's 131 speckles in 134, the far end of its ramp from 130. `src/render/raster.ts` draws by these rules, and the viewer with it.
 
+## The eyes
+
+- [[read out]] The irises are not drawn with the other balls. After drawing each eye, `DisplayBallzFrame` draws its iris inside it (seg10:5440 to 573f): where the iris is relative to its eye in the frame, or toward a point the dog looks at, or in the middle, by the dog's state; eased toward that place 0.6 pixels a frame (`ds:1d36`); and kept within the eye, on each axis, by the eye's radius less 0.8 of the iris's (`ds:1d3e`).
+- [[read out]] The iris is filled flat in the breed's iris colour, without fuzz, speckles or outline. If it is more than 7 pixels across, it is inset 2 pixels on every side and filled again in the pupil colour (seg10:56f3 to 573f).
+- [[read out]] `Ballz::LoadSpecialBallInfo` reads the colours: the iris's from `[256 Iris Color]` or `[16 Iris Color]`, by the display, or 3 where the breed gives none, as the bulldog and the chihuahua do; the pupil's from `[Pupil Color]`, which no breed has, or 0. It reads the eyelids' from `[256 Eyelid Color]` or `[16 Eyelid Color]`, and `[Key Balls]` too.
+- [[read out]] Where the dog's eyelids are closing, a share of each eye is covered by a circle cut along a line at the angle between the eyes, in the eyelid colour (`XFillPartialCircleRotate`, seg10:5b5c). [[inferred]] How far is the dog's state: `PetModule::GetEyelidHeightFromExcitement` is exported. Not yet read.
+- [[measured]] On the oracle's 16-colour display, the terrier's irises are a dark-yellow ring with a black pupil, colour 3 then 0, and the big dog's green, its `[16 Iris Color]` of 2.
+
 ## Still to find
 
-The eyes and eyelids (the kernel's modes -4 and -2); the adjustment `DisplayBallzFrame` adds to the fuzz; how far each row's start is from the ball's centre, exactly; `Puppy Balls` and the extensions; head tracking and the state's other turns; fuzz and speckles; the extras each frame lists; which animation is which; and how fast frames are shown.
+The eyelids, and how far they close (the kernel's modes -2 and -4); the adjustment `DisplayBallzFrame` adds to the fuzz; how far each row's start is from the ball's centre, exactly; `Puppy Balls` and the extensions; head tracking and the state's other turns; fuzz and speckles; the extras each frame lists; which animation is which; and how fast frames are shown.

@@ -50,5 +50,6 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 
 - [[measured]] The ball names come from the per-ball sections' comments, `eBall_Lankle, // 0` to `eBall_tongue2, // 64`, in the order of the skeleton. They are C enumerators, so the game's source called its balls this.
 - [[measured]] The bulldog has 29 lines where the others have 34.
+- [[read out]] `Ballz::LoadSpecialBallInfo` (DOGZDLL.DLL seg10:1421) reads the per-ball sections into tables of the engine, each with a default for a ball the section does not reach and a limit: `[Puppy Balls]` (-10, then halved), `[Outline Type]` (-1), `[Outline Color]`, `[Fuzz]` (0, up to 8), both `Ball Color` sections, `[Ball Size Diffs]` (halved and added to the skeleton's sizes), `[Speckle Color]` (-1), and the three extensions, halved. It reads `[Eyes]`, the eyelid and iris colours, a `[Pupil Color]` no breed has, and `[Key Balls]` ([[topic:drawing-a-dog]]).
 - [[read out]] `Default Factors` line 11 is "age": `PetModule::SetBallScaleFromAge` asks for factor 10, counting from 0.
 - Not yet known: how the extensions and `Puppy Balls` are applied, and the other behaviour factors.

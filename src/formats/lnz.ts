@@ -39,6 +39,20 @@ export interface Breed {
   /** The balls that are the eyes, and the irises, right then left. */
   eyes: [number, number];
   irises: [number, number];
+
+  /**
+   * The eyelids', irises' and pupils' colours, on the 256- and the
+   * 16-colour display: null where the breed gives none, and the game its
+   * default (`Ballz::LoadSpecialBallInfo`: 3 for an iris, 0 for a pupil).
+   */
+  eyelidColor256: number | null;
+  eyelidColor16: number | null;
+  irisColor256: number | null;
+  irisColor16: number | null;
+  pupilColor: number | null;
+
+  /** The head and the chest, by the file's comments. */
+  keyBalls: number[];
   headBalls: number[];
   omissions: number[];
   lines: Line[];
@@ -153,6 +167,7 @@ export function parseLnz(text: string, balls = 65): Breed {
   };
 
   const eyes = section('Eyes');
+  const optional = (name: string) => (sections.has(name) ? (numbers(name)[0] ?? null) : null);
 
   return {
     sections,
@@ -160,6 +175,12 @@ export function parseLnz(text: string, balls = 65): Breed {
     ballNames: section('Ball Size Diffs').map((line) => /eBall_\w+/.exec(line.comment)?.[0] ?? ''),
     eyes: pair(eyes[0], 'Eyes'),
     irises: pair(eyes[1], 'Eyes'),
+    eyelidColor256: optional('256 Eyelid Color'),
+    eyelidColor16: optional('16 Eyelid Color'),
+    irisColor256: optional('256 Iris Color'),
+    irisColor16: optional('16 Iris Color'),
+    pupilColor: optional('Pupil Color'),
+    keyBalls: sections.has('Key Balls') ? numbers('Key Balls') : [],
     headBalls: numbers('Head Balls'),
     omissions: sections.has('Omissions') ? numbers('Omissions') : [],
     lines: section('Linez').map((line) => {

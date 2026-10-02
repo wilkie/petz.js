@@ -51,6 +51,17 @@ export function scalesForAge(breed: Breed, age: number): Scales {
   return { pet: between(adultPet, puppyPet), ball: between(adultBall, puppyBall) };
 }
 
+/**
+ * A ball's size before scaling, as `Ballz::LoadSpecialBallInfo` and
+ * `SetPuppiness` make it: the skeleton's, with half the breed's
+ * `[Ball Size Diffs]`, and half its `[Puppy Balls]` in proportion to how much
+ * of a puppy the dog is, from 0 to 100. Halves are C's, rounding toward 0.
+ */
+export function ballSize(breed: Breed, header: AnimationHeader, ball: number, puppiness: number) {
+  const base = header.ballSizes[ball] + Math.trunc(breed.ballSizeDiffs[ball] / 2);
+  return base + Math.trunc((Math.trunc(breed.puppyBalls[ball] / 2) * puppiness) / 100);
+}
+
 /** Where a ball is drawn, and how large, in pixels from the dog's origin. */
 export interface Placed {
   x: number;
@@ -64,14 +75,16 @@ export interface Placed {
 /**
  * Places each ball of a frame: scaled by the pet scale, turned by `yaw`
  * about the upright axis, then tilted by the pitch the game derives from
- * the yaw, `-7 - |64 - |yaw|| / 10` in 256ths of a turn.
+ * the yaw, `-7 - |64 - |yaw|| / 10` in 256ths of a turn; sized by
+ * `ballSize`.
  */
 export function project(
   breed: Breed,
   header: AnimationHeader,
   frame: Frame,
   scales: Scales,
-  yaw = 0
+  yaw = 0,
+  puppiness = 0
 ): Placed[] {
   const turn = wrap(yaw);
   const pitch = -7 - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
@@ -89,8 +102,9 @@ export function project(
     const tiltedY = shift(sp * turnedZ + cp * y);
 
     /* Radius `size × ball scale >> 9`: the diameter is twice that. */
-    const size = header.ballSizes[index] + breed.ballSizeDiffs[index];
-    const radius = Math.floor((Math.max(0, size) * scales.ball) / 512);
+    const radius = Math.floor(
+      (Math.max(0, ballSize(breed, header, index, puppiness)) * scales.ball) / 512
+    );
 
     return { x: turnedX, y: tiltedY, depth, diameter: 2 * radius };
   });

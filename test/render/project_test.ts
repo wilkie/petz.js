@@ -1,10 +1,11 @@
 import { type AnimationHeader, type Frame } from '../../src/formats/animation.js';
 import { type Breed } from '../../src/formats/lnz.js';
-import { project, scalesForAge } from '../../src/render/project.js';
+import { ballSize, project, scalesForAge } from '../../src/render/project.js';
 
 const breed = {
   defaultScales: [220, 220, 140, 200],
   ballSizeDiffs: [0, 2],
+  puppyBalls: [0, 0],
 } as unknown as Breed;
 
 const header = { ballSizes: [10, 30] } as unknown as AnimationHeader;
@@ -49,7 +50,7 @@ describe('placing a frame', () => {
       { pet: 256, ball: 200 }
     );
 
-    // (10 × 200) >> 9 = 3, twice is 6; (32 × 200) >> 9 = 12, twice is 24.
+    // (10 × 200) >> 9 = 3, twice is 6; (31 × 200) >> 9 = 12, twice is 24.
     expect(placed.map((ball) => ball.diameter)).toEqual([6, 24]);
   });
 
@@ -84,5 +85,23 @@ describe('placing a frame', () => {
 
     // A quarter turn takes a point on the right to the near side.
     expect(Math.abs(quarter.x)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('a ball’s size', () => {
+  const sized = {
+    ...breed,
+    ballSizeDiffs: [0, -5],
+    puppyBalls: [9, 0],
+  } as unknown as Breed;
+
+  it('takes half the breed’s difference, rounded toward 0', () => {
+    expect(ballSize(sized, header, 1, 0)).toBe(28);
+  });
+
+  it('takes half the puppy balls in proportion to puppiness', () => {
+    expect(ballSize(sized, header, 0, 0)).toBe(10);
+    expect(ballSize(sized, header, 0, 100)).toBe(14);
+    expect(ballSize(sized, header, 0, 50)).toBe(12);
   });
 });

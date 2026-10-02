@@ -45,7 +45,8 @@ const RAMPS = { 256: { first: 16, length: 6 }, 16: { first: 0, length: 1 } } as 
 
 /** Everything to draw for a frame, farthest first. */
 export function marks(breed: Breed, placed: Placed[]): Mark[] {
-  const omitted = new Set(breed.omissions);
+  /* The irises are not drawn with the balls but in their eyes (`drawIris`). */
+  const omitted = new Set([...breed.omissions, ...breed.irises]);
   const list: Mark[] = [];
 
   placed.forEach((ball, index) => {
@@ -74,7 +75,9 @@ export function drawPet(
   { colours, originX, originY, age = 0, yaw = 0, seed = 1 }: DrawOptions
 ) {
   const next = random(seed);
-  const placed = project(breed, header, frame, scalesForAge(breed, age), yaw);
+  /* How much of a puppy: 100 less the age, as SetBallScaleFromAge asks.
+   * Not yet read where it is applied. */
+  const placed = project(breed, header, frame, scalesForAge(breed, age), yaw, 100 - age);
   const numbers = colours === 256 ? breed.ballColor256 : breed.ballColor16;
   const ramps = RAMPS[colours];
   const at = (ball: number) => ({ x: originX + placed[ball].x, y: originY + placed[ball].y });
@@ -115,5 +118,55 @@ export function drawPet(
       },
       next
     );
+
+    const eye = breed.eyes.indexOf(ball);
+
+    if (eye !== -1) {
+      drawIris(bitmap, breed, placed, ball, breed.irises[eye], at, colours);
+    }
+  }
+}
+
+/** The factor of the iris's radius kept inside the eye: `ds:1d3e` of DOGZDLL.DLL. */
+const IRIS_INSET = 0.8;
+
+/**
+ * Draws an eye's iris and pupil, as `DisplayBallzFrame` does after the eye
+ * (seg10:54xx to 573f): the iris where the frame puts it relative to its
+ * eye, kept within the eye by the eye's radius less 0.8 of the iris's on
+ * each axis, filled flat in the breed's iris colour; and if it is more than
+ * 7 pixels across, the pupil, the iris inset 2 pixels each side, in the
+ * pupil colour. The game eases the iris toward that place 0.6 pixels a frame
+ * (`ds:1d36`); a single frame is drawn where it is going.
+ */
+function drawIris(
+  bitmap: IndexedBitmap,
+  breed: Breed,
+  placed: Placed[],
+  eyeBall: number,
+  irisBall: number,
+  at: (ball: number) => { x: number; y: number },
+  colours: 256 | 16
+) {
+  const eye = placed[eyeBall];
+  const iris = placed[irisBall];
+  const limit = eye.diameter / 2 - Math.trunc((iris.diameter / 2) * IRIS_INSET);
+  const clamp = (value: number) => Math.max(-limit, Math.min(limit, value));
+  const centre = at(eyeBall);
+  const x = centre.x + clamp(iris.x - eye.x);
+  const y = centre.y + clamp(iris.y - eye.y);
+  const irisColour = (colours === 256 ? breed.irisColor256 : breed.irisColor16) ?? 3;
+  const pupilColour = breed.pupilColor ?? 0;
+  const disc = (diameter: number, colour: number) =>
+    fillBall(
+      bitmap,
+      { x, y, diameter, colour, outlineColour: 0, speckleColour: -1, outline: -1, fuzz: 0 },
+      () => 0
+    );
+
+  disc(iris.diameter, irisColour);
+
+  if (iris.diameter > 7) {
+    disc(iris.diameter - 4, pupilColour);
   }
 }
