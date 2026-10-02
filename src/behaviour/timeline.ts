@@ -2,8 +2,9 @@
  * A script played out as the frames the dog shows, one a tick, with what
  * happens as each is shown: what `ScriptSprite::PushScript` expands a script
  * into and `PopScript` steps through (DOGZDLL.DLL seg7:47e8 and 57ce). The
- * sounds, the turns and the glue between frames are kept; blinks, the dog's
- * factors and the rest are not yet. See kb/formats/scp.md.
+ * sounds, the turns, the glue between frames, the cues and the easing of
+ * the dog's rotation are kept; blinks, the dog's factors and the rest are
+ * not yet. See kb/formats/scp.md.
  */
 
 import { type Element, type Operand, OP, type Script } from '../formats/script.ts';
@@ -23,6 +24,25 @@ export interface Step {
 
   /** How far the dog turns, in 256ths of a turn. */
   turn?: number;
+
+  /**
+   * Ease the dog's rotation to this, in 256ths of a turn, over the frames
+   * left in the script (`8ae6 1 to`). Read as a fudge to a target; how the
+   * engine spreads it is inferred from `Fudger::SetTargetFudge`.
+   */
+  ease?: { to: number; frames: number };
+
+  /** Turn by this much every frame from here on, 0 to stop (`8ae9 1 by`, `Fudger::DoDrift`). */
+  drift?: number;
+
+  /** Cues raised for the engine, by number (`8ae3 n`, `ScriptSprite::ProcessCue`). */
+  cues?: number[];
+
+  /**
+   * Not shown, but the frame the next shown frame is placed by: a frame
+   * followed by `8ad3` (`PopScript`, seg7:597b). See `placeByReference`.
+   */
+  reference?: boolean;
 }
 
 /** The ball a script glues by when it says none: the belly (`GetDefaultGlueBall`). */
@@ -34,6 +54,13 @@ const SOUND_LAST = 0x8ade;
 const GLUE_CHEST = 0x8ad7;
 const GLUE = 0x8ad8;
 const TURN = 0x8ae5;
+const REFERENCE = 0x8ad3;
+const CUE = 0x8ae3;
+const EASE = 0x8ae6;
+const DRIFT = 0x8ae9;
+
+/** The angle the fudge opcodes name the dog's rotation by. */
+const ROTATION = 1;
 
 /** A frame's sequence flags: the start of one, and the end. */
 export const START = 1;
@@ -62,8 +89,17 @@ export function timeline(
   /* What happens with the next frame shown. */
   let pending: Omit<Step, 'frame'> = {};
 
+  /* Eases, whose frames are counted once the script is played out. */
+  const eases: Step[] = [];
+
   const show = (frame: number) => {
-    frames.push({ frame, ...pending });
+    const step = { frame, ...pending };
+
+    if (step.ease) {
+      eases.push(step);
+    }
+
+    frames.push(step);
     pending = {};
   };
 
@@ -137,6 +173,24 @@ export function timeline(
           case GLUE:
             pending.glue = value(a);
             break;
+          case REFERENCE:
+            if (frames.length) {
+              frames[frames.length - 1].reference = true;
+            }
+            break;
+          case CUE:
+            pending.cues = [...(pending.cues ?? []), value(a)];
+            break;
+          case EASE:
+            if (value(a) === ROTATION) {
+              pending.ease = { to: value(b), frames: frames.length };
+            }
+            break;
+          case DRIFT:
+            if (value(a) === ROTATION) {
+              pending.drift = value(b);
+            }
+            break;
           case TURN:
             // `1 turn x`: only the first operand of 1 turns the dog.
             if (value(a) === 1) {
@@ -166,5 +220,11 @@ export function timeline(
   };
 
   play(scripts[index].variants[variant], 0);
+
+  /* An ease is spread over the frames from where it is to the script's end. */
+  for (const step of eases) {
+    step.ease = { to: step.ease!.to, frames: frames.length - step.ease!.frames };
+  }
+
   return frames;
 }

@@ -203,3 +203,37 @@ export function parseLnz(text: string, balls = 65): Breed {
     defaultScales: numbers('Default Scales'),
   };
 }
+
+/** The factors of a dog's nature, in the order of `[Default Factors]` and of the engine's. */
+export const FACTORS = [
+  'excitement',
+  'naughty',
+  'grab object',
+  'clumsy',
+  'groom',
+  'ham',
+  'bark',
+  'sickness',
+  'spray fear',
+  'frustration',
+  'age',
+] as const;
+
+/**
+ * A breed's factors: for each, the value at its centre and how far either
+ * side of it a dog of the breed may be born (`[Default Factors]`, read by
+ * `PetModule::LoadFactors`). Where a line is missing, the engine's own
+ * centre stands, and a spread of 15.
+ */
+export function readFactors(sections: LnzSections): { centre: number; spread: number }[] {
+  const lines = sections.get('Default Factors') ?? [];
+  const engine = [70, 35, 35, 30, 50, 50, 50, 50, 20, 20, 0];
+
+  return FACTORS.map((_, n) => {
+    const [centre, spread] = lines[n]?.values ?? [];
+    return {
+      centre: typeof centre === 'number' ? centre : engine[n],
+      spread: typeof spread === 'number' ? spread : 15,
+    };
+  });
+}

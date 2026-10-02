@@ -123,13 +123,16 @@
         <label>Turn <input id="yaw" type="range" min="-128" max="128" value="0" /></label>
         <label><input id="sound" type="checkbox" /> Sound</label>
         <button id="play" type="button">Play</button>
+        <label><input id="live" type="checkbox" /> Live</label>
+        <output id="mood" for="live"></output>
       </div>
       <canvas id="stage" width="640" height="480" aria-label="The dog, drawn"></canvas>
       <p class="note">
         Drawn as Dogz draws, at twice its size: each ball placed, turned and tilted as the game
-        places it, and filled with its fuzz, speckles and outline, in Dogz's own palettes. Not yet
-        the eyes, nor the lines as the game draws them: see the knowledge base's page on drawing a
-        dog.
+        places it, and filled with its fuzz, speckles and outline, in Dogz's own palettes; not yet
+        the lines as the game draws them. Live, the dog is left to itself as Dogz leaves it: it
+        wanders, idles, does the tricks its mood suits and sleeps, choosing as the engine chooses.
+        See the knowledge base's pages on drawing a dog and on behaviour.
       </p>
     </main>
     <script type="module" src="/src/viewer/main.ts"></script>

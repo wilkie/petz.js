@@ -279,3 +279,10 @@ export function parseNe(data: Uint8Array): NeModule {
     resources,
   };
 }
+
+/** A module's automatic data segment, whose number its NE header gives at 0x0e. */
+export function dataSegment(module: NeModule) {
+  const view = new DataView(module.data.buffer, module.data.byteOffset, module.data.byteLength);
+  const header = view.getUint32(0x3c, true);
+  return module.segmentBytes(view.getUint16(header + 0x0e, true));
+}

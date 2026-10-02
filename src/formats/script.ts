@@ -12,7 +12,7 @@
  * and an operand may itself be `0x8b05 lo hi`, a random number between.
  */
 
-import { type NeModule } from './ne.ts';
+import { dataSegment, type NeModule } from './ne.ts';
 
 /** The first and last opcodes. */
 export const FIRST_OPCODE = 0x8ad0;
@@ -102,13 +102,6 @@ export function readStateNames(engine: NeModule): string[] {
 
     names.push(name);
   }
-}
-
-/** The engine's automatic data segment, whose number the NE header gives at 0x0e. */
-function dataSegment(engine: NeModule) {
-  const view = new DataView(engine.data.buffer, engine.data.byteOffset, engine.data.byteLength);
-  const header = view.getUint32(0x3c, true);
-  return engine.segmentBytes(view.getUint16(header + 0x0e, true));
 }
 
 /** Reads `ALL_PTZ.SCP`. Throws if any variant does not end where its length says. */

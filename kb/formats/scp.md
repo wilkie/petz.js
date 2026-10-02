@@ -5,7 +5,7 @@ summary: ALL_PTZ.SCP — 330 scripts that take the dog from one of 59 states to 
 status: partial
 files: [DOGZ.DOG/DATA/ALL_PTZ.SCP]
 source: [src/formats/script.ts, src/behaviour/timeline.ts]
-topics: [drawing-a-dog]
+topics: [drawing-a-dog, behaviour]
 ---
 
 The animations ([[format:bdt]]) are only frames; what the dog does is a script's choice of them. `ALL_PTZ.SCP` holds every script, the same for every breed. `ScriptSprite::LoadScripts` reads it, `PushScript` expands a script into a list of what to show, and `PopScript` steps through that list a frame a tick (DOGZDLL.DLL seg7:2180, 47e8 and 57ce).
@@ -41,8 +41,11 @@ All little-endian.
   - `0x8ada a` to `0x8ade a b c d e`: a sound, one of the one to five numbers at random, by `ScriptSprite::PlaySound` (seg7:75f1).
   - `0x8ad7`: glue by the chest, ball 50; `0x8ad8 n`: glue by ball n. The next frame shown is placed so that ball is where it was; then the glue is done with (seg7:6e33 to 6e81). Without one, the ball is the belly, 48 (`GetDefaultGlueBall`, seg7:4663).
   - `0x8ae5 1 turn x`: the dog turned by `turn`, in 256ths of a turn, added to its heading (seg7:5c74).
-- [[read out]] A frame followed by `0x8ad3` is held as the one the dog is placed by (seg7:597b, then 6e8e to 6f32). [[inferred]] Each script is glued to the next by the belly: a walking cycle's frames carry the dog about 90 units forward and the next cycle starts back where the first began, and only gluing the one to the other moves the dog on. In the viewer, so glued, a terrier walks across the stage. Not yet read: the `PetModule` methods that do the placing.
-- [[read out]] `PopScript` runs the rest as it reaches them: `0x8ad0` begins every variant; `0x8ad1 n` repeats what follows up to `0x8ad2` n times, 999 for ever; `0x8adf` sets one of the dog's factors (`PetModule::SetFactor`), `0x8ae1` blinks it (`ScriptSprite::DoBlink`), and `0x8ae3 n` sets bit n of a mask of the script's. `0x8af7` to `0x8af9`, `0x8afd` and `0x8b02` set where the dog is going; `0x8b00` and `0x8b01` start and stop something that moves it. Not yet known: how, and most of the rest.
+- [[read out]] A frame followed by `0x8ad3` is not shown but held as the one the next frame is placed by (seg7:597b). Unless that frame is glued, `PopScript` moves the dog by the difference between the centres of the held frame's rectangle and the new one's (`Ballz::GetCenterOffset`, seg7:6e8e to 6efc), then places the new frame as its own coordinates say (`Ballz::MoveFrameRect`, which moves the dog's rectangle as the frame's own moves). Every walk, trot and run ends with its cycle's first pose one stride on, then `0x8ad3`; so each cycle carries the dog on from where the last left off, and nothing needs gluing. `src/behaviour/stage.ts` places frames so.
+- [[read out]] `PopScript` runs the rest as it reaches them: `0x8ad0` begins every variant; `0x8ad1 n` repeats what follows up to `0x8ad2` n times, 999 for ever; `0x8adf` sets one of the dog's factors (`PetModule::SetFactor`), `0x8ae1` blinks it (`ScriptSprite::DoBlink`). `0x8af7` to `0x8af9`, `0x8afd` and `0x8b02` set where the dog is going; `0x8b00` and `0x8b01` start and stop something that moves it. Not yet known: how, and most of the rest.
+- [[read out]] `0x8ae3 n` raises cue n: it calls `ProcessCue` and sets bit n of a mask the states read (seg7:5e72 to 5ebe). Cue 4 starts every walk; cue 12, an idle pant looking about, has the dog look at a random point.
+- [[read out]] `0x8ae6 angle to`, `0x8ae7` and `0x8ae9 angle by` set the `Fudger`s, which ease the dog's angles — 0 tilt, 1 rotation, 2 spin, 3 roll, by the names at seg7:00e3 — from frame to frame (seg7:5dc0 to 5e6f). `0x8ae9` sets one's drift, a turn every frame until set to 0 (`Fudger::DoDrift`): run-in-circles drifts 8 to 11. [[inferred]] `0x8ae6` eases the angle to `to` over the rest of the script, as `Fudger::SetTargetFudge` counts the frames to the script's end.
+- [[read out]] The engine pushes some opcodes of its own between scripts: `0x8b0a s` and `0x8b0b` around script s, `0x8b06 state` to remember the trick being done, for the treat or spray that follows, `0x8b07 state` and `0x8b08 global` for the state to go to next when the queue reaches them ([[topic:behaviour]]).
 - [[read out]] A frame's sequence flags are the word after its bounds in [[format:bdt]] (`Ballz::GetBallFrameFlags`, seg10:2612): 1 the start of a sequence, 2 the end, 3 both.
 
 `src/behaviour/timeline.ts` plays a variant out as the frames it shows, and the viewer plays any script.

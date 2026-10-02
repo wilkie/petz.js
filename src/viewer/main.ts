@@ -5,7 +5,11 @@
  * drawing with the oracle's.
  */
 
+import { Pet, type PetData } from '../behaviour/pet.ts';
+import { borlandRand } from '../behaviour/random.ts';
+import { Stage } from '../behaviour/stage.ts';
 import { DEFAULT_GLUE, type Step, timeline } from '../behaviour/timeline.ts';
+import { transitionTable } from '../behaviour/transitions.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
 import {
   type AnimationHeader,
@@ -13,11 +17,18 @@ import {
   parseAnimation,
   parseBhd,
 } from '../formats/animation.ts';
-import { type Breed, parseLnz } from '../formats/lnz.ts';
+import {
+  readEngineScripts,
+  readEngineStateNames,
+  readPositionKinds,
+  readTrickScripts,
+} from '../formats/engine.ts';
+import { type Breed, parseLnz, readFactors } from '../formats/lnz.ts';
 import { parseNe } from '../formats/ne.ts';
 import { type Colour, PALETTE_16, PALETTE_256, readPalette } from '../formats/palette.ts';
 import { parseScripts, readOpcodes, readStateNames, type Script } from '../formats/script.ts';
-import { ballAt, drawPet } from '../render/ballz.ts';
+import { parseTricks } from '../formats/tricks.ts';
+import { drawPet } from '../render/ballz.ts';
 import { IndexedBitmap, random } from '../render/raster.ts';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -35,6 +46,8 @@ const frameInput = element<HTMLInputElement>('frame');
 const frameNumber = element<HTMLOutputElement>('frame-number');
 const play = element<HTMLButtonElement>('play');
 const soundInput = element<HTMLInputElement>('sound');
+const liveInput = element<HTMLInputElement>('live');
+const mood = element<HTMLOutputElement>('mood');
 const canvas = element<HTMLCanvasElement>('stage');
 const context = canvas.getContext('2d')!;
 
@@ -53,7 +66,13 @@ let allFrames: Frame[] = [];
 let scripts: Script[] = [];
 
 /** What is being shown: frames by their numbers over every animation, and what happens with each. */
-let sequence: Step[] = [];
+let sequence: (Step & { placedBy?: number })[] = [];
+
+/** The reference frame a script ends with, which its first frame is placed by when it loops. */
+let endsWith: number | undefined;
+
+/** Where a script's frames put the dog. */
+let scriptStage: Stage | null = null;
 let timer: number | undefined;
 
 /** Where the dog has walked to, from the stage's middle, and how far it has turned. */
@@ -62,12 +81,20 @@ let turned = 0;
 
 let gameFiles: GameFiles;
 
+/** What the dog left to itself needs of the game's files, and the dog itself when live. */
+let petData: Omit<PetData, 'flags'>;
+let engineStateNames: string[] = [];
+let live: { pet: Pet; stage: Stage; started: number } | null = null;
+
+/** The stage, in Dogz's own pixels. */
+const STAGE = { width: canvas.width / ZOOM, height: canvas.height / ZOOM };
+
 function draw() {
-  const breed = breeds.get(breedSelect.value)!;
+  if (live) {
+    return;
+  }
+
   const index = Math.min(Number(frameInput.value), sequence.length - 1);
-  const frame = allFrames[sequence[index].frame];
-  const colours = Number(coloursSelect.value) as 256 | 16;
-  const bitmap = new IndexedBitmap(canvas.width / ZOOM, canvas.height / ZOOM);
 
   frameInput.max = String(sequence.length - 1);
   frameNumber.value = `${index + 1} of ${sequence.length}, frame ${sequence[index].frame}`;
@@ -75,15 +102,34 @@ function draw() {
   /* Off one side of the stage, the dog comes back on at the other. */
   const wrap = (value: number, size: number) =>
     ((((value + size / 2) % size) + size) % size) - size / 2;
-  offset = { x: wrap(offset.x, bitmap.width), y: wrap(offset.y, bitmap.height) };
+  offset = { x: wrap(offset.x, STAGE.width), y: wrap(offset.y, STAGE.height) };
 
-  drawPet(bitmap, breed, header, frame, {
+  if (scriptStage) {
+    scriptStage.x = STAGE.width / 2 + offset.x;
+    scriptStage.y = (STAGE.height * 5) / 8 + offset.y;
+  }
+
+  drawDog(
+    sequence[index].frame,
+    STAGE.width / 2 + offset.x,
+    (STAGE.height * 5) / 8 + offset.y,
+    Number(yawInput.value) + turned
+  );
+}
+
+/** Draws a frame at a place on the stage, turned so far, and shows it. */
+function drawDog(frameNumber: number, originX: number, originY: number, yaw: number) {
+  const breed = breeds.get(breedSelect.value)!;
+  const colours = Number(coloursSelect.value) as 256 | 16;
+  const bitmap = new IndexedBitmap(STAGE.width, STAGE.height);
+
+  drawPet(bitmap, breed, header, allFrames[frameNumber], {
     colours,
-    originX: bitmap.width / 2 + offset.x,
-    originY: (bitmap.height * 5) / 8 + offset.y,
+    originX,
+    originY,
     age: Number(ageInput.value),
-    yaw: Number(yawInput.value) + turned,
-    seed: sequence[index].frame + 1,
+    yaw,
+    seed: frameNumber + 1,
   });
 
   const pixels = new ImageData(bitmap.toRgba(palettes.get(colours)!), bitmap.width, bitmap.height);
@@ -102,6 +148,7 @@ function chooseSequence() {
   turned = 0;
 
   if (scriptSelect.value === '') {
+    scriptStage = null;
     const { start, end } = header.animations[Number(animationSelect.value)];
     sequence = Array.from({ length: end - start }, (_, n) => ({ frame: start + n }));
   } else {
@@ -109,39 +156,65 @@ function chooseSequence() {
     const next = random(Date.now());
     const variant = next(scripts[index].variants.length);
 
-    sequence = timeline(scripts, index, variant, {
+    const steps = timeline(scripts, index, variant, {
       flags: (frame) => allFrames[frame]?.tag ?? 3,
       random: next,
       limit: 600,
     });
+
+    /* A reference frame is not shown: the frame after it is placed by it. */
+    sequence = [];
+    endsWith = undefined;
+
+    for (const step of steps) {
+      if (step.reference) {
+        endsWith = step.frame;
+      } else {
+        sequence.push({ ...step, placedBy: endsWith });
+        endsWith = undefined;
+      }
+    }
+
+    const breed = breeds.get(breedSelect.value)!;
+    scriptStage = new Stage(
+      STAGE.width,
+      STAGE.height,
+      breed,
+      header,
+      allFrames,
+      Number(ageInput.value)
+    );
+    scriptStage.show({ frame: sequence[0].frame }, Number(yawInput.value));
   }
 
   draw();
 }
 
 /**
- * Moves on a step, as the game does between frames: turns the dog, keeps a
- * glued ball where it was, and plays the step's sounds. Round from the last
- * step to the first, the belly is glued, as one script is to the next.
+ * Moves on a step, as the game does between frames: turns the dog, places
+ * the frame -- glued, or by a reference frame (`Stage.show`) -- and plays
+ * the step's sounds. Round from the last step to the first, the script
+ * follows itself as the engine plays a script twice: placed by the frame
+ * it ends with, or, where it ends with none, glued by the belly.
  */
 function advance() {
   const breed = breeds.get(breedSelect.value)!;
   const from = Number(frameInput.value);
   const to = (from + 1) % sequence.length;
-  const step = to === 0 ? { ...sequence[0], glue: sequence[0].glue ?? DEFAULT_GLUE } : sequence[to];
-  const options = { age: Number(ageInput.value), yaw: Number(yawInput.value) + turned };
+  let step = sequence[to];
 
-  if (step.glue !== undefined && scriptSelect.value !== '') {
-    const before = ballAt(breed, header, allFrames[sequence[from].frame], step.glue, options);
-    turned += step.turn ?? 0;
-    const after = ballAt(breed, header, allFrames[step.frame], step.glue, {
-      ...options,
-      yaw: Number(yawInput.value) + turned,
-    });
+  if (to === 0) {
+    step =
+      endsWith === undefined
+        ? { ...step, glue: step.glue ?? DEFAULT_GLUE }
+        : { ...step, placedBy: endsWith };
+  }
 
-    offset = { x: offset.x + before.x - after.x, y: offset.y + before.y - after.y };
-  } else {
-    turned += step.turn ?? 0;
+  turned += step.turn ?? 0;
+
+  if (scriptStage) {
+    scriptStage.show(step, Number(yawInput.value) + turned, step.placedBy);
+    offset = { x: scriptStage.x - STAGE.width / 2, y: scriptStage.y - (STAGE.height * 5) / 8 };
   }
 
   if (soundInput.checked) {
@@ -190,6 +263,60 @@ function stop() {
   play.textContent = 'Play';
 }
 
+/** The dog left to itself: a pet of the breed shown, on a stage the size of the canvas. */
+function startLive() {
+  const breed = breeds.get(breedSelect.value)!;
+  const age = Number(ageInput.value);
+  const stage = new Stage(STAGE.width, STAGE.height, breed, header, allFrames, age);
+  const pet = new Pet(
+    {
+      ...petData,
+      tricks: structuredClone(petData.tricks),
+      flags: (frame) => allFrames[frame]?.tag ?? 3,
+    },
+    stage,
+    borlandRand(Date.now()),
+    readFactors(breed.sections),
+    Math.trunc(age / 10)
+  );
+
+  pet.start(0);
+  live = { pet, stage, started: performance.now() };
+}
+
+/** A tick of the live dog: the engine's clock is milliseconds over 17. */
+function tickLive() {
+  const { pet, stage, started } = live!;
+  const breed = breeds.get(breedSelect.value)!;
+  const step = pet.tick((performance.now() - started) / 17);
+
+  stage.show(step, step.rotation, step.placedBy);
+  drawDog(step.frame, stage.x, stage.y, step.rotation);
+
+  if (soundInput.checked) {
+    for (const sound of step.sounds ?? []) {
+      void playSound(breed, sound);
+    }
+  }
+
+  mood.value = `${engineStateNames[step.state] ?? step.state}, excitement ${pet.factor(0)}`;
+}
+
+liveInput.addEventListener('change', () => {
+  stop();
+
+  if (liveInput.checked) {
+    startLive();
+    play.disabled = true;
+    timer = window.setInterval(tickLive, 1000 / FRAMES_PER_SECOND);
+  } else {
+    live = null;
+    play.disabled = false;
+    mood.value = '';
+    draw();
+  }
+});
+
 play.addEventListener('click', () => {
   if (timer !== undefined) {
     stop();
@@ -201,7 +328,13 @@ play.addEventListener('click', () => {
 });
 
 for (const control of [breedSelect, coloursSelect]) {
-  control.addEventListener('change', draw);
+  control.addEventListener('change', () => {
+    if (live) {
+      startLive();
+    }
+
+    draw();
+  });
 }
 
 for (const control of [ageInput, yawInput, frameInput]) {
@@ -230,6 +363,18 @@ async function start(files: GameFiles) {
 
   const states = readStateNames(engine);
   scripts = parseScripts(await files.read('DOGZ.DOG/DATA/ALL_PTZ.SCP'), readOpcodes(engine));
+
+  const tricks = parseTricks(await files.read('DOGZ.DOG/TRICKS.TDT'));
+  engineStateNames = readEngineStateNames(engine);
+  petData = {
+    scripts,
+    table: transitionTable(scripts),
+    positionKinds: readPositionKinds(engine, states.length),
+    tricks: tricks.current,
+    trickDefaults: tricks.defaults,
+    trickScripts: readTrickScripts(engine),
+    engineScripts: readEngineScripts(engine),
+  };
   scripts.forEach((script, index) =>
     scriptSelect.add(
       new Option(

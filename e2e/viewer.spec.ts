@@ -34,3 +34,14 @@ test('draws a dog from the oracle’s files', async ({ page }) => {
   await page.selectOption('#animation', '8');
   await expect(page.locator('#frame-number')).toHaveText(/^1 of 140, frame/);
 });
+
+test('leaves a dog to itself, live', async ({ page }) => {
+  test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
+  await page.goto('/viewer.html');
+
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await page.check('#live');
+
+  await expect(page.locator('#mood')).toHaveText(/^e[A-Za-z]+, excitement \d+$/);
+  await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(5000);
+});
