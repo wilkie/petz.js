@@ -14,8 +14,8 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { type Kind } from './frontmatter.js';
-import { render, type Targets } from './markup.js';
+import { type Kind } from './frontmatter.ts';
+import { render, type Targets } from './markup.ts';
 import {
   check,
   DIRECTORY,
@@ -31,8 +31,8 @@ import {
   STATUS_MEANING,
   targetsOf,
   urlOf,
-} from './pages.js';
-import { STYLE } from './style.js';
+} from './pages.ts';
+import { STYLE } from './style.ts';
 
 const ROOT = process.cwd();
 const OUT = join(ROOT, process.env.KB_OUT ?? 'dist/kb');

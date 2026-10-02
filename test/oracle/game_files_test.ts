@@ -7,10 +7,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { parseAnimation, parseBhd } from '../../src/formats/animation.js';
-import { parseLnz } from '../../src/formats/lnz.js';
-import { parseNe } from '../../src/formats/ne.js';
-import { PALETTE_16, PALETTE_256, readPalette } from '../../src/formats/palette.js';
+import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
+import { parseLnz } from '../../src/formats/lnz.ts';
+import { parseNe } from '../../src/formats/ne.ts';
+import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/script.ts';
+import { timeline } from '../../src/behaviour/timeline.ts';
+import { random } from '../../src/render/raster.ts';
+import { PALETTE_16, PALETTE_256, readPalette } from '../../src/formats/palette.ts';
 
 const DATA = join(process.cwd(), 'oracle', 'build', 'drive-c', 'DOGZ.DOG', 'DATA');
 const ENGINE = join(process.cwd(), 'oracle', 'build', 'drive-c', 'WINDOWS', 'DOGZDLL.DLL');
@@ -155,5 +158,46 @@ describeWithOracle("the oracle's DOGZDLL.DLL", () => {
 
       expect([name, ramp]).toEqual([name, ramp[0] < ramp[1] ? rising : rising.reverse()]);
     }
+  });
+});
+
+describeWithOracle("the oracle's scripts", () => {
+  const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
+  const scripts = parseScripts(read('ALL_PTZ.SCP'), readOpcodes(engine));
+  const header = parseBhd(read('ALL_PTZ.BHD'));
+  const tags = header.animations.flatMap((_, index) =>
+    parseAnimation(header, index, read(`${index}.BDT`)).map((frame) => frame.tag)
+  );
+
+  it('are 330, between 59 named states', () => {
+    const states = readStateNames(engine);
+
+    expect(scripts).toHaveLength(330);
+    expect(states).toHaveLength(59);
+    expect([states[0], states[9], states[58]]).toEqual(['NONE', 'standing', 'talk']);
+    expect(scripts.every((script) => script.from < 59 && script.to < 59)).toBe(true);
+  });
+
+  it('play out, every variant, as frames that exist', () => {
+    let outside = 0;
+
+    scripts.forEach((script, index) =>
+      script.variants.forEach((_, variant) => {
+        const frames = timeline(scripts, index, variant, {
+          flags: (frame) => tags[frame] ?? 3,
+          random: random(index + 1),
+        });
+        outside += frames.filter((frame) => frame < 0 || frame >= header.frameCount).length;
+      })
+    );
+
+    expect(outside).toBe(0);
+  });
+
+  it('flag frames as a sequence’s start and end, in pairs', () => {
+    const starts = tags.filter((tag) => tag & 1).length;
+    const ends = tags.filter((tag) => tag & 2).length;
+
+    expect(starts).toBe(ends);
   });
 });

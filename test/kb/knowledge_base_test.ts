@@ -1,6 +1,6 @@
-import { parsePage } from '../../scripts/kb/frontmatter.js';
-import { render } from '../../scripts/kb/markup.js';
-import { check, readInstallation, readPages, targetsOf } from '../../scripts/kb/pages.js';
+import { parsePage } from '../../scripts/kb/frontmatter.ts';
+import { render } from '../../scripts/kb/markup.ts';
+import { check, readInstallation, readPages, targetsOf } from '../../scripts/kb/pages.ts';
 
 describe('the knowledge base', () => {
   const pages = readPages();

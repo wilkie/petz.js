@@ -5,7 +5,7 @@ import {
   unlockCode,
   unlockPrefix,
   validationCode,
-} from '../../src/protection/unlock.js';
+} from '../../src/protection/unlock.ts';
 
 describe('the adoption unlock code', () => {
   it('is 3485 on a drive whose serial DOS will not give', () => {

@@ -1,5 +1,5 @@
-import { parseNe } from '../../src/formats/ne.js';
-import { readPalette } from '../../src/formats/palette.js';
+import { parseNe } from '../../src/formats/ne.ts';
+import { readPalette } from '../../src/formats/palette.ts';
 
 /**
  * A small NE library built byte by byte: one code segment with two

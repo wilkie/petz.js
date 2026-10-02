@@ -1,4 +1,4 @@
-import { parseAnimation, parseBhd, parseFrame } from '../../src/formats/animation.js';
+import { parseAnimation, parseBhd, parseFrame } from '../../src/formats/animation.ts';
 
 /**
  * A small BHD and BDT built byte by byte to the layout kb/formats/bhd.md and

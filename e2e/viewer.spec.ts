@@ -28,9 +28,9 @@ test('draws a dog from the oracle’s files', async ({ page }) => {
   test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
   await page.goto('/viewer.html');
 
-  await expect(page.locator('#status')).toHaveText(/5 breeds and 36 animations/);
+  await expect(page.locator('#status')).toHaveText(/5 breeds, 36 animations and 330 scripts/);
   await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(5000);
 
   await page.selectOption('#animation', '8');
-  await expect(page.locator('#frame-number')).toHaveText('0 of 140');
+  await expect(page.locator('#frame-number')).toHaveText(/^1 of 140, frame/);
 });

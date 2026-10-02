@@ -4,7 +4,7 @@ import {
   random,
   rowWidth,
   speckleColour,
-} from '../../src/render/raster.js';
+} from '../../src/render/raster.ts';
 
 /** A ball's pixels, as rows of characters: `.` nothing, then the colour's own digit. */
 function picture(bitmap: IndexedBitmap) {

@@ -8,10 +8,10 @@
  * kb/topics/drawing-a-dog.md.
  */
 
-import { type AnimationHeader, type Frame } from '../formats/animation.js';
-import { type Breed } from '../formats/lnz.js';
-import { type Placed, project, scalesForAge } from './project.js';
-import { drawTaperedLine, fillBall, IndexedBitmap, random, speckleColour } from './raster.js';
+import { type AnimationHeader, type Frame } from '../formats/animation.ts';
+import { type Breed } from '../formats/lnz.ts';
+import { type Placed, project, scalesForAge } from './project.ts';
+import { drawTaperedLine, fillBall, IndexedBitmap, random, speckleColour } from './raster.ts';
 
 /** Something to draw: a ball, or a line between two balls, at a depth. */
 type Mark =

@@ -52,13 +52,13 @@ A `.BDT` file is one animation's frames, end to end, with nothing before the fir
 
 All little-endian. With the skeleton's 65 balls, a frame is 405 bytes and two more for each extra.
 
-| Offset | Size         | What                                                              |
-| ------ | ------------ | ----------------------------------------------------------------- |
-| `0`    | 6 words      | The box the balls reach: the least x, y, z, then the greatest     |
-| `12`   | 1 word       | Not yet known: 0 in 3,613 frames, 1 in 119, 2 in 119 and 3 in one |
-| `14`   | 6 bytes each | Each ball's centre, x, y and z, signed words, in ball order       |
-| `404`  | 1 byte       | How many extras follow                                            |
-| `405`  | 2 bytes each | An extra: a ball's number, then a signed byte                     |
+| Offset | Size         | What                                                                                                                                  |
+| ------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`    | 6 words      | The box the balls reach: the least x, y, z, then the greatest                                                                         |
+| `12`   | 1 word       | The frame's sequence flags: 1 the start of a sequence, 2 the end ([[format:scp]]): 0 in 3,613 frames, 1 in 119, 2 in 119 and 3 in one |
+| `14`   | 6 bytes each | Each ball's centre, x, y and z, signed words, in ball order                                                                           |
+| `404`  | 1 byte       | How many extras follow                                                                                                                |
+| `405`  | 2 bytes each | An extra: a ball's number, then a signed byte                                                                                         |
 
 - [[measured]] Read this way, every one of the 3,852 frames in the 36 files starts at the offset [[format:bhd]] gives it, ends where the next starts, and the last of each file ends at the file's end. `test/oracle/game_files_test.ts` checks it against the oracle's files.
 - [[measured]] The box is each ball's centre less, or plus, half its size in the skeleton rounded down ([[format:bhd]]), the least and greatest over all the balls: exactly, on all six values of all 3,852 frames. [[refused]] Half the size unrounded matches only 806 to 3,192 of the frames on each value; a quarter or an eighth of it, none; a fixed margin of 5 or 6, at most 2,957.
@@ -71,4 +71,4 @@ All little-endian. With the skeleton's 65 balls, a frame is 405 bytes and two mo
 
 ## What is not yet known
 
-Which animation is which: the files are numbered, and [[file:DOGZ.DOG/DATA/ALL_PTZ.SCP]] and the brain presumably name them. And how fast frames are shown.
+Which animation is which, beyond what the scripts that play it are named for ([[format:scp]]); and how fast frames are shown.

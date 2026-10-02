@@ -13,8 +13,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { type FrontMatter, type Kind, parsePage, type Status } from './frontmatter.js';
-import { type Targets } from './markup.js';
+import { type FrontMatter, type Kind, parsePage, type Status } from './frontmatter.ts';
+import { type Targets } from './markup.ts';
 
 const ROOT = process.cwd();
 const PAGES = join(ROOT, 'kb');

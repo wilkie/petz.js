@@ -81,4 +81,4 @@ flowchart LR
 
 ## Still to find
 
-The eyelids, and how far they close (the kernel's modes -2 and -4); the adjustment `DisplayBallzFrame` adds to the fuzz; how far each row's start is from the ball's centre, exactly; `Puppy Balls` and the extensions; head tracking and the state's other turns; fuzz and speckles; the extras each frame lists; which animation is which; and how fast frames are shown.
+The eyelids, and how far they close (the kernel's modes -2 and -4); the adjustment `DisplayBallzFrame` adds to the fuzz; how far each row's start is from the ball's centre, exactly; `Puppy Balls` and the extensions; head tracking and the state's other turns; fuzz and speckles; the extras each frame lists; and how fast frames are shown. What the dog does with them is [[format:scp]].

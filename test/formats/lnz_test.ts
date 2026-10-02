@@ -1,4 +1,4 @@
-import { parseLnz, parseLnzSections } from '../../src/formats/lnz.js';
+import { parseLnz, parseLnzSections } from '../../src/formats/lnz.ts';
 
 /** A breed of two balls, written as the game's own files are: tabs, comments, CRLF. */
 const BREED = [

@@ -9,7 +9,7 @@
  * alignment.
  */
 
-import { type NeModule } from './ne.js';
+import { type NeModule } from './ne.ts';
 
 /** The resource type, `0x7f01` with its high bit set. */
 const TYPE = 32513;

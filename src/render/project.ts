@@ -10,8 +10,8 @@
  * cosines times 256, products shifted right by 8.
  */
 
-import { type AnimationHeader, type Frame } from '../formats/animation.js';
-import { type Breed } from '../formats/lnz.js';
+import { type AnimationHeader, type Frame } from '../formats/animation.ts';
+import { type Breed } from '../formats/lnz.ts';
 
 /** The game's sine and cosine of an angle in 256ths of a turn, times 256. */
 function sine(angle: number) {

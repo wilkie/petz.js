@@ -1,6 +1,6 @@
-import { type AnimationHeader, type Frame } from '../../src/formats/animation.js';
-import { type Breed } from '../../src/formats/lnz.js';
-import { ballSize, project, scalesForAge } from '../../src/render/project.js';
+import { type AnimationHeader, type Frame } from '../../src/formats/animation.ts';
+import { type Breed } from '../../src/formats/lnz.ts';
+import { ballSize, project, scalesForAge } from '../../src/render/project.ts';
 
 const breed = {
   defaultScales: [220, 220, 140, 200],
