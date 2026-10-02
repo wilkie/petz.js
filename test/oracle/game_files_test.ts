@@ -14,14 +14,15 @@ import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/scr
 import { timeline } from '../../src/behaviour/timeline.ts';
 import { random } from '../../src/render/raster.ts';
 import { PALETTE_16, PALETTE_256, readPalette } from '../../src/formats/palette.ts';
+import { describeWithOracle } from './with-oracle.ts';
 
 const DATA = join(process.cwd(), 'oracle', 'build', 'drive-c', 'DOGZ.DOG', 'DATA');
 const ENGINE = join(process.cwd(), 'oracle', 'build', 'drive-c', 'WINDOWS', 'DOGZDLL.DLL');
-const describeWithOracle = existsSync(DATA) ? describe : describe.skip;
+const withOracle = describeWithOracle(DATA);
 
 const read = (name: string) => new Uint8Array(readFileSync(join(DATA, name)));
 
-describeWithOracle("the oracle's game files", () => {
+withOracle("the oracle's game files", () => {
   const header = parseBhd(read('ALL_PTZ.BHD'));
 
   it('have 65 balls and 3,852 frames in 36 animations', () => {
@@ -112,7 +113,7 @@ describeWithOracle("the oracle's game files", () => {
   );
 });
 
-describeWithOracle("the oracle's DOGZDLL.DLL", () => {
+withOracle("the oracle's DOGZDLL.DLL", () => {
   const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
 
   it('exports 525 entries, every one named, MakeColorRamp at 8:1a71', () => {
@@ -161,7 +162,7 @@ describeWithOracle("the oracle's DOGZDLL.DLL", () => {
   });
 });
 
-describeWithOracle("the oracle's scripts", () => {
+withOracle("the oracle's scripts", () => {
   const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
   const scripts = parseScripts(read('ALL_PTZ.SCP'), readOpcodes(engine));
   const header = parseBhd(read('ALL_PTZ.BHD'));
@@ -202,7 +203,7 @@ describeWithOracle("the oracle's scripts", () => {
   });
 });
 
-describeWithOracle("the oracle's sounds", () => {
+withOracle("the oracle's sounds", () => {
   const DOGZ = join(DATA, '..');
   const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
   const scripts = parseScripts(read('ALL_PTZ.SCP'), readOpcodes(engine));

@@ -3,7 +3,7 @@
  * against the game's own files where the oracle is built (`pnpm oracle`).
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { Brain } from '../../src/behaviour/brain.ts';
@@ -39,14 +39,15 @@ import { parseNe } from '../../src/formats/ne.ts';
 import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/script.ts';
 import { parseTricks } from '../../src/formats/tricks.ts';
 import { parseBrain, writeBrain } from '../../src/formats/brain.ts';
+import { describeWithOracle } from './with-oracle.ts';
 
 const ROOT = join(process.cwd(), 'oracle', 'build', 'drive-c');
 const DOGZ = join(ROOT, 'DOGZ.DOG');
-const describeWithOracle = existsSync(DOGZ) ? describe : describe.skip;
+const withOracle = describeWithOracle(DOGZ);
 
 const read = (path: string) => new Uint8Array(readFileSync(join(DOGZ, path)));
 
-describeWithOracle('the engine’s behaviour', () => {
+withOracle('the engine’s behaviour', () => {
   const engine = parseNe(new Uint8Array(readFileSync(join(ROOT, 'WINDOWS', 'DOGZDLL.DLL'))));
   const names = readEngineStateNames(engine);
   const positions = readStateNames(engine);
