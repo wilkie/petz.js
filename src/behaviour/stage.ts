@@ -13,14 +13,31 @@
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
 import { ballAt } from '../render/ballz.ts';
-import { project, scalesForAge } from '../render/project.ts';
+import { type Placed, project, scalesForAge } from '../render/project.ts';
 import { type PetWorld } from './pet.ts';
 import { DEFAULT_GLUE, type Step } from './timeline.ts';
+
+/** A treat out of its box: held on the cursor, or put down on the stage. */
+export interface Treat {
+  /** 0 blue, 1 green, 2 red, as `FoodSprite::theirNames` lists them after food and water. */
+  colour: number;
+  held: boolean;
+  x: number;
+  y: number;
+}
 
 export class Stage implements PetWorld {
   /** The dog's origin on the stage, from its top left. */
   x: number;
   y: number;
+
+  /** Where the user's cursor is, and whether its primary button is down. */
+  pointer = { x: -1000, y: -1000, button: false };
+
+  treat: Treat | null = null;
+
+  /** Each ball's part of the body (`readBodyAreas`); without them, nothing is hit. */
+  bodyAreas: number[] = [];
 
   readonly width: number;
   readonly height: number;
@@ -93,6 +110,65 @@ export class Stage implements PetWorld {
 
     this.frame = next;
     this.rotation = rotation;
+  }
+
+  /** Every ball of the frame shown, placed on the stage. */
+  placed(): Placed[] {
+    return project(
+      this.breed,
+      this.header,
+      this.frame,
+      scalesForAge(this.breed, this.age),
+      this.rotation,
+      100 - this.age
+    ).map((ball) => ({ ...ball, x: this.x + ball.x, y: this.y + ball.y }));
+  }
+
+  cursor() {
+    return this.pointer;
+  }
+
+  /** A ball on the stage, and how wide it is drawn. */
+  ballOnStage(ball: number) {
+    return this.placed()[ball];
+  }
+
+  /** The rectangle the dog is drawn in. */
+  rect() {
+    const placed = this.placed();
+    return {
+      left: Math.min(...placed.map((ball) => ball.x - ball.diameter / 2)),
+      top: Math.min(...placed.map((ball) => ball.y - ball.diameter / 2)),
+      right: Math.max(...placed.map((ball) => ball.x + ball.diameter / 2)),
+      bottom: Math.max(...placed.map((ball) => ball.y + ball.diameter / 2)),
+    };
+  }
+
+  /**
+   * The part of the body under a point, or -1: the nearest ball whose square
+   * holds it, as `Ballz::HitTest` (seg10:46d8) tries them nearest first, and
+   * that ball's area (`HitTestBodyArea`).
+   */
+  areaAt(point: { x: number; y: number }) {
+    const placed = this.placed();
+    const nearestFirst = placed
+      .map((_, ball) => ball)
+      .sort((a, b) => placed[a].depth - placed[b].depth);
+
+    for (const ball of nearestFirst) {
+      const { x, y, diameter } = placed[ball];
+      const half = diameter / 2;
+
+      if (point.x > x - half && point.x < x + half && point.y > y - half && point.y < y + half) {
+        return this.bodyAreas[ball] ?? -1;
+      }
+    }
+
+    return -1;
+  }
+
+  eatTreat() {
+    this.treat = null;
   }
 
   /** Where the dog is: its belly, on the stage. */

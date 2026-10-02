@@ -4,7 +4,7 @@ name: DOGZ.WAD
 summary: Not a data archive but a library: the game's windows and dialogs — the adoption kit's screens, the playpen, options, photos — and the checks that keep it a trial.
 status: partial
 files: [DOGZ.DOG/DOGZ.WAD]
-topics: [copy-protection, adoption-unlock]
+topics: [copy-protection, adoption-unlock, behaviour]
 ---
 
 [[read out]] Despite its name, `DOGZ.WAD` is a 16-bit Windows NE library of 187,788 bytes: six code segments and one data segment, built with Borland C++ (1994, by the string in its data segment). [[file:DOGZ.DOG/DOGZ.EXE]] loads it. It imports from [[file:DOGZ.DOG/THINK.DLL]], [[file:WINDOWS/DOGZDLL.DLL]], [[file:DOGZ.DOG/NEURON.DLL]], CTL3DV2, COMMDLG, GDI, KERNEL, TOOLHELP, USER and WIN87EM.
@@ -30,3 +30,7 @@ topics: [copy-protection, adoption-unlock]
 [[read out]] The procedures' names are upper-cased Borland mangled names (`@ADOPTCONTEXTWNDPROC$QUIUIUIL`, a function of `unsigned, unsigned, unsigned, long`), as a Pascal-convention export is. The adoption screens' window class is `AdoptContext`, and their edit boxes are `AdoptEditBox`.
 
 Not yet known: which dialog is which screen, beyond the adoption kit's.
+
+## The pet's frame
+
+[[read out]] Every frame, seg4:42a4 fills the engine's `PetParams` and calls `PetModule::DoDrawFrame` in [[file:WINDOWS/DOGZDLL.DLL]] for each pet: the cursor from `GetCursorPos`, moved into the playpen's coordinates, and the primary and secondary mouse buttons, each read with `GetAsyncKeyState` after asking `SwapMouseButton` which is which (seg4:014d and 0187). See [[topic:behaviour]].

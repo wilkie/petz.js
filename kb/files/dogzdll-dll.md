@@ -39,6 +39,9 @@ source: [src/formats/palette.ts, src/formats/script.ts, src/formats/engine.ts]
 | DS:0x22d0                | the four roll-and-wiggle scripts                                                       |
 | DS:0x22d8                | walking, trotting and running                                                          |
 | DS:0x20a4, DS:0x20b8     | the five sleeping scripts with how often each repeats, and the two that break sleep up |
+| DS:0x20c4, DS:0x20ca     | what a dog petted on its back does, and what one poked in the face does, three each    |
+| DS:0x20d0, 8 bytes each  | the three spots a dog likes petting on: the ball, its chance, and for how many strokes |
+| seg10:0051 on            | each ball's part of the body, set one by one in the `Ballz` constructor                |
 | string table from 10000  | the names of its 109 states, `eNOTASTATE` to `eIconBeg`                                |
 
 ## Classes

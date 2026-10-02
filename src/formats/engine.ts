@@ -53,7 +53,32 @@ export interface EngineScripts {
 
   /** The two scripts sleep is broken with now and then (DS:0x20b8). */
   sleepBreaks: [number, number];
+
+  /** What a dog on its back does when petted, one at random (DS:0x20c4). */
+  pettedOnBack: number[];
+
+  /** What a dog does when poked in the face, one at random (DS:0x20ca). */
+  pokedInFace: number[];
+
+  /**
+   * The three spots a dog likes to be petted on, by ball, how likely each
+   * is to be chosen, in hundredths, and for how many strokes: at least
+   * `strokes`, and up to `extra` more (DS:0x20d0, `PetModule::PickNewPetSpot`).
+   */
+  petSpots: { ball: number; chance: number; strokes: number; extra: number }[];
 }
+
+/** The parts of the body, as `Ballz::HitTestBodyArea` names them. */
+export const AREA = {
+  head: 0,
+  tongue: 1,
+  face: 2,
+  hindquarters: 3,
+  rightLeg: 4,
+  leftLeg: 5,
+  tail: 7,
+  body: 8,
+} as const;
 
 const words = (data: Uint8Array, at: number, count: number) => {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -123,10 +148,44 @@ export function readEngineScripts(engine: NeModule): EngineScripts {
   const [walk, trot, run] = words(data, 0x22d8, 3);
   const [first, second] = words(data, 0x20b8, 2);
 
+  const spots = words(data, 0x20d0, 12);
+
   return {
     locomotion: [walk, trot, run],
     rolls: words(data, 0x22d0, 4),
     sleep: Array.from({ length: 5 }, (_, n) => ({ script: sleep[2 * n], times: sleep[2 * n + 1] })),
     sleepBreaks: [first, second],
+    pettedOnBack: words(data, 0x20c4, 3),
+    pokedInFace: words(data, 0x20ca, 3),
+    petSpots: Array.from({ length: 3 }, (_, n) => ({
+      ball: spots[4 * n],
+      chance: spots[4 * n + 1],
+      strokes: spots[4 * n + 2],
+      extra: spots[4 * n + 3],
+    })),
   };
+}
+
+/**
+ * The part of the body each ball is (`AREA`): the `Ballz` constructor sets
+ * them one by one, `mov word [es:bx+0xa05 + 2 × ball], area` (seg10:0051
+ * on), and this reads them out of its code.
+ */
+export function readBodyAreas(engine: NeModule, balls = 65): number[] {
+  const code = engine.segmentBytes(10);
+  const view = new DataView(code.buffer, code.byteOffset, code.byteLength);
+  const areas = new Array<number>(balls).fill(-1);
+
+  /* Within the constructor, which the destructor follows at 0x503. */
+  for (let at = 0; at < 0x503 - 6; at++) {
+    if (code[at] === 0x26 && code[at + 1] === 0xc7 && code[at + 2] === 0x87) {
+      const ball = (view.getUint16(at + 3, true) - 0xa05) / 2;
+
+      if (Number.isInteger(ball) && ball >= 0 && ball < balls) {
+        areas[ball] = view.getInt16(at + 5, true);
+      }
+    }
+  }
+
+  return areas;
 }

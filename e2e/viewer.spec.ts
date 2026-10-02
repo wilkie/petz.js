@@ -45,3 +45,18 @@ test('leaves a dog to itself, live', async ({ page }) => {
   await expect(page.locator('#mood')).toHaveText(/^e[A-Za-z]+, excitement \d+$/);
   await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(5000);
 });
+
+test('begs for a treat held up', async ({ page }) => {
+  test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
+  await page.goto('/viewer.html');
+
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await page.check('#live');
+
+  const box = (await page.locator('canvas').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+  await page.click('#treat-red');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+
+  await expect(page.locator('#mood')).toHaveText(/^eBegging/, { timeout: 20000 });
+});

@@ -6,14 +6,16 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { Pet, STATE } from '../../src/behaviour/pet.ts';
+import { GLOBAL, Pet, STATE } from '../../src/behaviour/pet.ts';
 import { borlandRand } from '../../src/behaviour/random.ts';
 import { Stage } from '../../src/behaviour/stage.ts';
 import { findTransition, transitionTable } from '../../src/behaviour/transitions.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import {
+  AREA,
   FIRST_TRICK,
   POSITION,
+  readBodyAreas,
   readEngineScripts,
   readEngineStateNames,
   readPositionKinds,
@@ -40,6 +42,7 @@ describeWithOracle('the engine’s behaviour', () => {
   const trickScripts = readTrickScripts(engine);
   const engineScripts = readEngineScripts(engine);
   const table = transitionTable(scripts);
+  const breedNames = parseLnz(new TextDecoder('latin1').decode(read('DATA/TERRIER.LNZ'))).ballNames;
   const at = (script: number) =>
     `${positions[scripts[script].from]} to ${positions[scripts[script].to]}`;
 
@@ -81,6 +84,39 @@ describeWithOracle('the engine’s behaviour', () => {
         expect(names[FIRST_TRICK + n]).toBeTruthy();
       }
     });
+  });
+
+  it('knows each ball’s part of the body: the head, the face, the legs, the tail', () => {
+    const areas = readBodyAreas(engine);
+    const named = (name: string) => areas[breedNames.indexOf(`eBall_${name}`)];
+
+    expect(areas.every((area) => area >= 0)).toBe(true);
+    expect([
+      named('head'),
+      named('nose'),
+      named('tongue1'),
+      named('chest'),
+      named('belly'),
+    ]).toEqual([AREA.head, AREA.face, AREA.tongue, AREA.body, AREA.body]);
+    expect([named('Lfoot'), named('Rfoot'), named('tail3'), named('butt')]).toEqual([
+      AREA.leftLeg,
+      AREA.rightLeg,
+      AREA.tail,
+      AREA.hindquarters,
+    ]);
+  });
+
+  it('likes being petted on the chest, the belly or the rump', () => {
+    expect(engineScripts.petSpots.map(({ ball }) => breedNames[ball])).toEqual([
+      'eBall_chest',
+      'eBall_belly',
+      'eBall_butt',
+    ]);
+    expect(engineScripts.pettedOnBack.map(at)).toEqual([
+      'rollover to rollover',
+      'rollover to rollover',
+      'rollover to rollover',
+    ]);
   });
 
   it('has trick data whose current table is still its defaults, for a dog never trained', () => {
@@ -174,6 +210,112 @@ describeWithOracle('the engine’s behaviour', () => {
         expect(Math.abs(excitement - trick.excitement)).toBeLessThanOrEqual(trick.excitementRange);
         expect(trick.withBall).toBe(0);
       }
+    });
+  });
+
+  describe('a terrier petted and given a treat', () => {
+    const header = parseBhd(read('DATA/ALL_PTZ.BHD'));
+    const frames = header.animations.flatMap((_, n) =>
+      parseAnimation(header, n, read(`DATA/${n}.BDT`))
+    );
+    const breed = parseLnz(
+      new TextDecoder('latin1').decode(read('DATA/TERRIER.LNZ')),
+      header.ballCount
+    );
+
+    const setUp = (seed: number) => {
+      const stage = new Stage(320, 240, breed, header, frames, 5);
+      stage.bodyAreas = readBodyAreas(engine);
+      const pet = new Pet(
+        {
+          scripts,
+          table,
+          positionKinds: kinds,
+          tricks: structuredClone(tricks.current),
+          trickDefaults: tricks.defaults,
+          trickScripts,
+          engineScripts,
+          flags: (frame) => frames[frame]?.tag ?? 3,
+        },
+        stage,
+        borlandRand(seed),
+        readFactors(breed.sections),
+        5
+      );
+      let tick = 0;
+      const states: number[] = [];
+
+      const run = (frameCount: number, act?: (n: number) => void) => {
+        for (let n = 0; n < frameCount; n++, tick++) {
+          act?.(n);
+          const step = pet.tick((tick * 45) / 17);
+          stage.show(step, step.rotation, step.placedBy);
+          states.push(step.state);
+        }
+      };
+
+      pet.start(0);
+      return { stage, pet, run, states };
+    };
+
+    it('takes stroking the chest for petting, enjoys it more and more, and rolls over', () => {
+      const { stage, pet, run, states } = setUp(3);
+      run(300);
+      run(400, (n) => {
+        const chest = stage.ballOnStage(50);
+        stage.pointer = { x: chest.x + ((n % 6) - 3) * 3, y: chest.y, button: true };
+      });
+
+      expect(pet.global === GLOBAL.petting || pet.global === GLOBAL.idle).toBe(true);
+      expect(states).toContain(STATE.pettingGood);
+      expect(pet.pettingLevel).toBeGreaterThan(3);
+    });
+
+    it('does not take a cursor merely resting on the dog, button down, for petting', () => {
+      const { stage, pet, run } = setUp(3);
+      run(300);
+      const chest = stage.ballOnStage(50);
+      run(100, () => {
+        stage.pointer = { x: chest.x, y: chest.y, button: true };
+      });
+
+      expect(pet.petting).toBe(false);
+    });
+
+    it('begs for a treat held up, and eats it when it is put down', () => {
+      const { stage, pet, run, states } = setUp(3);
+      run(200);
+
+      stage.treat = { colour: 2, held: true, x: 0, y: 0 };
+      pet.treatPickedUp();
+      expect(pet.global).toBe(GLOBAL.firstTreat + 2);
+
+      run(600, () => {
+        const at = stage.where();
+        stage.treat!.x = at.x;
+        stage.treat!.y = at.y - 40;
+      });
+      expect(states).toContain(STATE.begging);
+
+      stage.treat!.held = false;
+      pet.treatPutDown();
+      run(600);
+
+      expect(stage.treat).toBeNull();
+      expect(states).toContain(STATE.eating);
+    });
+
+    it('rewards the trick last done, when the treat is given before the dog has begged', () => {
+      const { stage, pet, run } = setUp(3);
+      run(200);
+
+      pet.lastTrick = FIRST_TRICK + 9;
+      stage.treat = { colour: 0, held: false, x: stage.where().x, y: stage.where().y };
+      pet.treatPutDown();
+      run(400);
+
+      expect(stage.treat).toBeNull();
+      expect(pet.brainActive).toBe(false);
     });
   });
 });

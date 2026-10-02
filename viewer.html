@@ -126,13 +126,22 @@
         <label><input id="live" type="checkbox" /> Live</label>
         <output id="mood" for="live"></output>
       </div>
+      <div class="controls" aria-label="Treats">
+        Treats:
+        <button id="treat-blue" type="button">Blue</button>
+        <button id="treat-green" type="button">Green</button>
+        <button id="treat-red" type="button">Red</button>
+        <button id="treat-away" type="button">Put away</button>
+      </div>
       <canvas id="stage" width="640" height="480" aria-label="The dog, drawn"></canvas>
       <p class="note">
         Drawn as Dogz draws, at twice its size: each ball placed, turned and tilted as the game
         places it, and filled with its fuzz, speckles and outline, in Dogz's own palettes; not yet
         the lines as the game draws them. Live, the dog is left to itself as Dogz leaves it: it
         wanders, idles, does the tricks its mood suits and sleeps, choosing as the engine chooses.
-        See the knowledge base's pages on drawing a dog and on behaviour.
+        Hold the button down and stroke it to pet it; click its face, paws or tail and it minds.
+        Take out a treat and hold it up and it begs, and does tricks; click to put the treat down
+        and it eats it. See the knowledge base's pages on drawing a dog and on behaviour.
       </p>
     </main>
     <script type="module" src="/src/viewer/main.ts"></script>

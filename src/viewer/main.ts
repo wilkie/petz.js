@@ -18,6 +18,7 @@ import {
   parseBhd,
 } from '../formats/animation.ts';
 import {
+  readBodyAreas,
   readEngineScripts,
   readEngineStateNames,
   readPositionKinds,
@@ -51,8 +52,8 @@ const mood = element<HTMLOutputElement>('mood');
 const canvas = element<HTMLCanvasElement>('stage');
 const context = canvas.getContext('2d')!;
 
-/** Dogz plays its frames at about this many a second. Not yet measured. */
-const FRAMES_PER_SECOND = 12;
+/** Dogz draws a frame every 45 milliseconds at most (`ReallyDoDrawFrame`, seg21:3dee). */
+const FRAMES_PER_SECOND = 1000 / 45;
 
 /** Dogz's own pixels, drawn this many times larger to be seen. */
 const ZOOM = 2;
@@ -84,6 +85,7 @@ let gameFiles: GameFiles;
 /** What the dog left to itself needs of the game's files, and the dog itself when live. */
 let petData: Omit<PetData, 'flags'>;
 let engineStateNames: string[] = [];
+let bodyAreas: number[] = [];
 let live: { pet: Pet; stage: Stage; started: number } | null = null;
 
 /** The stage, in Dogz's own pixels. */
@@ -268,6 +270,7 @@ function startLive() {
   const breed = breeds.get(breedSelect.value)!;
   const age = Number(ageInput.value);
   const stage = new Stage(STAGE.width, STAGE.height, breed, header, allFrames, age);
+  stage.bodyAreas = bodyAreas;
   const pet = new Pet(
     {
       ...petData,
@@ -292,6 +295,7 @@ function tickLive() {
 
   stage.show(step, step.rotation, step.placedBy);
   drawDog(step.frame, stage.x, stage.y, step.rotation);
+  drawTreat(stage);
 
   if (soundInput.checked) {
     for (const sound of step.sounds ?? []) {
@@ -299,8 +303,102 @@ function tickLive() {
     }
   }
 
-  mood.value = `${engineStateNames[step.state] ?? step.state}, excitement ${pet.factor(0)}`;
+  mood.value = `${engineStateNames[step.state] ?? step.state}, excitement ${pet.factor(0)}${
+    pet.global === 0x3f3 ? `, petted ${pet.pettingLevel}` : ''
+  }`;
 }
+
+/** The treats' colours, not yet the game's own pictures of them. */
+const TREAT_COLOURS = ['#2a5bd7', '#2a9d3a', '#d23a2a'];
+
+function drawTreat(stage: Stage) {
+  const treat = stage.treat;
+
+  if (!treat) {
+    return;
+  }
+
+  context.fillStyle = TREAT_COLOURS[treat.colour];
+  context.beginPath();
+  context.arc(treat.x * ZOOM, treat.y * ZOOM, 4 * ZOOM, 0, 2 * Math.PI);
+  context.fill();
+}
+
+/** Where the cursor is over the stage, in Dogz's pixels. */
+function stagePoint(event: MouseEvent) {
+  const box = canvas.getBoundingClientRect();
+  return {
+    x: ((event.clientX - box.left) * STAGE.width) / box.width,
+    y: ((event.clientY - box.top) * STAGE.height) / box.height,
+  };
+}
+
+canvas.addEventListener('mousemove', (event) => {
+  if (!live) {
+    return;
+  }
+
+  const point = stagePoint(event);
+  live.stage.pointer = { ...point, button: (event.buttons & 1) !== 0 };
+
+  if (live.stage.treat?.held) {
+    Object.assign(live.stage.treat, point);
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  if (live) {
+    live.stage.pointer = { x: -1000, y: -1000, button: false };
+  }
+});
+
+/**
+ * A click puts down the treat held, or picks up the one put down, as
+ * `GrabSprite::Update` lets the user; otherwise the button is held to pet.
+ */
+canvas.addEventListener('mousedown', (event) => {
+  if (!live) {
+    return;
+  }
+
+  const point = stagePoint(event);
+  const { stage, pet } = live;
+  const treat = stage.treat;
+  stage.pointer = { ...point, button: true };
+
+  if (treat?.held) {
+    treat.held = false;
+    pet.treatPutDown();
+  } else if (treat && Math.hypot(treat.x - point.x, treat.y - point.y) < 8) {
+    treat.held = true;
+    pet.treatPickedUp();
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  if (live) {
+    live.stage.pointer = { ...live.stage.pointer, button: false };
+  }
+});
+
+for (const [colour, button] of ['blue', 'green', 'red'].entries()) {
+  element<HTMLButtonElement>(`treat-${button}`).addEventListener('click', () => {
+    if (!live) {
+      return;
+    }
+
+    const { x, y } = live.stage.pointer;
+    live.stage.treat = { colour, held: true, x, y };
+    live.pet.treatPickedUp();
+  });
+}
+
+element<HTMLButtonElement>('treat-away').addEventListener('click', () => {
+  if (live?.stage.treat) {
+    live.stage.treat = null;
+    live.pet.treatPutAway();
+  }
+});
 
 liveInput.addEventListener('change', () => {
   stop();
@@ -366,6 +464,7 @@ async function start(files: GameFiles) {
 
   const tricks = parseTricks(await files.read('DOGZ.DOG/TRICKS.TDT'));
   engineStateNames = readEngineStateNames(engine);
+  bodyAreas = readBodyAreas(engine, header.ballCount);
   petData = {
     scripts,
     table: transitionTable(scripts),
