@@ -279,7 +279,7 @@ withOracle('the engine’s behaviour', () => {
         for (let n = 0; n < frameCount; n++, tick++) {
           act?.(n);
           const step = pet.tick((tick * 45) / 17);
-          stage.show(step, step.rotation, step.placedBy);
+          stage.show(step, step.rotation, step.placedBy, step.pinned);
           states.push(step.state);
           sounds.push(step.sounds ?? []);
         }
@@ -522,6 +522,73 @@ withOracle('the engine’s behaviour', () => {
 
       run(800);
       expect(pet.state).not.toBe(STATE.sprayReact);
+    });
+
+    it('lunges at a shoe held over it, hangs from it, and drops with it when it is let go', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(200);
+
+      const chin = stage.ballOnStage(51);
+      const shoe = {
+        x: Math.round(chin.x),
+        y: Math.round(chin.y) - 70,
+        held: true,
+        inMouth: false,
+      };
+      stage.shoe = shoe;
+      stage.pointer = { x: shoe.x, y: shoe.y, button: false };
+      pet.newGlobalState(GLOBAL.taunt);
+      expect(pet.state).toBe(STATE.lungingCursor);
+
+      let hung = false;
+      run(60, () => {
+        const at = stage.ballOnStage(51);
+        hung ||= Math.hypot(at.x - shoe.x, at.y - shoe.y) < 1;
+      });
+      expect(hung).toBe(true);
+
+      shoe.held = false;
+      let inMouth = false;
+      run(60, () => {
+        inMouth ||= shoe.inMouth;
+      });
+      expect(inMouth).toBe(true);
+      expect(states).toContain(STATE.lungingCursor);
+    });
+
+    it('charges at a shoe picked up, and on the run grabs it and tugs at it', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(200);
+
+      const shoe = { x: 0, y: 200, held: true, inMouth: false };
+      stage.shoe = shoe;
+
+      /* Picked up again on the far side whenever the dog gives up. */
+      const pickUp = () => {
+        shoe.x = stage.where().x > 320 ? 60 : 580;
+        stage.pointer = { x: shoe.x, y: shoe.y, button: false };
+        pet.shoePickedUp();
+      };
+
+      pickUp();
+      expect(pet.state).toBe(STATE.chargingCursor);
+
+      /* The engine moving the cursor between frames is the tug. */
+      let tugged = false;
+      let was = { ...stage.pointer };
+      run(2000, () => {
+        tugged ||= stage.pointer.x !== was.x || stage.pointer.y !== was.y;
+        Object.assign(shoe, { x: stage.pointer.x, y: stage.pointer.y });
+
+        if (pet.global === GLOBAL.idle) {
+          pickUp();
+        }
+
+        was = { ...stage.pointer };
+      });
+
+      expect(states).toContain(STATE.grabbingCursor);
+      expect(tugged).toBe(true);
     });
 
     it('has the bowls the size of their pictures: full, half, empty and the rim', () => {

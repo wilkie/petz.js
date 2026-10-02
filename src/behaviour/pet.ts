@@ -21,7 +21,7 @@ import {
 import { type Script } from '../formats/script.ts';
 import { type Trick } from '../formats/tricks.ts';
 import { type Brain } from './brain.ts';
-import { type Ball, type Food, foodSize, ballRect, isTreat } from './stage.ts';
+import { type Ball, type Food, type Shoe, foodSize, ballRect, isTreat } from './stage.ts';
 import { type Rand } from './random.ts';
 import { DEFAULT_GLUE, type Step, timeline } from './timeline.ts';
 import { AUTO, findTransition, type TransitionTable } from './transitions.ts';
@@ -35,6 +35,12 @@ export const STATE = {
   locomoteTrip: 6,
   locomote: 7,
   postLocomote: 8,
+  chasingCursor: 0xd,
+  chargingCursor: 0xe,
+  grabbingCursor: 0xf,
+  prowlingCursor: 0x10,
+  stalkingCursor: 0x11,
+  lungingCursor: 0x12,
   chasingPetting: 0x13,
   waitPetting: 0x14,
   pettingGood: 0x15,
@@ -75,6 +81,7 @@ export const GLOBAL = {
   firstTreat: 0x3ed,
   fetch: 0x3f0,
   petting: 0x3f3,
+  taunt: 0x3f5,
 } as const;
 
 /** Script positions the engine names by number (`readStateNames`). */
@@ -121,6 +128,17 @@ const SCRIPT = {
   sick: 287,
   sprayed: 68,
   shakeOffSpray: 323,
+  grabShoeRunning: 1,
+  reachForShoe: 215,
+  grabShoe: 214,
+  shakeShoe: 130,
+  stalk: 206,
+  gatherToLunge: 187,
+  lunge: 168,
+  hang: 167,
+  dangle: 169,
+  landFromLunge: 171,
+  lookAbout: 184,
   stopRunning: 26,
   stopRunningHard: 205,
   snatch: 240,
@@ -219,6 +237,12 @@ export interface PetWorld {
   /** Puts a food back in the box: a treat the dog has eaten. */
   putAwayFood?(food: Food): void;
 
+  /** The shoe out of the toy box, if any. */
+  shoe?: Shoe | null;
+
+  /** The user's cursor moved by the engine (`SetCursorPos`): the dog tugging at the shoe. */
+  moveCursor?(point: { x: number; y: number }): void;
+
   /** The ball out of the toy box, if any. */
   ball?: Ball | null;
 
@@ -260,6 +284,9 @@ export interface Tick extends Step {
   rotation: number;
   state: number;
   placedBy?: number;
+
+  /** A ball of the dog held to a point, the dog drawn about it: hanging from the shoe. */
+  pinned?: { ball: number; x: number; y: number };
 }
 
 /** A state's handler runs as the state is entered, as it is left, and every tick between. */
@@ -275,7 +302,10 @@ type Item =
   | { cue: number }
   | { trick: number }
   | { aim: { ball: number; at: { x: number; y: number } | null } }
-  | { factor: [number, number] };
+  | { factor: [number, number] }
+  | { steerAt: { x: number; y: number; rate: number; width: number; height: number } }
+  | { grab: number }
+  | { release: number };
 
 /** An angle in 256ths of a turn, from -128 to 127. */
 const wrap = (angle: number) => ((((angle + 128) % 256) + 256) % 256) - 128;
@@ -498,7 +528,13 @@ export class Pet {
     this.wearFullness();
     this.pulse();
     this.data.brain?.pulse();
-    return { ...shown, rotation: this.rotation, state: this.state, placedBy: this.placedBy };
+    return {
+      ...shown,
+      rotation: this.rotation,
+      state: this.state,
+      placedBy: this.placedBy,
+      pinned: this.pinned ?? undefined,
+    };
   }
 
   // The script queue: what `ScriptSprite` keeps and `PopScript` plays.
@@ -615,6 +651,7 @@ export class Pet {
     let placedBy: number | undefined;
 
     this.cues.clear();
+    this.grabbedSlot = -1;
 
     const control = (item: Item) => {
       if ('cue' in item) {
@@ -622,6 +659,15 @@ export class Pet {
       } else if ('trick' in item) {
         this.lastTrick = item.trick;
         this.lastTrickTime = this.time;
+      } else if ('steerAt' in item) {
+        /* `0x8af2 x y rate width height` (`SetTargetLocation`). */
+        const { x, y, rate, width, height } = item.steerAt;
+        this.setTargetLocation({ x, y }, rate, width, height);
+      } else if ('grab' in item) {
+        this.grabbedSlot = item.grab;
+        this.grabObject(item.grab);
+      } else if ('release' in item) {
+        this.releaseObject(item.release);
       } else if ('factor' in item) {
         /* `0x8adf n value` (`PetModule::SetFactor`). */
         this.setFactor(...item.factor);
@@ -689,6 +735,7 @@ export class Pet {
       }
 
       if (step.grab !== undefined) {
+        this.grabbedSlot = step.grab;
         this.grabObject(step.grab);
       }
 
@@ -931,23 +978,31 @@ export class Pet {
         return this.doBegging(mode);
       case STATE.sprayReact:
         return this.doSprayReact(mode);
+      case STATE.chasingCursor:
+      case STATE.chargingCursor:
+        return this.doChasingChargingCursor(mode);
+      case STATE.grabbingCursor:
+        return this.doGrabbingCursor(mode);
+      case STATE.stalkingCursor:
+        return this.doStalkingCursor(mode);
+      case STATE.prowlingCursor:
+        return this.doProwlingCursor(mode);
+      case STATE.lungingCursor:
+        return this.doLungingCursor(mode);
     }
 
     return undefined;
   }
 
   /**
-   * `ResetScriptSoft`: the script playing plays to its end, and what was
-   * queued after it is dropped. Inferred from its name and its callers.
+   * `ScriptSprite::ResetScript` (seg7:2dd0): the queue cleared, glued by
+   * the ball given (the chest, for none), and the dog taken to be in the
+   * position of the script it was playing — where it ends, unless it starts
+   * and ends the same.
    */
-  /**
-   * `ScriptSprite::ResetScript` (seg7:2dd0): the queue cleared, glued by the
-   * chest, and the dog taken to be in the position of the script it was
-   * playing — where it ends, unless it starts and ends the same.
-   */
-  private resetScript() {
+  private resetScript(glue = CHEST) {
     const script = this.data.scripts[this.playing];
-    this.queue = [{ glue: CHEST }];
+    this.queue = [{ glue }];
 
     /* And the slide it was aimed over: inferred, as the queue it counted is gone. */
     this.slide = null;
@@ -957,6 +1012,10 @@ export class Pet {
     }
   }
 
+  /**
+   * `ResetScriptSoft`: the script playing plays to its end, and what was
+   * queued after it is dropped. Inferred from its name and its callers.
+   */
   private resetSoft() {
     const end = this.queue.findIndex((item) => 'end' in item);
     this.queue = end === -1 ? [] : this.queue.slice(0, end + 1);
@@ -1002,11 +1061,15 @@ export class Pet {
     }
   }
 
+  /** Whether the dog has left `eIdle` since it was last made idle (`0xda`, seg16:02fe). */
+  private leftIdle = false;
+
   /** `PetModule::DoIdle`, seg16:02ce. */
   private doIdle(mode: Mode): Step | undefined {
     const excitement = this.factor(0);
 
     if (mode === 'exit') {
+      this.leftIdle = true;
       this.resetSoft();
       return undefined;
     }
@@ -1756,6 +1819,10 @@ export class Pet {
    * and the new one enters, choosing the state to start in unless told.
    */
   newGlobalState(global: number, state = 0) {
+    if (this.global === GLOBAL.taunt && global !== GLOBAL.taunt) {
+      this.exitTaunt();
+    }
+
     if (this.reducedGlobal() === GLOBAL.fetch) {
       this.exitFetch();
     }
@@ -1771,11 +1838,14 @@ export class Pet {
       this.enterBegEat(state);
     } else if (this.reducedGlobal() === GLOBAL.fetch) {
       this.enterFetch(state);
+    } else if (global === GLOBAL.taunt) {
+      this.enterTaunt();
     }
   }
 
   /** `PetModule::EnterIdle` (seg16:0000): to what is out on the desktop, or else walking. */
   private enterIdle(state: number) {
+    this.leftIdle = false;
     const desktop = this.checkDesktop();
 
     if (desktop) {
@@ -1788,7 +1858,8 @@ export class Pet {
   /**
    * `PetModule::CheckDesktop` (seg16:20b6): what out of the toy box the dog
    * goes to. A treat out is begged for at once. Otherwise one of the things
-   * out, not the one the dog last left: a bowl once long enough has passed
+   * out, not the one the dog last left until it has done something since
+   * (`0xda`, set as it leaves `eIdle`): a bowl once long enough has passed
    * since it was last eaten from or held — the emptier, the longer — and
    * anything else, the ball, only by a dog excited enough, 70 and more.
    */
@@ -1801,10 +1872,12 @@ export class Pet {
     }
 
     const ball = this.world.ball;
+    const shoe = this.world.shoe;
     const out = [
       ...foods.map((food) => ({ global: GLOBAL.begEat + food.kind, food })),
-      ...(ball && !ball.held ? [{ global: GLOBAL.fetch, food: null }] : []),
-    ].filter(({ global }) => global !== this.previousGlobal);
+      ...(ball ? [{ global: GLOBAL.fetch, food: null }] : []),
+      ...(shoe ? [{ global: GLOBAL.taunt, food: null }] : []),
+    ].filter(({ global }) => global !== this.previousGlobal || this.leftIdle);
 
     /* The engine starts at a random sprite of the stage's and takes the
      * first it can; here, one of these at random. */
@@ -2288,7 +2361,12 @@ export class Pet {
 
   /** What the dog begs for: the ball at play, else the treat (`0x11d4`). */
   private heldObject() {
-    return this.reducedGlobal() === GLOBAL.fetch ? this.world.ball : this.food;
+    const global = this.reducedGlobal();
+    return global === GLOBAL.fetch
+      ? this.world.ball
+      : global === GLOBAL.taunt
+        ? this.world.shoe
+        : this.food;
   }
 
   // Food and treats.
@@ -2828,6 +2906,554 @@ export class Pet {
     return step;
   }
 
+  // The taunt: the shoe.
+
+  /** The slot an object was grabbed into this frame (`0xe4` of the sprite, -1 for none). */
+  private grabbedSlot = -1;
+
+  /** Whether the chase has got going, the shoe in hand, the dog hanging (`0x222`). */
+  private going = false;
+
+  /** Where the dog grabs or lunges for the shoe (`0x127c`). */
+  private reachFor = { x: 0, y: 0 };
+
+  /** Whether the dog hung from the shoe at its last lunge (`DAT_310c`). */
+  private hungLast = false;
+
+  /** The dog's chin held to the shoe while it hangs from it. */
+  private pinned: Tick['pinned'] | null = null;
+
+  /**
+   * The shoe picked up (`ShoeSprite::Update`, seg20:3759): the taunt
+   * begins, and the dog, letting go of it if it had it, charges at once.
+   */
+  shoePickedUp() {
+    if (this.global !== GLOBAL.taunt) {
+      this.newGlobalState(GLOBAL.taunt);
+    }
+
+    this.releaseObject(4);
+    this.newState(STATE.chargingCursor);
+  }
+
+  /** The shoe put back in its box: the dog is left alone. */
+  shoePutAway() {
+    if (this.global === GLOBAL.taunt) {
+      this.newGlobalState(GLOBAL.idle);
+    }
+  }
+
+  /** The shoe's middle, which the dog goes for (`0x86` of the sprite at `0x74`). */
+  private shoeAt() {
+    const shoe = this.world.shoe;
+    return shoe ? { x: shoe.x, y: shoe.y } : (this.samples[0] ?? this.world.where());
+  }
+
+  /**
+   * `MakeFocusRect` (seg7:3565) about the dog's middle: a box so many times
+   * its standard size, ahead of it by its diagonal over a distance.
+   */
+  private focusRect(scale: number, distance: number) {
+    const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+    const [w, h] = [Math.trunc(width * scale), Math.trunc(height * scale)];
+    const centre = this.world.centre?.() ?? this.world.where();
+    const ahead = Math.trunc(Math.trunc(Math.sqrt(w * w + h * h)) / distance);
+    const sine = Math.trunc(Math.sin((this.rotation * Math.PI) / 128) * 256);
+    const x = centre.x - Math.trunc((256 * ahead * sine) / 65536);
+    return {
+      left: x - Math.trunc(w / 2),
+      right: x + Math.trunc(w / 2),
+      top: centre.y - Math.trunc(h / 2),
+      bottom: centre.y + Math.trunc(h / 2),
+    };
+  }
+
+  private static within(
+    rect: { left: number; right: number; top: number; bottom: number },
+    point: { x: number; y: number }
+  ) {
+    return (
+      point.x >= rect.left && point.x < rect.right && point.y >= rect.top && point.y < rect.bottom
+    );
+  }
+
+  /** Within the dog's reach to lunge: 2.1 standard sizes, raised by half its height. */
+  private lungeRect() {
+    const rect = this.focusRect(2.1, 2);
+    const { height } = this.world.standardSize?.() ?? { height: 60 };
+    rect.top -= Math.trunc(height / 2);
+    return rect;
+  }
+
+  /** How far the cursor has gone over the last frames (`0x19e` on, each frame's distance). */
+  private cursorTravel(frames: number) {
+    let travel = 0;
+
+    for (let n = 0; n < frames; n++) {
+      const [a, b] = [this.samples[n], this.samples[n + 1]];
+
+      if (a && b) {
+        travel = Math.trunc(travel + Math.hypot(a.x - b.x, a.y - b.y));
+      }
+    }
+
+    return travel;
+  }
+
+  /** How far the shoe is from where the cursor was so many frames ago (`0xea` on). */
+  private shoeMoved(frames: number) {
+    const then = this.samples[frames];
+    const shoe = this.shoeAt();
+    return then ? Math.hypot(shoe.x - then.x, shoe.y - then.y) : 0;
+  }
+
+  /** `DecideChasingChargingCursor` (seg3:1d71): charges, the more excited the likelier. */
+  private decideChasingCharging() {
+    return this.factor(0) < this.rand() % 175 ? STATE.chasingCursor : STATE.chargingCursor;
+  }
+
+  /**
+   * `PetModule::EnterTaunt` (seg3:0000): with the shoe close, the dog grabs
+   * at it; within reach, it lunges; else it chases or charges.
+   */
+  private enterTaunt() {
+    const shoe = this.shoeAt();
+
+    if (Pet.within(this.focusRect(0.6, 4), shoe)) {
+      this.newState(STATE.grabbingCursor);
+    } else if (Pet.within(this.lungeRect(), shoe)) {
+      this.newState(STATE.lungingCursor);
+    } else {
+      this.newState(this.decideChasingCharging());
+    }
+  }
+
+  /** `PetModule::ExitTaunt` (seg3:016e): the shoe let go of. */
+  private exitTaunt() {
+    this.resetScript();
+    this.releaseObject(4);
+    this.pinned = null;
+  }
+
+  /**
+   * `PetModule::DoChasingChargingCursor` (seg3:01d9): runs at the shoe,
+   * steering at it from its first stride. The shoe held still, far off, it
+   * prowls instead (but not charging); now and then, by its excitement, it
+   * lunges if the shoe is within reach; at it, it grabs, unless the cursor
+   * is going too fast. Its head following the shoe is not yet played.
+   */
+  private doChasingChargingCursor(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      this.resetSoft();
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.pushStored(SCRIPT.run);
+      this.going = false;
+      return undefined;
+    }
+
+    const shoe = this.shoeAt();
+    const still = this.shoeMoved(1) < 1;
+
+    if (
+      still &&
+      this.going &&
+      !Pet.within(this.focusRect(4, 4), shoe) &&
+      this.isOnscreen() &&
+      this.state !== STATE.chargingCursor
+    ) {
+      this.resetScript();
+      this.newState(STATE.prowlingCursor);
+      return this.pop().step;
+    }
+
+    if (this.rand() % 1000 < this.factor(0) && Pet.within(this.lungeRect(), shoe)) {
+      this.resetScript();
+      this.newState(STATE.lungingCursor);
+      return this.pop().step;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
+      this.pushStored(SCRIPT.run);
+    }
+
+    if (flags & 2) {
+      if (this.cursorTravel(3) < 30) {
+        this.resetScript(CHEST);
+        this.newState(STATE.grabbingCursor);
+        return step;
+      }
+
+      this.pushStored(SCRIPT.run);
+    }
+
+    if (this.cues.has(4)) {
+      this.going = true;
+    }
+
+    if (this.going) {
+      const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+      this.setTargetLocation(shoe, TURN_RATE, width, height);
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::DoGrabbingCursor` (seg3:06ac): snaps its chin at where it
+   * was going — on the run in one (script 1), else reaching (215, 214) —
+   * and shakes it (130) two or three times. Grabbed, the shoe goes with its
+   * chin and the cursor with it, a tug of war, until it is pulled 75 away;
+   * moved 15 from where it snapped, it was missed.
+   */
+  private doGrabbingCursor(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      this.resetSoft();
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.reachFor = this.steer ? { ...this.steer.point } : this.shoeAt();
+      const at = { ...this.reachFor };
+
+      if (this.position === RUNNING) {
+        this.push({ aim: { ball: 51, at } });
+        this.pushStored(SCRIPT.grabShoeRunning);
+      } else {
+        this.pushStored(SCRIPT.reachForShoe);
+        this.push(
+          { glue: CHEST },
+          { steerAt: { ...at, rate: TURN_RATE, width: 0, height: 0 } },
+          { aim: { ball: 51, at } }
+        );
+        this.pushStored(SCRIPT.grabShoe);
+        this.push({ cue: 3 });
+      }
+
+      this.push({ glue: CHEST });
+
+      for (let n = (this.rand() % 2) + 2; n > 0; n--) {
+        this.pushStored(SCRIPT.shakeShoe);
+      }
+
+      this.going = false;
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
+      this.newGlobalState(GLOBAL.idle);
+      return step;
+    }
+
+    const shoe = this.world.shoe;
+
+    if (this.grabbedSlot === 4) {
+      this.going = true;
+      const at = this.shoeAt();
+
+      if (Math.hypot(at.x - this.reachFor.x, at.y - this.reachFor.y) > 15) {
+        this.resetScript(CHEST);
+        this.newState(this.decideChasingCharging());
+      }
+    } else if (this.going && shoe) {
+      const chin = this.world.ballOnStage?.(51);
+
+      if (chin && Math.hypot(chin.x - shoe.x, chin.y - shoe.y) > 75) {
+        this.resetScript(36);
+        this.newState(this.decideChasingCharging());
+      } else if (chin) {
+        shoe.x = Math.trunc(chin.x);
+        shoe.y = Math.trunc(chin.y);
+
+        if (shoe.held) {
+          this.world.moveCursor?.(shoe);
+        }
+      }
+    }
+
+    return step;
+  }
+
+  /**
+   * After the shoe jumps, while stalking or prowling: it lunges if the shoe
+   * is in reach, else chases or charges (seg3:0cf9 and 11a5 on).
+   */
+  private shoeJumped() {
+    if (!this.going || this.shoeMoved(2) <= 15) {
+      return false;
+    }
+
+    this.resetScript(36);
+    this.newState(
+      Pet.within(this.lungeRect(), this.shoeAt())
+        ? STATE.lungingCursor
+        : this.decideChasingCharging()
+    );
+    return true;
+  }
+
+  /**
+   * `PetModule::DoStalkingCursor` (seg3:0b08): creeps after the shoe
+   * (script 206, three to five times); a sudden move of it sets it off; at
+   * it, it grabs; done creeping, it prowls.
+   */
+  private doStalkingCursor(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      this.resetSoft();
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.pushTransition(this.data.scripts[SCRIPT.stalk].from, BELLY);
+      this.push({ cue: 0 });
+
+      for (let n = (this.rand() % 3) + 3; n > 0; n--) {
+        this.pushStored(SCRIPT.stalk);
+      }
+
+      this.going = false;
+      return undefined;
+    }
+
+    if (!this.isOnscreen() && this.going) {
+      this.resetScript();
+      this.newState(this.decideChasingCharging());
+      return this.pop().step;
+    }
+
+    if (this.shoeJumped()) {
+      return this.pop().step;
+    }
+
+    if (this.going) {
+      const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+      this.setTargetLocation(
+        this.shoeAt(),
+        TURN_RATE,
+        Math.trunc(width * 1.2),
+        Math.trunc(height * 1.2)
+      );
+    }
+
+    const { step, flags } = this.pop();
+
+    if (this.cues.has(0)) {
+      this.going = true;
+    }
+
+    if (flags & 1) {
+      this.newState(STATE.prowlingCursor);
+    } else if (flags & 2) {
+      this.resetScript(BELLY);
+      this.newState(STATE.grabbingCursor);
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::DoProwlingCursor` (seg3:0f3c): stops, turned towards the
+   * shoe if it was running, and pants, fewer times the more excited it is,
+   * watching. A sudden move of the shoe sets it off; done, it lunges if the
+   * shoe is in reach, else stalks it, two times in three, or chases.
+   */
+  private doProwlingCursor(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      this.resetSoft();
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      if (this.position === RUNNING) {
+        const centre = this.world.centre?.() ?? this.world.where();
+        const turn = Math.max(-0x40, Math.min(0x40, Math.trunc(centre.x - this.shoeAt().x)));
+        this.push({ ease: turn });
+      }
+
+      this.pushTransition(this.data.scripts[SCRIPT.pant].from, BELLY);
+      this.push({ cue: 0 });
+
+      let pants = Math.trunc((100 - this.factor(0)) / 20);
+
+      if (pants) {
+        pants += this.rand() % pants;
+      }
+
+      this.pushTransition(STANDING, BELLY);
+
+      for (; pants > 0; pants--) {
+        this.pushStored(SCRIPT.pant);
+      }
+
+      this.going = false;
+      return undefined;
+    }
+
+    if (!this.isOnscreen() && this.going) {
+      this.resetScript();
+      this.newState(this.decideChasingCharging());
+      return this.pop().step;
+    }
+
+    if (this.shoeJumped()) {
+      return this.pop().step;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (this.cues.has(0)) {
+      this.going = true;
+    }
+
+    if (flags & 1) {
+      if (Pet.within(this.lungeRect(), this.shoeAt())) {
+        this.newState(STATE.lungingCursor);
+      } else if (this.rand() % 3 !== 0) {
+        this.newState(STATE.stalkingCursor);
+      } else {
+        this.newState(this.decideChasingCharging());
+      }
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::DoLungingCursor` (seg3:141a): gathers itself (script 187)
+   * and leaps (168), its chin at the shoe, within its reach. Landing within
+   * 50 of it, it hangs from it (167, then 169 six to seventeen times),
+   * swaying: its chin held to the shoe, so the user swings it about. Let go
+   * of, it drops with the shoe and shakes it (130); swung too fast, it
+   * falls off. Missing, it drops back (171), maybe looking about.
+   */
+  private doLungingCursor(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      this.resetSoft();
+      this.push({ drift: 0 });
+      this.pinned = null;
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.resetScript();
+      this.reachFor = this.shoeAt();
+      this.pushStored(SCRIPT.gatherToLunge);
+      this.push({ cue: 12 });
+      this.going = false;
+      return undefined;
+    }
+
+    const shoe = this.world.shoe;
+    const { step, flags } = this.pop();
+
+    if (this.cues.has(12)) {
+      const reach = this.lungeRect();
+      const at = this.shoeAt();
+      this.reachFor = {
+        x: Math.min(Math.max(at.x, reach.left), reach.right),
+        y: Math.min(Math.max(at.y, reach.top), reach.bottom),
+      };
+      this.push({ aim: { ball: 51, at: { ...this.reachFor } } });
+      this.pushStored(SCRIPT.lunge);
+      this.push({ cue: 13 });
+    } else if (this.cues.has(13)) {
+      const at = this.shoeAt();
+
+      if (Math.hypot(this.reachFor.x - at.x, this.reachFor.y - at.y) < 50) {
+        this.hungLast = true;
+        this.going = true;
+        this.grabObject(4);
+        this.pushTransition(this.data.scripts[SCRIPT.hang].from, BELLY);
+        this.push({ drift: 5 - (this.rand() % 11) });
+        this.pushStored(SCRIPT.hang);
+
+        for (let n = (this.rand() % 12) + 6; n > 0; n--) {
+          this.pushStored(SCRIPT.dangle);
+        }
+      } else {
+        this.hungLast = false;
+        this.pushStored(SCRIPT.landFromLunge);
+
+        if (this.rand() % 3 !== 0) {
+          this.push({ glue: CHEST });
+          this.pushStored(this.rand() % 2 ? SCRIPT.lookAgain : SCRIPT.lookAbout);
+          this.push({ glue: CHEST });
+        }
+      }
+    } else if (flags & 1) {
+      this.afterLunge();
+      return step;
+    }
+
+    if (this.going) {
+      this.pinned = { ball: 51, ...this.shoeAt() };
+
+      if (!shoe?.held) {
+        /* Let go of: down it comes with the shoe, and shakes it. */
+        this.going = false;
+        this.pinned = null;
+        this.resetScript();
+        this.push({ grab: 4 });
+        this.pushStored(SCRIPT.shakeShoe);
+        this.push({ release: 4 });
+      }
+
+      if (this.cursorTravel(3) > 230) {
+        this.pinned = null;
+        this.going = false;
+        this.resetScript();
+        const global = this.reducedGlobal();
+        this.newState(
+          global === GLOBAL.begEat || global === GLOBAL.fetch
+            ? this.pickTrickState()
+            : this.decideChasingCharging()
+        );
+      }
+    } else {
+      this.pinned = null;
+    }
+
+    return step;
+  }
+
+  /**
+   * The lunge done (seg3:1990 on): after it, a dog that hung last time, not
+   * excited enough, is done; the shoe held, or down on the stage away from
+   * its edges, it goes again; else it is done.
+   */
+  private afterLunge() {
+    const global = this.reducedGlobal();
+
+    if (global === GLOBAL.begEat || global === GLOBAL.fetch) {
+      this.newState(this.pickTrickState());
+      return;
+    }
+
+    /* The stage, 80 in from each side, and less a third of its height on
+     * the right, as the engine has it (seg3:19cf). */
+    const area = {
+      left: 80,
+      top: 0,
+      right: this.world.width - 80 - Math.trunc(this.world.height / 3),
+      bottom: this.world.height,
+    };
+    const shoe = this.world.shoe;
+
+    if (this.factor(0) < this.rand() % 100 && this.hungLast) {
+      this.newGlobalState(GLOBAL.idle);
+    } else if (shoe?.held || (shoe && Pet.within(area, shoe))) {
+      this.newState(this.decideChasingCharging());
+    } else {
+      this.newGlobalState(GLOBAL.idle);
+    }
+  }
+
   // The spray bottle.
 
   /**
@@ -2973,6 +3599,19 @@ export class Pet {
     const ball = this.world.ball;
     const treat = this.food;
 
+    /* The shoe, at the taunt (`GrabObject` case 4, `ActualGrabObject`). */
+    if (slot === 4) {
+      const shoe = this.world.shoe;
+
+      if (shoe && this.reducedGlobal() === GLOBAL.taunt && (!shoe.held || this.grabFromUser)) {
+        this.grabFromUser = false;
+        shoe.held = false;
+        shoe.inMouth = true;
+      }
+
+      return;
+    }
+
     if (slot === 2) {
       if (treat && (!treat.held || this.grabFromUser)) {
         this.grabFromUser = false;
@@ -2997,6 +3636,17 @@ export class Pet {
   }
 
   private releaseObject(slot: number) {
+    const shoe = this.world.shoe;
+
+    /* The shoe put down at the chin, as the ball is (`ActualReleaseObject`). */
+    if (slot === 4 && shoe?.inMouth) {
+      const chin = this.world.ballOnStage?.(51);
+      shoe.inMouth = false;
+      shoe.x = Math.trunc(chin?.x ?? shoe.x);
+      shoe.y = Math.trunc(chin?.y ?? shoe.y);
+      return;
+    }
+
     this.world.releaseBall?.(slot);
   }
 

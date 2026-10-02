@@ -127,3 +127,18 @@ test('flinches when sprayed', async ({ page }) => {
 
   await expect(page.locator('#mood')).toHaveText(/^eSprayReact/, { timeout: 5000 });
 });
+
+test('goes for a shoe it is teased with', async ({ page }) => {
+  test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
+  await page.goto('/viewer.html');
+
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await page.check('#live');
+
+  const box = (await page.locator('canvas').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+  await page.click('#shoe-out');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+
+  await expect(page.locator('#mood')).toHaveText(/^e[A-Za-z]+Cursor/, { timeout: 5000 });
+});

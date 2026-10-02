@@ -17,6 +17,7 @@ import {
   foodSize,
   isTreat,
   keepOnStage,
+  SHOE_SIZE,
   Stage,
 } from '../behaviour/stage.ts';
 import { DEFAULT_GLUE, type Step, timeline } from '../behaviour/timeline.ts';
@@ -31,6 +32,7 @@ import {
 import {
   BALL_PICTURE,
   readBodyAreas,
+  SHOE_PICTURE,
   SPRAY_PICTURE,
   BOWL_PICTURE,
   TREAT_PICTURE,
@@ -111,6 +113,8 @@ let petData: Omit<PetData, 'flags'>;
 let engineStateNames: string[] = [];
 let bodyAreas: number[] = [];
 let ballPicture: Dib;
+
+let shoePicture: Dib;
 
 /** The spray bottle at rest, and spraying. */
 let sprayPictures: Dib[] = [];
@@ -220,6 +224,15 @@ function drawDog(
     } else {
       loose.push([picture, food]);
     }
+  }
+
+  /* The shoe, loose, or in the mouth at the chin (`ShoeSprite::StaticDrawGrab`). */
+  const shoe = stage?.shoe;
+
+  if (shoe?.inMouth) {
+    inMouth = (chin) => draw(shoePicture, chin);
+  } else if (shoe) {
+    loose.push([shoePicture, shoe]);
   }
 
   /* The spray bottle, spraying while the button is down, turned to face the
@@ -426,7 +439,7 @@ function tickLive() {
   const breed = breeds.get(breedSelect.value)!;
   const step = pet.tick((performance.now() - started) / 17);
 
-  stage.show(step, step.rotation, step.placedBy);
+  stage.show(step, step.rotation, step.placedBy, step.pinned);
   drawDog(step.frame, stage.x, stage.y, step.rotation, stage);
 
   if (soundInput.checked) {
@@ -458,6 +471,10 @@ canvas.addEventListener('mousemove', (event) => {
 
   const point = stagePoint(event);
   live.stage.pointer = { ...point, button: (event.buttons & 1) !== 0 };
+
+  if (live.stage.shoe?.held) {
+    Object.assign(live.stage.shoe, keepOnStage(point, SHOE_SIZE, STAGE.width, STAGE.height));
+  }
 
   if (live.stage.spray) {
     Object.assign(live.stage.spray, keepOnStage(point, SPRAY_SIZE, STAGE.width, STAGE.height));
@@ -511,6 +528,21 @@ canvas.addEventListener('mousedown', (event) => {
   stage.pointer = { ...point, button: true };
 
   const ball = stage.ball;
+
+  const shoe = stage.shoe;
+
+  /* The shoe held is put down; down, or in the dog's mouth, picked up. */
+  if (shoe?.held) {
+    shoe.held = false;
+    return;
+  }
+
+  if (shoe && on(shoe, SHOE_SIZE)) {
+    shoe.held = true;
+    shoe.inMouth = false;
+    pet.shoePickedUp();
+    return;
+  }
 
   if (ball && !ball.held && on(ball, BALL_SIZE)) {
     /* Picked up, even out of the dog's mouth. */
@@ -603,6 +635,29 @@ element<HTMLButtonElement>('ball-out').addEventListener('click', () => {
 
 element<HTMLButtonElement>('ball-away').addEventListener('click', putBallAway);
 
+/** The shoe comes out held where the cursor is, and the dog is taunted with it. */
+element<HTMLButtonElement>('shoe-out').addEventListener('click', () => {
+  if (!live) {
+    return;
+  }
+
+  if (live.stage.ball?.held) {
+    putBallAway();
+  }
+
+  putFoodAway((food) => food.held);
+  const { x, y } = live.stage.pointer;
+  live.stage.shoe = { x, y, held: true, inMouth: false };
+  live.pet.shoePickedUp();
+});
+
+element<HTMLButtonElement>('shoe-away').addEventListener('click', () => {
+  if (live?.stage.shoe) {
+    live.stage.shoe = null;
+    live.pet.shoePutAway();
+  }
+});
+
 /** The spray bottle comes out held where the cursor is; what was held goes back. */
 element<HTMLButtonElement>('spray-out').addEventListener('click', () => {
   if (!live) {
@@ -687,6 +742,7 @@ async function start(files: GameFiles) {
   bodyAreas = readBodyAreas(engine, header.ballCount);
   ballPicture = readPicture(engine, BALL_PICTURE);
   sprayPictures = [0, 1].map((n) => readPicture(engine, SPRAY_PICTURE + n));
+  shoePicture = readPicture(engine, SHOE_PICTURE);
   treatPictures = [0, 1, 2].map((colour) => readPicture(engine, TREAT_PICTURE + colour));
   bowlPictures = [0, 1].map((kind) =>
     [0, 1, 2, 3].map((n) => readPicture(engine, BOWL_PICTURE + 10 * kind + n))

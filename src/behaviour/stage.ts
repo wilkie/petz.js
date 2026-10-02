@@ -51,6 +51,17 @@ export interface Food {
 /** Whether a food is a treat, which is eaten in one bite, or a bowl. */
 export const isTreat = (food: { kind: number }) => food.kind >= FOOD.blueTreat;
 
+/** The shoe: held on the cursor, down on the stage, or in the dog's mouth (`ShoeSprite`). */
+export interface Shoe {
+  x: number;
+  y: number;
+  held: boolean;
+  inMouth: boolean;
+}
+
+/** The size of the shoe's picture, bitmap 10600 (`InitShoeSprite`, seg20:36b4). */
+export const SHOE_SIZE = { width: 32, height: 32 };
+
 /** The size of a treat's picture, bitmaps 10300 to 10302 of DOGZDLL.DLL. */
 export const TREAT_SIZE = { width: 32, height: 32 };
 
@@ -166,6 +177,14 @@ export class Stage implements PetWorld {
   /** Where the user's cursor is, and whether its primary button is down. */
   pointer = { x: -1000, y: -1000, button: false };
 
+  /** The shoe out of the toy box. */
+  shoe: Shoe | null = null;
+
+  /** The engine moves the cursor (`SetCursorPos`): here, where the stage takes the cursor to be. */
+  moveCursor(point: { x: number; y: number }) {
+    this.pointer = { ...this.pointer, x: point.x, y: point.y };
+  }
+
   /** The spray bottle, held on the cursor, and whether it sprays (the button down). */
   spray: { x: number; y: number; spraying: boolean } | null = null;
 
@@ -233,7 +252,12 @@ export class Stage implements PetWorld {
    * Moves on to a step's frame, turned to `rotation`: glued, or placed by a
    * reference frame, or where its own coordinates put it.
    */
-  show(step: Step, rotation: number, reference?: number) {
+  show(
+    step: Step,
+    rotation: number,
+    reference?: number,
+    pinned?: { ball: number; x: number; y: number }
+  ) {
     const next = this.frames[step.frame];
 
     if (step.glue !== undefined) {
@@ -250,6 +274,14 @@ export class Stage implements PetWorld {
 
     this.frame = next;
     this.rotation = rotation;
+
+    /* Held by a ball, the dog is moved so that ball is at the point
+     * (`DoLungingCursor`, seg3:1a9f on, moving its rectangle). */
+    if (pinned) {
+      const at = this.ballOf(this.frame, pinned.ball, this.rotation);
+      this.x = pinned.x - at.x;
+      this.y = pinned.y - at.y;
+    }
   }
 
   /** Every ball of the frame shown, placed on the stage. */
