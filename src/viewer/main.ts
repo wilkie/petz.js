@@ -428,7 +428,7 @@ function startLive() {
   stage.bodyAreas = bodyAreas;
 
   /* The kennel is the toolbox's dog button, beside the playpen: where the oracle's
-   * screen has it, its middle 226 left of the playpen and 98 above it. */
+   * screen has it, its middle 226 left of the playpen's top left corner and 98 above it. */
   stage.kennel = { x: -226, y: -98 };
 
   /* One stream of random numbers, as the engine has, for the dog and its brain. */
