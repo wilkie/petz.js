@@ -63,13 +63,16 @@ DEBUG = __import__('os').environ.get('XINPUT_DEBUG')
 # Windows' screen, and DOSBox's window at the display's top left.
 WIDTH, HEIGHT = 640, 480
 
-# How far Windows' pointer moves for a pixel of the host's, measured on the
-# 640x480 256-colour display. DOSBox, with its mouse not locked, works out an
-# absolute position from where the host's pointer is in its window -- y
-# scaled to 0..199, the range it assumes for a mode it does not know -- and
-# hands Windows' PS/2 driver the differences.
+# How far Windows' pointer moves for a pixel of the host's, to start with.
+# DOSBox, with its mouse not locked, works out an absolute position from
+# where the host's pointer is in its window, scaled to the range it assumes
+# for the video mode -- 0..199 down the window for a mode it does not know,
+# such as the 256-colour driver's, and 0..479 for the VGA's own 640x480 --
+# and hands Windows' PS/2 driver the differences. So the scales depend on
+# the display, and `point` measures them as it goes.
 SCALE_X = 1
 SCALE_Y = 199 / 479
+
 
 # Windows 3.1's arrow, as it is drawn on the screen: where its hot spot is
 # (the top left here) the pixel is white, and so on. Only these pixels are
@@ -166,7 +169,7 @@ def find_arrow(raw):
     return None
 
 
-def ratchet(display, host_x, host_y, columns, rows):
+def ratchet(display, host_x, host_y, columns, rows, scale):
     """
     Moves Windows' pointer about `columns` and `rows` and leaves the host's
     where it was: a leap one way, which the mouse driver doubles, and a walk
@@ -175,13 +178,20 @@ def ratchet(display, host_x, host_y, columns, rows):
     window, where DOSBox sees it.
     """
     def span(amount, scale, at, size):
-        leap = min(240, round(abs(amount) / scale / 2) if amount else 0)
-        leap = leap if amount > 0 else -leap
-        # Room for the leap in the window, or no leap.
-        return leap if 0 <= at + leap < size else 0
+        if not amount:
+            return 0
 
-    lx = span(columns, SCALE_X, host_x, WIDTH)
-    ly = span(rows, SCALE_Y, host_y, HEIGHT)
+        # As far as wanted, within the packet's reach and the window's room.
+        room = size - 1 - at if amount > 0 else at
+        leap = min(240, round(abs(amount) / scale / 2), room)
+
+        if leap < 10:
+            return 0
+
+        return leap if amount > 0 else -leap
+
+    lx = span(columns, scale[0], host_x, WIDTH)
+    ly = span(rows, scale[1], host_y, HEIGHT)
 
     if not lx and not ly:
         return False
@@ -206,7 +216,9 @@ def point(display, name, x, y):
     screen and moved again by what is left, until it is there. Where the
     host's pointer would have to leave DOSBox's window to get there -- the
     window's height spans only 200 of Windows' rows -- a ratchet moves
-    Windows' pointer without moving the host's.
+    Windows' pointer without moving the host's. Where the arrow is not drawn,
+    because what is under it shows another pointer, its place is reckoned
+    from the last walk.
     """
     hx, hy = host_pointer(display)
 
@@ -214,13 +226,32 @@ def point(display, name, x, y):
         hx, hy = WIDTH // 2, HEIGHT // 2
         move(display, hx, hy)
 
+    scale = [SCALE_X, SCALE_Y]
+
+    # The last walk, to measure the scales by: where the host's pointer and
+    # Windows' were before it.
+    walked = None
+
     for _ in range(24):
         found = find_arrow(screen(name))
+
+        reckoned = False
+
+        if found is None and walked:
+            # Over something that takes a pointer of its own -- a hand over
+            # a button -- the arrow is not drawn. Where the last walk should
+            # have put it, by the scales measured so far, is the best there
+            # is.
+            (from_hx, from_hy), (from_x, from_y) = walked
+            found = (round(from_x + (hx - from_hx) * scale[0]),
+                     round(from_y + (hy - from_hy) * scale[1]))
+            reckoned = True
 
         if found is None:
             # Off an edge, where it is only partly drawn: bring it in, and
             # look again.
-            ratchet(display, hx, hy, 0, -60)
+            ratchet(display, hx, hy, 0, -60, scale)
+            walked = None
 
             for _ in range(40):
                 hx = max(0, hx - 1)
@@ -229,22 +260,33 @@ def point(display, name, x, y):
             time.sleep(0.3)
             continue
 
+        if walked and not reckoned:
+            (from_hx, from_hy), (from_x, from_y) = walked
+
+            # A walk long enough to measure, which cannot have been clamped
+            # at the screen's edge, says how far a host pixel goes.
+            for axis, host, seen in ((0, hx - from_hx, found[0] - from_x),
+                                     (1, hy - from_hy, found[1] - from_y)):
+                if abs(host) >= 8 and seen * host > 0:
+                    scale[axis] = seen / host
+
+        walked = None
         dx, dy = x - found[0], y - found[1]
 
         if DEBUG:
-            print(f'host {hx},{hy} pointer {found} off by {dx},{dy}', file=sys.stderr)
+            print(f'host {hx},{hy} pointer {found} off by {dx},{dy} scale {scale}', file=sys.stderr)
 
-        if abs(dx) <= 1 and abs(dy) <= 1:
+        if abs(dx) <= 1 and abs(dy) <= 1 or (reckoned and abs(dx) <= 3 and abs(dy) <= 3):
             return
 
-        target_x = hx + round(dx / SCALE_X)
-        target_y = hy + round(dy / SCALE_Y)
+        target_x = hx + round(dx / scale[0])
+        target_y = hy + round(dy / scale[1])
 
         if not (0 <= target_x < WIDTH and 0 <= target_y < HEIGHT):
             # Out of the window's reach: ratchet toward it.
             if not ratchet(display, hx, hy,
                            dx if not 0 <= target_x < WIDTH else 0,
-                           dy if not 0 <= target_y < HEIGHT else 0):
+                           dy if not 0 <= target_y < HEIGHT else 0, scale):
                 # Against the window's edge, with no room to leap: walk back
                 # toward its middle first, which moves Windows' pointer the
                 # wrong way, but leaves room.
@@ -257,6 +299,8 @@ def point(display, name, x, y):
 
             time.sleep(0.3)
             continue
+
+        walked = ((hx, hy), found)
 
         while (hx, hy) != (target_x, target_y):
             hx += max(-1, min(1, target_x - hx))

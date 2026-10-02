@@ -50,6 +50,15 @@ pnpm oracle:run
 
 This runs the oracle's Dogz in a DOSBox window on your own display, on a copy of the drive in `oracle/build/play/`. The dog keeps its state on the drive and ages with the clock, so playing on the oracle's own drive would leave it no longer the installation the record describes. `--fresh` starts the copy again from the installation, and `--windows` starts Windows without Dogz. Click into the window to give it the mouse; Ctrl+F10 takes the mouse back.
 
+## See it on another display, or another breed
+
+```shell
+node scripts/oracle/variant.mjs terrier16 --display vga --breed terrier
+node scripts/oracle/shoot.mjs terrier16
+```
+
+The first copies the installation to `oracle/build/variants/terrier16/` with one thing changed: Windows' 16-colour VGA driver, or the adopted dog made another breed (`bigdog`, `bulldog`, `chiua`, `scotty` or `terrier`). The second runs Dogz on it and keeps pictures of the screen in `oracle/build/screens/`. The installation itself is never changed.
+
 ## Check a Read out claim
 
 A **Read out** claim gives a file, a segment and an offset: `THINK.DLL` seg2:031a. The files are 16-bit Windows NE executables. Any disassembler that reads NE files will show the code there. For one that does not, the segment table in the NE header gives each segment's offset in the file. Segments are numbered from 1, as Windows numbers them.

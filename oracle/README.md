@@ -12,6 +12,7 @@ build it are in `scripts/oracle/`; `pnpm oracle` runs them in order.
 | `build/drive-c/`    | no        | The installed drive, mounted by DOSBox as C:                                                             |
 | `build/screens/`    | no        | A picture of every screen the scripted installers passed through                                         |
 | `build/stages/`     | no        | The drive's hashes as each stage left it                                                                 |
+| `build/variants/`   | no        | Copies of the drive with one thing changed, to measure on                                                |
 | `build/play/`       | no        | The copy of the drive `pnpm oracle:run` plays on                                                         |
 
 ## The scripts
@@ -23,6 +24,8 @@ build it are in `scripts/oracle/`; `pnpm oracle` runs them in order.
 | `install-dogz.mjs`    | Runs Dogz's InstallShield Setup from Program Manager and answers its screens             |
 | `register-dogz.mjs`   | Adopts a puppy through the adoption screens, with the unlock code worked out for DOSBox  |
 | `fingerprint.mjs`     | Records the drive in `installation.json`; `--check` compares it                          |
+| `variant.mjs`         | Copies the drive with one thing changed: the display driver, or the dog's breed          |
+| `shoot.mjs`           | Runs Dogz on a variant and keeps pictures of the screen                                  |
 | `run.mjs`             | Plays Dogz on your display, on a copy of the drive                                       |
 | `session.mjs`         | Runs Windows on a virtual X display for the scripts to drive                             |
 | `xinput.py`           | Presses keys, types, and puts Windows' pointer where it is wanted                        |

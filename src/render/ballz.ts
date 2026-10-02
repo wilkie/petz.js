@@ -14,23 +14,26 @@ import { type AnimationHeader, type Frame } from '../formats/animation.js';
 import { type Breed } from '../formats/lnz.js';
 
 /**
- * The 16 colours the breed files' comments name for `[16 Ball Color]` and
- * `[Outline Color]`: "0blk, 1dkRed, 2dkGrn, 3dkYel, 4dkBlu, 5dkMag, 6dkCyan,
- * 7dkGry, 8ltGry, 9Rd, 10Grn, 11Yel, 12Blu, 13Mag, 14Cyan, 15White" -- the
- * order of Windows' 16-colour palette, except that Windows has 7 the light
- * grey and 8 the dark. This follows the comment; which the game means is not
- * yet measured.
+ * The 16 colours of `[16 Ball Color]` and `[Outline Color]`, as the oracle's
+ * 16-colour display draws them (kb/topics/drawing-a-dog.md). The breed files'
+ * comments name them "0blk, 1dkRed, 2dkGrn, 3dkYel, 4dkBlu, 5dkMag, 6dkCyan,
+ * 7dkGry, 8ltGry, 9Rd, 10Grn, 11Yel, 12Blu, 13Mag, 14Cyan, 15White", and
+ * every breed drawn on the oracle agrees: colour 7 is the dark grey. The dark
+ * colours are mixes of 170 and 85 there rather than Windows' 128s; the light
+ * grey, 8, is the one no breed uses, and is Windows' button face. Colours no
+ * breed uses -- 5, 8, 12, 13, 14 -- are placed by elimination, not seen on a
+ * dog.
  */
 export const SIXTEEN_COLOURS = [
   '#000000',
-  '#800000',
-  '#008000',
-  '#808000',
-  '#000080',
-  '#800080',
-  '#008080',
-  '#808080',
-  '#c0c0c0',
+  '#aa0055',
+  '#00aa55',
+  '#aaaa55',
+  '#0000aa',
+  '#aa55aa',
+  '#55aaaa',
+  '#868a8e',
+  '#c3c7cb',
   '#ff0000',
   '#00ff00',
   '#ffff00',

@@ -138,8 +138,16 @@ export async function withWindows(name, program, steps, { limit = 60, drive = DR
       throw new Error(`Windows did not end; see oracle/build/screens/${name}-*.png`);
     }
   } finally {
+    /* And wait for both to be gone, so that the next session finds the
+     * display free. */
+    const gone = (child) =>
+      child.exitCode !== null || child.signalCode !== null
+        ? Promise.resolve()
+        : new Promise((done) => child.once('exit', done));
+
     dosbox.kill('SIGKILL');
     xvfb.kill('SIGKILL');
+    await Promise.all([gone(dosbox), gone(xvfb)]);
   }
 }
 
