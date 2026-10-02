@@ -24,6 +24,8 @@ const choose = element<HTMLParagraphElement>('choose');
 const picker = element<HTMLInputElement>('picker');
 const breedSelect = element<HTMLSelectElement>('breed');
 const coloursSelect = element<HTMLSelectElement>('colours');
+const ageInput = element<HTMLInputElement>('age');
+const yawInput = element<HTMLInputElement>('yaw');
 const animationSelect = element<HTMLSelectElement>('animation');
 const frameInput = element<HTMLInputElement>('frame');
 const frameNumber = element<HTMLOutputElement>('frame-number');
@@ -68,9 +70,10 @@ async function draw() {
 
   drawPet(bitmap, breed, header, list[index], {
     colours,
-    scale: 0.75,
     originX: bitmap.width / 2,
     originY: (bitmap.height * 5) / 8,
+    age: Number(ageInput.value),
+    yaw: Number(yawInput.value),
     seed: index + 1,
   });
 
@@ -104,6 +107,8 @@ play.addEventListener('click', () => {
 
 breedSelect.addEventListener('change', () => void draw());
 coloursSelect.addEventListener('change', () => void draw());
+ageInput.addEventListener('input', () => void draw());
+yawInput.addEventListener('input', () => void draw());
 frameInput.addEventListener('input', () => void draw());
 animationSelect.addEventListener('change', () => {
   frameInput.value = '0';

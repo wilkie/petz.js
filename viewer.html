@@ -113,13 +113,16 @@
         >
         <label>Frame <input id="frame" type="range" min="0" value="0" /></label>
         <output id="frame-number" for="frame">0</output>
+        <label>Age <input id="age" type="range" min="0" max="100" value="0" /></label>
+        <label>Turn <input id="yaw" type="range" min="-128" max="128" value="0" /></label>
         <button id="play" type="button">Play</button>
       </div>
       <canvas id="stage" width="640" height="480" aria-label="The dog, drawn"></canvas>
       <p class="note">
-        Drawn from the breed's <code>.LNZ</code>, the shared animations and Dogz's own palettes,
-        each ball flat in its colour. How Dogz scales the balls and shades them is not yet known, so
-        this is not yet how the game looks: see the knowledge base's page on drawing a dog.
+        Drawn as Dogz draws, at twice its size: each ball placed, turned and tilted as the game
+        places it, and filled with its fuzz, speckles and outline, in Dogz's own palettes. Not yet
+        the eyes, nor the lines as the game draws them: see the knowledge base's page on drawing a
+        dog.
       </p>
     </main>
     <script type="module" src="/src/viewer/main.ts"></script>

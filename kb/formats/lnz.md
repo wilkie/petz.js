@@ -32,7 +32,7 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 | `256 Eyelid Color` … | 1 each   | The eyelids' and irises' colours on the 256- and the 16-colour display; the bulldog and chihuahua give no iris colours                              |
 | `Key Balls`          | 2        | 52 "head" and 50 "chest"                                                                                                                            |
 | `Tongue Balls`       | 2        | 63 and 64                                                                                                                                           |
-| `Default Scales`     | 4        | Four percentages; commented-out lines beside them read "normal pet scale", "normal ball scale", "puppy pet scale" and "puppy ball scale"            |
+| `Default Scales`     | 4        | The adult's pet and ball scales, then the puppy's, in 256ths; the dog's are between by its age ([[topic:drawing-a-dog]])                            |
 | `Leg Extension` …    | 1 or 2   | `Leg`, `Body` and `Face Extension`; not yet known                                                                                                   |
 | `Head Balls`         | 28       | The balls of the head                                                                                                                               |
 | `Omissions`          | 0        | Balls not drawn; empty in every breed                                                                                                               |
@@ -50,4 +50,5 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 
 - [[measured]] The ball names come from the per-ball sections' comments, `eBall_Lankle, // 0` to `eBall_tongue2, // 64`, in the order of the skeleton. They are C enumerators, so the game's source called its balls this.
 - [[measured]] The bulldog has 29 lines where the others have 34.
-- Not yet known: how the scales and the extensions are applied, and the behaviour factors.
+- [[read out]] `Default Factors` line 11 is "age": `PetModule::SetBallScaleFromAge` asks for factor 10, counting from 0.
+- Not yet known: how the extensions and `Puppy Balls` are applied, and the other behaviour factors.

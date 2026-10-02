@@ -157,24 +157,30 @@ export function speckleColour(colour: number, speckle: number, first: number, le
   return start + (start + length - 1 - colour);
 }
 
-/** A thick line between two points, as round-ended runs of pixels. */
-export function drawLine(
+/**
+ * A line between two points, as thick at each end as given and tapering
+ * between, built of rows of pixels round each point along it.
+ */
+export function drawTaperedLine(
   bitmap: IndexedBitmap,
   from: { x: number; y: number },
   to: { x: number; y: number },
-  thickness: number,
+  fromWidth: number,
+  toWidth: number,
   colour: number
 ) {
   const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y)));
-  const radius = Math.max(0.5, thickness / 2);
 
   for (let step = 0; step <= steps; step++) {
-    const x = from.x + ((to.x - from.x) * step) / steps;
-    const y = from.y + ((to.y - from.y) * step) / steps;
+    const along = step / steps;
+    const x = Math.round(from.x + (to.x - from.x) * along);
+    const y = Math.round(from.y + (to.y - from.y) * along);
+    const radius = Math.max(0.5, (fromWidth + (toWidth - fromWidth) * along) / 2);
+    const reach = Math.ceil(radius);
 
-    for (let dy = -Math.ceil(radius); dy <= Math.ceil(radius); dy++) {
+    for (let dy = -reach; dy <= reach; dy++) {
       const half = Math.floor(Math.sqrt(Math.max(0, radius * radius - dy * dy)));
-      bitmap.span(Math.round(x) - half, Math.round(y) + dy, 2 * half + 1, colour);
+      bitmap.span(x - half, y + dy, 2 * half + 1, colour);
     }
   }
 }

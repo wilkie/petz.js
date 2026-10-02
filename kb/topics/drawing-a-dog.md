@@ -2,7 +2,14 @@
 kind: topic
 name: Drawing a dog
 summary: How a dog is put together from a breed file, the shared animations and Dogz's own palettes; what the viewer draws so far; and what is not yet known of how Dogz draws one — its scales and its shading.
-source: [src/render/ballz.ts, src/render/raster.ts, src/formats/palette.ts, src/viewer/main.ts]
+source:
+  [
+    src/render/ballz.ts,
+    src/render/project.ts,
+    src/render/raster.ts,
+    src/formats/palette.ts,
+    src/viewer/main.ts,
+  ]
 topics: [installation]
 ---
 
@@ -21,8 +28,8 @@ flowchart LR
 `pnpm dev`, then `/viewer.html`, draws any breed in any frame of any animation, on either display, from the game's own files: the oracle's, in development, or the drive Dogz is installed on chosen in the page, which never leaves the browser.
 
 - [[read out]] Positions: x across, y down, a larger z farther ([[format:bdt]]). Every ball and line is drawn in order of depth, farthest first; a line's depth is its two ends' average.
-- Sizes: the skeleton's diameter plus the breed's `Ball Size Diffs`, at one pixel and a half to the unit. Not yet measured against the game.
-- Lines: from the `Linez` section, round-ended, as thick as half the smaller end's diameter, in the first ball's colour. Not yet measured.
+- Sizes and places: as Dogz places a ball, for the breed's scales at an age and a way the dog is turned (below), shown twice the size.
+- Lines: from the `Linez` section, in the first ball's colour, each end as thick as `DisplayBallzFrame` works out for it (below). How `XDrawLine` draws them is not yet read.
 - Outlines: from `Outline Type` and `Outline Color`; a half outline is drawn round the lower half of the ball. Not yet measured.
 - Balls: drawn as Dogz draws them, into palette indices a row of pixels at a time, with their fuzz, speckles and outlines (below), and shown through Dogz's own palettes. Not yet the eyes' special drawing.
 
@@ -43,6 +50,14 @@ flowchart LR
 - [[read out]] `XDrawPort::XInitScreenPort` (seg8:11c9) also makes three ramps of eight with `MakeColorRamp`, into entries 164 to 171, 172 to 179 and 180 to 187 (seg8:16c9 to 1775). `MakeColorRamp` (seg8:1a71) blends two colours linearly, clamped at 255. [[inferred]] These are for colours the game changes at run time, such as the brush's. `MakeColorRamp` is a virtual method, slot 17 of `XDrawPort`'s table at seg8:994a, and is called only through it.
 - [[measured]] The screen's own palette, as the 256-colour playpens [[file:DOGZ.DOG/PLAYPENZ/256GRASS.BMP]], `256BONE.BMP` and `256PFM.BMP` carry it, is laid out as Windows' identity palette: the twenty static colours at 0 to 9 and 246 to 255, and Dogz's colours between, in another order. [[refused]] Reading the breeds' numbers as indices of that palette, or of `DOGZDLL.DLL`'s own bitmaps' palettes: the big dog's 130 to 135 would be a purple, an olive, a pale cyan, a brown, a grey-cyan and a tan.
 
+## Where a ball is drawn
+
+- [[read out]] `Ballz::GetCartesianCoordinates` (seg10:367a) places each ball of a frame. Each coordinate is multiplied by a scale of the dog's state and shifted right by 8, so the scales are in 256ths. The ball is then turned about the upright axis by the way the dog faces, and tilted by a pitch made from that: `-7 - |64 - |yaw|| / 10`, so more from above when the dog faces out (13) than side-on (7). Angles are in 256ths of a turn, from tables of sines and cosines times 256 for -128 to 128 that seg11:1c27 builds. Head tracking and three more turns of the state come between, not yet read.
+- [[read out]] A ball's radius is its size times the dog's ball scale, shifted right by 9 (seg10:367a): its diameter is its size times the ball scale in 256ths. [[inferred]] The size is the skeleton's ([[format:bhd]]) with the breed's `Ball Size Diffs`.
+- [[read out]] `PetModule::SetBallScaleFromAge` (seg21:4c4c) sets the scales from the breed's `[Default Scales]` by the dog's age, its factor 10 of 100: `age × (adult - puppy) / 100 + puppy`, for the pet scale from the first and third numbers and the ball scale from the second and fourth. The big dog's 220, 220, 140 and 200 make a puppy's positions 140 256ths and its balls 200: smaller, with bigger balls for its size.
+- [[read out]] `DisplayBallzFrame` gives `XDrawLine` each end of a line as thick as its ball's radius × 256 / 300 (seg10:5134).
+- By eye, the viewer's terrier turned side-on is the size and shape of the oracle's, [[guide:reproducing|shot]] on the 16-colour display: `src/render/project.ts` places balls by these rules. Not yet measured pixel for pixel; the dogs' poses on the oracle are not known frame for frame.
+
 ## How a ball is drawn
 
 - [[measured]] Close up, each ball on the oracle's 256-colour screen is one flat colour, its own number: the big dog's head and belly 131, its chest 130, its tongue 80. Across them are single pixels three entries up the ramp, 134 in the 131, and black outlines along parts of the balls' edges. There is no gradient: Dogz does not shade a ball, it fuzzes, speckles and outlines it.
@@ -58,4 +73,4 @@ flowchart LR
 
 ## Still to find
 
-The eyes and eyelids (the kernel's modes -4 and -2); the adjustment `DisplayBallzFrame` adds to the fuzz; how far each row's start is from the ball's centre, exactly; the scales (`Default Scales`, `Puppy Balls`, the extensions; `ScriptSprite::GetDefaultScale`, `PetModule::SetBallScaleFromAge`); fuzz and speckles; the extras each frame lists; which animation is which; and how fast frames are shown.
+The eyes and eyelids (the kernel's modes -4 and -2); the adjustment `DisplayBallzFrame` adds to the fuzz; how far each row's start is from the ball's centre, exactly; `Puppy Balls` and the extensions; head tracking and the state's other turns; fuzz and speckles; the extras each frame lists; which animation is which; and how fast frames are shown.

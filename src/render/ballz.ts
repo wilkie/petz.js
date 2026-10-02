@@ -1,18 +1,17 @@
 /**
  * Draws a dog: a breed (`lnz.ts`) in one frame of an animation
- * (`animation.ts`), as the 16-colour display shows it.
+ * (`animation.ts`), into palette indices, as Dogz does.
  *
  * Dogz draws its pets as balls -- filled circles, nearest last -- joined by
- * thick lines, in real time, in palette indices. What is known and what is guessed here is
- * kb/topics/drawing-a-dog.md: the frame's positions, the balls' sizes, the
- * lines and the palettes are read out of the files, and each ball is filled
- * as `XFillPartialCircleKernel` fills it (`raster.ts`); how sizes and
- * positions are scaled, and how lines are drawn, are not yet known.
+ * thick lines, in real time. Each ball is placed as `project.ts` places it,
+ * and filled as `raster.ts` fills it; what is read out and what is not yet is
+ * kb/topics/drawing-a-dog.md.
  */
 
 import { type AnimationHeader, type Frame } from '../formats/animation.js';
 import { type Breed } from '../formats/lnz.js';
-import { drawLine, fillBall, IndexedBitmap, random, speckleColour } from './raster.js';
+import { type Placed, project, scalesForAge } from './project.js';
+import { drawTaperedLine, fillBall, IndexedBitmap, random, speckleColour } from './raster.js';
 
 /** Something to draw: a ball, or a line between two balls, at a depth. */
 type Mark =
@@ -23,12 +22,15 @@ export interface DrawOptions {
   /** Which of the breed's colour sections to draw in. */
   colours: 256 | 16;
 
-  /** Frame units to a pixel: a frame's coordinates are multiplied by it. Not yet measured. */
-  scale: number;
-
-  /** Where the frame's origin is drawn, in the bitmap's pixels. */
+  /** Where the dog's origin is drawn, in the bitmap's pixels. */
   originX: number;
   originY: number;
+
+  /** The dog's age, from 0, a puppy, to 100. */
+  age?: number;
+
+  /** Which way the dog is turned, in 256ths of a turn. */
+  yaw?: number;
 
   /** The seed of the fuzz and speckles, which Dogz draws at random. */
   seed?: number;
@@ -41,33 +43,22 @@ export interface DrawOptions {
  */
 const RAMPS = { 256: { first: 16, length: 6 }, 16: { first: 0, length: 1 } } as const;
 
-/** Each ball's drawn diameter in frame units: the skeleton's size and the breed's difference. */
-export function ballDiameters(breed: Breed, header: AnimationHeader) {
-  return header.ballSizes.map((size, ball) => Math.max(0, size + breed.ballSizeDiffs[ball]));
-}
-
-/**
- * Everything to draw for a frame, farthest first. A larger z is farther from
- * the viewer: drawn that way, frame 0 of animation 0 shows the dog's face.
- */
-export function marks(breed: Breed, header: AnimationHeader, frame: Frame): Mark[] {
+/** Everything to draw for a frame, farthest first. */
+export function marks(breed: Breed, placed: Placed[]): Mark[] {
   const omitted = new Set(breed.omissions);
-  const diameters = ballDiameters(breed, header);
   const list: Mark[] = [];
 
-  frame.balls.forEach((position, ball) => {
-    if (!omitted.has(ball) && diameters[ball] > 0) {
-      list.push({ kind: 'ball', ball, depth: position.z });
+  placed.forEach((ball, index) => {
+    if (!omitted.has(index) && ball.diameter > 0) {
+      list.push({ kind: 'ball', ball: index, depth: ball.depth });
     }
   });
 
   for (const line of breed.lines) {
-    if (omitted.has(line.from) || omitted.has(line.to)) {
-      continue;
+    if (!omitted.has(line.from) && !omitted.has(line.to)) {
+      const depth = (placed[line.from].depth + placed[line.to].depth) / 2;
+      list.push({ kind: 'line', from: line.from, to: line.to, depth });
     }
-
-    const depth = (frame.balls[line.from].z + frame.balls[line.to].z) / 2;
-    list.push({ kind: 'line', from: line.from, to: line.to, depth });
   }
 
   /* Farthest first; at the same depth a line goes under the balls it joins. */
@@ -80,40 +71,37 @@ export function drawPet(
   breed: Breed,
   header: AnimationHeader,
   frame: Frame,
-  { colours, scale, originX, originY, seed = 1 }: DrawOptions
+  { colours, originX, originY, age = 0, yaw = 0, seed = 1 }: DrawOptions
 ) {
   const next = random(seed);
-  const diameters = ballDiameters(breed, header);
+  const placed = project(breed, header, frame, scalesForAge(breed, age), yaw);
   const numbers = colours === 256 ? breed.ballColor256 : breed.ballColor16;
   const ramps = RAMPS[colours];
-  const at = (ball: number) => ({
-    x: originX + frame.balls[ball].x * scale,
-    y: originY + frame.balls[ball].y * scale,
-  });
+  const at = (ball: number) => ({ x: originX + placed[ball].x, y: originY + placed[ball].y });
 
-  for (const mark of marks(breed, header, frame)) {
+  for (const mark of marks(breed, placed)) {
     if (mark.kind === 'line') {
-      // Lines are drawn by XDrawPort::XDrawLine, not yet read: as thick as
-      // half the smaller end, in the first ball's colour.
-      drawLine(
+      /* Each end as thick as its ball's radius × 256 / 300, as
+       * DisplayBallzFrame works them out for XDrawLine, not yet read. */
+      const width = (ball: number) => ((placed[ball].diameter / 2) * 256) / 300;
+      drawTaperedLine(
         bitmap,
         at(mark.from),
         at(mark.to),
-        (Math.min(diameters[mark.from], diameters[mark.to]) * scale) / 2,
+        width(mark.from),
+        width(mark.to),
         numbers[mark.from]
       );
       continue;
     }
 
     const { ball } = mark;
-    const centre = at(ball);
 
     fillBall(
       bitmap,
       {
-        x: centre.x,
-        y: centre.y,
-        diameter: diameters[ball] * scale,
+        ...at(ball),
+        diameter: placed[ball].diameter,
         colour: numbers[ball],
         outlineColour: breed.outlineColor[ball],
         speckleColour: speckleColour(
