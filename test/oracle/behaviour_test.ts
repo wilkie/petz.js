@@ -9,12 +9,20 @@ import { join } from 'node:path';
 import { Brain } from '../../src/behaviour/brain.ts';
 import { GLOBAL, Pet, STATE } from '../../src/behaviour/pet.ts';
 import { borlandRand } from '../../src/behaviour/random.ts';
-import { BALL_SIZE, Stage, TREAT_SIZE } from '../../src/behaviour/stage.ts';
+import {
+  BALL_SIZE,
+  BOWL_SIZE,
+  FOOD,
+  type Food,
+  Stage,
+  TREAT_SIZE,
+} from '../../src/behaviour/stage.ts';
 import { findTransition, transitionTable } from '../../src/behaviour/transitions.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import {
   AREA,
   BALL_PICTURE,
+  BOWL_PICTURE,
   FIRST_TRICK,
   POSITION,
   readBodyAreas,
@@ -320,29 +328,48 @@ describeWithOracle('the engine’s behaviour', () => {
       expect(pet.petting).toBe(false);
     });
 
+    /** A food out of the box, and the dog told of it. */
+    const takeOut = (
+      stage: Stage,
+      pet: Pet,
+      kind: number,
+      at: { x: number; y: number },
+      held: boolean
+    ) => {
+      const food: Food = { kind, held: true, ...at, servings: 0, full: 0, touched: 0 };
+      stage.foods.push(food);
+      pet.foodTakenOut(food);
+
+      if (!held) {
+        food.held = false;
+        pet.foodPutDown(food);
+      }
+
+      return food;
+    };
+
     it('begs for a treat held up, and eats it when it is put down', () => {
       const { stage, pet, run, states } = setUp(3);
       run(200);
 
-      stage.treat = { colour: 2, held: true, x: 0, y: 0 };
-      pet.treatPickedUp();
-      expect(pet.global).toBe(GLOBAL.firstTreat + 2);
+      const treat = takeOut(stage, pet, FOOD.redTreat, { x: 0, y: 0 }, true);
+      expect(pet.global).toBe(GLOBAL.begEat + FOOD.redTreat);
 
       run(600, () => {
         const at = stage.where();
-        stage.treat!.x = at.x;
-        stage.treat!.y = at.y - 40;
+        treat.x = at.x;
+        treat.y = at.y - 40;
       });
       expect(states).toContain(STATE.begging);
 
-      stage.treat!.held = false;
-      pet.treatPutDown();
+      treat.held = false;
+      pet.foodPutDown(treat);
       let eaten = false;
       run(600, () => {
-        eaten ||= !!stage.treat?.beingEaten;
+        eaten ||= !!treat.beingEaten;
       });
 
-      expect(stage.treat).toBeNull();
+      expect(stage.foods).toEqual([]);
       expect(states).toContain(STATE.eating);
 
       /* Drawn with the dog, under its head, as it bites. */
@@ -353,16 +380,23 @@ describeWithOracle('the engine’s behaviour', () => {
       const { stage, pet, run } = setUp(3);
       run(200);
 
-      const at = stage.where();
-      stage.treat = { colour: 1, held: false, x: at.x, y: at.y };
-      pet.newGlobalState(GLOBAL.firstTreat + 1, STATE.grabbingTreat);
+      const treat: Food = {
+        kind: FOOD.greenTreat,
+        held: false,
+        ...stage.where(),
+        servings: 0,
+        full: 0,
+        touched: 0,
+      };
+      stage.foods.push(treat);
+      pet.newGlobalState(GLOBAL.begEat + FOOD.greenTreat, STATE.grabbingTreat);
       let inMouth = false;
       run(300, () => {
-        inMouth ||= !!stage.treat?.inMouth;
+        inMouth ||= !!treat.inMouth;
       });
 
       expect(inMouth).toBe(true);
-      expect(stage.treat).toBeNull();
+      expect(stage.foods).toEqual([]);
     });
 
     it('rewards the trick last done, when the treat is given before the dog has begged', () => {
@@ -370,12 +404,82 @@ describeWithOracle('the engine’s behaviour', () => {
       run(200);
 
       pet.lastTrick = FIRST_TRICK + 9;
-      stage.treat = { colour: 0, held: false, x: stage.where().x, y: stage.where().y };
-      pet.treatPutDown();
+      takeOut(stage, pet, FOOD.blueTreat, stage.where(), false);
       run(400);
 
-      expect(stage.treat).toBeNull();
+      expect(stage.foods).toEqual([]);
       expect(pet.brainActive).toBe(false);
+    });
+
+    it('eats from a bowl put down, a serving a mouthful, its nose in the bowl', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(200);
+
+      const bowl = takeOut(stage, pet, FOOD.food, { x: 320, y: 300 }, false);
+      expect(bowl.full).toBeGreaterThanOrEqual(25);
+      expect(bowl.full).toBeLessThanOrEqual(35);
+
+      let eaten = false;
+      let nose = Infinity;
+      run(1500, () => {
+        eaten ||= !!bowl.beingEaten;
+
+        if (bowl.beingEaten) {
+          const at = stage.ballOnStage(55);
+          nose = Math.min(nose, Math.hypot(at.x - bowl.x, at.y - bowl.y));
+        }
+      });
+
+      expect(eaten).toBe(true);
+      expect(nose).toBeLessThan(40);
+      expect(bowl.servings).toBe(0);
+
+      /* A mouthful a serving, less one worn off every 420 ticks. */
+      expect(pet.fullness).toBeGreaterThan(10);
+      expect(states).toContain(STATE.eating);
+    });
+
+    it('laps from a bowl of water three to six times', () => {
+      const { stage, pet, run } = setUp(3, 640, 480);
+      run(200);
+
+      const bowl = takeOut(stage, pet, FOOD.water, { x: 320, y: 300 }, false);
+      run(1000);
+
+      expect(bowl.full - bowl.servings).toBeGreaterThanOrEqual(3);
+      expect(bowl.full - bowl.servings).toBeLessThanOrEqual(6);
+    });
+
+    it('is sick of food past half again a bowl, and will not eat more', () => {
+      const { stage, pet, run } = setUp(3, 640, 480);
+      run(200);
+
+      const bowl = takeOut(stage, pet, FOOD.food, { x: 320, y: 300 }, false);
+      const sick = Math.trunc(bowl.full * 1.5);
+      pet.fullness = sick + 3;
+      let fullest = 0;
+      run(700, () => {
+        fullest = Math.max(fullest, pet.fullness);
+      });
+
+      /* A mouthful past it, five more, and calmed (script 287). */
+      expect(fullest).toBeGreaterThan(sick + 5);
+      expect(pet.factor(0)).toBeLessThan(10);
+
+      /* Fuller than that by 7, a bowl put down is left alone. */
+      pet.fullness = Math.ceil(bowl.full * 1.5 + 8);
+      bowl.held = true;
+      pet.foodPickedUp(bowl);
+      bowl.held = false;
+      pet.foodPutDown(bowl);
+      expect(pet.global).toBe(GLOBAL.idle);
+    });
+
+    it('has the bowls the size of their pictures: full, half, empty and the rim', () => {
+      for (const n of [0, 1, 2, 3, 10, 11, 12, 13]) {
+        const picture = readPicture(engine, BOWL_PICTURE + n);
+        expect({ width: picture.width, height: picture.height }).toEqual(BOWL_SIZE);
+      }
     });
 
     it('has the treats the size of their pictures', () => {

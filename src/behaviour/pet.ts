@@ -20,7 +20,7 @@ import {
 import { type Script } from '../formats/script.ts';
 import { type Trick } from '../formats/tricks.ts';
 import { type Brain } from './brain.ts';
-import { type Ball } from './stage.ts';
+import { type Ball, type Food, foodSize, ballRect, isTreat } from './stage.ts';
 import { type Rand } from './random.ts';
 import { DEFAULT_GLUE, type Step, timeline } from './timeline.ts';
 import { AUTO, findTransition, type TransitionTable } from './transitions.ts';
@@ -78,6 +78,8 @@ export const GLOBAL = {
 /** Script positions the engine names by number (`readStateNames`). */
 const SITTING = 6;
 const STANDING = 9;
+const RUNNING = 21;
+const SITTING_UP = 30;
 
 /** Balls glued by: the belly, and the chest. */
 const BELLY = DEFAULT_GLUE;
@@ -106,6 +108,12 @@ const SCRIPT = {
   stopBackwards: 211,
   walkBackwards: 210,
   eatTreat: 86,
+  standOverBowl: 37,
+  eatFromBowl: 36,
+  eatFromBowlMore: 54,
+  eatFromBowlPause: 328,
+  lap: 262,
+  sick: 287,
   stopRunning: 26,
   stopRunningHard: 205,
   snatch: 240,
@@ -166,8 +174,8 @@ export interface PetData {
   brain?: Brain;
 }
 
-/** The treats' names, as `FoodSprite::theirNames` gives them after food and water. */
-const TREATS = ['BlueTreat', 'GreenTreat', 'RedTreat'];
+/** The foods' names, `FoodSprite::theirNames`, as the brain is told them. */
+const FOOD_NAMES = ['Food', 'Water', 'BlueTreat', 'GreenTreat', 'RedTreat'];
 
 /** What the engine needs to know of the stage, and of where the dog is on it. */
 export interface PetWorld {
@@ -198,18 +206,11 @@ export interface PetWorld {
   /** The rectangle the dog is drawn in. */
   rect?(): { left: number; top: number; right: number; bottom: number };
 
-  /** The treat out of its box, if any: 0 blue, 1 green, 2 red. */
-  treat?: {
-    colour: number;
-    held: boolean;
-    x: number;
-    y: number;
-    inMouth?: boolean;
-    beingEaten?: boolean;
-  } | null;
+  /** The food out of the toy box: bowls of food and water, and treats. */
+  foods?: Food[];
 
-  /** Takes the treat away: the dog has eaten it. */
-  eatTreat?(): void;
+  /** Puts a food back in the box: a treat the dog has eaten. */
+  putAwayFood?(food: Food): void;
 
   /** The ball out of the toy box, if any. */
   ball?: Ball | null;
@@ -223,8 +224,11 @@ export interface PetWorld {
   /** A frame of the ball (`XStage::UpdateSprites`), after the dog's. */
   updateBall?(): void;
 
-  /** Where a ball of the dog would be in a frame, were the dog not to move; and moving it. */
-  ballInFrame?(frame: number, ball: number, rotation: number): { x: number; y: number };
+  /** Where a ball of the dog would be after showing these frames, and moving the dog. */
+  lookAhead?(
+    frames: { step: Step; rotation: number; placedBy?: number }[],
+    ball: number
+  ): { x: number; y: number };
   nudge?(dx: number, dy: number): void;
 }
 
@@ -263,7 +267,8 @@ type Item =
   | { drift: number }
   | { cue: number }
   | { trick: number }
-  | { aim: { ball: number; at: { x: number; y: number } | null } };
+  | { aim: { ball: number; at: { x: number; y: number } | null } }
+  | { factor: [number, number] };
 
 /** An angle in 256ths of a turn, from -128 to 127. */
 const wrap = (angle: number) => ((((angle + 128) % 256) + 256) % 256) - 128;
@@ -477,6 +482,7 @@ export class Pet {
 
     const shown = this.dispatch();
     this.world.updateBall?.();
+    this.wearFullness();
     this.pulse();
     this.data.brain?.pulse();
     return { ...shown, rotation: this.rotation, state: this.state, placedBy: this.placedBy };
@@ -599,9 +605,12 @@ export class Pet {
 
     const control = (item: Item) => {
       if ('cue' in item) {
-        this.cues.add(item.cue);
+        this.processCue(item.cue);
       } else if ('trick' in item) {
         this.lastTrick = item.trick;
+      } else if ('factor' in item) {
+        /* `0x8adf n value` (`PetModule::SetFactor`). */
+        this.setFactor(...item.factor);
       } else if ('aim' in item) {
         this.startAim(item.aim.ball, item.aim.at);
       } else if ('glue' in item) {
@@ -665,7 +674,7 @@ export class Pet {
       }
 
       for (const cue of step.cues ?? []) {
-        this.cues.add(cue);
+        this.processCue(cue);
       }
     } else {
       step = { frame: this.lastStep.frame };
@@ -673,6 +682,22 @@ export class Pet {
     }
 
     return { step, flags };
+  }
+
+  /**
+   * A cue raised (`0x8ae3`): the states see it, and `ProcessCue` (seg7:7c1d)
+   * acts on two itself: cue 2 ends a slide (`0x8af4`), and cue 3 resets the
+   * dog's easing and drift (`ResetParams`, seg7:33ae, through every `Fudger`).
+   */
+  private processCue(cue: number) {
+    this.cues.add(cue);
+
+    if (cue === 2) {
+      this.slide = null;
+    } else if (cue === 3) {
+      this.ease = null;
+      this.drift = 0;
+    }
   }
 
   /** `ScriptSprite::SetTargetLocation` (seg7:295e): steer to a point, or, with none, stop. */
@@ -695,23 +720,17 @@ export class Pet {
    */
   private steerFrame() {
     const { point, rate, width, height, distance } = this.steer!;
-    const nose = this.world.ballOnStage?.(NOSE);
     const centre = this.world.centre?.() ?? this.world.where();
+    const box = this.noseBox(width, height, distance);
 
-    if (nose) {
-      const ahead = Math.trunc(Math.trunc(Math.sqrt(width * width + height * height)) / distance);
-      const sine = Math.trunc(Math.sin((this.rotation * Math.PI) / 128) * 256);
-      const x = nose.x - Math.trunc((256 * ahead * sine) / 65536);
-      const half = { x: Math.trunc(width / 2), y: Math.trunc(height / 2) };
-
-      if (
-        point.x >= x - half.x &&
-        point.x < x + half.x &&
-        point.y >= nose.y - half.y &&
-        point.y < nose.y + half.y
-      ) {
-        return 2;
-      }
+    if (
+      box &&
+      point.x >= box.left &&
+      point.x < box.right &&
+      point.y >= box.top &&
+      point.y < box.bottom
+    ) {
+      return 2;
     }
 
     const dx = Math.trunc(point.x - centre.x);
@@ -731,6 +750,24 @@ export class Pet {
     const ahead = (((bearing - this.rotation) % 256) + 256) % 256;
     this.ease = { to: wrap(bearing), by: ahead > 128 ? -rate : rate };
     return 0;
+  }
+
+  /**
+   * `MakeFocusRect` (seg7:3565): a box so wide and high, its middle ahead of
+   * the nose by its diagonal over a distance, the way the dog faces.
+   */
+  private noseBox(width: number, height: number, distance = FOCUS_DISTANCE) {
+    const nose = this.world.ballOnStage?.(NOSE);
+
+    if (!nose) {
+      return null;
+    }
+
+    const ahead = Math.trunc(Math.trunc(Math.sqrt(width * width + height * height)) / distance);
+    const sine = Math.trunc(Math.sin((this.rotation * Math.PI) / 128) * 256);
+    const x = nose.x - Math.trunc((256 * ahead * sine) / 65536);
+    const half = { x: Math.trunc(width / 2), y: Math.trunc(height / 2) };
+    return { left: x - half.x, right: x + half.x, top: nose.y - half.y, bottom: nose.y + half.y };
   }
 
   /** Frames queued before the next state change: what an ease is spread over. */
@@ -882,6 +919,23 @@ export class Pet {
    * `ResetScriptSoft`: the script playing plays to its end, and what was
    * queued after it is dropped. Inferred from its name and its callers.
    */
+  /**
+   * `ScriptSprite::ResetScript` (seg7:2dd0): the queue cleared, glued by the
+   * chest, and the dog taken to be in the position of the script it was
+   * playing — where it ends, unless it starts and ends the same.
+   */
+  private resetScript() {
+    const script = this.data.scripts[this.playing];
+    this.queue = [{ glue: CHEST }];
+
+    /* And the slide it was aimed over: inferred, as the queue it counted is gone. */
+    this.slide = null;
+
+    if (script) {
+      this.position = script.to;
+    }
+  }
+
   private resetSoft() {
     const end = this.queue.findIndex((item) => 'end' in item);
     this.queue = end === -1 ? [] : this.queue.slice(0, end + 1);
@@ -1031,7 +1085,7 @@ export class Pet {
     }
 
     if (mode === 'enter') {
-      if (this.reducedGlobal() === GLOBAL.begEat && !this.world.treat?.held) {
+      if (this.reducedGlobal() === GLOBAL.begEat && !this.food?.held) {
         this.newState(STATE.eating);
         return undefined;
       }
@@ -1448,8 +1502,8 @@ export class Pet {
         return this.wallTarget;
       }
 
-      if (state === STATE.beggingChasing && this.world.treat) {
-        return this.world.treat;
+      if (state === STATE.beggingChasing && this.food) {
+        return this.food;
       }
 
       if (state === STATE.chasingBall && this.world.ball) {
@@ -1521,7 +1575,7 @@ export class Pet {
       return undefined;
     }
 
-    if (state === STATE.beggingChasing && !this.world.treat) {
+    if (state === STATE.beggingChasing && !this.food) {
       this.newGlobalState(GLOBAL.idle);
       return this.pop().step;
     }
@@ -1662,6 +1716,9 @@ export class Pet {
 
   // Global states.
 
+  /** The global state before this one (`0xd6`). */
+  private previousGlobal = 0;
+
   /** `ReducedGlobalState`: the three treats, food and water are all one, begging and eating. */
   reducedGlobal() {
     if (this.global >= GLOBAL.begEat && this.global <= GLOBAL.begEat + 4) {
@@ -1682,6 +1739,7 @@ export class Pet {
       this.exitFetch();
     }
 
+    this.previousGlobal = this.global;
     this.global = global;
 
     if (global === GLOBAL.idle) {
@@ -1706,17 +1764,45 @@ export class Pet {
     }
   }
 
-  /** `PetModule::CheckDesktop` (seg16:20b6), for the treats: one out of its box is begged for. */
+  /**
+   * `PetModule::CheckDesktop` (seg16:20b6): what out of the toy box the dog
+   * goes to. A treat out is begged for at once. Otherwise one of the things
+   * out, not the one the dog last left: a bowl once long enough has passed
+   * since it was last eaten from or held — the emptier, the longer — and
+   * anything else, the ball, only by a dog excited enough, 70 and more.
+   */
   private checkDesktop() {
-    const treat = this.world.treat;
+    const foods = this.world.foods ?? [];
+    const treat = [...foods].reverse().find(isTreat);
 
     if (treat) {
-      return GLOBAL.firstTreat + treat.colour;
+      return GLOBAL.begEat + treat.kind;
     }
 
-    /* A toy out is noticed only by a dog excited enough, 70 and more. */
     const ball = this.world.ball;
-    return ball && !ball.held && this.factor(0) >= 70 ? GLOBAL.fetch : 0;
+    const out = [
+      ...foods.map((food) => ({ global: GLOBAL.begEat + food.kind, food })),
+      ...(ball && !ball.held ? [{ global: GLOBAL.fetch, food: null }] : []),
+    ].filter(({ global }) => global !== this.previousGlobal);
+
+    /* The engine starts at a random sprite of the stage's and takes the
+     * first it can; here, one of these at random. */
+    const r = this.rand();
+
+    if (!out.length) {
+      return 0;
+    }
+
+    const { global, food } = out[r % out.length];
+
+    if (food && !isTreat(food)) {
+      /* Minutes, of 60 ticks, from (315 − 300 × left) for food, (325 − 275 × left) for water. */
+      const [most, scale] = food.kind === 0 ? [315, 300] : [325, 275];
+      const wait = (most - Math.trunc((food.servings * scale) / food.full)) * 60;
+      return this.time < food.touched + wait ? 0 : global;
+    }
+
+    return this.factor(0) < 70 ? 0 : global;
   }
 
   // The cursor.
@@ -1796,7 +1882,7 @@ export class Pet {
       }
     }
 
-    if (moves < 2 || this.world.treat?.held) {
+    if (moves < 2 || this.food?.held) {
       this.petting = false;
     }
 
@@ -2181,60 +2267,101 @@ export class Pet {
 
   /** What the dog begs for: the ball at play, else the treat (`0x11d4`). */
   private heldObject() {
-    return this.reducedGlobal() === GLOBAL.fetch ? this.world.ball : this.world.treat;
+    return this.reducedGlobal() === GLOBAL.fetch ? this.world.ball : this.food;
   }
 
-  // Treats.
+  // Food and treats.
 
-  /** `PetModule::EnterBegEat` (seg18:0000): to eat a treat put down, or chase one held. */
-  private enterBegEat(state: number) {
-    this.brainActive = false;
-    this.newState(state || (this.world.treat?.held ? STATE.beggingChasing : STATE.eating));
+  /** Which food the dog is begging for or eating (`0x1242`): its kind, while the global state is its. */
+  private foodKind = -1;
+
+  /** The food at play, if it is out. */
+  private get food(): Food | null {
+    return this.world.foods?.find((food) => food.kind === this.foodKind) ?? null;
   }
 
   /**
-   * The treat picked up, as `FoodSprite::Update` (seg20:0de4) sees it: the
-   * dog begs for it; picked up while the dog eats it, the dog begs again.
+   * How full the dog is (`0x188` of the food bowl): a mouthful from the bowl
+   * adds 1, and every 420 ticks one wears off (`FoodSprite::Update`, at
+   * `0x18a`). Fuller than half again a bowl, it is sick; fuller still, it
+   * will not eat.
    */
-  treatPickedUp() {
-    const treat = this.world.treat;
+  fullness = 0;
+  private fullnessWears = 0;
 
-    if (!treat) {
-      return;
+  private wearFullness() {
+    if (this.fullness > 0 && this.time > this.fullnessWears) {
+      this.fullness--;
+      this.fullnessWears = this.time + 420;
+    }
+  }
+
+  /** Too full to eat from a bowl of so many servings, put down or held while it eats (seg20:0e86). */
+  private tooFull(food: Food) {
+    return food.kind === 0 && this.fullness > food.full * 1.5 + 7;
+  }
+
+  /** `PetModule::EnterBegEat` (seg18:0000): to eat a food put down, or chase one held. */
+  private enterBegEat(state: number) {
+    this.brainActive = false;
+    this.foodKind = this.global - GLOBAL.begEat;
+    this.newState(state || (this.food?.held ? STATE.beggingChasing : STATE.eating));
+  }
+
+  /**
+   * A food taken out of the toy box (`FoodSprite::Update`): a bowl is filled
+   * with 25 to 35 servings; then it is held, as picked up.
+   */
+  foodTakenOut(food: Food) {
+    if (!isTreat(food)) {
+      food.full = food.servings = (this.rand() % 11) + 25;
     }
 
-    if (this.state === STATE.eating && this.global === GLOBAL.firstTreat + treat.colour) {
+    food.touched = this.time;
+    this.foodPickedUp(food);
+  }
+
+  /**
+   * A food picked up, as `FoodSprite::Update` (seg20:0de4) sees it: the dog
+   * begs for it; picked up while the dog eats it, the dog begs again,
+   * unless it is too full.
+   */
+  foodPickedUp(food: Food) {
+    if (this.state === STATE.eating && this.global === GLOBAL.begEat + food.kind) {
+      if (this.tooFull(food)) {
+        this.newGlobalState(GLOBAL.idle);
+        return;
+      }
+
       if (this.brainActive) {
-        this.data.brain?.tell('[+]BringOut*', `[u]${TREATS[treat.colour]}`);
+        this.data.brain?.tell('[+]BringOut*', `[u]${FOOD_NAMES[food.kind]}`);
       }
 
       this.newState(STATE.begging);
     } else {
-      this.newGlobalState(GLOBAL.firstTreat + treat.colour);
+      this.newGlobalState(GLOBAL.begEat + food.kind);
     }
   }
 
-  /** The treat put down: the dog goes to eat it (`FoodSprite::Update`). */
-  treatPutDown() {
-    const treat = this.world.treat;
-
-    if (!treat) {
-      return;
-    }
+  /** A food put down: the dog goes to eat it, unless too full (`FoodSprite::Update`). */
+  foodPutDown(food: Food) {
+    food.touched = this.time;
 
     if (this.brainActive) {
-      this.data.brain?.tell('[w]Throw!', `[u]${TREATS[treat.colour]}`);
+      this.data.brain?.tell('[w]Throw!', `[u]${FOOD_NAMES[food.kind]}`);
     }
 
-    if (this.global === GLOBAL.firstTreat + treat.colour) {
+    if (this.tooFull(food)) {
+      this.newGlobalState(GLOBAL.idle);
+    } else if (this.global === GLOBAL.begEat + food.kind) {
       this.newState(STATE.eating);
     } else {
-      this.newGlobalState(GLOBAL.firstTreat + treat.colour, STATE.eating);
+      this.newGlobalState(GLOBAL.begEat + food.kind, STATE.eating);
     }
   }
 
-  /** The treat put back in its box: the dog is left alone (`FoodSprite::Update`). */
-  treatPutAway() {
+  /** A food put back in its box: the dog is left alone (`FoodSprite::Update`). */
+  foodPutAway() {
     if (this.reducedGlobal() === GLOBAL.begEat) {
       this.newGlobalState(GLOBAL.idle);
     }
@@ -2253,7 +2380,7 @@ export class Pet {
     }
 
     if (mode === 'enter') {
-      if (this.reducedGlobal() === GLOBAL.begEat && !this.world.treat?.held) {
+      if (this.reducedGlobal() === GLOBAL.begEat && !this.food?.held) {
         this.newState(STATE.eating);
         return undefined;
       }
@@ -2289,12 +2416,12 @@ export class Pet {
    * out, which sets the desire of the treat's colour.
    */
   private activateBrain() {
-    const treat = this.world.treat;
+    const treat = this.food;
 
     if (this.reducedGlobal() === GLOBAL.begEat && !this.brainActive) {
       this.brainActive = true;
       this.data.brain?.zeroOutDesires();
-      this.data.brain?.tell('[+]BringOut*', `[u]${treat ? TREATS[treat.colour] : ''}`);
+      this.data.brain?.tell('[+]BringOut*', `[u]${treat ? FOOD_NAMES[treat.kind] : ''}`);
     }
   }
 
@@ -2304,13 +2431,14 @@ export class Pet {
    * one at random that needs no ball; without, it begs on.
    */
   pickTrickState(): number {
-    const treat = this.world.treat;
+    const treat = this.food;
 
     if (this.reducedGlobal() === GLOBAL.fetch) {
       return this.pickPlayTrick();
     }
 
-    if (this.reducedGlobal() === GLOBAL.begEat && treat?.held) {
+    /* Only a treat is snatched; a bowl, never (seg21:6927). */
+    if (this.reducedGlobal() === GLOBAL.begEat && treat?.held && isTreat(treat)) {
       this.factors[9] = Math.min(100, this.factors[9] + 4);
 
       if (this.decideIfGrabFromUser()) {
@@ -2393,35 +2521,41 @@ export class Pet {
   }
 
   /**
-   * `PetModule::DoEating` (seg18:12cb), for a treat: goes to it and eats it
-   * in one bite; the bite (cue 10) rewards the trick last done if the brain
-   * was not yet awake. The walk to the treat is simplified.
+   * `PetModule::DoEating` (seg18:12cb): goes to the food and eats it. A
+   * treat is one bite, and the bite (cue 10) rewards the trick last done if
+   * the brain was not yet awake. A bowl is eaten from a mouthful at a time,
+   * each a serving (cue 12), until it is empty or the dog is sick of it; or
+   * lapped, three to six times. The walk to the food is simplified.
    */
   private doEating(mode: Mode): Step | undefined {
+    const food = this.food;
+
     if (mode === 'exit') {
-      if (this.world.treat) {
-        this.world.treat.beingEaten = false;
+      if (food) {
+        food.beingEaten = false;
+        food.touched = this.time;
       }
 
       this.resetSoft();
       return undefined;
     }
 
-    const treat = this.world.treat;
-
     if (mode === 'enter') {
-      if (!treat) {
+      if (!food) {
         this.newGlobalState(GLOBAL.idle);
         return undefined;
       }
 
-      this.target = { x: treat.x, y: treat.y };
+      this.resetScript();
+      this.target = null;
+      this.setTargetLocation(null);
 
-      if (!this.near(treat)) {
+      if (!this.foodInReach(food)) {
+        this.target = { x: food.x, y: food.y };
         this.locomotion = this.pickLocomotion();
         this.pushLocomotion();
       } else {
-        this.eat();
+        this.eat(food);
       }
 
       return undefined;
@@ -2429,17 +2563,17 @@ export class Pet {
 
     const { step, flags } = this.pop();
 
-    /* From cue 0 the treat is drawn with the dog, under its head, until cue 13 or eaten (seg18:1c62). */
-    if (this.cues.has(0) && this.world.treat && !this.world.treat.held) {
-      this.world.treat.beingEaten = true;
+    /* From cue 0 the food is drawn with the dog, under its head, until cue 13 or eaten (seg18:1c62). */
+    if (this.cues.has(0) && food && !food.held) {
+      food.beingEaten = true;
     }
 
-    if (this.cues.has(13) && this.world.treat) {
-      this.world.treat.beingEaten = false;
+    if (this.cues.has(13) && food) {
+      food.beingEaten = false;
     }
 
-    if (this.cues.has(10) && this.world.treat) {
-      this.world.eatTreat?.();
+    if (this.cues.has(10) && food && isTreat(food)) {
+      this.world.putAwayFood?.(food);
       this.factors[9] = this.centres[9];
 
       if (!this.brainActive) {
@@ -2447,13 +2581,23 @@ export class Pet {
       }
     }
 
-    if (this.target && treat && (flags & 2 || this.near(treat))) {
+    if (this.cues.has(12) && food) {
+      this.mouthful(food);
+    }
+
+    /* The bowl taken from under its nose: after it again (seg18:2041, the engine chasing it as `0x26`). */
+    if (this.cues.has(14) && food && !this.atBowl(food)) {
+      this.newState(STATE.eating);
+      return step;
+    }
+
+    if (this.target && food && (flags & 2 || this.foodInReach(food))) {
       this.target = null;
       this.setTargetLocation(null);
       this.queue = this.queue.filter((item) => !('step' in item));
-      this.eat();
+      this.eat(food);
     } else if (flags & 1) {
-      if (this.target && treat) {
+      if (this.target && food) {
         this.pushLocomotion();
       } else {
         this.newGlobalState(GLOBAL.idle);
@@ -2463,11 +2607,151 @@ export class Pet {
     return step;
   }
 
-  /** The bite: script 86, its frames glued by the chest (seg18:1757). */
-  private eat() {
-    this.pushTransition(this.data.scripts[SCRIPT.eatTreat].from, BELLY);
+  /**
+   * The dog lined up to eat (seg18:14d9 to 1c4e): it sits up, unless
+   * running, turns towards the food if it faces the other way, and its nose
+   * is slid to just above it, higher the older the dog. Then a treat is one
+   * bite (script 86); a bowl is stood over (37), and eaten from (36, with
+   * 54 now and then and 328 every so often) a mouthful a serving left, or
+   * lapped (262) three to six times.
+   */
+  private eat(food: Food) {
+    const range = (n: number) => Math.trunc(((this.factor(10) - 1) * n) / 100);
+    let lift: number;
+
+    if (this.position === RUNNING) {
+      lift = range(13) + 49;
+    } else {
+      lift = range(10) + 40;
+
+      if (this.position !== SITTING_UP) {
+        this.pushTransition(SITTING_UP, BELLY);
+        this.push({ glue: CHEST });
+      }
+    }
+
+    /* The engine lifts it 0 to 7 more when the pet sprite's slot 0x80 says 1; not yet read. */
+    const across = Math.trunc(-this.rotation / 16);
+    this.push({ cue: 3 });
+
+    const nose = this.world.ballOnStage?.(NOSE);
+    const turn = nose ? Math.max(-0x40, Math.min(0x40, Math.trunc((nose.x - food.x) / 3))) : 0;
+
+    if ((turn > 0 && this.rotation < 0) || (turn < 0 && this.rotation > 0)) {
+      this.push({ ease: turn });
+    }
+
+    /* `0x8ae8 0 0 6`, turning towards it, is not yet played. */
+    this.push({ aim: { ball: NOSE, at: { x: food.x + across, y: food.y - lift } } });
+
+    if (isTreat(food)) {
+      this.pushTransition(this.data.scripts[SCRIPT.eatTreat].from, BELLY);
+      this.push({ cue: 0 }, { glue: CHEST }, { cue: 3 });
+      this.pushStored(SCRIPT.eatTreat);
+      return;
+    }
+
+    this.pushTransition(this.data.scripts[SCRIPT.standOverBowl].from, BELLY);
     this.push({ cue: 0 }, { glue: CHEST }, { cue: 3 });
-    this.pushStored(SCRIPT.eatTreat);
+    this.pushTransition(this.data.scripts[SCRIPT.eatFromBowl].from, BELLY);
+    this.push({ cue: 14 });
+
+    if (food.kind === 0) {
+      let untilPause = (this.rand() % 10) + 5;
+
+      for (let n = 0; n < food.servings; n++) {
+        this.pushStored(SCRIPT.eatFromBowl);
+
+        if (this.rand() % 6 === 0) {
+          this.pushStored(SCRIPT.eatFromBowlMore);
+        }
+
+        if (untilPause-- < 0) {
+          this.pushStored(SCRIPT.eatFromBowlPause);
+          untilPause = (this.rand() % 10) + 6;
+        }
+
+        this.push({ cue: 12 });
+      }
+
+      if (food.servings !== 0) {
+        this.push({ cue: 13 });
+      }
+    } else {
+      /* Laps by how full it was filled, not by what is left. */
+      const laps = Math.min((this.rand() % 4) + 3, food.full);
+
+      for (let n = 0; n < laps; n++) {
+        this.pushStored(SCRIPT.lap);
+        this.push({ cue: 12 });
+      }
+    }
+  }
+
+  /**
+   * Cue 12, a mouthful (seg18:1c4e on): a serving less in the bowl; from the
+   * food bowl, the dog fuller, and fuller than half again the bowl it is
+   * sick of it: it stops, stands and is sick (script 287), and is calmed to
+   * an excitement under 10.
+   */
+  private mouthful(food: Food) {
+    food.servings = Math.max(0, food.servings - 1);
+
+    if (food.kind !== 0) {
+      return;
+    }
+
+    this.fullness++;
+
+    if (this.fullness > food.full * 1.5) {
+      this.fullness += 5;
+      this.queue = [];
+      this.push({ cue: 13 });
+      this.pushTransition(STANDING, BELLY);
+      this.push({ glue: BELLY });
+      this.pushStored(SCRIPT.sick);
+      this.push({ factor: [0, this.rand() % 10] });
+    }
+  }
+
+  /**
+   * Whether the dog can eat the food where it stands: the box ahead of its
+   * nose, a walk's (`0xc8`, seg18:1460 on), meets the food's rectangle; else
+   * it walks to it. Which box the engine takes is the target's last set,
+   * inferred to be a walk's.
+   */
+  private foodInReach(food: Food) {
+    const { width, height } = this.locomotionFudge(SCRIPT.walk);
+    const box = this.noseBox(width, height);
+    const rect = ballRect(food, foodSize(food));
+
+    if (!box) {
+      return this.near(food);
+    }
+
+    return (
+      box.left < rect.right &&
+      rect.left < box.right &&
+      box.top < rect.bottom &&
+      rect.top < box.bottom
+    );
+  }
+
+  /** Cue 14: the dog's tongue on the bowl, within 14 of its sides and up to 20 above it (seg18:2041). */
+  private atBowl(food: Food) {
+    const tongue = this.world.ballOnStage?.(63);
+
+    if (!tongue) {
+      return true;
+    }
+
+    const rect = ballRect(food, foodSize(food));
+    return (
+      tongue.x >= rect.left + 14 &&
+      tongue.x < rect.right - 14 &&
+      tongue.y >= rect.top - 20 &&
+      tongue.y < rect.bottom
+    );
   }
 
   /**
@@ -2504,7 +2788,9 @@ export class Pet {
 
     if (this.cues.has(10)) {
       this.factors[9] = this.centres[9];
-      this.world.eatTreat?.();
+      if (this.food) {
+        this.world.putAwayFood?.(this.food);
+      }
     }
 
     if (flags & 1) {
@@ -2569,7 +2855,7 @@ export class Pet {
 
   private grabObject(slot: number) {
     const ball = this.world.ball;
-    const treat = this.world.treat;
+    const treat = this.food;
 
     if (slot === 2) {
       if (treat && (!treat.held || this.grabFromUser)) {
@@ -3202,42 +3488,69 @@ export class Pet {
   } | null = null;
 
   /**
-   * `0x8af4 ball x y` (`PopScript`, seg7:5e98 and 7144 on): the frames up to
-   * the next cue 2 are counted, and the dog slid evenly over them so that
-   * the ball named is at the point when that frame shows; `0x7ffd` for the
-   * point is the ball at play. Where the engine plays the frames ahead to
-   * know where that ball will be, this takes the frame where the dog now
-   * stands, so moves within the frames between are not counted.
+   * `0x8af4 ball x y` (`PopScript`, seg7:5e98, and 7144 on): the queue is
+   * played ahead to the end of the next script (`0x8b0b`), or to a cue 2,
+   * or until it runs out or names a state (seg7:667e, 6624), and the dog is
+   * slid evenly over those frames so that the ball named is at the point
+   * when the last of them shows;
+   * `0x7ffd` for the point is the ball at play. Played ahead here are the
+   * frames, their glue and placing, and the dog's turning, eases and drift.
    */
   private startAim(ball: number, at: { x: number; y: number } | null) {
     const point = at ?? this.world.ball;
-    let frames = 0;
-    let target: Step | undefined;
+    const frames: { step: Step; rotation: number; placedBy?: number }[] = [];
+    let glue: number | undefined;
+    let placedBy: number | undefined;
+    const saved = { rotation: this.rotation, ease: this.ease, drift: this.drift };
 
-    for (const item of this.queue) {
-      if ('step' in item && !item.step.reference) {
-        frames++;
-
+    for (const [index, item] of this.queue.entries()) {
+      /* Played ahead, `PopScript` stops at the end of a script (`0x8b0b`),
+       * at cue 2, before the frame it comes with, and at a state named. */
+      if ('end' in item || 'goto' in item || ('cue' in item && item.cue === 2)) {
+        break;
+      } else if ('ease' in item) {
+        const after = this.queue.slice(index + 1);
+        const goes = after.findIndex((later) => 'goto' in later);
+        const frames = (goes < 0 ? after : after.slice(0, goes)).filter(
+          (later) => 'step' in later && !later.step.reference
+        ).length;
+        this.startEase(item.ease, Math.max(1, frames));
+      } else if ('drift' in item) {
+        this.drift = item.drift;
+      } else if ('glue' in item) {
+        glue = item.glue;
+      } else if ('step' in item && item.step.reference) {
+        placedBy = item.step.frame;
+      } else if ('step' in item) {
         if (item.step.cues?.includes(2)) {
-          target = item.step;
           break;
         }
+
+        this.turn(item.step);
+        frames.push({
+          step: { ...item.step, glue: item.step.glue ?? glue },
+          rotation: this.rotation,
+          placedBy,
+        });
+        glue = placedBy = undefined;
       }
     }
 
-    if (!point || !target || !this.world.ballInFrame || frames < 1) {
+    Object.assign(this, saved);
+
+    if (!point || !this.world.lookAhead || frames.length < 1) {
       return;
     }
 
-    const there = this.world.ballInFrame(target.frame, ball, this.rotation);
+    const there = this.world.lookAhead(frames, ball);
     this.slide = {
-      dx: (point.x - there.x) / frames,
-      dy: (point.y - there.y) / frames,
+      dx: (point.x - there.x) / frames.length,
+      dy: (point.y - there.y) / frames.length,
       x: 0,
       y: 0,
       movedX: 0,
       movedY: 0,
-      left: frames,
+      left: frames.length,
     };
   }
 }

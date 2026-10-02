@@ -57,7 +57,7 @@ test('begs for a treat held up', async ({ page }) => {
 
   const box = (await page.locator('canvas').boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
-  await page.click('#treat-red');
+  await page.click('#food-red');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
 
   await expect(page.locator('#mood')).toHaveText(/^eBegging/, { timeout: 20000 });

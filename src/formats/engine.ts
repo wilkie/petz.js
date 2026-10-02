@@ -272,6 +272,9 @@ export const BALL_PICTURE = 10200;
  */
 export const TREAT_PICTURE = 10300;
 
+/** The bowls' pictures: `10000 + 10 × kind + n`, n 0 full, 1 half, 2 empty and 3 the rim. */
+export const BOWL_PICTURE = 10000;
+
 /** A bitmap resource of the engine's. */
 export function readPicture(engine: NeModule, id: number) {
   const resource = engine.resources().find((r) => r.type === 2 && r.id === id);

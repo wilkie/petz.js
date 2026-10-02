@@ -8,7 +8,17 @@
 import { Brain, type BrainMapping } from '../behaviour/brain.ts';
 import { Pet, type PetData } from '../behaviour/pet.ts';
 import { borlandRand } from '../behaviour/random.ts';
-import { BALL_SIZE, ballRect, keepOnStage, Stage, TREAT_SIZE } from '../behaviour/stage.ts';
+import {
+  BALL_SIZE,
+  ballRect,
+  bowlPicture,
+  FOOD,
+  type Food,
+  foodSize,
+  isTreat,
+  keepOnStage,
+  Stage,
+} from '../behaviour/stage.ts';
 import { DEFAULT_GLUE, type Step, timeline } from '../behaviour/timeline.ts';
 import { transitionTable } from '../behaviour/transitions.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
@@ -21,6 +31,7 @@ import {
 import {
   BALL_PICTURE,
   readBodyAreas,
+  BOWL_PICTURE,
   TREAT_PICTURE,
   readBrainMap,
   readEngineScripts,
@@ -101,6 +112,9 @@ let bodyAreas: number[] = [];
 let ballPicture: Dib;
 let treatPictures: Dib[] = [];
 
+/** The food and water bowls' pictures: full, half, empty, and the rim. */
+let bowlPictures: Dib[][] = [];
+
 /** The brain, as the game's file has it, then as the live dog has learned; and how the engine maps it. */
 let brainFile: BrainFile | null = null;
 let brainMap: BrainMapping[] = [];
@@ -160,7 +174,7 @@ function drawDog(
   const palette = palettes.get(colours)!;
   const bitmap = new IndexedBitmap(STAGE.width, STAGE.height);
   const ball = stage?.ball;
-  const treat = stage?.treat;
+  const foods = stage?.foods ?? [];
   const draw = (picture: Dib, at: { x: number; y: number }) => {
     const { left, top } = ballRect({ x: Math.trunc(at.x), y: Math.trunc(at.y) }, picture);
     drawPicture(bitmap, picture, mapColours(picture, palette), left, top);
@@ -178,17 +192,26 @@ function drawDog(
     inMouth = (chin) => draw(ballPicture, ball.slot === 0 ? chin : stage!.ballOnStage(45));
   }
 
-  if (treat) {
-    const picture = treatPictures[treat.colour];
+  let overHead: (() => void) | undefined;
 
-    if (treat.inMouth) {
+  for (const food of foods) {
+    /* A bowl shows how much is left; its fourth picture is its rim (`0x180`). */
+    const picture = isTreat(food)
+      ? treatPictures[food.kind - FOOD.blueTreat]
+      : bowlPictures[food.kind][bowlPicture(food)];
+
+    if (food.inMouth) {
       /* At the chin (`FoodSprite::StaticDrawGrab`). */
       inMouth = (chin) => draw(picture, chin);
-    } else if (treat.beingEaten) {
-      /* Where it lies, under the head (`FoodSprite::StaticDraw`). */
-      underHead = () => draw(picture, treat);
+    } else if (food.beingEaten) {
+      /* Where it lies, under the head, and a bowl's rim over it (`StaticDraw`, `StaticDrawFront`). */
+      underHead = () => draw(picture, food);
+
+      if (!isTreat(food)) {
+        overHead = () => draw(bowlPictures[food.kind][3], food);
+      }
     } else {
-      loose.push([picture, treat]);
+      loose.push([picture, food]);
     }
   }
 
@@ -211,6 +234,7 @@ function drawDog(
     seed: frameNumber + 1,
     bonus: { ball: 51, draw: inMouth },
     underHead,
+    overHead,
   });
 
   if (front) {
@@ -420,8 +444,10 @@ canvas.addEventListener('mousemove', (event) => {
   const point = stagePoint(event);
   live.stage.pointer = { ...point, button: (event.buttons & 1) !== 0 };
 
-  if (live.stage.treat?.held) {
-    Object.assign(live.stage.treat, keepOnStage(point, TREAT_SIZE, STAGE.width, STAGE.height));
+  for (const food of live.stage.foods) {
+    if (food.held) {
+      Object.assign(food, keepOnStage(point, foodSize(food), STAGE.width, STAGE.height));
+    }
   }
 });
 
@@ -433,8 +459,8 @@ canvas.addEventListener('mouseleave', () => {
 });
 
 /**
- * A click puts down the treat held, or picks up the one put down, as
- * `GrabSprite::Update` lets the user; otherwise the button is held to pet.
+ * A click puts down the food held, or picks up the ball or a food put down,
+ * as `GrabSprite::Update` lets the user; otherwise the button is held to pet.
  */
 canvas.addEventListener('mousedown', (event) => {
   if (!live) {
@@ -443,10 +469,6 @@ canvas.addEventListener('mousedown', (event) => {
 
   const point = stagePoint(event);
   const { stage, pet } = live;
-  const treat = stage.treat;
-  stage.pointer = { ...point, button: true };
-
-  const ball = stage.ball;
 
   /* Anywhere on its picture's rectangle (`GrabSprite::Update`, `XPointInXRect`). */
   const on = (at: { x: number; y: number }, size: { width: number; height: number }) => {
@@ -456,6 +478,14 @@ canvas.addEventListener('mousedown', (event) => {
     );
   };
 
+  const held = stage.foods.find((food) => food.held);
+  const under = [...stage.foods]
+    .reverse()
+    .find((food) => !food.inMouth && !food.held && on(food, foodSize(food)));
+  stage.pointer = { ...point, button: true };
+
+  const ball = stage.ball;
+
   if (ball && !ball.held && on(ball, BALL_SIZE)) {
     /* Picked up, even out of the dog's mouth. */
     ball.held = true;
@@ -463,12 +493,12 @@ canvas.addEventListener('mousedown', (event) => {
     ball.x = point.x;
     ball.y = point.y;
     pet.ballPickedUp();
-  } else if (treat?.held) {
-    treat.held = false;
-    pet.treatPutDown();
-  } else if (treat && !treat.inMouth && on(treat, TREAT_SIZE)) {
-    treat.held = true;
-    pet.treatPickedUp();
+  } else if (held) {
+    held.held = false;
+    pet.foodPutDown(held);
+  } else if (under) {
+    under.held = true;
+    pet.foodPickedUp(under);
   }
 });
 
@@ -484,25 +514,33 @@ window.addEventListener('mouseup', () => {
   }
 });
 
-for (const [colour, button] of ['blue', 'green', 'red'].entries()) {
-  element<HTMLButtonElement>(`treat-${button}`).addEventListener('click', () => {
+/** Each food comes out of the box held, where the cursor is; the one held before goes back. */
+for (const [kind, button] of ['food', 'water', 'blue', 'green', 'red'].entries()) {
+  element<HTMLButtonElement>(`food-${button}`).addEventListener('click', () => {
     if (!live) {
       return;
     }
 
-    putBallAway();
+    if (live.stage.ball?.held) {
+      putBallAway();
+    }
+
+    putFoodAway((food) => food.held || food.kind === kind);
     const { x, y } = live.stage.pointer;
-    live.stage.treat = { colour, held: true, x, y };
-    live.pet.treatPickedUp();
+    const food: Food = { kind, held: true, x, y, servings: 0, full: 0, touched: 0 };
+    live.stage.foods.push(food);
+    live.pet.foodTakenOut(food);
   });
 }
 
-element<HTMLButtonElement>('treat-away').addEventListener('click', putTreatAway);
+element<HTMLButtonElement>('food-away').addEventListener('click', () =>
+  putFoodAway((food) => food === live?.stage.foods.at(-1))
+);
 
-function putTreatAway() {
-  if (live?.stage.treat) {
-    live.stage.treat = null;
-    live.pet.treatPutAway();
+function putFoodAway(which: (food: Food) => boolean) {
+  for (const food of live?.stage.foods.filter(which) ?? []) {
+    live!.stage.putAwayFood(food);
+    live!.pet.foodPutAway();
   }
 }
 
@@ -519,7 +557,7 @@ element<HTMLButtonElement>('ball-out').addEventListener('click', () => {
     return;
   }
 
-  putTreatAway();
+  putFoodAway((food) => food.held);
   const { x, y } = live.stage.pointer;
   live.stage.ball = { x, y, vx: 0, vy: 0, held: true, slot: null, recorded: null };
   live.pet.ballPickedUp();
@@ -596,6 +634,9 @@ async function start(files: GameFiles) {
   bodyAreas = readBodyAreas(engine, header.ballCount);
   ballPicture = readPicture(engine, BALL_PICTURE);
   treatPictures = [0, 1, 2].map((colour) => readPicture(engine, TREAT_PICTURE + colour));
+  bowlPictures = [0, 1].map((kind) =>
+    [0, 1, 2, 3].map((n) => readPicture(engine, BOWL_PICTURE + 10 * kind + n))
+  );
   brainMap = readBrainMap(engine);
 
   try {

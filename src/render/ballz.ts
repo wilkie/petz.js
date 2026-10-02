@@ -49,6 +49,12 @@ export interface DrawOptions {
    * `DoEating` sets to `FoodSprite::StaticDraw`.
    */
   underHead?: () => void;
+
+  /**
+   * And just after all but the last two head balls (the proc at `0x414`,
+   * seg10:5334): a bowl's rim, over the muzzle in it (`StaticDrawFront`).
+   */
+  overHead?: () => void;
 }
 
 /**
@@ -102,7 +108,7 @@ export function drawPet(
   breed: Breed,
   header: AnimationHeader,
   frame: Frame,
-  { colours, originX, originY, age = 0, yaw = 0, seed = 1, bonus, underHead }: DrawOptions
+  { colours, originX, originY, age = 0, yaw = 0, seed = 1, bonus, underHead, overHead }: DrawOptions
 ) {
   const next = random(seed);
   /* How much of a puppy: 100 less the age, as SetBallScaleFromAge asks.
@@ -112,7 +118,13 @@ export function drawPet(
   const ramps = RAMPS[colours];
   const at = (ball: number) => ({ x: originX + placed[ball].x, y: originY + placed[ball].y });
 
-  for (const mark of marks(breed, placed)) {
+  const list = marks(breed, placed);
+  const headCount = list.filter(
+    (mark) => mark.kind === 'ball' && breed.headBalls.includes(mark.ball)
+  ).length;
+  let headsDrawn = 0;
+
+  for (const mark of list) {
     if (mark.kind === 'line') {
       /* Each end as thick as its ball's radius × 256 / 300, as
        * DisplayBallzFrame works them out for XDrawLine, not yet read. */
@@ -130,7 +142,13 @@ export function drawPet(
 
     const { ball } = mark;
 
-    if (underHead && breed.headBalls.includes(ball)) {
+    const head = breed.headBalls.includes(ball);
+
+    if (head) {
+      headsDrawn++;
+    }
+
+    if (underHead && head) {
       underHead();
       underHead = undefined;
     }
@@ -155,6 +173,11 @@ export function drawPet(
     );
 
     const eye = breed.eyes.indexOf(ball);
+
+    if (overHead && headsDrawn === headCount - 2) {
+      overHead();
+      overHead = undefined;
+    }
 
     if (bonus?.ball === ball) {
       bonus.draw(at(ball));

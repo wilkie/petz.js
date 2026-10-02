@@ -17,13 +17,26 @@ import { type Placed, project, scalesForAge } from '../render/project.ts';
 import { type PetWorld } from './pet.ts';
 import { DEFAULT_GLUE, type Step } from './timeline.ts';
 
-/** A treat out of its box: held on the cursor, or put down on the stage. */
-export interface Treat {
-  /** 0 blue, 1 green, 2 red, as `FoodSprite::theirNames` lists them after food and water. */
-  colour: number;
+/** The kinds of food, as `FoodSprite::theirNames` lists them. */
+export const FOOD = { food: 0, water: 1, blueTreat: 2, greenTreat: 3, redTreat: 4 } as const;
+
+/**
+ * Food out of the toy box (`FoodSprite`): a bowl of food or of water, or a
+ * treat; held on the cursor, or put down on the stage.
+ */
+export interface Food {
+  /** 0 food, 1 water, 2 to 4 the blue, green and red treats (`FOOD`). */
+  kind: number;
   held: boolean;
   x: number;
   y: number;
+
+  /** A bowl's servings left, and how many it was filled with (`0x184`, `0x186`). */
+  servings: number;
+  full: number;
+
+  /** When it was last held or eaten from, in the engine's ticks (`0x166`). */
+  touched: number;
 
   /** Snatched into the dog's mouth (`GrabObject` slot 2), and drawn with it at its chin. */
   inMouth?: boolean;
@@ -35,8 +48,24 @@ export interface Treat {
   beingEaten?: boolean;
 }
 
+/** Whether a food is a treat, which is eaten in one bite, or a bowl. */
+export const isTreat = (food: { kind: number }) => food.kind >= FOOD.blueTreat;
+
 /** The size of a treat's picture, bitmaps 10300 to 10302 of DOGZDLL.DLL. */
 export const TREAT_SIZE = { width: 32, height: 32 };
+
+/** The size of a bowl's pictures, bitmaps 10000 to 10003 and 10010 to 10013. */
+export const BOWL_SIZE = { width: 64, height: 32 };
+
+export const foodSize = (food: { kind: number }) => (isTreat(food) ? TREAT_SIZE : BOWL_SIZE);
+
+/**
+ * Which of a bowl's pictures shows how much is left: 0 full, 1 half, 2
+ * empty (`FoodSprite::Update`, seg20:0de4).
+ */
+export function bowlPicture({ servings, full }: { servings: number; full: number }) {
+  return Math.max(0, Math.min(2, Math.trunc(((full - servings + 2) * 2) / full)));
+}
 
 /**
  * The size of the ball's picture, bitmap 10200 of DOGZDLL.DLL
@@ -137,7 +166,8 @@ export class Stage implements PetWorld {
   /** Where the user's cursor is, and whether its primary button is down. */
   pointer = { x: -1000, y: -1000, button: false };
 
-  treat: Treat | null = null;
+  /** The food out of the toy box, at most one of each kind. */
+  foods: Food[] = [];
   ball: Ball | null = null;
 
   /** Where the cursor was the frame before: a ball let go takes half the difference as its speed. */
@@ -326,10 +356,21 @@ export class Stage implements PetWorld {
     this.lastPointer = { x: this.pointer.x, y: this.pointer.y };
   }
 
-  /** A ball of the dog in some frame, were the dog to stay where it is: what `8af4` aims with. */
-  ballInFrame(frame: number, ball: number, rotation: number) {
-    const at = this.ballOf(this.frames[frame], ball, rotation);
-    return { x: this.x + at.x, y: this.y + at.y };
+  /**
+   * Where a ball of the dog would be after these frames were shown, the
+   * stage left as it was: what `0x8af4` aims with, as `PopScript` plays the
+   * queue ahead between `SaveEnvironmentVars` and `RestoreEnvironmentVars`.
+   */
+  lookAhead(frames: { step: Step; rotation: number; placedBy?: number }[], ball: number) {
+    const saved = { x: this.x, y: this.y, frame: this.frame, rotation: this.rotation };
+
+    for (const { step, rotation, placedBy } of frames) {
+      this.show(step, rotation, placedBy);
+    }
+
+    const at = this.ballOnStage(ball);
+    Object.assign(this, saved);
+    return { x: at.x, y: at.y };
   }
 
   /** Moves the dog by so much, as `PopScript` slides it towards an aim (seg7:6f6b). */
@@ -399,8 +440,8 @@ export class Stage implements PetWorld {
     );
   }
 
-  eatTreat() {
-    this.treat = null;
+  putAwayFood(food: Food) {
+    this.foods = this.foods.filter((out) => out !== food);
   }
 
   /** Where the dog is: its belly, on the stage. */
