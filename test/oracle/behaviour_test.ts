@@ -12,6 +12,8 @@ import { borlandRand } from '../../src/behaviour/random.ts';
 import {
   BALL_SIZE,
   BOWL_SIZE,
+  BRUSH_SIZE,
+  PAINT_RAMPS,
   FOOD,
   type Food,
   Stage,
@@ -23,6 +25,7 @@ import {
   AREA,
   BALL_PICTURE,
   BOWL_PICTURE,
+  BRUSH_PICTURE,
   FIRST_TRICK,
   POSITION,
   readBodyAreas,
@@ -589,6 +592,36 @@ withOracle('the engine’s behaviour', () => {
 
       expect(states).toContain(STATE.grabbingCursor);
       expect(tugged).toBe(true);
+    });
+
+    it('is painted by the brush: the ball under its tip and those of its colour, shade kept', () => {
+      const { stage, run } = setUp(3, 640, 480);
+      run(200);
+
+      const chest = stage.ballOnStage(50);
+      const colour = PAINT_RAMPS[256].first + 3 * PAINT_RAMPS[256].length;
+      expect(stage.paint({ x: chest.x, y: chest.y }, colour, 256)).toBe(true);
+
+      const hit = stage.ballUnder({ x: chest.x, y: chest.y });
+      const group = breed.ballColor16[hit];
+      breed.ballColor16.forEach((number, ball) => {
+        const shade = (breed.ballColor256[ball] - 16) % 6;
+        const painted =
+          number === group &&
+          ![0x3f, 0x40, 0x26, 0x0e, 0x20, 0x08, 0x29, 0x11, 0x37].includes(ball);
+        expect(stage.breed.ballColor256[ball]).toBe(
+          painted ? colour + shade : breed.ballColor256[ball]
+        );
+      });
+
+      /* Far from the dog, nothing. */
+      expect(stage.paint({ x: -500, y: -500 }, colour, 256)).toBe(false);
+    });
+
+    it('has the brush the size of its picture, its paint bright red', () => {
+      const picture = readPicture(engine, BRUSH_PICTURE);
+      expect({ width: picture.width, height: picture.height }).toEqual(BRUSH_SIZE);
+      expect(picture.pixels.some((n) => picture.colours[n].join() === '255,0,0')).toBe(true);
     });
 
     it('has the bowls the size of their pictures: full, half, empty and the rim', () => {

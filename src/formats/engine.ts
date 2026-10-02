@@ -275,6 +275,9 @@ export const TREAT_PICTURE = 10300;
 /** The spray bottle's pictures: 10400 at rest and 10401 spraying (`InitSpraySprite`, seg20:16a8). */
 export const SPRAY_PICTURE = 10400;
 
+/** The brush's picture (`InitPaintSprite`, seg20:2e8e). */
+export const BRUSH_PICTURE = 10500;
+
 /** The shoe's picture (`InitShoeSprite`, seg20:36b4). */
 export const SHOE_PICTURE = 10600;
 

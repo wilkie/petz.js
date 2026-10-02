@@ -142,3 +142,13 @@ test('goes for a shoe it is teased with', async ({ page }) => {
 
   await expect(page.locator('#mood')).toHaveText(/^e[A-Za-z]+Cursor/, { timeout: 5000 });
 });
+
+test('offers the paint colours for the brush, as the game’s menu does', async ({ page }) => {
+  test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
+  await page.goto('/viewer.html');
+
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await expect(page.locator('#brush-colours .swatch')).toHaveCount(20);
+  await page.selectOption('#colours', '16');
+  await expect(page.locator('#brush-colours .swatch')).toHaveCount(16);
+});

@@ -145,6 +145,13 @@ flowchart LR
 - [[read out]] Left alone, the dog may come back to the shoe as to anything out (`CheckDesktop`): what it last left is skipped only until it has done something else (`0xda`, set as it leaves `eIdle`).
 - [[inferred]] The head and eyes following the shoe (`SetHeadTarget`, `SetEyeTarget`) and how far the head may turn (`0x8ae6 0x11`, the fudger `HeadTrackMaxAll`) are not yet played; nor is the tilt eased level.
 
+## The brush
+
+- [[read out]] The brush is a sprite with one picture, 10500, 24 by 32 (`InitPaintSprite`, seg20:2da8), always drawn turned left for right and over the dog (`0x16e`), its paint — the screen's colour 9, bright red — in the brush's colour (`XPicture::XRemapColor`, `PaintSprite::Draw`). Held, it is centred on the cursor, then 10 left and 5 down; its tip is 3 in from its left and 10 up from its bottom (`PaintSprite::Update`, seg20:2f33).
+- [[read out]] The colour is the user's choice from a menu [[file:DOGZ.DOG/DOGZ.WAD]] builds (see there): the paint colours are ramps of the palette, set by `XDrawPort::InitStaticDraw` (seg8:0e28) — on 256 colours 20 ramps of 6 from colour 16, painted from each ramp's first; on 16, each of the 16 colours.
+- [[read out]] Let go of, the brush goes back in its box, and if its tip is over the dog — the dog's rectangle widened by its standard size, as for the spray — the ball under the tip (`Ballz::HitTest`) is painted, with every ball the breed gives the same `[16 Ball Color]` number, as it came (`0xdd1`, a copy kept of it): each takes the brush's colour, on 256 colours plus its own place in its ramp, its original `[256 Ball Color]` less 16 modulo 6, so keeping its shade (`SetBallColor`, seg10:455f, into the table for the display's depth, `0xdc9`). The tongue (63, 64), the nose and nostrils (55, 17, 41), the eyes (8, 32) and the irises (14, 38) are not painted. The speckles are made again from the new colours (`GenerateSpeckleColors`). The dog does not mind.
+- [[inferred]] Whether the engine keeps the paint when the dog is saved is not yet read; the viewer's dog keeps it until it is started again.
+
 ## Not yet
 
 - [[read out]] Scruffing, `eGuilty` and birthing are states this does not yet play; nor, at play, the dog faking a throw, tumbling with the ball, the user too close, turning to the ball before a grab (`0x8ae8`), or the ball moved during a ball trick (`0x8aed`, `0x8af4`).

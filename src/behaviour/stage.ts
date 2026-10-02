@@ -59,6 +59,42 @@ export interface Shoe {
   inMouth: boolean;
 }
 
+/** The balls the brush leaves: the tongue, the nose and nostrils, the eyes and irises (`SetBallColor`). */
+const UNPAINTED = [0x3f, 0x40, 0x26, 0x0e, 0x20, 0x08, 0x29, 0x11, 0x37];
+
+/**
+ * The paint colours (`XDrawPort::InitStaticDraw`, seg8:0e28): on 256
+ * colours, 20 ramps of 6 from colour 16, each painted from its first; on
+ * 16, each of the 16 colours.
+ */
+export const PAINT_RAMPS = {
+  256: { first: 16, length: 6, count: 20 },
+  16: { first: 0, length: 1, count: 16 },
+} as const;
+
+/** The size of the brush's picture, bitmap 10500 (`InitPaintSprite`, seg20:2e8e). */
+export const BRUSH_SIZE = { width: 24, height: 32 };
+
+/**
+ * The brush held: its picture centred on the cursor, then 10 left and 5
+ * down; its tip 3 in from its left, 10 up from its bottom
+ * (`PaintSprite::Update`, seg20:2f33).
+ */
+export function brushRect(at: { x: number; y: number }) {
+  const rect = ballRect(at, BRUSH_SIZE);
+  return {
+    left: rect.left - 10,
+    top: rect.top + 5,
+    right: rect.right - 10,
+    bottom: rect.bottom + 5,
+  };
+}
+
+export function brushTip(at: { x: number; y: number }) {
+  const rect = brushRect(at);
+  return { x: rect.left + 3, y: rect.bottom - 10 };
+}
+
 /** The size of the shoe's picture, bitmap 10600 (`InitShoeSprite`, seg20:36b4). */
 export const SHOE_SIZE = { width: 32, height: 32 };
 
@@ -177,6 +213,12 @@ export class Stage implements PetWorld {
   /** Where the user's cursor is, and whether its primary button is down. */
   pointer = { x: -1000, y: -1000, button: false };
 
+  /** The breed as it came, before any painting. */
+  readonly original: Breed;
+
+  /** The brush, held on the cursor, and the colour it paints (`PaintSprite`). */
+  brush: { x: number; y: number; colour: number } | null = null;
+
   /** The shoe out of the toy box. */
   shoe: Shoe | null = null;
 
@@ -203,7 +245,8 @@ export class Stage implements PetWorld {
 
   private frame: Frame;
   private rotation = 0;
-  private readonly breed: Breed;
+  /** The breed, as the dog now is: its colours painted. */
+  readonly breed: Breed;
   private readonly header: AnimationHeader;
   private readonly frames: Frame[];
   private readonly age: number;
@@ -218,7 +261,14 @@ export class Stage implements PetWorld {
   ) {
     this.width = width;
     this.height = height;
-    this.breed = breed;
+
+    /* The dog's own colours, which the brush paints; the breed's are kept. */
+    this.breed = {
+      ...breed,
+      ballColor256: [...breed.ballColor256],
+      ballColor16: [...breed.ballColor16],
+    };
+    this.original = breed;
     this.header = header;
     this.frames = frames;
     this.age = age;
@@ -322,6 +372,12 @@ export class Stage implements PetWorld {
    * that ball's area (`HitTestBodyArea`).
    */
   areaAt(point: { x: number; y: number }) {
+    const ball = this.ballUnder(point);
+    return ball < 0 ? -1 : (this.bodyAreas[ball] ?? -1);
+  }
+
+  /** The ball under a point, nearest first, or -1 (`Ballz::HitTest`, seg10:46d8). */
+  ballUnder(point: { x: number; y: number }) {
     const placed = this.placed();
     const nearestFirst = placed
       .map((_, ball) => ball)
@@ -332,11 +388,48 @@ export class Stage implements PetWorld {
       const half = diameter / 2;
 
       if (point.x > x - half && point.x < x + half && point.y > y - half && point.y < y + half) {
-        return this.bodyAreas[ball] ?? -1;
+        return ball;
       }
     }
 
     return -1;
+  }
+
+  /**
+   * The brush let go of with its tip at a point (`PaintSprite::Update`,
+   * seg20:2f33): over the dog — its rectangle widened by its standard size,
+   * as the spray's — the ball under the tip, and every ball the breed gives
+   * the same 16-colour number, take the brush's colour; on 256 colours each
+   * keeps its own shade, its place in its ramp. Not the eyes, nose or
+   * tongue (`Ballz::SetBallColor`, seg10:455f). Returns whether it painted.
+   */
+  paint(tip: { x: number; y: number }, colour: number, colours: 256 | 16) {
+    if (!this.sprayHits(tip)) {
+      return false;
+    }
+
+    const hit = this.ballUnder(tip);
+
+    if (hit < 0) {
+      return false;
+    }
+
+    const group = this.original.ballColor16[hit];
+    const table = colours === 256 ? this.breed.ballColor256 : this.breed.ballColor16;
+
+    this.original.ballColor16.forEach((number, ball) => {
+      if (number !== group || UNPAINTED.includes(ball)) {
+        return;
+      }
+
+      const shade =
+        colours === 256
+          ? (this.original.ballColor256[ball] - PAINT_RAMPS[256].first) % PAINT_RAMPS[256].length
+          : 0;
+      table[ball] = colour + shade;
+    });
+
+    return true;
   }
 
   /** The middle of the rectangle the dog is drawn in: the sprite's position (`XSprite::MoveSpriteRect`). */

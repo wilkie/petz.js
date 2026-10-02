@@ -58,6 +58,20 @@
         gap: 0.4rem;
         align-items: center;
       }
+      .swatches {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 2px;
+      }
+      .swatch {
+        width: 1rem;
+        height: 1rem;
+        padding: 0;
+        border: 1px solid var(--line);
+      }
+      .swatch[aria-pressed='true'] {
+        outline: 2px solid currentColor;
+      }
       #frame {
         width: 14rem;
         max-width: 100%;
@@ -145,6 +159,11 @@
         <button id="shoe-out" type="button">Take out</button>
         <button id="shoe-away" type="button">Put away</button>
       </div>
+      <div class="controls" aria-label="Brush">
+        Brush:
+        <span id="brush-colours" class="swatches"></span>
+        <button id="brush-out" type="button">Take out</button>
+      </div>
       <div class="controls" aria-label="Spray bottle">
         Spray bottle:
         <button id="spray-out" type="button">Take out</button>
@@ -161,7 +180,8 @@
         water and it eats or drinks; it comes back to them now and then. Take out the ball and it
         waits for a throw: drag and let go to throw it, and it fetches it back. Take out the spray
         bottle and click on the dog to spray it: what it was doing it will do less. Take out the
-        shoe and tease the dog with it: it chases, stalks and lunges, and grabs and tugs.
+        shoe and tease the dog with it: it chases, stalks and lunges, and grabs and tugs. Choose a
+        paint colour, take out the brush, and click on the dog to paint it.
       </p>
     </main>
     <script type="module" src="/src/viewer/main.ts"></script>

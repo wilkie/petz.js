@@ -34,3 +34,7 @@ Not yet known: which dialog is which screen, beyond the adoption kit's.
 ## The pet's frame
 
 [[read out]] Every frame, seg4:42a4 fills the engine's `PetParams` and calls `PetModule::DoDrawFrame` in [[file:WINDOWS/DOGZDLL.DLL]] for each pet: the cursor from `GetCursorPos`, moved into the playpen's coordinates, and the primary and secondary mouse buttons, each read with `GetAsyncKeyState` after asking `SwapMouseButton` which is which (seg4:014d and 0187). See [[topic:behaviour]].
+
+## The paint colours
+
+[[read out]] The brush's colour is chosen from a popup menu the WAD builds itself, one owner-drawn item for each paint colour, as many as `PetParams` +0x232 says — 20 on 256 colours, 16 on 16 (seg4:23ad on): commands 1900 on, each drawn as a swatch of its ramp's first colour (seg4:26ac on). Choosing one sets `PetParams` +0x234, the brush's colour, to `n × ramp length + first` (seg4:2db9), and remaps the cursor's paint; it is kept in the profile, key 0x13 (`WritePetzProfileInt`, seg4:151e). See [[topic:behaviour]]. `PetParams` is DS:0x27c6 here: the cursor at +0x12, the buttons at +0x0e and +0x10.

@@ -12,11 +12,14 @@ import {
   BALL_SIZE,
   ballRect,
   bowlPicture,
+  brushRect,
+  brushTip,
   FOOD,
   type Food,
   foodSize,
   isTreat,
   keepOnStage,
+  PAINT_RAMPS,
   SHOE_SIZE,
   Stage,
 } from '../behaviour/stage.ts';
@@ -31,6 +34,7 @@ import {
 } from '../formats/animation.ts';
 import {
   BALL_PICTURE,
+  BRUSH_PICTURE,
   readBodyAreas,
   SHOE_PICTURE,
   SPRAY_PICTURE,
@@ -115,6 +119,10 @@ let bodyAreas: number[] = [];
 let ballPicture: Dib;
 
 let shoePicture: Dib;
+let brushPicture: Dib;
+
+/** The colour of the brush's paint in its picture, as the screen has it: bright red (`XRemapColor(9, …)`). */
+const PAINT_COLOUR = 9;
 
 /** The spray bottle at rest, and spraying. */
 let sprayPictures: Dib[] = [];
@@ -180,7 +188,8 @@ function drawDog(
   yaw: number,
   stage?: Stage
 ) {
-  const breed = breeds.get(breedSelect.value)!;
+  /* Live, the dog's own colours, as the brush has painted them. */
+  const breed = stage?.breed ?? breeds.get(breedSelect.value)!;
   const colours = Number(coloursSelect.value) as 256 | 16;
   const palette = palettes.get(colours)!;
   const bitmap = new IndexedBitmap(STAGE.width, STAGE.height);
@@ -267,6 +276,17 @@ function drawDog(
 
   if (front) {
     loose.forEach(([picture, at, mirrored]) => draw(picture, at, mirrored));
+  }
+
+  /* The brush, always over the dog, turned, its paint in its colour (`PaintSprite::Draw`). */
+  const brush = stage?.brush;
+
+  if (brush) {
+    const { left, top } = brushRect(brush);
+    const mapped = mapColours(brushPicture, palette).map((index) =>
+      index === PAINT_COLOUR ? brush.colour : index
+    );
+    drawPicture(bitmap, brushPicture, mapped, left, top, true);
   }
 
   const pixels = new ImageData(bitmap.toRgba(palettes.get(colours)!), bitmap.width, bitmap.height);
@@ -472,6 +492,10 @@ canvas.addEventListener('mousemove', (event) => {
   const point = stagePoint(event);
   live.stage.pointer = { ...point, button: (event.buttons & 1) !== 0 };
 
+  if (live.stage.brush) {
+    Object.assign(live.stage.brush, point);
+  }
+
   if (live.stage.shoe?.held) {
     Object.assign(live.stage.shoe, keepOnStage(point, SHOE_SIZE, STAGE.width, STAGE.height));
   }
@@ -529,6 +553,12 @@ canvas.addEventListener('mousedown', (event) => {
 
   const ball = stage.ball;
 
+  /* The brush held paints as it is let go of. */
+  if (stage.brush) {
+    stage.pointer = { ...point, button: true };
+    return;
+  }
+
   const shoe = stage.shoe;
 
   /* The shoe held is put down; down, or in the dog's mouth, picked up. */
@@ -567,6 +597,13 @@ canvas.addEventListener('mousedown', (event) => {
 window.addEventListener('mouseup', () => {
   if (live) {
     live.stage.pointer = { ...live.stage.pointer, button: false };
+
+    /* Let go of, the brush paints the dog under its tip, and goes back in the box. */
+    if (live.stage.brush && live.stage.pointer) {
+      const brush = live.stage.brush;
+      live.stage.paint(brushTip(brush), brush.colour, Number(coloursSelect.value) as 256 | 16);
+      live.stage.brush = null;
+    }
 
     /* Let go of, the spray bottle goes back in the box, and over the dog, sprays it. */
     if (live.stage.spray?.spraying) {
@@ -634,6 +671,47 @@ element<HTMLButtonElement>('ball-out').addEventListener('click', () => {
 });
 
 element<HTMLButtonElement>('ball-away').addEventListener('click', putBallAway);
+
+/** Which paint colour the brush is chosen to have: the host's menu (`DOGZ.WAD` commands 1900 on). */
+let paintChoice = 0;
+
+/** A swatch for each paint colour, the first of its ramp, as `DOGZ.WAD`'s owner-drawn menu shows them. */
+function showPaintColours() {
+  const colours = Number(coloursSelect.value) as 256 | 16;
+  const ramps = PAINT_RAMPS[colours];
+  const palette = palettes.get(colours);
+  const box = element<HTMLSpanElement>('brush-colours');
+  box.replaceChildren();
+  paintChoice = Math.min(paintChoice, ramps.count - 1);
+
+  for (let n = 0; n < ramps.count; n++) {
+    const swatch = document.createElement('button');
+    const colour = palette?.[ramps.first + n * ramps.length] ?? [0, 0, 0];
+    swatch.type = 'button';
+    swatch.className = 'swatch';
+    swatch.title = `Paint ${n + 1}`;
+    swatch.setAttribute('aria-pressed', String(n === paintChoice));
+    swatch.style.background = `rgb(${colour.join(',')})`;
+    swatch.addEventListener('click', () => {
+      paintChoice = n;
+      showPaintColours();
+    });
+    box.append(swatch);
+  }
+}
+
+/** The brush comes out held, in the colour chosen. */
+element<HTMLButtonElement>('brush-out').addEventListener('click', () => {
+  if (!live) {
+    return;
+  }
+
+  const ramps = PAINT_RAMPS[Number(coloursSelect.value) as 256 | 16];
+  const { x, y } = live.stage.pointer;
+  live.stage.brush = { x, y, colour: ramps.first + paintChoice * ramps.length };
+});
+
+coloursSelect.addEventListener('change', showPaintColours);
 
 /** The shoe comes out held where the cursor is, and the dog is taunted with it. */
 element<HTMLButtonElement>('shoe-out').addEventListener('click', () => {
@@ -733,6 +811,7 @@ async function start(files: GameFiles) {
   const engine = parseNe(await files.read('WINDOWS/DOGZDLL.DLL'));
   palettes.set(256, readPalette(engine, PALETTE_256, 256));
   palettes.set(16, readPalette(engine, PALETTE_16, 16));
+  showPaintColours();
 
   const states = readStateNames(engine);
   scripts = parseScripts(await files.read('DOGZ.DOG/DATA/ALL_PTZ.SCP'), readOpcodes(engine));
@@ -743,6 +822,7 @@ async function start(files: GameFiles) {
   ballPicture = readPicture(engine, BALL_PICTURE);
   sprayPictures = [0, 1].map((n) => readPicture(engine, SPRAY_PICTURE + n));
   shoePicture = readPicture(engine, SHOE_PICTURE);
+  brushPicture = readPicture(engine, BRUSH_PICTURE);
   treatPictures = [0, 1, 2].map((colour) => readPicture(engine, TREAT_PICTURE + colour));
   bowlPictures = [0, 1].map((kind) =>
     [0, 1, 2, 3].map((n) => readPicture(engine, BOWL_PICTURE + 10 * kind + n))
