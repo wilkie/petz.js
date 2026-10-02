@@ -38,3 +38,7 @@ Not yet known: which dialog is which screen, beyond the adoption kit's.
 ## The paint colours
 
 [[read out]] The brush's colour is chosen from a popup menu the WAD builds itself, one owner-drawn item for each paint colour, as many as `PetParams` +0x232 says — 20 on 256 colours, 16 on 16 (seg4:23ad on): commands 1900 on, each drawn as a swatch of its ramp's first colour (seg4:26ac on). Choosing one sets `PetParams` +0x234, the brush's colour, to `n × ramp length + first` (seg4:2db9), and remaps the cursor's paint; it is kept in the profile, key 0x13 (`WritePetzProfileInt`, seg4:151e). See [[topic:behaviour]]. `PetParams` is DS:0x27c6 here: the cursor at +0x12, the buttons at +0x0e and +0x10.
+
+## Calling and the buttons
+
+[[read out]] A double click on the playpen (`WM_LBUTTONDBLCLK`, 0x203, in the window procedures' message tables at seg4:1876 and 1ced) sets DS:0xf98, which the frame copies into `PetParams` +0x10 and then clears (seg4:4353, 4526): the user calling the dog ([[topic:behaviour]]). The primary button goes to +0x0e (seg4:014d, which reads `VK_LBUTTON` unless the buttons are swapped) and the secondary to +0x0c (seg4:0187).

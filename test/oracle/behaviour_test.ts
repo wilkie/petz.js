@@ -624,6 +624,63 @@ withOracle('the engine’s behaviour', () => {
       expect(picture.pixels.some((n) => picture.colours[n].join() === '255,0,0')).toBe(true);
     });
 
+    it('is picked up by the scruff with the secondary button, and dangles from the cursor', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(200);
+
+      const neck = stage.ballOnStage(54);
+      stage.pointer = { x: neck.x, y: neck.y - 10, button: false, secondary: true };
+      run(2);
+      expect(pet.state).toBe(STATE.scruff);
+
+      /* Carried off to the left and up. */
+      run(40, (n) => {
+        stage.pointer = { x: neck.x - 2 * n, y: neck.y - 10 - n, button: false, secondary: true };
+      });
+      const held = stage.ballOnStage(54);
+      expect(Math.abs(held.x - stage.pointer.x)).toBeLessThan(1);
+      expect(held.y - stage.pointer.y).toBeCloseTo(Math.trunc(held.diameter / 2), 0);
+
+      stage.pointer = { ...stage.pointer, secondary: false };
+      run(2);
+      expect(pet.state).not.toBe(STATE.scruff);
+      expect(states).toContain(STATE.scruff);
+    });
+
+    it('is not scruffed far from its neck, nor while the user holds something', () => {
+      const { stage, pet, run } = setUp(3, 640, 480);
+      run(200);
+
+      const neck = stage.ballOnStage(54);
+      stage.pointer = { x: neck.x + 80, y: neck.y, button: false, secondary: true };
+      run(2);
+      expect(pet.state).not.toBe(STATE.scruff);
+
+      stage.pointer = { x: neck.x, y: neck.y, button: false, secondary: false };
+      run(1);
+      stage.brush = { x: 0, y: 0, colour: 16 };
+      stage.pointer = { x: neck.x, y: neck.y, button: false, secondary: true };
+      run(2);
+      expect(pet.state).not.toBe(STATE.scruff);
+    });
+
+    it('comes when called', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(200);
+
+      const at = stage.where();
+      stage.pointer = { x: at.x > 320 ? 60 : 580, y: 240, button: false };
+      run(1);
+      pet.call();
+      run(1);
+      expect(pet.state).toBe(STATE.chasingOwner);
+
+      run(400);
+      const now = stage.where();
+      expect(Math.abs(now.x - stage.pointer.x)).toBeLessThan(Math.abs(at.x - stage.pointer.x));
+      expect(states).toContain(STATE.chasingOwner);
+    });
+
     it('has the bowls the size of their pictures: full, half, empty and the rim', () => {
       for (const n of [0, 1, 2, 3, 10, 11, 12, 13]) {
         const picture = readPicture(engine, BOWL_PICTURE + n);

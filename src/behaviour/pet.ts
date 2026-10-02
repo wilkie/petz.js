@@ -35,6 +35,7 @@ export const STATE = {
   locomoteTrip: 6,
   locomote: 7,
   postLocomote: 8,
+  scruff: 0xa,
   chasingCursor: 0xd,
   chargingCursor: 0xe,
   grabbingCursor: 0xf,
@@ -86,6 +87,7 @@ export const GLOBAL = {
 
 /** Script positions the engine names by number (`readStateNames`). */
 const SITTING = 6;
+const SIT_PANT = 7;
 const STANDING = 9;
 const RUNNING = 21;
 
@@ -126,6 +128,8 @@ const SCRIPT = {
   eatFromBowlPause: 328,
   lap: 262,
   sick: 287,
+  pickedUp: 4,
+  dangling: 3,
   sprayed: 68,
   shakeOffSpray: 323,
   grabShoeRunning: 1,
@@ -177,6 +181,9 @@ const MOOD_PERIOD = 400;
 /** The ball the dog arrives by: a target is reached when it is ahead of the nose (seg7:6b45). */
 const NOSE = 55;
 
+/** The neck, by which the dog is scruffed (`DoScruffHandler`). */
+const NECK = 54;
+
 /** How fast the dog turns towards a target, in 256ths of a turn a frame (`DoLocomote`). */
 const TURN_RATE = 6;
 
@@ -214,7 +221,10 @@ export interface PetWorld {
   aim(target: { x: number; y: number }): number;
 
   /** The user's cursor, and whether its primary button is down; optional, for a dog left alone. */
-  cursor?(): { x: number; y: number; button: boolean };
+  cursor?(): { x: number; y: number; button: boolean; secondary?: boolean };
+
+  /** Whether the user holds a toy, food or tool (`0x220`, seg21:4533 on): the dog cannot be scruffed. */
+  holding?(): boolean;
 
   /** The part of the dog's body under a point (`AREA`), or -1. */
   areaAt?(point: { x: number; y: number }): number;
@@ -268,6 +278,9 @@ interface Sample {
   x: number;
   y: number;
   button: boolean;
+
+  /** The secondary button, which scruffs. */
+  secondary?: boolean;
 }
 
 /** How many past cursor samples this keeps: as many as the engine reads. */
@@ -522,6 +535,9 @@ export class Pet {
     this.time = time;
     this.sample();
     this.doPettingHandler();
+    this.doScruffHandler();
+    this.doCallingHandler();
+    this.called = false;
 
     const shown = this.dispatch();
     this.world.updateBall?.();
@@ -978,6 +994,8 @@ export class Pet {
         return this.doBegging(mode);
       case STATE.sprayReact:
         return this.doSprayReact(mode);
+      case STATE.scruff:
+        return this.doScruff(mode);
       case STATE.chasingCursor:
       case STATE.chargingCursor:
         return this.doChasingChargingCursor(mode);
@@ -3452,6 +3470,148 @@ export class Pet {
     } else {
       this.newGlobalState(GLOBAL.idle);
     }
+  }
+
+  // Scruffing and calling.
+
+  /** The secondary button the frame before (`0x216`). */
+  private secondaryWas = false;
+
+  /** Called this frame: the user double-clicked the playpen (`0x21c`, `DOGZ.WAD`'s DS:0xf98). */
+  private called = false;
+
+  /** The user calls the dog (a double click on the playpen, `WM_LBUTTONDBLCLK`). */
+  call() {
+    this.called = true;
+  }
+
+  /**
+   * `PetModule::DoScruffHandler` (seg21:4ec0), every frame: a press of the
+   * secondary button within 50 of the dog's neck (ball 54) picks it up by
+   * the scruff, unless the user holds something.
+   */
+  private doScruffHandler() {
+    const cursor = this.samples[0];
+    const secondary = !!cursor?.secondary;
+
+    if (cursor && this.state !== STATE.scruff && !this.world.holding?.()) {
+      const neck = this.world.ballOnStage?.(NECK);
+
+      if (
+        neck &&
+        Math.hypot(neck.x - cursor.x, neck.y - cursor.y) < 50 &&
+        secondary &&
+        !this.secondaryWas
+      ) {
+        this.newState(STATE.scruff);
+      }
+    }
+
+    this.secondaryWas = secondary;
+  }
+
+  /**
+   * `PetModule::DoCallingHandler` (seg21:4d36), every frame: called, an idle
+   * dog runs to the cursor (`eChasingOwner`), or, with the cursor on it —
+   * within its rectangle widened by a quarter of its standard size each
+   * side — sits and pants; a dog being taunted leaves the shoe and comes.
+   */
+  private doCallingHandler() {
+    if (!this.called) {
+      return;
+    }
+
+    const cursor = this.samples[0];
+
+    if (this.global === GLOBAL.idle && this.state !== STATE.chasingOwner && cursor) {
+      const rect = this.world.rect?.();
+      const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+      /* `XInsetRect` by minus a quarter of the standard size: widened. */
+      const [dx, dy] = [Math.trunc(-width / 4), Math.trunc(-height / 4)];
+      const on =
+        !!rect &&
+        Pet.within(
+          {
+            left: rect.left + dx,
+            right: rect.right - dx,
+            top: rect.top + dy,
+            bottom: rect.bottom - dy,
+          },
+          cursor
+        );
+
+      if (!on) {
+        this.resetScript(BELLY);
+        this.newState(STATE.chasingOwner);
+        return;
+      }
+
+      this.resetSoft();
+      this.pushTransition(SIT_PANT, BELLY);
+    }
+
+    if (this.global === GLOBAL.taunt) {
+      this.resetScript(BELLY);
+      this.newGlobalState(GLOBAL.idle, STATE.chasingOwner);
+    }
+  }
+
+  /**
+   * `PetModule::DoScruff` (seg21:637c): picked up (script 4), swaying, and
+   * dangling (3, again and again) by its neck from the cursor while the
+   * button is held; let go of, back to its food or the ball, or to idle.
+   * Its tilt, the cursor's shape, and its being put down by playing the
+   * pick-up backwards are not yet played.
+   */
+  private doScruff(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      this.resetScript();
+      this.push({ drift: 0 }, { glue: CHEST });
+      this.pinned = null;
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.releaseObject(1);
+      this.resetScript(CHEST);
+      this.push({ drift: 5 - (this.rand() % 11) });
+      this.pushStored(SCRIPT.pickedUp);
+      return undefined;
+    }
+
+    const cursor = this.samples[0];
+
+    if (!cursor?.secondary) {
+      this.pinned = null;
+      const global = this.reducedGlobal();
+
+      if (global === GLOBAL.begEat) {
+        this.newState(STATE.eating);
+      } else if (global === GLOBAL.fetch) {
+        this.newState(STATE.anticipatingBall);
+      } else {
+        this.newGlobalState(GLOBAL.idle);
+      }
+
+      return this.pop().step;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags) {
+      this.push({ glue: CHEST });
+      this.pushStored(SCRIPT.dangling);
+    }
+
+    /* Held by the top of its neck: the neck half its width below the cursor (seg21:637c, `Ballz` slot 0x38). */
+    const neck = this.world.ballOnStage?.(NECK);
+    this.pinned = {
+      ball: NECK,
+      x: cursor.x,
+      y: cursor.y + Math.trunc((neck?.diameter ?? 0) / 2),
+    };
+
+    return step;
   }
 
   // The spray bottle.

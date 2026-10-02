@@ -211,7 +211,11 @@ export class Stage implements PetWorld {
   y: number;
 
   /** Where the user's cursor is, and whether its primary button is down. */
-  pointer = { x: -1000, y: -1000, button: false };
+  pointer: { x: number; y: number; button: boolean; secondary?: boolean } = {
+    x: -1000,
+    y: -1000,
+    button: false,
+  };
 
   /** The breed as it came, before any painting. */
   readonly original: Breed;
@@ -225,6 +229,17 @@ export class Stage implements PetWorld {
   /** The engine moves the cursor (`SetCursorPos`): here, where the stage takes the cursor to be. */
   moveCursor(point: { x: number; y: number }) {
     this.pointer = { ...this.pointer, x: point.x, y: point.y };
+  }
+
+  /** Whether the user holds something: then the dog cannot be scruffed. */
+  holding() {
+    return (
+      !!this.ball?.held ||
+      this.foods.some((food) => food.held) ||
+      !!this.shoe?.held ||
+      !!this.spray ||
+      !!this.brush
+    );
   }
 
   /** The spray bottle, held on the cursor, and whether it sprays (the button down). */

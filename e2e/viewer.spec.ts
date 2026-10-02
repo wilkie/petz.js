@@ -152,3 +152,34 @@ test('offers the paint colours for the brush, as the game’s menu does', async 
   await page.selectOption('#colours', '16');
   await expect(page.locator('#brush-colours .swatch')).toHaveCount(16);
 });
+
+test('comes when called with a double click', async ({ page }) => {
+  test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
+  await page.setViewportSize({ width: 1280, height: 1200 });
+  await page.goto('/viewer.html');
+
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await page.check('#live');
+  await page.waitForTimeout(1000);
+
+  /* Far in a corner, which the dog is not in. */
+  const box = (await page.locator('canvas').boundingBox())!;
+  const corner = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')!;
+    const { data } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+    let x = 0;
+    let n = 0;
+
+    for (let at = 3; at < data.length; at += 4) {
+      if (data[at]) {
+        x += ((at - 3) / 4) % canvas.width;
+        n++;
+      }
+    }
+
+    return x / n / canvas.width < 0.5 ? 0.95 : 0.05;
+  });
+
+  await page.mouse.dblclick(box.x + box.width * corner, box.y + box.height * 0.9);
+  await expect(page.locator('#mood')).toHaveText(/^eChasingOwner/, { timeout: 2000 });
+});

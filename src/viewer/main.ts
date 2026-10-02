@@ -490,7 +490,11 @@ canvas.addEventListener('mousemove', (event) => {
   }
 
   const point = stagePoint(event);
-  live.stage.pointer = { ...point, button: (event.buttons & 1) !== 0 };
+  live.stage.pointer = {
+    ...point,
+    button: (event.buttons & 1) !== 0,
+    secondary: (event.buttons & 2) !== 0,
+  };
 
   if (live.stage.brush) {
     Object.assign(live.stage.brush, point);
@@ -511,6 +515,12 @@ canvas.addEventListener('mousemove', (event) => {
   }
 });
 
+/* The secondary button is the game's, not the browser's menu's. */
+canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+
+/** A double click calls the dog, as `DOGZ.WAD` sets the call for `WM_LBUTTONDBLCLK`. */
+canvas.addEventListener('dblclick', () => live?.pet.call());
+
 canvas.addEventListener('mouseleave', () => {
   if (live) {
     /* The cursor off the stage is still where it left it, to the engine. */
@@ -529,6 +539,12 @@ canvas.addEventListener('mousedown', (event) => {
 
   const point = stagePoint(event);
   const { stage, pet } = live;
+
+  /* The secondary button scruffs the dog (`DoScruffHandler`); it does nothing else here. */
+  if (event.button === 2) {
+    stage.pointer = { ...stage.pointer, ...point, secondary: true };
+    return;
+  }
 
   /* The spray bottle held sprays while the button is down. */
   if (stage.spray) {
@@ -594,7 +610,12 @@ canvas.addEventListener('mousedown', (event) => {
  * Letting go of the button throws the ball held, at the speed the cursor
  * last moved, and sprays with the spray bottle.
  */
-window.addEventListener('mouseup', () => {
+window.addEventListener('mouseup', (event) => {
+  if (live && event.button === 2) {
+    live.stage.pointer = { ...live.stage.pointer, secondary: false };
+    return;
+  }
+
   if (live) {
     live.stage.pointer = { ...live.stage.pointer, button: false };
 

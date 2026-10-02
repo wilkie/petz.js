@@ -152,8 +152,15 @@ flowchart LR
 - [[read out]] Let go of, the brush goes back in its box, and if its tip is over the dog — the dog's rectangle widened by its standard size, as for the spray — the ball under the tip (`Ballz::HitTest`) is painted, with every ball the breed gives the same `[16 Ball Color]` number, as it came (`0xdd1`, a copy kept of it): each takes the brush's colour, on 256 colours plus its own place in its ramp, its original `[256 Ball Color]` less 16 modulo 6, so keeping its shade (`SetBallColor`, seg10:455f, into the table for the display's depth, `0xdc9`). The tongue (63, 64), the nose and nostrils (55, 17, 41), the eyes (8, 32) and the irises (14, 38) are not painted. The speckles are made again from the new colours (`GenerateSpeckleColors`). The dog does not mind.
 - [[inferred]] Whether the engine keeps the paint when the dog is saved is not yet read; the viewer's dog keeps it until it is started again.
 
+## Scruffing and calling
+
+- [[read out]] Every frame, `DoScruffHandler` (seg21:4ec0) picks the dog up by the scruff (`eScruff`, 0xa) when the secondary button is newly pressed within 50 pixels (DS:0x22e6) of its neck, ball 54 — not while the user holds a toy, food or tool (`0x220`, set as the sprites are updated, seg21:4533 on). The primary button is `PetParams` +0x0e, the secondary +0x0c ([[file:DOGZ.DOG/DOGZ.WAD]]).
+- [[read out]] `DoScruff` (seg21:637c) lets go of what is under its paw, drops its script at once, sways (a drift of −5 to 5), is picked up (script 4) and dangles (3, again and again) while the button is held: the dog's rectangle is moved each frame so that its neck is below the cursor by half the neck's width (`Ballz` slot 0x38, the ball's drawn size) — held by the top of its neck. Let go of, it goes back to its food or to waiting for the ball, or is left alone.
+- [[read out]] Every frame, `DoCallingHandler` (seg21:4d36) answers a call — `PetParams` +0x10, which [[file:DOGZ.DOG/DOGZ.WAD]] sets for one frame on a double click: an idle dog runs to the cursor (`eChasingOwner`), or, with the cursor on it — its rectangle widened by a quarter of its standard size — sits and pants; a dog being taunted with the shoe leaves it and comes.
+- [[inferred]] Not yet played: the cursor's shapes the engine asks for (`PushCursorRequest`), the dangling dog's tilt (the pet sprite's method at 0x80, setting a fudger's target, and `0x8ae2`), and its being put down by playing the pick-up backwards (`0x8ad6` from the frame shown).
+
 ## Not yet
 
-- [[read out]] Scruffing, `eGuilty` and birthing are states this does not yet play; nor, at play, the dog faking a throw, tumbling with the ball, the user too close, turning to the ball before a grab (`0x8ae8`), or the ball moved during a ball trick (`0x8aed`, `0x8af4`).
+- [[read out]] Guarding the screen, `eGuilty`, birthing and poo are states this does not yet play; nor, at play, the dog faking a throw, tumbling with the ball, the user too close, turning to the ball before a grab (`0x8ae8`), or the ball moved during a ball trick (`0x8aed`, `0x8af4`).
 - [[read out]] `DoTargettedLocomote` passes the target's distance from a local it never sets; the reimplementation passes 4, as `DoLocomote` does.
 - [[inferred]] `ResetScriptSoft`, which a state calls leaving, is taken to let the script playing finish and drop the rest.
