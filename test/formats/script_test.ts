@@ -1,4 +1,4 @@
-import { timeline } from '../../src/behaviour/timeline.ts';
+import { DEFAULT_GLUE, timeline } from '../../src/behaviour/timeline.ts';
 import { OP, parseScripts } from '../../src/formats/script.ts';
 
 /** Opcodes' operand counts, as DOGZDLL.DLL's table gives the ones used here. */
@@ -12,6 +12,11 @@ const ARITY = new Map<number, number>([
   [OP.random, 2],
   [OP.call, 3],
   [OP.end, 0],
+  [0x8ada, 1],
+  [0x8adb, 2],
+  [0x8ad7, 0],
+  [0x8ad8, 1],
+  [0x8ae5, 3],
 ]);
 
 /** A script file: a copyright line, records, a total, and variants, each led by its length. */
@@ -51,6 +56,7 @@ function file(scripts: { from: number; to: number; variants: number[][] }[]) {
 }
 
 const flags = (frame: number) => ({ 10: 1, 13: 2 })[frame] ?? 0;
+const frames = (steps: { frame: number }[]) => steps.map(({ frame }) => frame);
 
 describe('the scripts', () => {
   const scripts = parseScripts(
@@ -82,16 +88,58 @@ describe('the scripts', () => {
   });
 
   it('play frames and ranges in order', () => {
-    expect(timeline(scripts, 0, 0, { flags, random: () => 0 })).toEqual([5, 7, 8, 9]);
+    expect(frames(timeline(scripts, 0, 0, { flags, random: () => 0 }))).toEqual([5, 7, 8, 9]);
   });
 
   it('repeat, and walk to the end or the start of a sequence by its flags', () => {
-    expect(timeline(scripts, 1, 0, { flags, random: () => 0 })).toEqual([1, 1]);
-    expect(timeline(scripts, 1, 1, { flags, random: () => 0 })).toEqual([11, 12, 13, 12, 11, 10]);
+    expect(frames(timeline(scripts, 1, 0, { flags, random: () => 0 }))).toEqual([1, 1]);
+    expect(frames(timeline(scripts, 1, 1, { flags, random: () => 0 }))).toEqual([
+      11, 12, 13, 12, 11, 10,
+    ]);
   });
 
-  it('call other scripts', () => {
-    expect(timeline(scripts, 2, 0, { flags, random: () => 0 })).toEqual([5, 7, 8, 9]);
+  it('call other scripts, gluing each by the belly', () => {
+    const steps = timeline(scripts, 2, 0, { flags, random: () => 0 });
+
+    expect(frames(steps)).toEqual([5, 7, 8, 9]);
+    expect(steps[0].glue).toBe(DEFAULT_GLUE);
+  });
+
+  it('give the next frame its sounds, its glue and its turn', () => {
+    const [events] = parseScripts(
+      file([
+        {
+          from: 0,
+          to: 0,
+          variants: [
+            [
+              OP.begin,
+              0x8ada,
+              56,
+              0x8adb,
+              3,
+              4,
+              0x8ad8,
+              52,
+              0x8ae5,
+              1,
+              16,
+              0,
+              20,
+              0x8ad7,
+              21,
+              OP.end,
+            ],
+          ],
+        },
+      ]),
+      ARITY
+    ).map((_, index, all) => timeline(all, index, 0, { flags, random: (n) => n - 1 }));
+
+    expect(events).toEqual([
+      { frame: 20, sounds: [56, 4], glue: 52, turn: 16 },
+      { frame: 21, glue: 50 },
+    ]);
   });
 
   it('refuse a variant longer than its length', () => {

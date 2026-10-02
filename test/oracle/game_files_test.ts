@@ -187,7 +187,7 @@ describeWithOracle("the oracle's scripts", () => {
           flags: (frame) => tags[frame] ?? 3,
           random: random(index + 1),
         });
-        outside += frames.filter((frame) => frame < 0 || frame >= header.frameCount).length;
+        outside += frames.filter(({ frame }) => frame < 0 || frame >= header.frameCount).length;
       })
     );
 
@@ -200,4 +200,45 @@ describeWithOracle("the oracle's scripts", () => {
 
     expect(starts).toBe(ends);
   });
+});
+
+describeWithOracle("the oracle's sounds", () => {
+  const DOGZ = join(DATA, '..');
+  const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
+  const scripts = parseScripts(read('ALL_PTZ.SCP'), readOpcodes(engine));
+
+  it.each(['BIGDOG', 'BULLDOG', 'CHIUA', 'SCOTTY', 'TERRIER'])(
+    'are named by %s’s lists, 81 each, every one there, and reached by every number the scripts play',
+    (name) => {
+      const breed = parseLnz(new TextDecoder('latin1').decode(read(`${name}.LNZ`)));
+      const [adult, puppy] = breed.sections
+        .get('Sound List')!
+        .map((line) => String(line.values[0]));
+      const played = new Set<number>();
+
+      for (const script of scripts) {
+        for (const element of script.variants.flat()) {
+          if ('op' in element && element.op >= 0x8ada && element.op <= 0x8ade) {
+            element.operands.forEach(
+              (operand) => typeof operand === 'number' && played.add(operand)
+            );
+          }
+        }
+      }
+
+      for (const list of [adult, puppy]) {
+        const names = readFileSync(join(DOGZ, list.toUpperCase()), 'latin1')
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        const sounds = join(DOGZ, 'SOUNDS');
+
+        expect(names).toHaveLength(81);
+        expect(
+          names.filter((file) => !existsSync(join(sounds, file.toUpperCase().replace(/\\/g, '/'))))
+        ).toEqual([]);
+        expect(Math.max(...played)).toBeLessThan(names.length);
+      }
+    }
+  );
 });

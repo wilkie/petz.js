@@ -66,6 +66,21 @@ export function marks(breed: Breed, placed: Placed[]): Mark[] {
   return list.sort((a, b) => b.depth - a.depth || (a.kind === 'line' ? -1 : 1));
 }
 
+/**
+ * Where a ball of a frame is drawn, relative to the dog's origin: what a
+ * player needs to keep a glued ball in place from one frame to the next.
+ */
+export function ballAt(
+  breed: Breed,
+  header: AnimationHeader,
+  frame: Frame,
+  ball: number,
+  { age = 0, yaw = 0 }: Pick<DrawOptions, 'age' | 'yaw'>
+) {
+  const placed = project(breed, header, frame, scalesForAge(breed, age), yaw, 100 - age);
+  return { x: placed[ball].x, y: placed[ball].y };
+}
+
 /** Draws the frame into a bitmap of palette indices, as Dogz does. */
 export function drawPet(
   bitmap: IndexedBitmap,
