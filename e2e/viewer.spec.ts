@@ -43,7 +43,9 @@ test('leaves a dog to itself, live', async ({ page }) => {
   await page.check('#live');
 
   await expect(page.locator('#mood')).toHaveText(/^e[A-Za-z]+, excitement \d+$/);
-  await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(5000);
+
+  /* Live, drawn at the game's size: a quarter of the pixels. */
+  await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(1250);
 });
 
 test('begs for a treat held up', async ({ page }) => {
@@ -62,4 +64,30 @@ test('begs for a treat held up', async ({ page }) => {
 
   /* Once it has begged, its brain wants the red treat, and chooses its tricks. */
   await expect(page.locator('#mood')).toHaveText(/wants TrickRed$/, { timeout: 40000 });
+});
+
+test('fetches a ball thrown', async ({ page }) => {
+  test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
+  await page.goto('/viewer.html');
+
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await page.check('#live');
+
+  const box = (await page.locator('canvas').boundingBox())!;
+  const at = (x: number, y: number) =>
+    page.mouse.move(box.x + box.width * x, box.y + box.height * y);
+  await at(0.3, 0.3);
+  await page.click('#ball-out');
+  await at(0.3, 0.3);
+  await page.waitForTimeout(3000);
+
+  /* Dragged to the right and let go. */
+  await page.mouse.down();
+  for (let n = 1; n <= 4; n++) {
+    await at(0.3 + 0.05 * n, 0.3);
+    await page.waitForTimeout(45);
+  }
+  await page.mouse.up();
+
+  await expect(page.locator('#mood')).toHaveText(/^eReturningBall/, { timeout: 30000 });
 });

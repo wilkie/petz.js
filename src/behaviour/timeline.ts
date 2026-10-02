@@ -43,6 +43,10 @@ export interface Step {
    * followed by `8ad3` (`PopScript`, seg7:597b). See `placeByReference`.
    */
   reference?: boolean;
+
+  /** An object grabbed into a slot of the dog's — 0 the mouth, 1 a paw — or let go of (`8b03`, `8b04`). */
+  grab?: number;
+  release?: number;
 }
 
 /** The ball a script glues by when it says none: the belly (`GetDefaultGlueBall`). */
@@ -55,6 +59,8 @@ const GLUE_CHEST = 0x8ad7;
 const GLUE = 0x8ad8;
 const TURN = 0x8ae5;
 const REFERENCE = 0x8ad3;
+const GRAB = 0x8b03;
+const RELEASE = 0x8b04;
 const CUE = 0x8ae3;
 const EASE = 0x8ae6;
 const DRIFT = 0x8ae9;
@@ -172,6 +178,12 @@ export function timeline(
             break;
           case GLUE:
             pending.glue = value(a);
+            break;
+          case GRAB:
+            pending.grab = value(a);
+            break;
+          case RELEASE:
+            pending.release = value(a);
             break;
           case REFERENCE:
             if (frames.length) {

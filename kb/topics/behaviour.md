@@ -1,7 +1,7 @@
 ---
 kind: topic
 name: Behaviour
-summary: How the dog decides what to do when left to itself — a state machine that pushes scripts onto a queue: an idle plan of pants and tricks, tricks chosen by mood and nature, sleep, and wandering from place to place — with the excitement that cycles over minutes and the factors of its nature behind every choice.
+summary: How the dog decides what to do when left to itself — a state machine that pushes scripts onto a queue: an idle plan of pants and tricks, tricks chosen by mood and nature, sleep, wandering from place to place, petting, treats and fetch — with the excitement that cycles over minutes and the factors of its nature behind every choice.
 source:
   [
     src/behaviour/pet.ts,
@@ -103,8 +103,21 @@ flowchart LR
 - [[read out]] A treat put down is eaten in one bite (script 86; `DoEating`, seg18:12cb). Its cue 10 is the bite: the treat is gone, the dog's frustration settles to its centre, and, only if the brain was not yet woken, the trick last done is rewarded ([[format:tdt]]). So the trick weights learn only from a treat given before the dog has begged; once it has, what it learns is the brain's.
 - [[inferred]] How the dog walks to a treat put down, and its following the treat about while it begs, are simplified: it steers to the treat as when chasing.
 
+## Fetch
+
+- [[read out]] The ball is a sprite of its own, `BallSprite` (seg20). Taken out of the toy box it starts the global state 0x3f0, playing ball (`EnterFetch`, seg19:0000): held, the dog begs for it as for a treat, and picks tricks by their play weight ([[format:tdt]]); a frustrated, grabby dog may leap and snatch it from the hand (`PickTrickState`, seg21:6907). Put back in the box, the dog is left alone.
+- [[read out]] Held, the ball follows the cursor, and its speed is half how far the cursor moved since the frame before (`BallSprite::Update`, seg20:20b8). Let go, each frame it loses a fortieth of its speed, stops once below a pixel a frame each way, moves by the whole pixels of its speed, and bounces straight back off the stage's edges (`UpdateLocation`, seg20:2634). It is moving fast above 120 pixels squared a frame (`IsMovingFast`), and `ProjectLocation` rolls it on so many frames to say where it will be and how often it will bounce.
+- [[read out]] Thrown, the dog's frustration settles, and it chases the ball, if `rand() % 30` is below its excitement plus 10 or its head is off the stage; otherwise it sits and watches, six to ten pants, and loses interest (`DoObservingBallThrown`, seg19:022b).
+- [[read out]] Chasing (0x18), it steers at where the ball will be four frames on (seg21:7a8f). Running, if the ball will pass within 75 of a point 200 above its chin in the next fourteen frames, bouncing at most once, it leaps for it (seg21:7f4d: scripts 26 and 25, `DoJumpingGrabbingBall`, seg19:0e30); a clumsy dog misses (60 to look again, maybe). Reaching a ball that will not bounce in four frames, it grabs it (`DoGrabbingBall`, seg19:0941): a pounce (29) if the ball has not moved since it put it down, otherwise reaching down (82) and grabbing (81) (`PushBallGrabAction`, seg19:2bf9); a clumsy dog fumbles it (185, 186) and chases it again.
+- [[read out]] `0x8b03 slot` and `0x8b04 slot` in a script grab and let go of the object at play (`GrabObject`, seg14:04e4, and `ReleaseObject`): slot 0 is the mouth, ball 51, the chin, and slot 1 a paw, ball 45. Held, the ball goes where that ball of the dog goes; let go, it rests there. `GrabObject` takes the ball wherever it is, only not from the user's hand unless the dog is snatching it.
+- [[read out]] `0x8af4 ball x y` slides the dog, evenly over the frames up to the next cue 2, so that its ball is at the point when that frame shows; `0x7ffd` for x is the ball at play (`PopScript`, seg7:5e98 and 7144 on). So the grab lands the chin on the ball, and the leap meets it in the air.
+- [[read out]] With the ball, a dog decides whether it is naughty, `rand() % 100` below its naughty factor (`DecideIfNaughty`, seg14:20a6). Good, it runs back to the user (0x19: at the cursor, kept within 100 of the dog); naughty, somewhere far from the dog and the user (0x1a, `GetNewNaughtyTarget`, seg19:275f). There it stops, turns round if facing more than 0x50 away, and drops the ball (script 8; `DoReleasingBall`, seg19:033d, `PushBallReleaseAction`, seg19:2a84). A naughty dog snatches it back when the cursor reaches for it.
+- [[read out]] Then it waits for the next throw, doing a trick or two by play weight between pants (`DoAnticipatingBall`, seg19:101d; a naughty dog guards it, 0x1c); if the cursor moves off, it takes up the ball and brings it again, and after enough it loses interest and goes back to idle. A trick with the ball needs the ball free and within a box half again its standard size ahead of it (`IsBallGrabbable`, seg19:018e): nosing it (102), walking on it (88, 89), bouncing on it (87), throwing it (97) and chasing it, balancing it (85) (`PushBallTrick`, seg21:6bde).
+- [[inferred]] The ball's picture is not yet read: the viewer draws a circle 12 pixels across. Where `0x8af4` plays the frames ahead to know where the ball will be, the reimplementation takes the target frame as though the dog stood still. The distances `GetNewNaughtyTarget` is called with are inferred.
+- [[inferred]] On a stage smaller than Dogz's own screen a dog runs far enough to drop the ball off it, and fetches it again and again; the viewer's live stage is 640 by 480, as the game's.
+
 ## Not yet
 
-- [[read out]] The ball, the spray bottle, the cursor games and scruffing are states this does not yet play.
+- [[read out]] The spray bottle, the cursor games and scruffing are states this does not yet play; nor, at play, the dog faking a throw, tumbling with the ball, the user too close, turning to the ball before a grab (`0x8ae8`), or the ball moved during a ball trick (`0x8aed`, `0x8af4`).
 - [[read out]] `DoTargettedLocomote` passes the target's distance from a local it never sets; the reimplementation passes 4, as `DoLocomote` does.
 - [[inferred]] `ResetScriptSoft`, which a state calls leaving, is taken to let the script playing finish and drop the rest.

@@ -26,6 +26,69 @@ export interface Treat {
   y: number;
 }
 
+/** The size of the ball, in Dogz's pixels: its picture is not yet read, so this is a guess. */
+export const BALL_SIZE = 12;
+
+/**
+ * A ball: where it is, how fast it rolls, and who has it — the user, on
+ * the cursor; the dog, in its mouth (slot 0) or under a paw (slot 1); or
+ * nobody, on the stage.
+ */
+export interface Ball {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  held: boolean;
+  slot: number | null;
+
+  /** Where it was put down, and where the dog's chin was then (`RecordPosition`). */
+  recorded: { x: number; y: number; chinX: number; chinY: number } | null;
+}
+
+/** The dog's balls an object is held by: the chin, and a toe (`GrabObject`, seg14:04e4). */
+const HOLDERS = [51, 45];
+
+/**
+ * `BallSprite::UpdateLocation` (seg20:2634): a frame of rolling. The speed
+ * loses a fortieth of itself, stops within a pixel a frame, and turns back
+ * at the stage's edges. Returns whether it bounced.
+ */
+export function rollBall(ball: Ball, width: number, height: number) {
+  if (ball.vx === 0 && ball.vy === 0) {
+    return false;
+  }
+
+  ball.vx -= ball.vx / 40;
+  ball.vy -= ball.vy / 40;
+
+  if (ball.vx < 1 && ball.vx > -1) {
+    ball.vx = 0;
+  }
+
+  if (ball.vy < 1 && ball.vy > -1) {
+    ball.vy = 0;
+  }
+
+  ball.x += Math.trunc(ball.vx);
+  ball.y += Math.trunc(ball.vy);
+
+  const half = BALL_SIZE / 2;
+  let bounced = false;
+
+  if ((ball.x - half < 0 && ball.vx < 0) || (ball.x + half > width && ball.vx > 0)) {
+    ball.vx = -ball.vx;
+    bounced = true;
+  }
+
+  if ((ball.y - half < 0 && ball.vy < 0) || (ball.y + half > height && ball.vy > 0)) {
+    ball.vy = -ball.vy;
+    bounced = true;
+  }
+
+  return bounced;
+}
+
 export class Stage implements PetWorld {
   /** The dog's origin on the stage, from its top left. */
   x: number;
@@ -35,6 +98,10 @@ export class Stage implements PetWorld {
   pointer = { x: -1000, y: -1000, button: false };
 
   treat: Treat | null = null;
+  ball: Ball | null = null;
+
+  /** Where the cursor was the frame before: a ball let go takes half the difference as its speed. */
+  private lastPointer = { x: -1000, y: -1000 };
 
   /** Each ball's part of the body (`readBodyAreas`); without them, nothing is hit. */
   bodyAreas: number[] = [];
@@ -68,7 +135,7 @@ export class Stage implements PetWorld {
     this.frame = frames[0];
   }
 
-  private ball(frame: Frame, ball: number, rotation: number) {
+  private ballOf(frame: Frame, ball: number, rotation: number) {
     return ballAt(this.breed, this.header, frame, ball, { age: this.age, yaw: rotation });
   }
 
@@ -97,8 +164,8 @@ export class Stage implements PetWorld {
     const next = this.frames[step.frame];
 
     if (step.glue !== undefined) {
-      const before = this.ball(this.frame, step.glue, this.rotation);
-      const after = this.ball(next, step.glue, rotation);
+      const before = this.ballOf(this.frame, step.glue, this.rotation);
+      const after = this.ballOf(next, step.glue, rotation);
       this.x += before.x - after.x;
       this.y += before.y - after.y;
     } else if (reference !== undefined) {
@@ -192,13 +259,110 @@ export class Stage implements PetWorld {
     return { width: Math.trunc(extent('x')), height: Math.trunc(extent('y')) };
   }
 
+  /**
+   * A frame of the ball (`BallSprite::Update`, seg20:20b8): held, it follows
+   * the cursor; in the dog's mouth or under its paw, that ball of the dog;
+   * else it rolls.
+   */
+  updateBall() {
+    const ball = this.ball;
+
+    if (ball?.held) {
+      ball.vx = Math.trunc((this.pointer.x - this.lastPointer.x) / 2);
+      ball.vy = Math.trunc((this.pointer.y - this.lastPointer.y) / 2);
+      ball.x = this.pointer.x;
+      ball.y = this.pointer.y;
+    } else if (ball && ball.slot !== null) {
+      const holder = this.placed()[HOLDERS[ball.slot]];
+      ball.x = holder.x;
+      ball.y = holder.y;
+      ball.vx = ball.vy = 0;
+    } else if (ball) {
+      rollBall(ball, this.width, this.height);
+    }
+
+    this.lastPointer = { x: this.pointer.x, y: this.pointer.y };
+  }
+
+  /** A ball of the dog in some frame, were the dog to stay where it is: what `8af4` aims with. */
+  ballInFrame(frame: number, ball: number, rotation: number) {
+    const at = this.ballOf(this.frames[frame], ball, rotation);
+    return { x: this.x + at.x, y: this.y + at.y };
+  }
+
+  /** Moves the dog by so much, as `PopScript` slides it towards an aim (seg7:6f6b). */
+  nudge(dx: number, dy: number) {
+    this.x += dx;
+    this.y += dy;
+  }
+
+  /** `BallSprite::ProjectLocation`: where the ball will be so many frames on, and how often it will bounce. */
+  projectBall(frames: number) {
+    const ball = this.ball!;
+    const ahead = { ...ball };
+    let bounces = 0;
+
+    for (let n = 0; n < frames; n++) {
+      if (rollBall(ahead, this.width, this.height)) {
+        bounces++;
+      }
+    }
+
+    return { x: ahead.x, y: ahead.y, bounces };
+  }
+
+  /** `PetModule::GrabObject`: the ball into the dog's mouth, or under its paw. */
+  grabBall(slot: number) {
+    if (this.ball) {
+      this.ball.slot = slot;
+      this.ball.held = false;
+    }
+  }
+
+  /**
+   * `PetModule::ReleaseObject`: the ball put down where the dog held it,
+   * at rest; from the mouth, recorded there (`RecordPosition`).
+   */
+  releaseBall(slot: number) {
+    const ball = this.ball;
+
+    if (!ball || ball.slot !== slot) {
+      return;
+    }
+
+    const holder = this.placed()[HOLDERS[slot]];
+    ball.slot = null;
+    ball.x = holder.x;
+    ball.y = holder.y;
+    ball.vx = ball.vy = 0;
+    ball.recorded = slot === 0 ? { x: ball.x, y: ball.y, chinX: holder.x, chinY: holder.y } : null;
+  }
+
+  /** `BallSprite::HasMoved` (seg20:1f28): moved since put down, or the dog's chin 7 pixels from where it was. */
+  ballHasMoved() {
+    const ball = this.ball;
+    const chin = this.placed()[HOLDERS[0]];
+
+    if (!ball?.recorded) {
+      return true;
+    }
+
+    const { x, y, chinX, chinY } = ball.recorded;
+    return !(
+      ball.x === x &&
+      ball.y === y &&
+      Math.abs(chinX - chin.x) < 7 &&
+      Math.abs(chinY - chin.y) < 7
+    );
+  }
+
   eatTreat() {
     this.treat = null;
   }
 
   /** Where the dog is: its belly, on the stage. */
   where() {
-    const belly = this.ball(this.frame, DEFAULT_GLUE, this.rotation);
+    const belly = this.ballOf(this.frame, DEFAULT_GLUE, this.rotation);
     return { x: this.x + belly.x, y: this.y + belly.y };
   }
 
@@ -215,8 +379,8 @@ export class Stage implements PetWorld {
     let closest = Infinity;
 
     for (let rotation = -128; rotation < 128; rotation += 16) {
-      const from = this.ball(this.frame, DEFAULT_GLUE, rotation);
-      const to = this.ball(this.frame, head, rotation);
+      const from = this.ballOf(this.frame, DEFAULT_GLUE, rotation);
+      const to = this.ballOf(this.frame, head, rotation);
       const angle = Math.atan2(to.y - from.y, to.x - from.x) - want;
       const off = Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle)));
 

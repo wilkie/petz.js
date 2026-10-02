@@ -239,8 +239,8 @@ describeWithOracle('the engine’s behaviour', () => {
       header.ballCount
     );
 
-    const setUp = (seed: number) => {
-      const stage = new Stage(320, 240, breed, header, frames, 5);
+    const setUp = (seed: number, width = 320, height = 240) => {
+      const stage = new Stage(width, height, breed, header, frames, 5);
       stage.bodyAreas = readBodyAreas(engine);
       const pet = new Pet(
         {
@@ -351,6 +351,52 @@ describeWithOracle('the engine’s behaviour', () => {
 
       expect(stage.treat).toBeNull();
       expect(pet.brainActive).toBe(false);
+    });
+
+    /* On Dogz's own 640 by 480 screen: a dog runs too far for a smaller one. */
+    it('fetches a ball thrown, brings it back and drops it', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(200);
+
+      stage.ball = { x: 320, y: 120, vx: 0, vy: 0, held: true, slot: null, recorded: null };
+      stage.pointer = { x: 320, y: 120, button: true };
+      pet.ballPickedUp();
+      expect(pet.global).toBe(GLOBAL.fetch);
+      run(180);
+
+      /* Thrown to the right, fast, and let go. */
+      run(3, (n) => {
+        stage.pointer = { x: 340 + 20 * n, y: 140, button: true };
+      });
+      stage.ball.held = false;
+      stage.pointer.button = false;
+      pet.ballThrown();
+
+      const thrown = states.length;
+      let inMouth = false;
+      run(700, () => {
+        inMouth ||= stage.ball?.slot === 0;
+      });
+      /* Run after, or leapt and caught. */
+      const chased: number[] = [STATE.chasingBall, STATE.jumpingGrabbingBall];
+      expect(states.slice(thrown).some((state) => chased.includes(state))).toBe(true);
+      expect(inMouth).toBe(true);
+      expect(states.slice(thrown)).toContain(STATE.returningBallDirect);
+      expect(states.slice(thrown)).toContain(STATE.releasingBall);
+      expect(stage.ball).toMatchObject({ held: false });
+    });
+
+    it('waits for the ball held up, and does its tricks', () => {
+      const { stage, pet, run, states } = setUp(3, 640, 480);
+      run(200);
+
+      stage.ball = { x: 320, y: 120, vx: 0, vy: 0, held: true, slot: null, recorded: null };
+      stage.pointer = { x: 320, y: 120, button: true };
+      pet.ballPickedUp();
+      run(600);
+
+      expect(states.slice(200).some((state) => state === STATE.begging)).toBe(true);
+      expect(states.slice(200).some((state) => state >= FIRST_TRICK)).toBe(true);
     });
   });
 

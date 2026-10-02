@@ -8,7 +8,7 @@
 import { Brain, type BrainMapping } from '../behaviour/brain.ts';
 import { Pet, type PetData } from '../behaviour/pet.ts';
 import { borlandRand } from '../behaviour/random.ts';
-import { Stage } from '../behaviour/stage.ts';
+import { BALL_SIZE, Stage } from '../behaviour/stage.ts';
 import { DEFAULT_GLUE, type Step, timeline } from '../behaviour/timeline.ts';
 import { transitionTable } from '../behaviour/transitions.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
@@ -58,8 +58,12 @@ const context = canvas.getContext('2d')!;
 /** Dogz draws a frame every 45 milliseconds at most (`ReallyDoDrawFrame`, seg21:3dee). */
 const FRAMES_PER_SECOND = 1000 / 45;
 
-/** Dogz's own pixels, drawn this many times larger to be seen. */
-const ZOOM = 2;
+/**
+ * Dogz's own pixels, drawn this many times larger to be seen; live, the
+ * stage is Dogz's own 640 by 480 screen, drawn at its size, as the dog
+ * walks and throws as far as it does in the game.
+ */
+let zoom = 2;
 
 let header: AnimationHeader;
 const breeds = new Map<string, Breed>();
@@ -96,7 +100,13 @@ let brainMap: BrainMapping[] = [];
 let live: { pet: Pet; stage: Stage; started: number } | null = null;
 
 /** The stage, in Dogz's own pixels. */
-const STAGE = { width: canvas.width / ZOOM, height: canvas.height / ZOOM };
+const STAGE = { width: canvas.width / zoom, height: canvas.height / zoom };
+
+function setZoom(to: number) {
+  zoom = to;
+  STAGE.width = canvas.width / zoom;
+  STAGE.height = canvas.height / zoom;
+}
 
 function draw() {
   if (live) {
@@ -314,6 +324,7 @@ function tickLive() {
   stage.show(step, step.rotation, step.placedBy);
   drawDog(step.frame, stage.x, stage.y, step.rotation);
   drawTreat(stage);
+  drawBall(stage);
 
   if (soundInput.checked) {
     for (const sound of step.sounds ?? []) {
@@ -340,8 +351,25 @@ function drawTreat(stage: Stage) {
 
   context.fillStyle = TREAT_COLOURS[treat.colour];
   context.beginPath();
-  context.arc(treat.x * ZOOM, treat.y * ZOOM, 4 * ZOOM, 0, 2 * Math.PI);
+  context.arc(treat.x * zoom, treat.y * zoom, 4 * zoom, 0, 2 * Math.PI);
   context.fill();
+}
+
+/** The ball, not yet the game's own picture of it. */
+function drawBall(stage: Stage) {
+  const ball = stage.ball;
+
+  if (!ball) {
+    return;
+  }
+
+  context.fillStyle = '#e8c21a';
+  context.strokeStyle = '#000';
+  context.lineWidth = zoom;
+  context.beginPath();
+  context.arc(ball.x * zoom, ball.y * zoom, (BALL_SIZE / 2) * zoom, 0, 2 * Math.PI);
+  context.fill();
+  context.stroke();
 }
 
 /** Where the cursor is over the stage, in Dogz's pixels. */
@@ -387,7 +415,16 @@ canvas.addEventListener('mousedown', (event) => {
   const treat = stage.treat;
   stage.pointer = { ...point, button: true };
 
-  if (treat?.held) {
+  const ball = stage.ball;
+
+  if (ball && !ball.held && Math.hypot(ball.x - point.x, ball.y - point.y) < BALL_SIZE) {
+    /* Picked up, even out of the dog's mouth. */
+    ball.held = true;
+    ball.slot = null;
+    ball.x = point.x;
+    ball.y = point.y;
+    pet.ballPickedUp();
+  } else if (treat?.held) {
     treat.held = false;
     pet.treatPutDown();
   } else if (treat && Math.hypot(treat.x - point.x, treat.y - point.y) < 8) {
@@ -396,9 +433,15 @@ canvas.addEventListener('mousedown', (event) => {
   }
 });
 
+/** Letting go of the button throws the ball held, at the speed the cursor last moved. */
 window.addEventListener('mouseup', () => {
   if (live) {
     live.stage.pointer = { ...live.stage.pointer, button: false };
+
+    if (live.stage.ball?.held) {
+      live.stage.ball.held = false;
+      live.pet.ballThrown();
+    }
   }
 });
 
@@ -408,28 +451,54 @@ for (const [colour, button] of ['blue', 'green', 'red'].entries()) {
       return;
     }
 
+    putBallAway();
     const { x, y } = live.stage.pointer;
     live.stage.treat = { colour, held: true, x, y };
     live.pet.treatPickedUp();
   });
 }
 
-element<HTMLButtonElement>('treat-away').addEventListener('click', () => {
+element<HTMLButtonElement>('treat-away').addEventListener('click', putTreatAway);
+
+function putTreatAway() {
   if (live?.stage.treat) {
     live.stage.treat = null;
     live.pet.treatPutAway();
   }
+}
+
+function putBallAway() {
+  if (live?.stage.ball) {
+    live.stage.ball = null;
+    live.pet.ballPutAway();
+  }
+}
+
+/** The ball comes out held, at rest where the cursor is; a treat out is put away first. */
+element<HTMLButtonElement>('ball-out').addEventListener('click', () => {
+  if (!live) {
+    return;
+  }
+
+  putTreatAway();
+  const { x, y } = live.stage.pointer;
+  live.stage.ball = { x, y, vx: 0, vy: 0, held: true, slot: null, recorded: null };
+  live.pet.ballPickedUp();
 });
+
+element<HTMLButtonElement>('ball-away').addEventListener('click', putBallAway);
 
 liveInput.addEventListener('change', () => {
   stop();
 
   if (liveInput.checked) {
+    setZoom(1);
     startLive();
     play.disabled = true;
     timer = window.setInterval(tickLive, 1000 / FRAMES_PER_SECOND);
   } else {
     live = null;
+    setZoom(2);
     play.disabled = false;
     mood.value = '';
     draw();

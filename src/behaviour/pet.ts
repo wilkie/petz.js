@@ -20,12 +20,14 @@ import {
 import { type Script } from '../formats/script.ts';
 import { type Trick } from '../formats/tricks.ts';
 import { type Brain } from './brain.ts';
+import { type Ball } from './stage.ts';
 import { type Rand } from './random.ts';
 import { DEFAULT_GLUE, type Step, timeline } from './timeline.ts';
 import { AUTO, findTransition, type TransitionTable } from './transitions.ts';
 
 /** The engine's states this file plays, by the numbers `readEngineStateNames` names. */
 export const STATE = {
+  waitState: 1,
   chasingOwner: 3,
   idle: 4,
   sleeping: 5,
@@ -37,6 +39,17 @@ export const STATE = {
   pettingGood: 0x15,
   pettingBad: 0x16,
   aligningPetting: 0x17,
+  chasingBall: 0x18,
+  returningBallDirect: 0x19,
+  returningBallIndirect: 0x1a,
+  anticipatingBall: 0x1b,
+  guardingBall: 0x1c,
+  grabbingBall: 0x1d,
+  grabbingBallMiss: 0x1e,
+  jumpingGrabbingBall: 0x1f,
+  jumpingGrabbingBallMiss: 0x20,
+  releasingBall: 0x21,
+  observingBallThrown: 0x25,
   beggingChasing: 0x26,
   eating: 0x28,
   grabbingTreat: 0x29,
@@ -45,6 +58,8 @@ export const STATE = {
   chasingWall: 0x54,
   lastIdleTrick: 0x60,
   lungingWall: 0x66,
+  firstBallTrick: 0x61,
+  lastBallTrick: 0x65,
 } as const;
 
 /**
@@ -56,6 +71,7 @@ export const GLOBAL = {
   idle: 1000,
   begEat: 0x3eb,
   firstTreat: 0x3ed,
+  fetch: 0x3f0,
   petting: 0x3f3,
 } as const;
 
@@ -93,6 +109,15 @@ const SCRIPT = {
   stopRunning: 26,
   stopRunningHard: 205,
   snatch: 240,
+  reachForBall: 82,
+  grabBall: 81,
+  pounceOnBall: 29,
+  dropBall: 8,
+  lookAgain: 60,
+  jumpForBall: 25,
+  jumpMissed: 83,
+  fumble: 185,
+  pawBall: 186,
   pantLonger: 30,
   sitPantLonger: 119,
   walk: 13,
@@ -178,6 +203,22 @@ export interface PetWorld {
 
   /** Takes the treat away: the dog has eaten it. */
   eatTreat?(): void;
+
+  /** The ball out of the toy box, if any. */
+  ball?: Ball | null;
+
+  /** Where the ball will be so many frames on, and how often it will bounce. */
+  projectBall?(frames: number): { x: number; y: number; bounces: number };
+  grabBall?(slot: number): void;
+  releaseBall?(slot: number): void;
+  ballHasMoved?(): boolean;
+
+  /** A frame of the ball (`XStage::UpdateSprites`), after the dog's. */
+  updateBall?(): void;
+
+  /** Where a ball of the dog would be in a frame, were the dog not to move; and moving it. */
+  ballInFrame?(frame: number, ball: number, rotation: number): { x: number; y: number };
+  nudge?(dx: number, dy: number): void;
 }
 
 /** A cursor sample, one a frame: `ReallyDoDrawFrame` keeps thirty. */
@@ -214,7 +255,8 @@ type Item =
   | { ease: number }
   | { drift: number }
   | { cue: number }
-  | { trick: number };
+  | { trick: number }
+  | { aim: { ball: number; at: { x: number; y: number } | null } };
 
 /** An angle in 256ths of a turn, from -128 to 127. */
 const wrap = (angle: number) => ((((angle + 128) % 256) + 256) % 256) - 128;
@@ -427,6 +469,7 @@ export class Pet {
     this.doPettingHandler();
 
     const shown = this.dispatch();
+    this.world.updateBall?.();
     this.pulse();
     this.data.brain?.pulse();
     return { ...shown, rotation: this.rotation, state: this.state, placedBy: this.placedBy };
@@ -552,6 +595,8 @@ export class Pet {
         this.cues.add(item.cue);
       } else if ('trick' in item) {
         this.lastTrick = item.trick;
+      } else if ('aim' in item) {
+        this.startAim(item.aim.ball, item.aim.at);
       } else if ('glue' in item) {
         glue = item.glue;
       } else if ('goto' in item) {
@@ -594,6 +639,23 @@ export class Pet {
       this.turn(step);
       this.lastStep = step;
       this.placedBy = placedBy;
+
+      if (this.slide && this.slide.left-- > 0) {
+        this.slide.x += this.slide.dx;
+        this.slide.y += this.slide.dy;
+        const [x, y] = [Math.trunc(this.slide.x), Math.trunc(this.slide.y)];
+        this.world.nudge?.(x - this.slide.movedX, y - this.slide.movedY);
+        this.slide.movedX = x;
+        this.slide.movedY = y;
+      }
+
+      if (step.release !== undefined) {
+        this.releaseObject(step.release);
+      }
+
+      if (step.grab !== undefined) {
+        this.grabObject(step.grab);
+      }
 
       for (const cue of step.cues ?? []) {
         this.cues.add(cue);
@@ -759,6 +821,30 @@ export class Pet {
         return this.doLocomoteTrip(mode);
       case STATE.lungingWall:
         return this.doLungingWall(mode);
+      case STATE.chasingBall:
+      case STATE.returningBallDirect:
+      case STATE.returningBallIndirect:
+        return this.doTargettedLocomote(mode);
+      case STATE.waitState:
+        return this.doWaitState(mode);
+      case STATE.anticipatingBall:
+      case STATE.guardingBall:
+        return this.doAnticipatingBall(mode);
+      case STATE.grabbingBall:
+        return this.doGrabbingBall(mode);
+      case STATE.grabbingBallMiss:
+      case STATE.jumpingGrabbingBallMiss:
+        return this.doMissingBall(mode);
+      case STATE.jumpingGrabbingBall:
+        return this.doJumpingGrabbingBall(mode);
+      case STATE.releasingBall:
+        return this.doReleasingBall(mode);
+      case STATE.observingBallThrown:
+        return this.doObservingBallThrown(mode);
+    }
+
+    if (state >= STATE.firstBallTrick && state <= STATE.lastBallTrick) {
+      return this.doBallTrick(mode);
     }
 
     if (state >= STATE.firstTrick && state <= STATE.lastIdleTrick) {
@@ -956,11 +1042,11 @@ export class Pet {
         if (around < facing && around > -facing) {
           this.pushStored(SCRIPT.turnAround);
         } else {
-          /* Idle, it turns the way it is turned; begging, towards the treat. */
+          /* Idle, it turns the way it is turned; begging, towards the treat or the ball. */
           const left =
             this.global === GLOBAL.idle
               ? rotation < 0
-              : this.world.where().x < (this.world.treat?.x ?? 0);
+              : this.world.where().x < (this.heldObject()?.x ?? 0);
           this.pushTransition(this.data.scripts[SCRIPT.walk].from, BELLY);
           this.push({ ease: left ? 5 - facing : facing - 5 });
           this.pushStored(SCRIPT.walk);
@@ -997,7 +1083,13 @@ export class Pet {
     if (flags & 8) {
       this.newState(this.gotoState);
     } else if (flags & 1) {
-      this.newState(this.reducedGlobal() === GLOBAL.begEat ? this.pickTrickState() : STATE.idle);
+      const global = this.reducedGlobal();
+
+      if (global === GLOBAL.fetch) {
+        this.newState(this.world.ball?.held ? this.pickTrickState() : STATE.chasingBall);
+      } else {
+        this.newState(global === GLOBAL.begEat ? this.pickTrickState() : STATE.idle);
+      }
     }
 
     return step;
@@ -1014,6 +1106,22 @@ export class Pet {
     /* The engine also eases the dog's tilt level here (`8ae6 0 0`); tilt is
      * not drawn yet. */
     this.glueIfNotGlued(CHEST);
+
+    /* At play, after some tricks the dog may grab the ball; else it drops it. */
+    const weights = this.data.tricks[state - FIRST_TRICK];
+
+    if (weights?.withBall) {
+      this.pushBallTrick(state);
+      return;
+    }
+
+    if (weights?.grabAfter && this.global === GLOBAL.fetch && this.rand() % 2 === 0) {
+      if (this.isBallGrabbable()) {
+        this.pushBallGrabAction();
+      }
+    } else {
+      this.pushBallReleaseAction();
+    }
 
     switch (state) {
       case 0x2c: {
@@ -1337,14 +1445,39 @@ export class Pet {
         return this.world.treat;
       }
 
-      return this.samples[0] ?? this.wallTarget;
+      if (state === STATE.chasingBall && this.world.ball) {
+        /* Where the ball will be four frames on (seg21:7a8f). */
+        return this.world.projectBall?.(4) ?? this.world.ball;
+      }
+
+      if (state === STATE.returningBallIndirect) {
+        return this.naughtyTarget;
+      }
+
+      const cursor = this.samples[0] ?? this.wallTarget;
+
+      if (state === STATE.returningBallDirect) {
+        /* To the user, kept 100 pixels in from the stage's edges (seg21:7a0f). */
+        return {
+          x: Math.min(this.world.width - 100, Math.max(100, cursor.x)),
+          y: Math.min(this.world.height - 100, Math.max(100, cursor.y)),
+        };
+      }
+
+      return cursor;
     };
 
     if (mode === 'exit') {
       this.queue = [];
       this.setTargetLocation(null);
 
-      const stopping = [STATE.chasingOwner, STATE.chasingPetting, STATE.beggingChasing] as number[];
+      const stopping = [
+        STATE.chasingOwner,
+        STATE.chasingPetting,
+        STATE.returningBallDirect,
+        STATE.returningBallIndirect,
+        STATE.beggingChasing,
+      ] as number[];
 
       if (this.playing === SCRIPT.run && stopping.includes(state) && this.rand() % 3 === 0) {
         this.push({ glue: BELLY });
@@ -1366,7 +1499,15 @@ export class Pet {
         };
       }
 
-      const pace = state === STATE.chasingPetting ? 1 : state === STATE.chasingWall ? 2 : 0;
+      if (state === STATE.returningBallIndirect) {
+        this.resetSoft();
+        this.pushBallGrabAction();
+        this.naughtyTarget = this.newNaughtyTarget();
+      }
+
+      const ballMoving = state === STATE.chasingBall && this.ballMoving();
+      const pace =
+        state === STATE.chasingPetting ? 1 : state === STATE.chasingWall || ballMoving ? 2 : 0;
       this.locomotion = this.pickLocomotion(pace, false);
       this.pushStored(this.locomotion);
       this.waiting = false;
@@ -1375,6 +1516,15 @@ export class Pet {
 
     if (state === STATE.beggingChasing && !this.world.treat) {
       this.newGlobalState(GLOBAL.idle);
+      return this.pop().step;
+    }
+
+    if (state === STATE.chasingBall && this.jumpForBall()) {
+      return this.pop().step;
+    }
+
+    if (state === STATE.returningBallIndirect && this.waggling && !this.decideIfNaughty()) {
+      this.newState(STATE.returningBallDirect);
       return this.pop().step;
     }
 
@@ -1408,6 +1558,21 @@ export class Pet {
           return step;
         case STATE.chasingWall:
           this.newState(STATE.lungingWall);
+          return step;
+        case STATE.chasingBall: {
+          /* Grab it if it will not bounce in the next four frames and is not moving fast. */
+          const ahead = this.world.projectBall?.(4);
+
+          if (ahead && ahead.bounces === 0 && !this.ballMovingFast()) {
+            this.newState(this.decideIfClumsy() ? STATE.grabbingBallMiss : STATE.grabbingBall);
+            return step;
+          }
+
+          break;
+        }
+        case STATE.returningBallDirect:
+        case STATE.returningBallIndirect:
+          this.newState(STATE.releasingBall);
           return step;
       }
     }
@@ -1492,8 +1657,12 @@ export class Pet {
 
   /** `ReducedGlobalState`: the three treats, food and water are all one, begging and eating. */
   reducedGlobal() {
-    return this.global >= GLOBAL.begEat && this.global <= GLOBAL.begEat + 4
-      ? GLOBAL.begEat
+    if (this.global >= GLOBAL.begEat && this.global <= GLOBAL.begEat + 4) {
+      return GLOBAL.begEat;
+    }
+
+    return this.global >= GLOBAL.fetch && this.global <= GLOBAL.fetch + 2
+      ? GLOBAL.fetch
       : this.global;
   }
 
@@ -1502,6 +1671,10 @@ export class Pet {
    * and the new one enters, choosing the state to start in unless told.
    */
   newGlobalState(global: number, state = 0) {
+    if (this.reducedGlobal() === GLOBAL.fetch) {
+      this.exitFetch();
+    }
+
     this.global = global;
 
     if (global === GLOBAL.idle) {
@@ -1510,6 +1683,8 @@ export class Pet {
       this.enterPetting(state);
     } else if (this.reducedGlobal() === GLOBAL.begEat) {
       this.enterBegEat(state);
+    } else if (this.reducedGlobal() === GLOBAL.fetch) {
+      this.enterFetch(state);
     }
   }
 
@@ -1527,7 +1702,14 @@ export class Pet {
   /** `PetModule::CheckDesktop` (seg16:20b6), for the treats: one out of its box is begged for. */
   private checkDesktop() {
     const treat = this.world.treat;
-    return treat ? GLOBAL.firstTreat + treat.colour : 0;
+
+    if (treat) {
+      return GLOBAL.firstTreat + treat.colour;
+    }
+
+    /* A toy out is noticed only by a dog excited enough, 70 and more. */
+    const ball = this.world.ball;
+    return ball && !ball.held && this.factor(0) >= 70 ? GLOBAL.fetch : 0;
   }
 
   // The cursor.
@@ -1986,8 +2168,13 @@ export class Pet {
   }
 
   private treatNear() {
-    const treat = this.world.treat;
-    return treat !== null && treat !== undefined && this.near(treat);
+    const held = this.heldObject();
+    return held !== null && held !== undefined && this.near(held);
+  }
+
+  /** What the dog begs for: the ball at play, else the treat (`0x11d4`). */
+  private heldObject() {
+    return this.reducedGlobal() === GLOBAL.fetch ? this.world.ball : this.world.treat;
   }
 
   // Treats.
@@ -2059,7 +2246,7 @@ export class Pet {
     }
 
     if (mode === 'enter') {
-      if (!this.world.treat?.held) {
+      if (this.reducedGlobal() === GLOBAL.begEat && !this.world.treat?.held) {
         this.newState(STATE.eating);
         return undefined;
       }
@@ -2078,7 +2265,7 @@ export class Pet {
     const { step, flags } = this.pop();
     this.noteWaiting();
 
-    if (this.waiting && !this.treatNear()) {
+    if (this.waiting && !this.treatNear() && this.reducedGlobal() === GLOBAL.begEat) {
       this.queue = [];
       this.newState(STATE.beggingChasing);
     } else if (flags & 1) {
@@ -2111,6 +2298,10 @@ export class Pet {
    */
   pickTrickState(): number {
     const treat = this.world.treat;
+
+    if (this.reducedGlobal() === GLOBAL.fetch) {
+      return this.pickPlayTrick();
+    }
 
     if (this.reducedGlobal() === GLOBAL.begEat && treat?.held) {
       this.factors[9] = Math.min(100, this.factors[9] + 4);
@@ -2145,8 +2336,23 @@ export class Pet {
   /** `PetModule::PushBegWaitLoops` (seg18:25e0): pants, waiting for the treat after a trick. */
   private pushBegWaitLoops() {
     const excitement = this.factor(0);
-    let loops = Math.trunc((100 - excitement) / 20) + 1;
-    loops += this.rand() % loops;
+    let loops: number;
+
+    if (this.reducedGlobal() === GLOBAL.fetch) {
+      /* At play, a held ball makes the dog keener: fewer pants, maybe none. */
+      const keen = excitement + (this.world.ball?.held ? 30 : 0);
+      loops = Math.trunc((130 - keen) / 20) + 1;
+
+      if (loops < 1) {
+        return;
+      }
+
+      loops += this.rand() % loops;
+      this.pushBallReleaseAction();
+    } else {
+      loops = Math.trunc((100 - excitement) / 20) + 1;
+      loops += this.rand() % loops;
+    }
 
     this.push({ glue: CHEST });
     let sitting = excitement < this.rand() % 85 || this.position === SITTING;
@@ -2284,5 +2490,717 @@ export class Pet {
     }
 
     return step;
+  }
+
+  // The ball.
+
+  /** Where a naughty dog runs off to with the ball (`0x11d0`). */
+  private naughtyTarget = { x: 0, y: 0 };
+
+  /** A fumbled grab: the dog chases the ball again (`DAT_3b90`). */
+  private fumbled = false;
+
+  /** Is the dog naughty this time (`0x124c`, `DecideIfNaughty`, seg14:20a6)? */
+  naughty = false;
+
+  private decideIfNaughty() {
+    this.naughty = this.rand() % 100 < this.factor(1);
+    return this.naughty;
+  }
+
+  private ballMoving() {
+    const ball = this.world.ball;
+    return !!ball && (ball.vx !== 0 || ball.vy !== 0);
+  }
+
+  /** `BallSprite::IsMovingFast` (seg20:1e5d): faster than 120 pixels squared a frame. */
+  private ballMovingFast() {
+    const ball = this.world.ball;
+    return !!ball && ball.vx * ball.vx + ball.vy * ball.vy > 120;
+  }
+
+  /** The ball in the dog's mouth once the queue has played out (`IsBallInMouthAsOfLastAction`). */
+  private ballInMouthAfterQueue() {
+    let inMouth = this.world.ball?.slot === 0;
+
+    for (const item of this.queue) {
+      if ('step' in item) {
+        if (item.step.release === 0) {
+          inMouth = false;
+        }
+
+        if (item.step.grab === 0) {
+          inMouth = true;
+        }
+      }
+    }
+
+    return inMouth;
+  }
+
+  /** `PetModule::GrabObject` (seg14:04e4): at play, the ball into a slot, unless the user holds it. */
+  private grabFromUser = false;
+
+  private grabObject(slot: number) {
+    const ball = this.world.ball;
+
+    if (!ball || this.reducedGlobal() !== GLOBAL.fetch || (ball.held && !this.grabFromUser)) {
+      return;
+    }
+
+    this.grabFromUser = false;
+
+    if (ball.slot !== null && ball.slot !== slot) {
+      this.world.releaseBall?.(ball.slot);
+    }
+
+    this.world.grabBall?.(slot);
+  }
+
+  private releaseObject(slot: number) {
+    this.world.releaseBall?.(slot);
+  }
+
+  /** `IsBallGrabbable` (seg19:018e): within a box half again the dog's standard size, ahead of it. */
+  private isBallGrabbable() {
+    const ball = this.world.ball;
+    return !!ball && this.inFocusBox(ball, 1.5);
+  }
+
+  /**
+   * `MakeFocusRect` about the middle of the dog: a box of so many times its
+   * standard size, a quarter of the box's diagonal ahead the way it faces.
+   */
+  private inFocusBox(point: { x: number; y: number }, scale: number) {
+    const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+    const [w, h] = [Math.trunc(width * scale), Math.trunc(height * scale)];
+    const centre = this.world.centre?.() ?? this.world.where();
+    const ahead = Math.trunc(Math.trunc(Math.sqrt(w * w + h * h)) / FOCUS_DISTANCE);
+    const sine = Math.trunc(Math.sin((this.rotation * Math.PI) / 128) * 256);
+    const x = centre.x - Math.trunc((256 * ahead * sine) / 65536);
+
+    return (
+      point.x >= x - Math.trunc(w / 2) &&
+      point.x < x + Math.trunc(w / 2) &&
+      point.y >= centre.y - Math.trunc(h / 2) &&
+      point.y < centre.y + Math.trunc(h / 2)
+    );
+  }
+
+  /**
+   * `PetModule::PushBallGrabAction` (seg19:2bf9): if the ball has not moved
+   * since the dog put it down, a pounce (script 29); otherwise reach down to
+   * it (82) and grab it (81).
+   */
+  private pushBallGrabAction() {
+    const ball = this.world.ball;
+
+    if (!ball || ball.held || this.ballInMouthAfterQueue()) {
+      return;
+    }
+
+    this.push({ glue: CHEST });
+
+    if (!(this.world.ballHasMoved?.() ?? true)) {
+      this.push({ cue: 7 });
+      this.pushStored(SCRIPT.pounceOnBall);
+      this.push({ cue: 6 });
+    } else {
+      /* The engine also turns the dog towards the ball (`0x8ae8`); not yet played. */
+      this.pushStored(SCRIPT.reachForBall);
+      this.push({ aim: { ball: NOSE, at: null } });
+      this.pushStored(SCRIPT.grabBall);
+    }
+
+    this.push({ glue: CHEST });
+  }
+
+  /** `PetModule::PushBallReleaseAction` (seg19:2a84): with the ball in its mouth, it drops it (script 8). */
+  private pushBallReleaseAction() {
+    if (!this.ballInMouthAfterQueue()) {
+      return;
+    }
+
+    this.push({ cue: 7 });
+    this.glueIfNotGlued(CHEST);
+    this.pushStored(SCRIPT.dropBall);
+    this.push({ glue: CHEST }, { cue: 6 });
+  }
+
+  /** `PetModule::EnterFetch` (seg19:0000): to beg for the ball held, or chase it. */
+  private enterFetch(state: number) {
+    this.naughty = false;
+    this.anticipations = (this.rand() % 2) + 2;
+    this.newState(state || (this.world.ball?.held ? STATE.begging : STATE.chasingBall));
+  }
+
+  /** `PetModule::ExitFetch` (seg19:00f4): the ball let go of. */
+  private exitFetch() {
+    if (this.world.ball?.slot === 0) {
+      this.releaseObject(0);
+    }
+  }
+
+  /** The user picks the ball up (`BallSprite::Update`, seg20:20b8): at play, the dog begs for it. */
+  ballPickedUp() {
+    if (this.reducedGlobal() === GLOBAL.fetch) {
+      this.releaseObject(0);
+      this.releaseObject(1);
+      this.resetSoft();
+      this.newState(STATE.begging);
+    } else {
+      this.newGlobalState(GLOBAL.fetch);
+    }
+  }
+
+  /**
+   * The user lets the ball go (`BallSprite::Update`, seg20:2236 to 2330):
+   * the dog's frustration settles, and it chases the ball, or, calm and with
+   * its head on the stage, watches it go.
+   */
+  ballThrown() {
+    if (this.reducedGlobal() !== GLOBAL.fetch) {
+      return;
+    }
+
+    const excitement = this.factor(0);
+    this.queue = [{ glue: 36 }];
+    this.factors[9] = this.centres[9];
+
+    /* Whether it will misjudge the catch, by its clumsiness; not yet played. */
+    this.rand();
+
+    const chase = this.rand() % 30 < excitement + 10 || !this.isOnscreen();
+    this.newState(chase ? STATE.chasingBall : STATE.observingBallThrown);
+  }
+
+  /** The ball put back in the toy box: the dog is left alone (`BallSprite::Update`). */
+  ballPutAway() {
+    if (this.reducedGlobal() === GLOBAL.fetch) {
+      this.newGlobalState(GLOBAL.idle);
+    }
+  }
+
+  /**
+   * At play, the trick for the ball held (`PickTrickState`, seg21:6907): a
+   * frustrated dog may leap and snatch it; otherwise a trick by its play
+   * weight, one with the ball only if the ball is free and within reach.
+   */
+  private pickPlayTrick(): number {
+    const ball = this.world.ball;
+
+    if (ball?.held) {
+      this.factors[9] = Math.min(100, this.factors[9] + 4);
+
+      if (this.rand() % 0xd2 < this.factor(9) && this.rand() % 0xd2 < this.factor(2)) {
+        this.grabFromUser = true;
+        return STATE.jumpingGrabbingBall;
+      }
+    }
+
+    const total = this.data.tricks.reduce((sum, trick) => sum + trick.playWeight, 0);
+
+    for (let tries = 0; tries < 100000; tries++) {
+      const n = this.rand() % this.data.tricks.length;
+      const trick = this.data.tricks[n];
+      let reject = trick.playWeight < this.rand() % total;
+
+      if (trick.withBall && (ball?.held || !ball)) {
+        reject = true;
+      }
+
+      if (!this.isBallGrabbable() && trick.withBall) {
+        reject = true;
+      }
+
+      if (!reject) {
+        return FIRST_TRICK + n;
+      }
+    }
+
+    return STATE.begging;
+  }
+
+  /**
+   * Running after a ball in the air, a leap for it (seg21:7f4d to 80b6): if
+   * the ball will pass over the dog's chin in the next fourteen frames.
+   */
+  private jumpForBall() {
+    const ball = this.world.ball;
+
+    if (
+      !ball ||
+      ball.held ||
+      this.locomotion !== SCRIPT.run ||
+      this.history[1] === STATE.jumpingGrabbingBall
+    ) {
+      return false;
+    }
+
+    const ahead = this.world.projectBall?.(14);
+    const chin = this.world.ballOnStage?.(51);
+
+    if (!ahead || !chin || ahead.bounces > 1 || (ahead.bounces === 1 && !this.ballMoving())) {
+      return false;
+    }
+
+    /* A box 150 wide and high, 200 above the chin. */
+    if (Math.abs(ahead.x - chin.x) < 75 && Math.abs(ahead.y - (chin.y - 200)) < 75) {
+      this.newState(
+        this.decideIfClumsy() ? STATE.jumpingGrabbingBallMiss : STATE.jumpingGrabbingBall
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * `PetModule::DoGrabbingBall` (seg19:0941): grabs the ball; a clumsy dog
+   * fumbles it and chases it again. Then back to the user with it, or, if
+   * naughty, off somewhere else.
+   */
+  private doGrabbingBall(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.setTargetLocation(null);
+      const ahead = this.world.projectBall?.(4);
+
+      if (ahead && ahead.bounces !== 0 && (ahead.bounces !== 1 || this.rand() % 3 !== 0)) {
+        this.newState(STATE.chasingBall);
+        return undefined;
+      }
+
+      this.queue = [];
+      this.pushBallGrabAction();
+      this.fumbled = false;
+
+      if (this.decideIfClumsy()) {
+        this.pushStored(SCRIPT.fumble);
+        this.pushStored(SCRIPT.pawBall);
+        this.push({ step: { frame: this.lastStep.frame, release: 1 } });
+        this.fumbled = true;
+      }
+
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (this.cues.has(12)) {
+      this.releaseObject(0);
+    }
+
+    if (flags & 1) {
+      this.newState(
+        this.fumbled
+          ? STATE.chasingBall
+          : this.decideIfNaughty()
+            ? STATE.returningBallIndirect
+            : STATE.returningBallDirect
+      );
+    }
+
+    return step;
+  }
+
+  /** A miss (seg19:070c, 0d44): a look about, maybe (60), and after the ball again. */
+  private doMissingBall(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.queue = [];
+
+      if (this.state === STATE.jumpingGrabbingBallMiss) {
+        this.pushStored(SCRIPT.jumpMissed);
+      }
+
+      if (this.rand() % 2 !== 0) {
+        this.pushStored(SCRIPT.lookAgain);
+      }
+
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
+      this.newState(STATE.chasingBall);
+    }
+
+    return step;
+  }
+
+  /** `PetModule::DoJumpingGrabbingBall` (seg19:0e30): pulls up (26) and leaps for it (25). */
+  private doJumpingGrabbingBall(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.queue = [];
+      this.setTargetLocation(null);
+
+      if (this.playingKind() & POSITION.moving) {
+        this.pushStored(SCRIPT.stopRunning);
+      }
+
+      const ahead = this.world.projectBall?.(14) ?? null;
+      this.push({ aim: { ball: 51, at: ahead } });
+      this.pushStored(SCRIPT.jumpForBall);
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
+      if (this.world.ball?.held) {
+        this.world.ball.held = false;
+      }
+
+      this.newState(
+        this.decideIfNaughty() ? STATE.returningBallIndirect : STATE.returningBallDirect
+      );
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::DoReleasingBall` (seg19:033d): stops, faces the user, and
+   * drops the ball; then waits for the next throw, or, naughty, guards it.
+   */
+  private doReleasingBall(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      if (this.world.ball?.slot !== 0) {
+        this.newState(this.naughty ? STATE.guardingBall : STATE.anticipatingBall);
+        return undefined;
+      }
+
+      this.pushTransition(STANDING, BELLY);
+      this.push({ cue: 0 }, { glue: CHEST });
+
+      const rotation = this.rotation;
+
+      if (rotation < -0x50 || rotation > 0x50) {
+        this.pushStored(SCRIPT.turnAround);
+      }
+
+      this.pushBallReleaseAction();
+      this.push({ glue: 37 });
+      this.waiting = false;
+      return undefined;
+    }
+
+    if (!this.waiting && this.naughty) {
+      const cursor = this.samples[0];
+
+      if (cursor && this.inFocusBox(cursor, 1.8)) {
+        /* Keep-away: the user reaches for it, and the dog snatches it back. */
+        this.pushBallGrabAction();
+        this.newState(STATE.returningBallIndirect);
+        return this.pop().step;
+      }
+    }
+
+    const { step, flags } = this.pop();
+
+    if (this.cues.has(0)) {
+      this.waiting = true;
+    }
+
+    if (flags & 1) {
+      const ball = this.world.ball;
+      const onStage =
+        !!ball &&
+        ball.x >= 0 &&
+        ball.y >= 0 &&
+        ball.x < this.world.width &&
+        ball.y < this.world.height;
+
+      if (!onStage) {
+        this.pushBallGrabAction();
+        this.newState(this.naughty ? STATE.returningBallIndirect : STATE.returningBallDirect);
+      } else {
+        this.newState(this.naughty ? STATE.guardingBall : STATE.anticipatingBall);
+      }
+    }
+
+    return step;
+  }
+
+  /** How many tricks more the dog will do waiting for a throw (`0x127a`). */
+  private anticipations = 0;
+
+  /**
+   * `PetModule::DoAnticipatingBall` (seg19:101d): the ball dropped, the dog
+   * waits for the throw, doing a trick or two; if the user goes away from
+   * it, it takes the ball back itself; after enough, it loses interest. A
+   * naughty dog's guarding (0x1c, seg19:1ec7) is played the same way.
+   */
+  private doAnticipatingBall(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.anticipations = (this.rand() % (Math.trunc(this.factor(0) / 30) + 2)) + 1;
+      this.pushBallReleaseAction();
+
+      if (!(this.playingKind() & POSITION.moving)) {
+        this.push({ cue: 0 });
+      }
+
+      const pant = this.position === SITTING ? SCRIPT.sitPant : SCRIPT.pant;
+      this.pushTransition(this.data.scripts[pant].from, BELLY);
+      this.push({ cue: 0 });
+      this.pushBegWaitLoops();
+      this.waiting = false;
+      return undefined;
+    }
+
+    if (this.waiting) {
+      const cursor = this.samples[0];
+
+      if (!this.isOnscreen() || !cursor || !this.inFocusBox(cursor, 1.8)) {
+        this.queue = [{ glue: 36 }];
+
+        if (this.isBallGrabbable()) {
+          this.pushBallGrabAction();
+          this.newState(STATE.returningBallDirect);
+        } else {
+          this.newState(STATE.chasingBall);
+        }
+
+        return this.pop().step;
+      }
+    }
+
+    const { step, flags } = this.pop();
+    this.noteWaiting();
+
+    if (flags & 8) {
+      this.newState(this.gotoState);
+    } else if (flags & 1) {
+      if (this.anticipations-- > 0) {
+        this.waiting = false;
+        this.push({ glue: CHEST });
+        this.pushTrick(this.pickTrickState());
+        this.push({ cue: 0 });
+        this.pushBegWaitLoops();
+      } else {
+        this.queue = [{ glue: CHEST }];
+        this.naughty = false;
+        this.newGlobalState(GLOBAL.idle);
+      }
+    }
+
+    return step;
+  }
+
+  /** `PetModule::DoObservingBallThrown` (seg19:022b): sits and watches six to ten pants, then loses interest. */
+  private doObservingBallThrown(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      for (let times = (this.rand() % 5) + 5; times >= 0; times--) {
+        this.pushStored(SCRIPT.sitPant);
+      }
+
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 1) {
+      this.newGlobalState(GLOBAL.idle);
+    }
+
+    return step;
+  }
+
+  /** `PetModule::DoWaitState` (seg21:6073): plays the queue out to the state it names. */
+  private doWaitState(mode: Mode): Step | undefined {
+    if (mode !== 'run') {
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 8) {
+      this.newState(this.gotoState);
+    } else if (flags & 1) {
+      this.newState(STATE.idle);
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::GetNewNaughtyTarget` (seg19:275f): a point on the stage far
+   * from the dog and from the user. How far, the engine's callers say;
+   * here half the stage's diagonal, inferred.
+   */
+  private newNaughtyTarget() {
+    const cursor = this.samples[0] ?? { x: 0, y: 0 };
+    const at = this.world.centre?.() ?? this.world.where();
+    const { width, height } = this.world;
+    const most = Math.trunc(Math.hypot(width - 120, height - 120) / 2) - 50;
+    let fromUser = Math.hypot(at.x - cursor.x, at.y - cursor.y);
+
+    for (let tries = 0; tries < 10000; tries++) {
+      const point = {
+        x: (this.rand() % Math.max(1, width - 120)) + 60,
+        y: (this.rand() % Math.max(1, height - 120)) + 60,
+      };
+
+      if (
+        Math.hypot(at.x - point.x, at.y - point.y) > most &&
+        Math.hypot(cursor.x - point.x, cursor.y - point.y) > fromUser
+      ) {
+        return point;
+      }
+
+      fromUser = Math.max(20, fromUser - 1);
+    }
+
+    return { x: width / 2, y: height / 2 };
+  }
+
+  /** `PetModule::DoBallTrick` (seg18:061d): a trick with the ball, then the next trick or idle. */
+  private doBallTrick(mode: Mode): Step | undefined {
+    if (mode === 'exit') {
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.pushBallTrick(this.state);
+      return undefined;
+    }
+
+    const { step, flags } = this.pop();
+
+    if (flags & 8) {
+      this.newState(this.gotoState);
+    } else if (flags & 1) {
+      const global = this.reducedGlobal();
+      this.newState(
+        global === GLOBAL.begEat || global === GLOBAL.fetch ? this.pickTrickState() : STATE.idle
+      );
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::PushBallTrick` (seg21:6bde): nosing the ball (102), walking
+   * on it (88 then 89) or bouncing on it (87), throwing it (97), balancing
+   * it (85). How the engine moves the ball during them (`0x8af4`, `0x8aed`,
+   * `0x8ae9`) is not yet played.
+   */
+  private pushBallTrick(state: number) {
+    const repeat = (times: number, then: () => void) => {
+      for (let n = 0; n < times; n++) {
+        then();
+      }
+    };
+
+    switch (state) {
+      case 0x61:
+        this.pushBallReleaseAction();
+
+        if (this.world.ballHasMoved?.()) {
+          this.pushBallGrabAction();
+          this.push({ step: { frame: this.lastStep.frame, release: 0 } }, { glue: CHEST });
+        }
+
+        repeat((this.rand() % 4) + 1, () => this.pushStored(102));
+        break;
+      case 0x62:
+      case 0x63: {
+        const on = state === 0x63 ? 87 : 89;
+        this.pushBallReleaseAction();
+        this.pushStored(88);
+        this.pushTransition(this.data.scripts[on].from, BELLY);
+        this.push({ drift: 2 - (this.rand() % 5) });
+        repeat((this.rand() % 4) + 1, () => this.pushStored(on));
+        this.push({ cue: 3 }, { drift: 0 });
+        break;
+      }
+      case 0x64:
+        this.pushBallGrabAction();
+        this.pushStored(97);
+        this.push({ goto: STATE.chasingBall });
+        break;
+      case 0x65:
+        this.pushBallGrabAction();
+        this.pushTransition(this.data.scripts[85].from, BELLY);
+        repeat(this.rand() % 4, () => this.pushStored(85));
+        break;
+    }
+
+    this.push({ glue: CHEST });
+  }
+
+  /** A slide under way towards an aim (`-0x71ec` on). */
+  private slide: {
+    dx: number;
+    dy: number;
+    x: number;
+    y: number;
+    movedX: number;
+    movedY: number;
+    left: number;
+  } | null = null;
+
+  /**
+   * `0x8af4 ball x y` (`PopScript`, seg7:5e98 and 7144 on): the frames up to
+   * the next cue 2 are counted, and the dog slid evenly over them so that
+   * the ball named is at the point when that frame shows; `0x7ffd` for the
+   * point is the ball at play. Where the engine plays the frames ahead to
+   * know where that ball will be, this takes the frame where the dog now
+   * stands, so moves within the frames between are not counted.
+   */
+  private startAim(ball: number, at: { x: number; y: number } | null) {
+    const point = at ?? this.world.ball;
+    let frames = 0;
+    let target: Step | undefined;
+
+    for (const item of this.queue) {
+      if ('step' in item && !item.step.reference) {
+        frames++;
+
+        if (item.step.cues?.includes(2)) {
+          target = item.step;
+          break;
+        }
+      }
+    }
+
+    if (!point || !target || !this.world.ballInFrame || frames < 1) {
+      return;
+    }
+
+    const there = this.world.ballInFrame(target.frame, ball, this.rotation);
+    this.slide = {
+      dx: (point.x - there.x) / frames,
+      dy: (point.y - there.y) / frames,
+      x: 0,
+      y: 0,
+      movedX: 0,
+      movedY: 0,
+      left: frames,
+    };
   }
 }

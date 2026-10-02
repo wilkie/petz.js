@@ -133,6 +133,11 @@
         <button id="treat-red" type="button">Red</button>
         <button id="treat-away" type="button">Put away</button>
       </div>
+      <div class="controls" aria-label="Ball">
+        Ball:
+        <button id="ball-out" type="button">Take out</button>
+        <button id="ball-away" type="button">Put away</button>
+      </div>
       <canvas id="stage" width="640" height="480" aria-label="The dog, drawn"></canvas>
       <p class="note">
         Drawn as Dogz draws, at twice its size: each ball placed, turned and tilted as the game
@@ -141,7 +146,8 @@
         wanders, idles, does the tricks its mood suits and sleeps, choosing as the engine chooses.
         Hold the button down and stroke it to pet it; click its face, paws or tail and it minds.
         Take out a treat and hold it up and it begs, and does the tricks its brain chooses; click to
-        put the treat down and it eats it, and its brain learns from it.
+        put the treat down and it eats it, and its brain learns from it. Take out the ball and it
+        waits for a throw: drag and let go to throw it, and it fetches it back.
       </p>
     </main>
     <script type="module" src="/src/viewer/main.ts"></script>
