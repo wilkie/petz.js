@@ -145,6 +145,12 @@ let bowlPictures: Dib[][] = [];
 /** The brain, as the game's file has it, then as the live dog has learned; and how the engine maps it. */
 let brainFile: BrainFile | null = null;
 let brainMap: BrainMapping[] = [];
+/**
+ * The seed of the fuzz and speckle tables, once a session as Dogz seeds
+ * `rand` from the clock's low word before it makes them (`InitPetModule`).
+ */
+const FUZZ_SEED = Date.now() & 0xffff || 1;
+
 let live: {
   pet: Pet;
   stage: Stage;
@@ -287,7 +293,7 @@ function drawDog(
     originY,
     age: Number(ageInput.value),
     yaw,
-    seed: frameNumber + 1,
+    seed: FUZZ_SEED,
     bonus: { ball: 51, draw: inMouth },
     underHead,
     overHead,

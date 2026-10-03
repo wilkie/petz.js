@@ -4,7 +4,7 @@ import {
   fillLid,
   fillShaded,
   IndexedBitmap,
-  random,
+  circleTables,
   rowWidth,
   speckleColour,
 } from '../../src/render/raster.ts';
@@ -27,16 +27,23 @@ function picture(bitmap: IndexedBitmap) {
   return rows;
 }
 
+/** A ball of radius 5, drawn as a circle of diameter 9 in a square 10 across. */
 const ball = {
-  x: 4,
-  y: 4,
-  diameter: 6,
+  x: 8,
+  y: 8,
+  diameter: 10,
   colour: 1,
   outlineColour: 0,
-  speckleColour: -1,
+  speckleColour: 7,
   outline: -1,
   fuzz: 0,
 };
+
+/** Each row's pixels other than speckles, from its first. */
+const rowsOf = (bitmap: IndexedBitmap) =>
+  picture(bitmap)
+    .map((row) => row.replace(/7/g, '1').replace(/^\.+|\.+$/g, ''))
+    .filter(Boolean);
 
 describe('a circle’s rows', () => {
   it('are as wide as the circle is there', () => {
@@ -46,64 +53,74 @@ describe('a circle’s rows', () => {
 });
 
 describe('a ball', () => {
-  /* Rows of the upper half each have a speckle, which, where a ball has no
-   * speckle colour of its own, is its own colour, and may fall one pixel
-   * past the row's end: the lower half shows the fill alone. */
-  it('is filled flat in its colour, without an outline', () => {
-    const bitmap = new IndexedBitmap(9, 9);
-    fillBall(bitmap, ball, random(1));
+  it('is a circle one less across than its square, its rows from the square’s top', () => {
+    const bitmap = new IndexedBitmap(16, 16);
+    fillBall(bitmap, ball, circleTables(1));
+    const rows = picture(bitmap);
 
-    expect(picture(bitmap).slice(3, 7)).toEqual([
-      '.111111..',
-      '..11111..',
-      '..1111...',
-      '.........',
+    /* Rows 1 to 8 of a circle of 9, from y 3 (8 less its radius). */
+    expect(rows.slice(0, 3).every((row) => !row.includes('1'))).toBe(true);
+    expect(rowsOf(bitmap).map((row) => row.length)).toEqual([5, 7, 8, 8, 8, 8, 7, 5]);
+    expect(rows[3].search(/[17]/)).toBe(8 - 2);
+  });
+
+  it('with a half outline, has a pixel of it before each row, which is one shorter', () => {
+    const bitmap = new IndexedBitmap(16, 16);
+    fillBall(bitmap, { ...ball, outline: 0 }, circleTables(1));
+
+    expect(rowsOf(bitmap)).toEqual([
+      '01111',
+      '0111111',
+      '01111111',
+      '01111111',
+      '01111111',
+      '01111111',
+      '0111111',
+      '01111',
     ]);
   });
 
-  it('with a half outline, has its rows’ leftmost pixels in the outline colour', () => {
-    const bitmap = new IndexedBitmap(9, 9);
-    fillBall(bitmap, { ...ball, outline: 0 }, random(1));
+  it('with an outline 1 thick, has whole rows of it top and bottom, and a pixel each end', () => {
+    const bitmap = new IndexedBitmap(16, 16);
+    fillBall(bitmap, { ...ball, outline: 1 }, circleTables(1));
 
-    expect(picture(bitmap).slice(3, 6)).toEqual(['.011111..', '..01111..', '..0111...']);
-  });
-
-  it('with an outline 1 thick, has a whole row at the top and a pixel each side, and no speckles', () => {
-    const bitmap = new IndexedBitmap(9, 9);
-    fillBall(bitmap, { ...ball, outline: 1, speckleColour: 7 }, random(1));
-
-    expect(picture(bitmap).slice(1, 7)).toEqual([
-      '..0000...',
-      '..01110..',
-      '.011110..',
-      '..01110..',
-      '..0110...',
-      '.........',
+    expect(rowsOf(bitmap)).toEqual([
+      '00000',
+      '011110',
+      '0111110',
+      '0111110',
+      '0111110',
+      '0111110',
+      '011110',
+      '00000',
     ]);
   });
 
   it('has a speckle in each row of its upper half, and none below', () => {
-    const bitmap = new IndexedBitmap(9, 9);
-    fillBall(bitmap, { ...ball, speckleColour: 7 }, random(3));
-    const rows = picture(bitmap);
-    const speckled = rows.map((row) => row.includes('7'));
+    const bitmap = new IndexedBitmap(16, 16);
+    fillBall(bitmap, ball, circleTables(3));
+    const speckled = picture(bitmap).map((row) => row.includes('7'));
 
-    expect(speckled.slice(1, 3)).toEqual([true, true]);
-    expect(speckled.slice(4)).not.toContain(true);
+    /* Rows 1 to 3 of 8 (below 9 / 2). */
+    expect(speckled.slice(3, 6)).toEqual([true, true, true]);
+    expect(speckled.slice(6)).not.toContain(true);
   });
 
-  it('shifts each row right by no more than its fuzz', () => {
-    for (let seed = 1; seed < 50; seed++) {
-      const bitmap = new IndexedBitmap(12, 9);
-      fillBall(bitmap, { ...ball, fuzz: 2 }, random(seed));
-      const steady = new IndexedBitmap(12, 9);
-      fillBall(steady, ball, random(seed));
+  it('moves each row right by no more than its fuzz, the same each time it is drawn', () => {
+    const tables = circleTables(5);
+    const draw = (fuzz: number) => {
+      const bitmap = new IndexedBitmap(20, 16);
+      fillBall(bitmap, { ...ball, fuzz, speckleColour: -1 }, tables);
+      return picture(bitmap);
+    };
+    const steady = draw(0);
+    const fuzzy = draw(3);
 
-      picture(bitmap).forEach((row, y) => {
-        const shift = row.indexOf('1') - picture(steady)[y].indexOf('1');
-        expect(row.indexOf('1') === -1 || (shift >= 0 && shift <= 2)).toBe(true);
-      });
-    }
+    fuzzy.forEach((row, y) => {
+      const shift = row.indexOf('1') - steady[y].indexOf('1');
+      expect(row.indexOf('1') === -1 || (shift >= 0 && shift <= 3)).toBe(true);
+    });
+    expect(draw(3)).toEqual(fuzzy);
   });
 });
 
@@ -126,13 +143,13 @@ describe('a speckle colour', () => {
 });
 
 describe('an eyelid', () => {
-  /* A ball of 11 at (20, 20), covered 4 rows' worth, by the angle given. */
+  /* An eye 12 across at (20, 20), covered 4 rows' worth, by the angle given. */
   const lid = (angle: number) => {
     const bitmap = new IndexedBitmap(40, 40);
-    fillLid(bitmap, { x: 20, y: 20, d: 11, colour: 4, cover: 4, angle });
+    fillLid(bitmap, { x: 20, y: 20, d: 12, colour: 4, cover: 4, angle });
     const rows: string[] = [];
 
-    for (let y = 15; y < 27; y++) {
+    for (let y = 14; y < 26; y++) {
       let row = '';
 
       for (let x = 14; x < 27; x++) {
@@ -167,7 +184,7 @@ describe('an eyelid', () => {
     /* Each row's covered pixels are at its right end, or its left. */
     for (const row of lid(64).filter((row) => row.includes('#'))) {
       expect(row.lastIndexOf('#')).toBeGreaterThan(row.indexOf('#') - 1);
-      expect(row.indexOf('#')).toBeGreaterThan(6);
+      expect(row.indexOf('#')).toBeGreaterThanOrEqual(6);
     }
 
     for (const row of lid(-64).filter((row) => row.includes('#'))) {
@@ -179,12 +196,12 @@ describe('an eyelid', () => {
 describe('a shining ball', () => {
   it('is shaded from the ramp’s eighth colour at the top to its first, which fills the rest', () => {
     const bitmap = new IndexedBitmap(40, 40);
-    fillShaded(bitmap, { x: 20, y: 20, diameter: 20, fuzz: 0 }, 164, () => 0);
+    fillShaded(bitmap, { x: 20, y: 20, diameter: 20, fuzz: 0 }, 164);
     const rows = Array.from({ length: 20 }, (_, r) => bitmap.get(20, 10 + r));
 
-    /* The top 0.3 of 20 rows, 6, step down a quarter turn by 64 / 6 = 10. */
-    expect(rows.slice(0, 7)).toEqual([171, 171, 171, 169, 168, 166, 164]);
-    expect(rows.slice(7, 19).every((colour) => colour === 164)).toBe(true);
+    /* A circle of 19: the top 0.3 of its rows, 5, step down a quarter turn by 64 / 5 = 12. */
+    expect(rows.slice(0, 7)).toEqual([171, 171, 170, 169, 167, 164, 164]);
+    expect(rows.slice(7, 18).every((colour) => colour === 164)).toBe(true);
   });
 });
 

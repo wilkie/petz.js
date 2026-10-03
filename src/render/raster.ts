@@ -4,14 +4,14 @@
  * this follows, from `XDrawPort::InitCircleLookup` and
  * `XDrawPort::XFillPartialCircleKernel` in DOGZDLL.DLL.
  *
- * A ball of diameter D is D rows. Row r (from 1) is as wide as the circle is
- * there, `sqrt(D² - (D - 2r)²)`, centred, and shifted right by a random 0 to
- * the ball's fuzz level of pixels: fuzz makes ragged edges, not narrower
- * rows. It is filled in the ball's colour; then, by its outline type, its
- * leftmost pixel in the outline colour (0, a half outline), or that many
- * pixels at each end and that many whole rows at top and bottom (more than
- * 0), or nothing (-1). In the upper half of a ball without a full outline,
- * each row has one pixel at a random place in it in the speckle colour.
+ * A ball of radius r is drawn in a square 2r across, as a circle of
+ * diameter D = 2r - 1: rows 1 to D - 1 down from the square's top, row i
+ * as wide as `sqrt(D² - (D - 2i)²)`, centred, and moved right by the
+ * ball's fuzz from a table made once at random. It is filled in the ball's
+ * colour; by its outline type, with a pixel of the outline colour before
+ * each row (0, a half outline), that many pixels of it at each end and that
+ * many whole rows at top and bottom (more than 0), or none (-1); and, but
+ * for a full outline, one speckle in each row of its upper half.
  */
 
 import { sine } from './project.ts';
@@ -99,46 +99,127 @@ export interface Ball {
   fuzz: number;
 }
 
-/** Draws a ball as `XFillPartialCircleKernel` does. */
-export function fillBall(bitmap: IndexedBitmap, ball: Ball, next: (below: number) => number) {
-  const d = Math.round(ball.diameter);
+/** The largest diameter `InitCircleLookup` makes tables for. */
+const LARGEST = 119;
 
-  if (d < 1) {
-    return;
+/**
+ * The tables `InitCircleLookup` (seg8:200f) makes once, with `rand()`:
+ * for every diameter to 119 and each of its rows, for each fuzz level 0 to
+ * 7 how far right the row is moved, `rand() % (level + 1)`, then where in it
+ * its speckle goes, `rand() % (width + 1)`; and, first, the rows' moves for
+ * the full outlines, 256 to a level (`XInitScreenPort`, seg8:14d7).
+ */
+export interface CircleTables {
+  /** By level, then the diameter's rows from `d(d - 1) / 2`. */
+  fuzz: Int8Array[];
+  speckle: Int8Array;
+  /** By level, a row each. */
+  outline: Int8Array[];
+}
+
+const tables = new Map<number, CircleTables>();
+
+/** The circle tables, made with Borland's `rand` from a seed, once each. */
+export function circleTables(seed = 1): CircleTables {
+  const made = tables.get(seed);
+
+  if (made) {
+    return made;
   }
 
-  const fuzz = Math.max(0, Math.min(7, ball.fuzz));
-  const top = Math.round(ball.y - d / 2);
-  const speckle = ball.speckleColour >= 0 ? ball.speckleColour : ball.colour;
+  let state = seed >>> 0;
+  const rand = () => {
+    state = (Math.imul(state, 0x015a4e35) + 1) >>> 0;
+    return (state >>> 16) & 0x7fff;
+  };
+  const size = (LARGEST * (LARGEST + 1)) / 2;
+  const outline = Array.from({ length: 8 }, (_, level) =>
+    Int8Array.from({ length: 256 }, () => rand() % (level + 1))
+  );
+  const fuzz = Array.from({ length: 8 }, () => new Int8Array(size));
+  const speckle = new Int8Array(size);
 
-  for (let r = 1; r <= d; r++) {
+  for (let d = 1; d <= LARGEST; d++) {
+    for (let r = 1; r <= d; r++) {
+      const at = (d * (d - 1)) / 2 + r - 1;
+
+      for (let level = 0; level < 8; level++) {
+        fuzz[level][at] = rand() % (level + 1);
+      }
+
+      speckle[at] = rand() % (rowWidth(d, r) + 1);
+    }
+  }
+
+  const result = { fuzz, speckle, outline };
+  tables.set(seed, result);
+  return result;
+}
+
+/** A ball's circle, as the kernel lays it out: its rows, each one's place and width. */
+function circleRows(
+  ball: { x: number; y: number; diameter: number },
+  level: number,
+  fuzz: CircleTables
+) {
+  const radius = Math.floor(Math.round(ball.diameter) / 2);
+  const d = 2 * radius - 1;
+  const x = Math.round(ball.x);
+  const top = Math.round(ball.y) - radius;
+  const rows: { r: number; y: number; start: number; width: number; spot: number; edge: number }[] =
+    [];
+
+  for (let r = 1; r < d; r++) {
     const width = rowWidth(d, r);
-    const y = top + r - 1;
-    const left = Math.round(ball.x) - Math.floor(width / 2) + next(fuzz + 1);
-    const thick = ball.outline;
+    const at = (d * (d - 1)) / 2 + r - 1;
+    const inTable = d <= LARGEST;
+    rows.push({
+      r,
+      y: top + r - 1,
+      /* The square's left, plus half of D rounded up, less half the width. */
+      start: x - Math.floor(width / 2) + (inTable ? fuzz.fuzz[level][at] : 0),
+      width,
+      spot: inTable ? fuzz.speckle[at] : 0,
+      /* The full outlines' rows: the square's left plus half what the row leaves. */
+      edge: x - radius + Math.trunc((d - width) / 2) + fuzz.outline[level][(r - 1) & 0xff],
+    });
+  }
 
+  return { rows, d };
+}
+
+/** Draws a ball as `XFillPartialCircleKernel` does in modes -1, 0 and above (seg8:3db8 on). */
+export function fillBall(bitmap: IndexedBitmap, ball: Ball, fuzz: CircleTables = circleTables()) {
+  const level = Math.max(0, Math.min(7, ball.fuzz));
+  const { rows, d } = circleRows(ball, level, fuzz);
+  const speckle = ball.speckleColour >= 0 ? ball.speckleColour : ball.colour;
+  const thick = ball.outline;
+
+  for (const { r, y, start, width, spot, edge } of rows) {
     if (thick > 0) {
-      if (r <= thick || r > d - thick) {
-        bitmap.span(left, y, width, ball.outlineColour);
+      /* Whole rows of the outline at top and bottom, its ends between. */
+      if (r <= thick || r >= d - thick) {
+        bitmap.span(edge, y, width, ball.outlineColour);
       } else {
-        bitmap.span(left, y, thick, ball.outlineColour);
-        bitmap.span(left + thick, y, width - 2 * thick, ball.colour);
-        bitmap.span(left + width - thick, y, thick, ball.outlineColour);
+        bitmap.span(edge, y, thick, ball.outlineColour);
+        bitmap.span(edge + thick, y, width - 1 - 2 * thick, ball.colour);
+        bitmap.span(edge + thick + Math.max(0, width - 1 - 2 * thick), y, thick, ball.outlineColour);
       }
 
       continue;
     }
 
-    bitmap.span(left, y, width, ball.colour);
-
-    if (thick === 0 && width > 0) {
-      bitmap.set(left, y, ball.outlineColour);
+    if (thick === 0) {
+      /* A pixel of the outline before the row, which is one shorter. */
+      bitmap.set(start - 1, y, ball.outlineColour);
+      bitmap.span(start, y, width - 1, ball.colour);
+    } else {
+      bitmap.span(start, y, width, ball.colour);
     }
 
-    /* One speckle a row in the upper half; its place drawn as the spot
-     * table's is, anywhere from the row's start to its end. */
-    if (r < d / 2 && width > 0) {
-      bitmap.set(left + next(width + 1), y, speckle);
+    /* A speckle in each row of the upper half, anywhere to one past its end. */
+    if (r < Math.trunc(d / 2)) {
+      bitmap.set(start + spot, y, speckle);
     }
   }
 }
@@ -154,30 +235,18 @@ export function fillShaded(
   bitmap: IndexedBitmap,
   ball: Pick<Ball, 'x' | 'y' | 'diameter' | 'fuzz'>,
   ramp: number,
-  next: (below: number) => number
+  fuzz: CircleTables = circleTables()
 ) {
-  const d = Math.round(ball.diameter);
-
-  if (d < 1) {
-    return;
-  }
-
-  const fuzz = Math.max(0, Math.min(7, ball.fuzz));
-  const top = Math.round(ball.y - d / 2);
+  const level = Math.max(0, Math.min(7, ball.fuzz));
+  const { rows, d } = circleRows(ball, level, fuzz);
   const shaded = Math.max(1, Math.trunc(0.3 * d));
   const step = Math.trunc(((-1 / shaded) * 256) / 4) || -5;
   let phase = 0x40;
 
-  for (let r = 1; r <= d; r++, phase += step) {
-    const width = rowWidth(d, r);
-    const level = Math.max(0, Math.min(7, sine(phase) >> 5));
-    const colour = phase > 0 ? ramp + level : ramp;
-    bitmap.span(
-      Math.round(ball.x) - Math.floor(width / 2) + next(fuzz + 1),
-      top + r - 1,
-      width,
-      colour
-    );
+  for (const { y, start, width } of rows) {
+    const shade = Math.max(0, Math.min(7, sine(phase) >> 5));
+    bitmap.span(start, y, width, phase > 0 ? ramp + shade : ramp);
+    phase += step;
   }
 }
 
@@ -197,7 +266,7 @@ export function wrapAngle(angle: number) {
 }
 
 /**
- * Covers part of a ball of diameter `d` centred at `x`, `y` in one colour,
+ * Covers part of a ball drawn in a square `d` across, centred at `x`, `y`, in one colour,
  * from one side up to a line, as `XFillPartialCircleKernel` does in mode -2
  * (seg8:3995 to 3db5): an eyelid. `cover` rows are covered, from the top
  * when the line is level (the angle within 2 of 0), from the bottom when it
@@ -216,13 +285,14 @@ export function fillLid(
     angle,
   }: { x: number; y: number; d: number; colour: number; cover: number; angle: number }
 ) {
-  const rows = d;
-  const top = Math.round(y - d / 2);
+  /* The eye's square is `d` across; its circle one less, as every ball's. */
+  const rows = d - 1;
+  const top = Math.round(y) - Math.floor(d / 2);
   const rectLeft = Math.round(x) - Math.floor(d / 2);
-  const across = d + 1;
+  const across = d;
   const a = wrapAngle(angle);
   const row = (r: number) => {
-    const width = rowWidth(d, r);
+    const width = rowWidth(rows, r);
     return { width, start: Math.round(x) - Math.floor(width / 2), y: top + r - 1 };
   };
 

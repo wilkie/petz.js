@@ -27,7 +27,7 @@ import {
   fillLid,
   fillShaded,
   IndexedBitmap,
-  random,
+  circleTables,
   speckleColour,
   wrapAngle,
 } from './raster.ts';
@@ -51,7 +51,10 @@ export interface DrawOptions {
   /** Which way the dog is turned, in 256ths of a turn. */
   yaw?: number;
 
-  /** The seed of the fuzz and speckles, which Dogz draws at random. */
+  /**
+   * The seed of the tables of fuzz and speckles, which Dogz makes at random
+   * once (`InitCircleLookup`): the same seed, the same ragged edges.
+   */
   seed?: number;
 
   /** The head turned toward what the dog looks at (`HeadTrackPrep`), if it is. */
@@ -197,7 +200,7 @@ export function drawPet(
     bristle = 0,
   }: DrawOptions
 ) {
-  const next = random(seed);
+  const tables = circleTables(seed);
   /* How much of a puppy: 100 less the age, as SetBallScaleFromAge asks.
    * Not yet read where it is applied. */
   const placed = project(
@@ -265,7 +268,7 @@ export function drawPet(
         bitmap,
         { ...at(ball), diameter: placed[ball].diameter, fuzz: breed.fuzz[ball] + bristle },
         SHINE,
-        next
+        tables
       );
     } else {
       fillBall(
@@ -284,7 +287,7 @@ export function drawPet(
           outline: breed.outlineType[ball],
           fuzz: breed.fuzz[ball] + bristle,
         },
-        next
+        tables
       );
     }
 
@@ -368,8 +371,7 @@ function drawIris(
   const disc = (diameter: number, colour: number) =>
     fillBall(
       bitmap,
-      { x, y, diameter, colour, outlineColour: 0, speckleColour: -1, outline: -1, fuzz: 0 },
-      () => 0
+      { x, y, diameter, colour, outlineColour: 0, speckleColour: -1, outline: -1, fuzz: 0 }
     );
 
   disc(iris.diameter, irisColour);
@@ -438,7 +440,7 @@ function drawLid(
     y: centre.y,
     d,
     colour: (colours === 256 ? breed.eyelidColor256 : breed.eyelidColor16) ?? 4,
-    cover: Math.trunc(((d + 1) * (100 - open)) / 100),
+    cover: Math.trunc((d * (100 - open)) / 100),
     angle,
   });
 }
