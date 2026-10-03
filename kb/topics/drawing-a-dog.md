@@ -125,6 +125,6 @@ flowchart LR
 
 ## Still to find
 
-- [[measured]] With the lines scanned as the bitmap is laid out, the bitmap's way up taken from WinG's timing, and the eyelids where the blink, which goes on while the dog is held, caught them, every probe ([[guide:reproducing]]) matches the oracle's picture to within 9 pixels of 3,300 to 4,800: side-on with and without fur exactly.
+- [[measured]] With the lines scanned as the bitmap is laid out, the bitmap's way up taken from WinG's timing, and the eyelids where the blink, which goes on while the dog is held, caught them, every probe ([[guide:reproducing]]) matches the oracle's picture to within 13 pixels of 2,600 to 5,000: side-on with and without fur exactly; sitting (frame 1131) and asleep on its back (1690) to a pixel; asleep lying (1908) to 5; playing dead (2651), upside down, to 13; turned to face out (`--turn -64`, found at yaw 0) to 9, and turned an eighth (`--turn 32`, yaw 96) exactly.
 
 How fast frames are shown. What the dog does with them is [[format:scp]].

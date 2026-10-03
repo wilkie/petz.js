@@ -88,5 +88,65 @@
       "wrong": 0,
       "pixels": 4307
     }
+  },
+  {
+    "name": "sit1131",
+    "about": "the big dog sitting, frame 1131 (script 105, sitting)",
+    "variant": ["--plain", "--hold", "1131"],
+    "frame": 1131,
+    "expect": {
+      "wrong": 1,
+      "pixels": 4285
+    }
+  },
+  {
+    "name": "sleep1908",
+    "about": "asleep, lying, frame 1908 (script 129, sleeping)",
+    "variant": ["--plain", "--hold", "1908"],
+    "frame": 1908,
+    "expect": {
+      "wrong": 5,
+      "pixels": 3608
+    }
+  },
+  {
+    "name": "back1690",
+    "about": "asleep on its back, frame 1690 (script 139, sleep_back)",
+    "variant": ["--plain", "--hold", "1690"],
+    "frame": 1690,
+    "expect": {
+      "wrong": 1,
+      "pixels": 3562
+    }
+  },
+  {
+    "name": "dead2651",
+    "about": "playing dead, frame 2651 (script 152, playDead)",
+    "variant": ["--plain", "--hold", "2651"],
+    "frame": 2651,
+    "expect": {
+      "wrong": 13,
+      "pixels": 3914
+    }
+  },
+  {
+    "name": "turn35left",
+    "about": "frame 35 turned a quarter (0x8ae5 -64)",
+    "variant": ["--plain", "--hold", "35", "--turn", "-64"],
+    "frame": 35,
+    "expect": {
+      "wrong": 9,
+      "pixels": 2610
+    }
+  },
+  {
+    "name": "turn35eighth",
+    "about": "frame 35 turned an eighth (0x8ae5 32)",
+    "variant": ["--plain", "--hold", "35", "--turn", "32"],
+    "frame": 35,
+    "expect": {
+      "wrong": 0,
+      "pixels": 3605
+    }
   }
 ]
