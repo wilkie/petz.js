@@ -14,6 +14,7 @@ import { type Breed } from '../formats/lnz.ts';
 import {
   type Angles,
   angle256,
+  type Blend,
   type Eyelids,
   type Head,
   type Placed,
@@ -58,6 +59,12 @@ export interface DrawOptions {
 
   /** The dog's tilt, spin and roll. */
   angles?: Angles;
+
+  /** The frame blended from a reference frame, as the dog breathes. */
+  blend?: Blend;
+
+  /** How many levels the fur bristles: added to every ball's fuzz (the `BallState`'s `+0x46`). */
+  bristle?: number;
 
   /** Each eyelid's height and tilt, as the dog's fudgers have them: 100 and level without. */
   eyelids?: Eyelids;
@@ -141,7 +148,13 @@ export function ballAt(
   header: AnimationHeader,
   frame: Frame,
   ball: number,
-  { age = 0, yaw = 0, head, angles }: Pick<DrawOptions, 'age' | 'yaw' | 'head' | 'angles'>
+  {
+    age = 0,
+    yaw = 0,
+    head,
+    angles,
+    blend,
+  }: Pick<DrawOptions, 'age' | 'yaw' | 'head' | 'angles' | 'blend'>
 ) {
   const placed = project(
     breed,
@@ -151,7 +164,8 @@ export function ballAt(
     yaw,
     100 - age,
     head,
-    angles
+    angles,
+    blend
   );
   return { x: placed[ball].x, y: placed[ball].y };
 }
@@ -179,6 +193,8 @@ export function drawPet(
     eyesWide = 0,
     angles,
     eyelids,
+    blend,
+    bristle = 0,
   }: DrawOptions
 ) {
   const next = random(seed);
@@ -192,7 +208,8 @@ export function drawPet(
     yaw,
     100 - age,
     head,
-    angles
+    angles,
+    blend
   );
   const numbers = colours === 256 ? breed.ballColor256 : breed.ballColor16;
   const ramps = RAMPS[colours];
@@ -240,7 +257,7 @@ export function drawPet(
       /* The nose and nostrils shine (mode -4, seg10:523d). */
       fillShaded(
         bitmap,
-        { ...at(ball), diameter: placed[ball].diameter, fuzz: breed.fuzz[ball] },
+        { ...at(ball), diameter: placed[ball].diameter, fuzz: breed.fuzz[ball] + bristle },
         SHINE,
         next
       );
@@ -259,7 +276,7 @@ export function drawPet(
             ramps.length
           ),
           outline: breed.outlineType[ball],
-          fuzz: breed.fuzz[ball],
+          fuzz: breed.fuzz[ball] + bristle,
         },
         next
       );

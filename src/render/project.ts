@@ -20,6 +20,12 @@ export interface Angles {
   roll: number;
 }
 
+/** A frame's balls this many hundredths of the way from where a reference frame has them (`BallState` `+0x32`, `+0x34`). */
+export interface Blend {
+  scale: number;
+  reference: Frame;
+}
+
 /** Each eyelid's height, the share of the eye it may leave open, in hundredths, and its tilt. */
 export interface Eyelids {
   left: { height: number; tilt: number };
@@ -124,13 +130,28 @@ export function project(
   yaw = 0,
   puppiness = 0,
   head?: Head,
-  { tilt = 0, spin = 0, roll = 0 }: Partial<Angles> = {}
+  { tilt = 0, spin = 0, roll = 0 }: Partial<Angles> = {},
+  blend?: Blend
 ): Placed[] {
+  /* Blended, a ball is moved the scale's share of the way from the reference frame (seg10:3b0c to 3c4e). */
+  const at = (index: number) => {
+    const ball = frame.balls[index];
+    const from = blend?.reference.balls[index];
+
+    if (!blend || blend.scale === 100 || !from) {
+      return ball;
+    }
+
+    const toward = (axis: 'x' | 'y' | 'z') =>
+      Math.trunc(((ball[axis] - from[axis]) * blend.scale) / 100) + from[axis];
+    return { x: toward('x'), y: toward('y'), z: toward('z') };
+  };
+
   const turn = wrap(yaw - spin);
   const pitch = -7 - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
   const [cy, sy, cp, sp] = [cosine(turn), sine(turn), cosine(pitch), sine(pitch)];
   const heads = head ? new Set(breed.headBalls) : null;
-  const snout = frame.balls[HEAD_PIVOT];
+  const snout = frame.balls[HEAD_PIVOT] && at(HEAD_PIVOT);
   const pivot = head &&
     snout && {
       x: Math.trunc(shift(snout.x * scales.pet) + head.drift.x),
@@ -138,7 +159,8 @@ export function project(
       z: Math.trunc(shift(snout.z * scales.pet) + head.drift.z),
     };
 
-  return frame.balls.map((ball, index) => {
+  return frame.balls.map((_, index) => {
+    const ball = at(index);
     let x = shift(ball.x * scales.pet);
     let y = shift(ball.y * scales.pet);
     let z = shift(ball.z * scales.pet);

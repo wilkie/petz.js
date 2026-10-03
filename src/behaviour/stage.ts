@@ -223,6 +223,9 @@ export class Stage implements PetWorld {
   /** The dog's tilt, spin and roll, as the last frame shown has them. */
   angles: Angles | undefined = undefined;
 
+  /** Its frame blended from a reference frame as it breathes, as the last frame shown has it. */
+  blend: { scale: number; reference: number } | undefined = undefined;
+
   /** The breed as it came, before any painting. */
   readonly original: Breed;
 
@@ -306,14 +309,21 @@ export class Stage implements PetWorld {
     ball: number,
     rotation: number,
     head = this.head,
-    angles = this.angles
+    angles = this.angles,
+    blend = this.blend
   ) {
     return ballAt(this.breed, this.header, frame, ball, {
       age: this.age,
       yaw: rotation,
       head,
       angles,
+      blend: this.blendOf(blend),
     });
+  }
+
+  /** The blend as `project` takes it, its reference a frame. */
+  private blendOf(blend = this.blend) {
+    return blend && { scale: blend.scale, reference: this.frames[blend.reference] };
   }
 
   /** The centre of the rectangle a frame is drawn in, from the dog's origin. */
@@ -326,7 +336,8 @@ export class Stage implements PetWorld {
       rotation,
       100 - this.age,
       this.head,
-      this.angles
+      this.angles,
+      this.blendOf()
     );
     const left = Math.min(...placed.map((ball) => ball.x - ball.diameter / 2));
     const right = Math.max(...placed.map((ball) => ball.x + ball.diameter / 2));
@@ -346,17 +357,26 @@ export class Stage implements PetWorld {
     pinned?: { ball: number; x: number; y: number },
     centredAt?: { x: number; y: number },
     head?: Head,
-    angles?: Angles
+    angles?: Angles,
+    blend?: { scale: number; reference: number }
   ) {
     const next = this.frames[step.frame];
 
-    /* The frame before as it was drawn, the new one with the head and the dog's angles as they now are. */
-    const was = { head: this.head, angles: this.angles };
+    /* The frame before as it was drawn, the new one with the head, the dog's angles and its breathing as they now are. */
+    const was = { head: this.head, angles: this.angles, blend: this.blend };
     this.head = head;
     this.angles = angles;
+    this.blend = blend;
 
     if (step.glue !== undefined) {
-      const before = this.ballOf(this.frame, step.glue, this.rotation, was.head, was.angles);
+      const before = this.ballOf(
+        this.frame,
+        step.glue,
+        this.rotation,
+        was.head,
+        was.angles,
+        was.blend
+      );
       const after = this.ballOf(next, step.glue, rotation);
       this.x += before.x - after.x;
       this.y += before.y - after.y;
@@ -396,7 +416,8 @@ export class Stage implements PetWorld {
       this.rotation,
       100 - this.age,
       this.head,
-      this.angles
+      this.angles,
+      this.blendOf()
     ).map((ball) => ({ ...ball, x: this.x + ball.x, y: this.y + ball.y }));
   }
 

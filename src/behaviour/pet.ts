@@ -247,6 +247,9 @@ export interface PetData {
   scripts: Script[];
   table: TransitionTable;
   positionKinds: number[];
+
+  /** Each position's heart rate, -1 for none (`readHeartRates`); without, the heart stays as it starts. */
+  heartRates?: number[];
   tricks: Trick[];
   trickDefaults: Trick[];
   trickScripts: TrickScript[];
@@ -373,6 +376,12 @@ export interface Tick extends Step {
   /** The dog's tilt, spin and roll, in 256ths of a turn. */
   angles?: Angles;
 
+  /** How many levels the fur bristles: added to every ball's fuzz. */
+  bristle?: number;
+
+  /** Each ball this many hundredths of the way from where a reference frame has it to where the frame does. */
+  blend?: { scale: number; reference: number };
+
   /** Each eyelid's height, in hundredths open at most, and tilt (`BallState` `+0x24`, `+0x26`, `+0x20`, `+0x22`). */
   eyelids?: Eyelids;
 }
@@ -389,6 +398,8 @@ type Item =
   | { drift: number }
   | { fudge: Fudge }
   | { lids: number }
+  | { begin: number }
+  | { after: Omit<Step, 'frame'> }
   | { cue: number }
   | { trick: number }
   | { aim: { ball: number; at: { x: number; y: number } | null } }
@@ -641,6 +652,11 @@ export class Pet {
       eyes: { mode: this.eyeMode, ...this.eyeTarget },
       lids: this.lids,
       eyesWide: this.eyesWide,
+      bristle: this.bristle,
+      blend:
+        this.motionScale === 100
+          ? undefined
+          : { scale: this.motionScale, reference: this.reference },
       angles: {
         tilt: this.fudged(AXIS.tilt),
         spin: this.fudged(AXIS.spin),
@@ -680,13 +696,21 @@ export class Pet {
   private pushScript(index: number) {
     const script = this.data.scripts[index];
     const variant = this.rand() % script.variants.length;
+    let after: Omit<Step, 'frame'> | undefined;
     const steps = timeline(this.data.scripts, index, variant, {
       flags: this.data.flags,
       random: (n) => this.rand() % n,
       limit: 600,
+      tail: (rest) => (after = rest),
     });
 
-    this.push(...steps.map((step) => ({ step, script: index })), { end: index });
+    /* Its start (`0x8b0a`), its frames, what follows them, its end (`0x8b0b`). */
+    this.push(
+      { begin: index },
+      ...steps.map((step) => ({ step, script: index })),
+      ...(after ? [{ after }] : []),
+      { end: index }
+    );
   }
 
   /**
@@ -773,6 +797,8 @@ export class Pet {
     let placedBy: number | undefined;
 
     this.cues.clear();
+    this.easeMotionScale();
+    this.tails.splice(0).forEach((after) => this.applyTail(after));
     this.grabbedSlot = -1;
 
     const control = (item: Item) => {
@@ -808,6 +834,15 @@ export class Pet {
         this.applyFudge(item.fudge, this.framesAhead());
       } else if ('lids' in item) {
         this.restLids(item.lids);
+      } else if ('begin' in item) {
+        this.updateHeartRate(item.begin);
+      } else if ('after' in item) {
+        /* Met after this frame, it is for the next (`PopScript` reaches it then). */
+        if (step) {
+          this.tails.push(item.after);
+        } else {
+          this.applyTail(item.after);
+        }
       }
     };
 
@@ -858,44 +893,81 @@ export class Pet {
         this.slide.movedY = y;
       }
 
-      if (step.release !== undefined) {
-        this.releaseObject(step.release);
-      }
-
-      if (step.grab !== undefined) {
-        this.grabbedSlot = step.grab;
-        this.grabObject(step.grab);
-      }
-
-      if (step.look === 'random') {
-        this.lookAtRandomPoint();
-      } else if (step.look === 'user') {
-        this.lookAtUser();
-      } else if (step.look === 'ahead') {
-        this.lookAhead();
-      }
-
-      for (const each of step.fudges ?? []) {
-        this.applyFudge(each, each.frames ?? 1);
-      }
-
-      if (step.lids !== undefined) {
-        this.restLids(step.lids);
-      }
-
-      if (step.blink !== undefined) {
-        this.doBlink(step.blink);
-      }
-
-      for (const cue of step.cues ?? []) {
-        this.processCue(cue);
-      }
+      this.applyEffects(step);
     } else {
       step = { frame: this.lastStep.frame };
       this.placedBy = undefined;
     }
 
+    /* Breathing, the frames move as far as the heart beats fast (seg7:6aea). */
+    if (this.breathing) {
+      this.motionTarget = Math.trunc(this.heart / 10);
+    }
+
     return { step, flags };
+  }
+
+  /** What a step does besides its frame: as the frame is shown, or after a script's last. */
+  private applyEffects(step: Omit<Step, 'frame'>) {
+    if (step.release !== undefined) {
+      this.releaseObject(step.release);
+    }
+
+    if (step.grab !== undefined) {
+      this.grabbedSlot = step.grab;
+      this.grabObject(step.grab);
+    }
+
+    if (step.look === 'random') {
+      this.lookAtRandomPoint();
+    } else if (step.look === 'user') {
+      this.lookAtUser();
+    } else if (step.look === 'ahead') {
+      this.lookAhead();
+    }
+
+    for (const each of step.fudges ?? []) {
+      this.applyFudge(each, each.frames ?? 1);
+    }
+
+    if (step.lids !== undefined) {
+      this.restLids(step.lids);
+    }
+
+    if (step.blink !== undefined) {
+      this.doBlink(step.blink);
+    }
+
+    if (step.breathe !== undefined) {
+      this.breathe(step.breathe);
+    }
+
+    if (step.bristle !== undefined) {
+      this.bristle = step.bristle;
+    }
+
+    for (const cue of step.cues ?? []) {
+      this.processCue(cue);
+    }
+  }
+
+  /** What followed the last frame shown, done as the next is reached. */
+  private tails: Omit<Step, 'frame'>[] = [];
+
+  /** What follows a script's last frame (`PopScript`, before the next): its turns as well. */
+  private applyTail(after: Omit<Step, 'frame'>) {
+    this.rotation = wrap(this.rotation + (after.turn ?? 0));
+
+    if (after.ease) {
+      this.startEase(after.ease.to, this.framesAhead());
+    }
+
+    if (after.drift !== undefined) {
+      this.drift = after.drift;
+    }
+
+    this.sounds.push(...(after.sounds ?? []));
+    this.applyEffects(after);
   }
 
   /**
@@ -950,6 +1022,8 @@ export class Pet {
     }
 
     this.lidRest = 30;
+    this.breathing = false;
+    this.motionTarget = 100;
     this.targetsOn = true;
     this.lookAt(null);
     this.eyesWide = 0;
@@ -4474,6 +4548,76 @@ export class Pet {
     this.lidRest = closed >= 0 ? closed : 30;
   }
 
+  // The heart and breathing.
+
+  /** The heart rate in tenths (`0x2094`): 40 to start. */
+  private heart = 400;
+
+  /** Whether the frames move by the heart (`0x2096`, `8aff`), and the frame they move from (`+0x34`). */
+  private breathing = false;
+  private reference = 0;
+
+  /** How far, in hundredths, each frame's balls are from the reference frame (`+0x32`), and where that eases to (`0x2098`). */
+  private motionScale = 100;
+  private motionTarget = 100;
+
+  /** How many levels the fur bristles (`+0x46`, `8b01`). */
+  private bristle = 0;
+
+  /**
+   * `ScriptSprite::UpdateHeartRate` (seg7:79ab), as each script starts: the
+   * heart goes toward the rate of the positions the script goes between,
+   * their average, up 1.5 or down 0.5 a script.
+   */
+  private updateHeartRate(script: number) {
+    const rates = this.data.heartRates;
+    const { from, to } = this.data.scripts[script] ?? {};
+
+    if (!rates || from === undefined || to === undefined) {
+      return;
+    }
+
+    let [a, b] = [rates[from] ?? -1, rates[to] ?? -1];
+
+    if (a < 0 && b < 0) {
+      return;
+    }
+
+    a = a < 0 ? b : a;
+    b = b < 0 ? a : b;
+    const target = Math.trunc((a + b) / 2) * 10;
+
+    if (target < this.heart) {
+      this.heart -= 5;
+    }
+
+    if (this.heart < target) {
+      this.heart += 15;
+    }
+  }
+
+  /** `8aff frame`: breathe from a frame; `8b00`: stop, the frames as they are at once. */
+  private breathe(reference: number | null) {
+    if (reference === null) {
+      this.breathing = false;
+      this.motionTarget = 100;
+      this.motionScale = 100;
+    } else {
+      this.breathing = true;
+      this.reference = reference;
+    }
+  }
+
+  /** As `PopScript` starts (seg7:5841): the motion scale 5 nearer its target. */
+  private easeMotionScale() {
+    if (this.reference < 0) {
+      return;
+    }
+
+    const gap = this.motionTarget - this.motionScale;
+    this.motionScale += Math.sign(gap) * Math.min(Math.abs(gap), 5);
+  }
+
   // The kennel.
 
   /** Where the dog is put this frame, its rectangle's middle at the point. */
@@ -4715,6 +4859,8 @@ export class Pet {
    */
   private doSprayReact(mode: Mode): Step | undefined {
     if (mode === 'exit') {
+      /* Its fur lies flat again (seg14:0f85). */
+      this.bristle = 0;
       return undefined;
     }
 

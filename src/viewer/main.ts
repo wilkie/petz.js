@@ -44,6 +44,7 @@ import {
   readEngineScripts,
   readEngineStateNames,
   readPicture,
+  readHeartRates,
   readPositionKinds,
   readTrickScripts,
 } from '../formats/engine.ts';
@@ -153,6 +154,7 @@ let live: {
   lids?: number;
   eyesWide?: number;
   eyelids?: Eyelids;
+  bristle?: number;
   iris: { x: number; y: number };
 } | null = null;
 
@@ -296,6 +298,11 @@ function drawDog(
     eyesWide: live?.eyesWide,
     eyelids: live?.eyelids,
     angles: stage?.angles,
+    blend: stage?.blend && {
+      scale: stage.blend.scale,
+      reference: allFrames[stage.blend.reference],
+    },
+    bristle: live?.bristle,
   });
 
   if (front) {
@@ -501,6 +508,7 @@ function tickLive() {
     lids: step.lids,
     eyesWide: step.eyesWide,
     eyelids: step.eyelids,
+    bristle: step.bristle,
   });
   drawDog(step.frame, stage.x, stage.y, step.rotation, stage);
 
@@ -901,6 +909,7 @@ async function start(files: GameFiles) {
     scripts,
     table: transitionTable(scripts),
     positionKinds: readPositionKinds(engine, states.length),
+    heartRates: readHeartRates(engine, states.length),
     tricks: tricks.current,
     trickDefaults: tricks.defaults,
     trickScripts: readTrickScripts(engine),

@@ -125,6 +125,17 @@ export function readPositionKinds(engine: NeModule, count: number): number[] {
   return Array.from({ length: count }, (_, n) => words(data, 0xece + 15 * n + 13, 1)[0]);
 }
 
+/**
+ * Each position's heart rate (`ScriptSprite`'s statics, seg26:0x70, a word
+ * each, -1 for none): 20 asleep, 40 walking, 110 running. `UpdateHeartRate`
+ * reads it.
+ */
+export function readHeartRates(engine: NeModule, count: number): number[] {
+  const statics = engine.segmentBytes(26);
+  const view = new DataView(statics.buffer, statics.byteOffset, statics.byteLength);
+  return Array.from({ length: count }, (_, n) => view.getInt16(0x70 + 2 * n, true));
+}
+
 /** How each trick is played: six bytes a trick, at DS:0x216e. */
 export function readTrickScripts(engine: NeModule): TrickScript[] {
   const data = dataSegment(engine);

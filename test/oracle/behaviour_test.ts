@@ -34,6 +34,7 @@ import {
   readEngineScripts,
   readEngineStateNames,
   readPicture,
+  readHeartRates,
   readPositionKinds,
   readTrickScripts,
   TREAT_PICTURE,
@@ -58,6 +59,7 @@ withOracle('the engine’s behaviour', () => {
   const names = readEngineStateNames(engine);
   const positions = readStateNames(engine);
   const kinds = readPositionKinds(engine, positions.length);
+  const heartRates = readHeartRates(engine, positions.length);
   const scripts = parseScripts(read('DATA/ALL_PTZ.SCP'), readOpcodes(engine));
   const tricks = parseTricks(read('TRICKS.TDT'));
   const trickScripts = readTrickScripts(engine);
@@ -66,6 +68,23 @@ withOracle('the engine’s behaviour', () => {
   const breedNames = parseLnz(new TextDecoder('latin1').decode(read('DATA/TERRIER.LNZ'))).ballNames;
   const at = (script: number) =>
     `${positions[scripts[script].from]} to ${positions[scripts[script].to]}`;
+
+  it('keeps what follows a script’s last frame: turning round, stopping breathing', () => {
+    const tail = (script: number) => {
+      let after: object | undefined;
+      timeline(scripts, script, 0, {
+        flags: () => 3,
+        random: () => 0,
+        tail: (rest) => (after = rest),
+      });
+      return after;
+    };
+
+    /* Turning round (219) turns the dog after its last frame; panting stops (28). */
+    expect(tail(219)).toEqual({ turn: 128, glue: 50 });
+    expect(tail(28)).toEqual({ breathe: null });
+    expect(tail(27)).toBeUndefined();
+  });
 
   it('turns the dog round with 0x8ae7, and slants its eyelids with 0x8ae8', () => {
     const play = (script: number, variant: number) =>
@@ -198,6 +217,7 @@ withOracle('the engine’s behaviour', () => {
           scripts,
           table,
           positionKinds: kinds,
+          heartRates,
           tricks: structuredClone(tricks.current),
           trickDefaults: tricks.defaults,
           trickScripts,
@@ -288,6 +308,7 @@ withOracle('the engine’s behaviour', () => {
           scripts,
           table,
           positionKinds: kinds,
+          heartRates,
           tricks: dogTricks,
           trickDefaults: tricks.defaults,
           trickScripts,
@@ -302,7 +323,7 @@ withOracle('the engine’s behaviour', () => {
       let tick = 0;
       const states: number[] = [];
       const sounds: number[][] = [];
-      const looks: Pick<Tick, 'head' | 'eyes' | 'lids'>[] = [];
+      const looks: Pick<Tick, 'head' | 'eyes' | 'lids' | 'bristle' | 'blend'>[] = [];
 
       const run = (frameCount: number, act?: (n: number) => void) => {
         for (let n = 0; n < frameCount; n++, tick++) {
@@ -319,7 +340,13 @@ withOracle('the engine’s behaviour', () => {
           );
           states.push(step.state);
           sounds.push(step.sounds ?? []);
-          looks.push({ head: step.head, eyes: step.eyes, lids: step.lids });
+          looks.push({
+            head: step.head,
+            eyes: step.eyes,
+            lids: step.lids,
+            bristle: step.bristle,
+            blend: step.blend,
+          });
         }
       };
 
@@ -599,7 +626,7 @@ withOracle('the engine’s behaviour', () => {
     });
 
     it('flinches when sprayed, and does the trick it was at less', () => {
-      const { stage, pet, run, states, sounds, tricks: dogTricks } = setUp(3, 640, 480);
+      const { stage, pet, run, states, sounds, looks, tricks: dogTricks } = setUp(3, 640, 480);
       let trick = -1;
       run(3000, () => {
         if (trick < 0 && pet.state >= FIRST_TRICK && pet.state <= STATE.lastIdleTrick) {
@@ -619,6 +646,17 @@ withOracle('the engine’s behaviour', () => {
 
       const sprayed = sounds.length;
       run(800);
+      /* Its fur bristles as it flinches (script 68's 0x8b01), and lies flat again. */
+      const bristles = looks.slice(sprayed).map(({ bristle }) => bristle ?? 0);
+      expect(Math.max(...bristles)).toBe(4);
+      expect(bristles.join('')).toMatch(/^0*22444433/);
+      expect(bristles.at(-1)).toBe(0);
+
+      /* Panting, it breathed: its frames moved from the reference frame by its heart rate. */
+      const scales = looks.flatMap(({ blend }) => (blend ? [blend.scale] : []));
+      expect(scales.length).toBeGreaterThan(0);
+      expect(Math.min(...scales)).toBeGreaterThanOrEqual(20);
+      expect(Math.max(...scales)).toBeLessThan(100);
 
       expect(states).toContain(STATE.sprayReact);
       expect(pet.global).toBe(GLOBAL.idle);

@@ -139,7 +139,7 @@ flowchart LR
 - [[read out]] Let go of, it goes back in its box, and if the cursor is within the dog's drawn rectangle widened on every side by the dog's standard width and height (DS:0x3bd0, set by `FigureOutStandardWidthAndHeight`), the dog is sprayed (`SpraySprite::Update`, seg20:174d): `NegativeReinforcement`, a yelp (`PlaySound(75)`), its script dropped at once (`ResetScriptHard`, glued by the chest), and `eSprayReact`. No global state is entered: 0x3f4, `EnterSpray`'s, is set by nothing.
 - [[read out]] `NegativeReinforcement` (seg14:1bc5): a dog that decided to snatch in its last few chances (`0x1262`, `0x1264` on) is 5 less grabby, and forgets them. Otherwise, left alone, the trick it was at is 5 less likely, idle, never less than 1: the state before the one it is in (`0xc2`, the second of `NewState`'s history at `0xc0`) if the last trick (`0x8b06`) began under a second ago, else that trick; either gives way to the other if it is no trick and the trick was within ten seconds. At play, it is 5 more naughty, or 5 less if it was being naughty, and changes its mind about being naughty.
 - [[read out]] `DoSprayReact` (seg14:0f69) lets go of what is under its paw, drops its script again, eases its tilt level, and flinches (script 68) and, glued by the chest, shakes itself off or runs (323, seven variants); then waits for the ball at play, or is left alone. The brain is not told: it has no input for spraying.
-- [[inferred]] `0x8b01 n`, which script 68 is full of, is not yet played.
+- [[read out]] Script 68's flinch bristles the dog's fur, `0x8b01` 2, 4, 4, 3, 2 and 0, a frame or two each (below, breathing and bristling); `DoSprayReact` lays it flat again as it leaves.
 
 ## The shoe
 
@@ -188,6 +188,14 @@ flowchart LR
 - [[read out]] The scripts turn the dog round with `0x8ae7 1 128 10` (scripts 78 to 80) and a few 256ths at random (172); ease its tilt and spin level (`0x8ae6 0 0`, `0x8ae6 2 0`); and slant both eyelids with `0x8ae8 14`: −30, a frown, shaking off the spray (323), −20 and −10 elsewhere, 30 and 40 drooping, sick of food (283) and calmed (287), and back to 0. Script 283 also opens both lids to 100 (`0x8ae8 13 100 1`).
 - [[read out]] `ResetParams` stops every fudger (`Fudger::Reset`: no step, no drift) and eases the eyelids' tilts level at 10 a frame (seg7:3430 to 3453). The engine sets the tilt itself only to level it: scruffing (0 at 10 a frame), leaping for the ball (0 at 4), begging as an icon and birthing (0 at 180) — through the pet sprite's method at 0x80 (seg7:82d1). `0x8af3` would tilt the dog toward the point it steers at (seg7:6c79 to 6d1c), but nothing uses it, and `0x8ae2` only prints a message. So in play the dog is never tilted, spun or rolled.
 - `src/behaviour/fudger.ts` plays the fudgers, and the drawing turns the dog by them ([[topic:drawing-a-dog]]).
+
+## Breathing and bristling
+
+- [[read out]] The dog has a heart rate, in tenths, 40 to start (`0x2094`). As each script starts (`0x8b0a`, `UpdateHeartRate`, seg7:79ab), it goes toward the rate of the positions the script goes between — their average, one standing in for the other if it has none — up 1.5 or down 0.5 a script. The rates are `ScriptSprite`'s, a word a position at seg26:0x70: 20 asleep, 30 sitting, 40 walking or panting, 60 standing, 80 sitting up or rolling over, 110 running.
+- [[read out]] `0x8aff frame` (scripts 27 and 75, panting from frames 38 and 839) has the dog breathe by it (`0x2096`): every frame (seg7:6aea) its motion scale's target is the heart rate (`GetHeartRate`, seg7:7a80, `SetMotionScale`), and the scale (`BallState` `+0x32`) eases 5 a frame toward its target (seg7:5841). `GetCartesianCoordinates` puts each ball the scale's share of the way from where the reference frame has it (`+0x34`, `SetMotionScaleReferenceFrame`) to where the frame does: a calm dog pants less than the frames show, a dog that has run pants more. `0x8b00` (28, 76 and 202) stops it, the scale back to 100 at once; `ResetParams` stops it too and lets the scale ease back.
+- [[read out]] `0x8b01 n` sets how many levels every ball's fuzz is raised by (`+0x46`; `DisplayBallzFrame` adds it to each ball's level, seg10:526c and 528b, and the kernel keeps it to 7): the fur bristles.
+- [[read out]] What a script has after its last frame — script 219's turn round (`0x8ae5 1 128`), 28's `0x8b00`, a cue — `PopScript` reaches on its way to the next frame, so it takes effect then. `src/behaviour/timeline.ts` hands it on (`tail`), and the reimplementation does it as the next frame is reached.
+- [[read out]] `0x8aef frame weight` would blend one frame with another for a frame (`+0x42`, `+0x44`), but no script uses it.
 
 ## Blinking and the eyelids
 

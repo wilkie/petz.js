@@ -76,6 +76,15 @@ export interface Step {
 
   /** How far the eyelids rest closed, in hundredths, 30 when negative (`8ae0 n`). */
   lids?: number;
+
+  /** How many levels the fur bristles, added to every ball's fuzz (`8b01 n`). */
+  bristle?: number;
+
+  /**
+   * Breathing with the heart from a reference frame (`8aff frame`), or no
+   * longer (`8b00`, null): the frames' motion from it scaled by the heart rate.
+   */
+  breathe?: number | null;
 }
 
 /** The ball a script glues by when it says none: the belly (`GetDefaultGlueBall`). */
@@ -93,6 +102,9 @@ const RELEASE = 0x8b04;
 const LIDS = 0x8ae0;
 const BLINK = 0x8ae1;
 const CUE = 0x8ae3;
+const BREATHE = 0x8aff;
+const STILL = 0x8b00;
+const BRISTLE = 0x8b01;
 const EASE = 0x8ae6;
 const DRIFT = 0x8ae9;
 const LOOKS = { 0x8afa: 'random', 0x8afb: 'user', 0x8afc: 'ahead' } as const;
@@ -116,6 +128,9 @@ export interface TimelineOptions {
 
   /** How many frames at most: a repeat of 999 is for ever. */
   limit?: number;
+
+  /** What follows the script's last frame, which `PopScript` acts on before the next. */
+  tail?: (after: Omit<Step, 'frame'>) => void;
 }
 
 /** The steps a variant of a script plays out as, in order. */
@@ -123,7 +138,7 @@ export function timeline(
   scripts: Script[],
   index: number,
   variant: number,
-  { flags, random, limit = 2000 }: TimelineOptions
+  { flags, random, limit = 2000, tail }: TimelineOptions
 ): Step[] {
   const frames: Step[] = [];
 
@@ -235,6 +250,15 @@ export function timeline(
           case BLINK:
             pending.blink = value(a);
             break;
+          case BREATHE:
+            pending.breathe = value(a);
+            break;
+          case STILL:
+            pending.breathe = null;
+            break;
+          case BRISTLE:
+            pending.bristle = value(a);
+            break;
           case CUE:
             pending.cues = [...(pending.cues ?? []), value(a)];
             break;
@@ -292,6 +316,10 @@ export function timeline(
   };
 
   play(scripts[index].variants[variant], 0);
+
+  if (Object.keys(pending).length) {
+    tail?.(pending);
+  }
 
   /* An ease is spread over the frames from where it is to the script's end. */
   for (const step of eases) {
