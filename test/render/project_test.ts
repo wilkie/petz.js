@@ -1,6 +1,6 @@
 import { type AnimationHeader, type Frame } from '../../src/formats/animation.ts';
 import { type Breed } from '../../src/formats/lnz.ts';
-import { ballSize, project, scalesForAge } from '../../src/render/project.ts';
+import { angle256, ballSize, project, scalesForAge, sine } from '../../src/render/project.ts';
 
 const breed = {
   defaultScales: [220, 220, 140, 200],
@@ -158,5 +158,19 @@ describe('turning the head', () => {
   it('moves the head by its offset', () => {
     const moved = place({ ...still, offset: { x: 5, y: 0, z: 0 } });
     expect(moved[0].x).toBe(place()[0].x + 5);
+  });
+});
+
+describe('the engine’s angles', () => {
+  it('make sines with its own short π, so a quarter turn’s is 255', () => {
+    expect(sine(0)).toBe(0);
+    expect(sine(64)).toBe(255);
+    expect(sine(-64)).toBe(-255);
+    expect(sine(32)).toBe(181);
+  });
+
+  it('turn a direction into 256ths of a turn by its own 2π', () => {
+    expect(angle256(1, 0)).toBe(64);
+    expect(angle256(0, -1)).toBe(128);
   });
 });

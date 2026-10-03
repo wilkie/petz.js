@@ -70,6 +70,8 @@ node scripts/oracle/shoot.mjs held35 --wait 12 --count 8 --every 3
 
 `--set "<section>=<n>"` gives every line of a section of the adopted breed's file one value, and `--set "<section>[<ball>]=<n>"` one ball's line, as many as wanted: `--set "Body Extension=100"` makes the dog long, `--set "256 Ball Color[45]=80"` one ball red, to find it on the screen.
 
+[[measured]] WinG profiles the display the first time a variant runs on a new day: its key in `WIN.INI`'s `[WinG]` section changes with the date (`...-5D42-...` one day, `...-5D43-...` the next), and the profiling covers the screen for minutes. Shoot a fresh variant a second time; the first run has written the key.
+
 ## Check a Read out claim
 
 A **Read out** claim gives a file, a segment and an offset: `THINK.DLL` seg2:031a. The files are 16-bit Windows NE executables ([[format:ne]]), and segments are numbered from 1, as Windows numbers them. With the oracle built:

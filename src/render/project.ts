@@ -32,18 +32,26 @@ export interface Eyelids {
   right: { height: number; tilt: number };
 }
 
-/** The angle of a point from the origin, in 256ths of a turn (seg11:1e8a, as `atan2`). */
+/** The angle of a point from the origin, in 256ths of a turn (seg11:1e8a, as `atan2`), by the engine's own 2π, 6.283 (`ds:1d60`). */
 export function angle256(y: number, x: number) {
-  return Math.trunc((Math.atan2(y, x) * 128) / Math.PI);
+  return Math.trunc((Math.atan2(y, x) * 256) / 6.283);
 }
 
-/** The game's sine and cosine of an angle in 256ths of a turn, times 256. */
+/**
+ * The engine's π (`ds:1d50`), short: its tables of sines and cosines are
+ * made with it (seg11:1c3e), so a quarter turn falls just short and its sine
+ * is 255, not 256 — which, rounded down, puts a point that far out a pixel
+ * nearer the middle.
+ */
+const PI = 3.1415;
+
+/** The game's sine and cosine of an angle in 256ths of a turn, times 256, rounded toward 0 (`ds:3b62`, `3b5e`). */
 export function sine(angle: number) {
-  return Math.trunc(Math.sin((angle * Math.PI) / 128) * 256);
+  return Math.trunc(Math.sin((angle * PI * 2) / 256) * 256);
 }
 
 function cosine(angle: number) {
-  return Math.trunc(Math.cos((angle * Math.PI) / 128) * 256);
+  return Math.trunc(Math.cos((angle * PI * 2) / 256) * 256);
 }
 
 /** An angle into -128 to 128. */
