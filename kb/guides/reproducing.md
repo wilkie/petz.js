@@ -66,6 +66,8 @@ node scripts/oracle/shoot.mjs held35 --wait 12 --count 8 --every 3
 
 `--hold <frame>` holds the dog still in one frame, to compare with a drawing: it rewrites every script in `ALL_PTZ.SCP` to show that frame for ever, the eyelids open and the head looking at nothing (cue 7), so whatever the dog plays first it stays in; `--turn <n>` turns it first. [[measured]] Held so, seven of eight pictures three seconds apart are identical to the byte; the eighth differs by a blink, 168 pixels of one eyelid. Rewriting only the kennel scripts (92 and 93) holds nothing: the dog does not play them as Dogz starts, but idles at the playpen's left edge, looking about.
 
+`--plain` takes the chance out of the drawing and the clutter from behind it: the adopted breed's balls without fuzz or speckles, the saved dog removed so its own colours are drawn, the playpen's paw tile solid magenta, and the playpen window 480 pixels square at the screen's right. [[measured]] `--plain --hold 35` shows the big dog side-on, wholly in view, the same in every picture.
+
 ## Check a Read out claim
 
 A **Read out** claim gives a file, a segment and an offset: `THINK.DLL` seg2:031a. The files are 16-bit Windows NE executables ([[format:ne]]), and segments are numbered from 1, as Windows numbers them. With the oracle built:

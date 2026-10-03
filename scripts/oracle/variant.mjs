@@ -17,6 +17,11 @@
  *                 names DATA\<name>.LNZ (bigdog, bulldog, chiua, scotty,
  *                 terrier), and the saved dog is removed, so Dogz starts
  *                 with that breed rather than the one it saved.
+ * --plain        Nothing drawn at random, and the dog on a plain ground:
+ *                 the adopted breed's every ball without fuzz ([Fuzz] 0) or
+ *                 speckles ([Speckle Color] -1), the saved dog removed so
+ *                 its own colours are drawn, the playpen's paw tile solid
+ *                 magenta, and the playpen window 480 square at the right.
  * --hold <frame>  The dog held still in one frame: every script in
  *                 ALL_PTZ.SCP rewritten to show that frame for ever, its
  *                 eyelids open (`0x8ae0 0`) and its head straight (cue 7:
@@ -48,6 +53,23 @@ async function edit(path, change) {
   }
 
   await writeFile(path, changed, 'latin1');
+}
+
+/** Each line of a section of a breed file given one value, its comment kept. */
+function setSection(text, name, value) {
+  const lines = text.split('\r\n');
+  let inside = false;
+
+  return lines
+    .map((line) => {
+      if (line.startsWith('[')) {
+        inside = line.startsWith(`[${name}]`);
+        return line;
+      }
+
+      return inside && /^\s*-?\d/.test(line) ? line.replace(/^\s*-?\d+/, value) : line;
+    })
+    .join('\r\n');
 }
 
 async function main() {
@@ -99,6 +121,31 @@ async function main() {
     }
 
     log(`  the dog a ${breed}`);
+  }
+
+  if (args.includes('--plain')) {
+    const ini = await readFile(join(drive, 'DOGZ.DOG', 'DOGZ.INI'), 'latin1');
+    const pet = /^Your Pet=\.\\data\\(\w+)\.lnz/im.exec(ini)?.[1] ?? 'bigdog';
+    await edit(join(drive, 'DOGZ.DOG', 'DATA', `${pet.toUpperCase()}.LNZ`), (text) =>
+      setSection(setSection(text, 'Fuzz', '0'), 'Speckle Color', '-1')
+    );
+
+    for (const file of SAVED) {
+      await rm(join(drive, 'DOGZ.DOG', file), { force: true });
+    }
+
+    /* The paw tile, 64 by 64 at 4 bits, all its first colour, made magenta. */
+    const tile = join(drive, 'DOGZ.DOG', 'PLAYPENZ', '16_PAW.BMP');
+    const bmp = await readFile(tile);
+    const pixels = bmp.readUInt32LE(10);
+    bmp.fill(0, pixels);
+    bmp.set([0xff, 0x00, 0xff, 0x00], 54);
+    await writeFile(tile, bmp);
+
+    await edit(join(drive, 'DOGZ.DOG', 'DOGZ.INI'), (text) =>
+      text.replace(/^Compound Window Location=.*$/m, 'Compound Window Location=160, 0, 640, 480')
+    );
+    log(`  the ${pet} without fuzz or speckles, on magenta`);
   }
 
   const hold = option('--hold');
