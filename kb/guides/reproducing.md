@@ -68,6 +68,8 @@ node scripts/oracle/shoot.mjs held35 --wait 12 --count 8 --every 3
 
 `--plain` takes the chance out of the drawing and the clutter from behind it: the adopted breed's balls without fuzz or speckles, the saved dog removed so its own colours are drawn, the playpen's paw tile solid magenta, and the playpen window 480 pixels square at the screen's right. [[measured]] `--plain --hold 35` shows the big dog side-on, wholly in view, the same in every picture.
 
+`--plain --keep-fur` leaves the breed's fuzz and speckles, for the drawing's random part; which seed a session drew with is found by searching (the seed is the clock's at start, not the same twice).
+
 `--set "<section>=<n>"` gives every line of a section of the adopted breed's file one value, and `--set "<section>[<ball>]=<n>"` one ball's line, as many as wanted: `--set "Body Extension=100"` makes the dog long, `--set "256 Ball Color[45]=80"` one ball red, to find it on the screen.
 
 [[measured]] WinG profiles the display the first time a variant runs on a new day: its key in `WIN.INI`'s `[WinG]` section changes with the date (`...-5D42-...` one day, `...-5D43-...` the next), and the profiling covers the screen for minutes. Shoot a fresh variant a second time; the first run has written the key.

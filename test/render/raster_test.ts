@@ -39,6 +39,16 @@ const ball = {
   fuzz: 0,
 };
 
+/** Seed 1's tables with every speckle at its row's start and nothing carried: for a ball's shape alone. */
+const steadyTables = () => {
+  const tables = circleTables(1);
+  return {
+    ...tables,
+    speckle: new Int8Array(tables.speckle.length),
+    carry: tables.carry.map((level) => new Int8Array(level.length)),
+  };
+};
+
 /** Each row's pixels other than speckles, from its first. */
 const rowsOf = (bitmap: IndexedBitmap) =>
   picture(bitmap)
@@ -55,7 +65,7 @@ describe('a circle’s rows', () => {
 describe('a ball', () => {
   it('is a circle one less across than its square, its rows from the square’s top', () => {
     const bitmap = new IndexedBitmap(16, 16);
-    fillBall(bitmap, ball, circleTables(1));
+    fillBall(bitmap, ball, steadyTables());
     const rows = picture(bitmap);
 
     /* Rows 1 to 8 of a circle of 9, from y 3 (8 less its radius). */
@@ -66,7 +76,7 @@ describe('a ball', () => {
 
   it('with a half outline, has a pixel of it before each row, which is one shorter', () => {
     const bitmap = new IndexedBitmap(16, 16);
-    fillBall(bitmap, { ...ball, outline: 0 }, circleTables(1));
+    fillBall(bitmap, { ...ball, outline: 0 }, steadyTables());
 
     expect(rowsOf(bitmap)).toEqual([
       '01111',
@@ -82,7 +92,7 @@ describe('a ball', () => {
 
   it('with an outline 1 thick, has whole rows of it top and bottom, and a pixel each end', () => {
     const bitmap = new IndexedBitmap(16, 16);
-    fillBall(bitmap, { ...ball, outline: 1 }, circleTables(1));
+    fillBall(bitmap, { ...ball, outline: 1 }, steadyTables());
 
     expect(rowsOf(bitmap)).toEqual([
       '00000',
@@ -98,15 +108,53 @@ describe('a ball', () => {
 
   it('has a speckle in each row of its upper half, and none below', () => {
     const bitmap = new IndexedBitmap(16, 16);
-    fillBall(bitmap, ball, circleTables(3));
+    fillBall(bitmap, ball, steadyTables());
     const speckled = picture(bitmap).map((row) => row.includes('7'));
 
-    /* Rows 1 to 3 of 8 (below 9 / 2). */
-    expect(speckled.slice(3, 6)).toEqual([true, true, true]);
-    expect(speckled.slice(6)).not.toContain(true);
+    /* On a bottom-up bitmap, the rows counted from the bottom past 9 / 2: rows 1 to 4 of 8. */
+    expect(speckled.slice(3, 7)).toEqual([true, true, true, true]);
+    expect(speckled.slice(7)).not.toContain(true);
   });
 
-  it('moves each row right by no more than its fuzz, the same each time it is drawn', () => {
+  it('moves a whole ball left by the move carried into its diameter', () => {
+    const tables = steadyTables();
+    tables.carry[3][9] = 2;
+    const draw = (fuzz: number) => {
+      const bitmap = new IndexedBitmap(20, 16);
+      fillBall(
+        bitmap,
+        { ...ball, fuzz, speckleColour: -1 },
+        { ...tables, fuzz: tables.fuzz.map((level) => new Int8Array(level.length)) }
+      );
+      return picture(bitmap);
+    };
+    const steady = draw(0);
+
+    draw(3).forEach((row, y) => {
+      expect(row.indexOf('1') === -1 || row.indexOf('1') === steady[y].indexOf('1') - 2).toBe(true);
+    });
+  });
+
+  it('takes the table’s rows from the bottom up', () => {
+    const tables = steadyTables();
+    const fuzz = tables.fuzz.map((level) => new Int8Array(level.length));
+    /* Diameter 9's first row in the table. */
+    fuzz[1][(9 * 8) / 2] = 1;
+    const draw = (level: number) => {
+      const bitmap = new IndexedBitmap(20, 16);
+      fillBall(bitmap, { ...ball, fuzz: level, speckleColour: -1 }, { ...tables, fuzz });
+      return picture(bitmap).map((row) => row.indexOf('1'));
+    };
+
+    const moved = draw(1);
+    const steady = draw(0);
+    /* Rows 1 to 8 from y 3: only the bottom one, y 10, moves. */
+    expect(moved.map((x, y) => x - steady[y])).toEqual([
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+    ]);
+  });
+
+  it('moves each row by no more than its fuzz, the same each time it is drawn', () => {
     const tables = circleTables(5);
     const draw = (fuzz: number) => {
       const bitmap = new IndexedBitmap(20, 16);
@@ -118,7 +166,7 @@ describe('a ball', () => {
 
     fuzzy.forEach((row, y) => {
       const shift = row.indexOf('1') - steady[y].indexOf('1');
-      expect(row.indexOf('1') === -1 || (shift >= 0 && shift <= 3)).toBe(true);
+      expect(row.indexOf('1') === -1 || (shift >= -3 && shift <= 3)).toBe(true);
     });
     expect(draw(3)).toEqual(fuzzy);
   });

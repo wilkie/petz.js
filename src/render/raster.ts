@@ -112,6 +112,13 @@ const LARGEST = 119;
 export interface CircleTables {
   /** By level, then the diameter's rows from `d(d - 1) / 2`. */
   fuzz: Int8Array[];
+  /**
+   * By level, then diameter: the move every row of the diameter is less by.
+   * The kernel steps from row to row by the difference of their moves, and
+   * the table starts each diameter from the last move of the one before
+   * (`InitCircleLookup` never resets it), so a whole ball sits that much left.
+   */
+  carry: Int8Array[];
   speckle: Int8Array;
   /** By level, a row each. */
   outline: Int8Array[];
@@ -137,26 +144,36 @@ export function circleTables(seed = 1): CircleTables {
     Int8Array.from({ length: 256 }, () => rand() % (level + 1))
   );
   const fuzz = Array.from({ length: 8 }, () => new Int8Array(size));
+  const carry = Array.from({ length: 8 }, () => new Int8Array(LARGEST + 1));
   const speckle = new Int8Array(size);
+  const last = new Int8Array(8);
 
   for (let d = 1; d <= LARGEST; d++) {
+    for (let level = 0; level < 8; level++) {
+      carry[level][d] = last[level];
+    }
+
     for (let r = 1; r <= d; r++) {
       const at = (d * (d - 1)) / 2 + r - 1;
 
       for (let level = 0; level < 8; level++) {
         fuzz[level][at] = rand() % (level + 1);
+        last[level] = fuzz[level][at];
       }
 
       speckle[at] = rand() % (rowWidth(d, r) + 1);
     }
   }
 
-  const result = { fuzz, speckle, outline };
+  const result = { fuzz, carry, speckle, outline };
   tables.set(seed, result);
   return result;
 }
 
 /** A ball's circle, as the kernel lays it out: its rows, each one's place and width. */
+/** Whether the screen's bitmap is bottom-up: then the kernel walks a ball's rows, and its tables, from the bottom. */
+export const BITMAP = { bottomUp: true };
+
 function circleRows(
   ball: { x: number; y: number; diameter: number },
   level: number,
@@ -166,22 +183,34 @@ function circleRows(
   const d = 2 * radius - 1;
   const x = Math.round(ball.x);
   const top = Math.round(ball.y) - radius;
-  const rows: { r: number; y: number; start: number; width: number; spot: number; edge: number }[] =
-    [];
+  const inTable = d >= 1 && d <= LARGEST;
+  const carry = inTable ? fuzz.carry[level][d] : 0;
+  const rows: {
+    r: number;
+    y: number;
+    start: number;
+    width: number;
+    spot: number;
+    speckled: boolean;
+    edge: number;
+  }[] = [];
 
   for (let r = 1; r < d; r++) {
     const width = rowWidth(d, r);
-    const at = (d * (d - 1)) / 2 + r - 1;
-    const inTable = d <= LARGEST;
+    /* The table's row for this one: counted from the top, or from the bottom. */
+    const k = BITMAP.bottomUp ? d - r : r;
+    const at = (d * (d - 1)) / 2 + k - 1;
     rows.push({
       r,
       y: top + r - 1,
       /* The square's left, plus half of D rounded up, less half the width. */
-      start: x - Math.floor(width / 2) + (inTable ? fuzz.fuzz[level][at] : 0),
+      start: x - Math.floor(width / 2) + (inTable ? fuzz.fuzz[level][at] - carry : 0),
       width,
       spot: inTable ? fuzz.speckle[at] : 0,
+      /* A speckle in each row of the upper half, as the kernel counts it either way up. */
+      speckled: BITMAP.bottomUp ? k > Math.trunc(d / 2) : k < Math.trunc(d / 2),
       /* The full outlines' rows: the square's left plus half what the row leaves. */
-      edge: x - radius + Math.trunc((d - width) / 2) + fuzz.outline[level][(r - 1) & 0xff],
+      edge: x - radius + Math.trunc((d - width) / 2) + fuzz.outline[level][(k - 1) & 0xff],
     });
   }
 
@@ -195,7 +224,7 @@ export function fillBall(bitmap: IndexedBitmap, ball: Ball, fuzz: CircleTables =
   const speckle = ball.speckleColour >= 0 ? ball.speckleColour : ball.colour;
   const thick = ball.outline;
 
-  for (const { r, y, start, width, spot, edge } of rows) {
+  for (const { r, y, start, width, spot, speckled, edge } of rows) {
     if (thick > 0) {
       /* Whole rows of the outline at top and bottom, its ends between. */
       if (r <= thick || r >= d - thick) {
@@ -223,7 +252,7 @@ export function fillBall(bitmap: IndexedBitmap, ball: Ball, fuzz: CircleTables =
     }
 
     /* A speckle in each row of the upper half, anywhere to one past its end. */
-    if (r < Math.trunc(d / 2)) {
+    if (speckled) {
       bitmap.set(start + spot, y, speckle);
     }
   }

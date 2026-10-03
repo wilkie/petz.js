@@ -22,6 +22,7 @@
  *                 speckles ([Speckle Color] -1), the saved dog removed so
  *                 its own colours are drawn, the playpen's paw tile solid
  *                 magenta, and the playpen window 480 square at the right.
+ *                 With --keep-fur, the breed's fuzz and speckles stay.
  * --hold <frame>  The dog held still in one frame: every script in
  *                 ALL_PTZ.SCP rewritten to show that frame for ever, its
  *                 eyelids open (`0x8ae0 0`) and its head straight (cue 7:
@@ -137,9 +138,11 @@ async function main() {
   if (args.includes('--plain')) {
     const ini = await readFile(join(drive, 'DOGZ.DOG', 'DOGZ.INI'), 'latin1');
     const pet = /^Your Pet=\.\\data\\(\w+)\.lnz/im.exec(ini)?.[1] ?? 'bigdog';
-    await edit(join(drive, 'DOGZ.DOG', 'DATA', `${pet.toUpperCase()}.LNZ`), (text) =>
-      setSection(setSection(text, 'Fuzz', '0'), 'Speckle Color', '-1')
-    );
+    if (!args.includes('--keep-fur')) {
+      await edit(join(drive, 'DOGZ.DOG', 'DATA', `${pet.toUpperCase()}.LNZ`), (text) =>
+        setSection(setSection(text, 'Fuzz', '0'), 'Speckle Color', '-1')
+      );
+    }
 
     for (const file of SAVED) {
       await rm(join(drive, 'DOGZ.DOG', file), { force: true });
@@ -156,7 +159,9 @@ async function main() {
     await edit(join(drive, 'DOGZ.DOG', 'DOGZ.INI'), (text) =>
       text.replace(/^Compound Window Location=.*$/m, 'Compound Window Location=160, 0, 640, 480')
     );
-    log(`  the ${pet} without fuzz or speckles, on magenta`);
+    log(
+      `  the ${pet}${args.includes('--keep-fur') ? '' : ' without fuzz or speckles'}, on magenta`
+    );
   }
 
   const sets = args.flatMap((arg, at) => (args[at - 1] === '--set' ? [arg] : []));
