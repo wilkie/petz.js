@@ -4983,6 +4983,13 @@ export class Pet {
     this.world.grabBall?.(slot);
   }
 
+  /** `Clean up Toys` (`StandardButtonSwitch` 12, seg21:5461): whatever it holds let go of, slot by slot. */
+  releaseAll() {
+    for (let slot = 0; slot < 8; slot++) {
+      this.releaseObject(slot);
+    }
+  }
+
   private releaseObject(slot: number) {
     const shoe = this.world.shoe;
 

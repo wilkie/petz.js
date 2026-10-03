@@ -36,5 +36,5 @@ Whatever trick a begging dog does is the brain's choice: DOGZDLL.DLL's class `XB
 
 ## Not yet
 
-- [[read out]] The engine writes the brain back to its file as it closes (`WriteBrain`), and so keeps what it learned; the viewer keeps it only while the page is open.
+- [[read out]] The engine writes the brain back to its file as it closes (`WriteBrain`, seg15:1527, to the INI's `Brain File`), and so keeps what it learned; the viewer keeps it in the browser ([[topic:behaviour]], keeping the dog).
 - [[read out]] Its learning on objects marked `[a]`, its `jolt` and its situation bleed are in the code but unused by Dogz's file, and not played.

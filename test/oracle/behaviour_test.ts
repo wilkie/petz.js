@@ -45,7 +45,7 @@ import { parseNe } from '../../src/formats/ne.ts';
 import { drawPet } from '../../src/render/ballz.ts';
 import { IndexedBitmap } from '../../src/render/raster.ts';
 import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/script.ts';
-import { parseTricks } from '../../src/formats/tricks.ts';
+import { parseTricks, writeTricks } from '../../src/formats/tricks.ts';
 import { parseBrain, writeBrain } from '../../src/formats/brain.ts';
 import { describeWithOracle } from './with-oracle.ts';
 
@@ -808,6 +808,37 @@ withOracle('the engine’s behaviour', () => {
       expect(stage.paint({ x: -500, y: -500 }, colour, 256)).toBe(false);
     });
 
+    it('paints the eyelids with the head, restores its colours, and keeps them', () => {
+      const { stage, run } = setUp(3, 640, 480);
+      run(200);
+      expect(stage.painted).toBe(false);
+
+      /* The head's group painted: the eyelids take the head's new colour. */
+      const centre = stage.ballOnStage(52);
+      const reach = Math.ceil(centre.diameter / 2);
+      const spots = Array.from({ length: (2 * reach + 1) ** 2 }, (_, n) => ({
+        x: centre.x - reach + (n % (2 * reach + 1)),
+        y: centre.y - reach + Math.floor(n / (2 * reach + 1)),
+      }));
+      const head = spots.find((spot) => stage.ballUnder(spot) === 52)!;
+      const colour = PAINT_RAMPS[256].first + 5 * PAINT_RAMPS[256].length;
+      expect(stage.paint(head, colour, 256)).toBe(true);
+      expect(stage.breed.eyelidColor256).toBe(stage.breed.ballColor256[52]);
+      expect(stage.painted).toBe(true);
+
+      /* Kept, and read back over a dog of the breed: the same colours. */
+      const saved = stage.savedColours(256);
+      const again = new Stage(640, 480, breed, header, frames, 5);
+      again.restoreSaved(saved, 256);
+      expect(again.breed.ballColor256).toEqual(stage.breed.ballColor256);
+      expect(again.breed.eyelidColor256).toBe(stage.breed.eyelidColor256);
+
+      /* Restore Original Colors: the breed's own again. */
+      stage.restoreColours(256);
+      expect(stage.breed.ballColor256).toEqual(breed.ballColor256);
+      expect(stage.breed.eyelidColor256).toBe(breed.eyelidColor256);
+    });
+
     it('has the brush the size of its picture, its paint bright red', () => {
       const picture = readPicture(engine, BRUSH_PICTURE);
       expect({ width: picture.width, height: picture.height }).toEqual(BRUSH_SIZE);
@@ -1056,6 +1087,10 @@ withOracle('the engine’s behaviour', () => {
       expect(states.slice(200).some((state) => state === STATE.begging)).toBe(true);
       expect(states.slice(200).some((state) => state >= FIRST_TRICK)).toBe(true);
     });
+  });
+
+  it('writes TRICKS.TDT back byte for byte, as SaveTrickData does', () => {
+    expect(writeTricks(parseTricks(read('TRICKS.TDT')))).toEqual(read('TRICKS.TDT'));
   });
 
   describe('the brain', () => {

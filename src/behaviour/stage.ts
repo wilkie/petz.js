@@ -63,6 +63,16 @@ export interface Shoe {
 /** The balls the brush leaves: the tongue, the nose and nostrils, the eyes and irises (`SetBallColor`). */
 const UNPAINTED = [0x3f, 0x40, 0x26, 0x0e, 0x20, 0x08, 0x29, 0x11, 0x37];
 
+/** The head: painting it paints the eyelids (`SetBallColor`, seg10:455f). */
+const HEAD = 0x34;
+
+/** What `SAVED.LNZ` keeps: the two colour tables, and the eyelid colour of the display it was saved on. */
+export interface SavedColours {
+  ballColor256: number[];
+  ballColor16: number[];
+  eyelid: { colours: 256 | 16; colour: number | null };
+}
+
 /**
  * The paint colours (`XDrawPort::InitStaticDraw`, seg8:0e28): on 256
  * colours, 20 ramps of 6 from colour 16, each painted from its first; on
@@ -478,7 +488,8 @@ export class Stage implements PetWorld {
    * as the spray's — the ball under the tip, and every ball the breed gives
    * the same 16-colour number, take the brush's colour; on 256 colours each
    * keeps its own shade, its place in its ramp. Not the eyes, nose or
-   * tongue (`Ballz::SetBallColor`, seg10:455f). Returns whether it painted.
+   * tongue (`Ballz::SetBallColor`, seg10:455f); painting the head paints
+   * the eyelids too. Returns whether it painted.
    */
   paint(tip: { x: number; y: number }, colour: number, colours: 256 | 16) {
     if (!this.sprayHits(tip)) {
@@ -504,9 +515,56 @@ export class Stage implements PetWorld {
           ? (this.original.ballColor256[ball] - PAINT_RAMPS[256].first) % PAINT_RAMPS[256].length
           : 0;
       table[ball] = colour + shade;
+      this.painted = true;
+
+      if (ball === HEAD) {
+        this.breed[colours === 256 ? 'eyelidColor256' : 'eyelidColor16'] = colour + shade;
+      }
     });
 
     return true;
+  }
+
+  /** Painted since it came, or since its colours were last kept: `Ballz` +0xbe7, which saves `SAVED.LNZ`. */
+  painted = false;
+
+  /**
+   * `Restore Original Colors` from the Options menu (`StandardButtonSwitch`
+   * 13, seg21:54fb): the display's colours and the eyelids' back to the
+   * breed's own. It counts as painting: the dog is saved so.
+   */
+  restoreColours(colours: 256 | 16) {
+    if (colours === 256) {
+      this.breed.ballColor256.splice(0, Infinity, ...this.original.ballColor256);
+      this.breed.eyelidColor256 = this.original.eyelidColor256;
+    } else {
+      this.breed.ballColor16.splice(0, Infinity, ...this.original.ballColor16);
+      this.breed.eyelidColor16 = this.original.eyelidColor16;
+    }
+
+    this.painted = true;
+  }
+
+  /** The dog's colours as `SAVED.LNZ` keeps them: both tables, and the display's eyelids. */
+  savedColours(colours: 256 | 16): SavedColours {
+    return {
+      ballColor256: [...this.breed.ballColor256],
+      ballColor16: [...this.breed.ballColor16],
+      eyelid: {
+        colours,
+        colour: colours === 256 ? this.breed.eyelidColor256 : this.breed.eyelidColor16,
+      },
+    };
+  }
+
+  /** Colours kept before, as `LoadSpecialBallInfo` reads `SAVED.LNZ` over the breed's (seg10:2073). */
+  restoreSaved(saved: SavedColours, colours: 256 | 16) {
+    this.breed.ballColor256.splice(0, Infinity, ...saved.ballColor256);
+    this.breed.ballColor16.splice(0, Infinity, ...saved.ballColor16);
+
+    if (saved.eyelid.colours === colours && saved.eyelid.colour !== null) {
+      this.breed[colours === 256 ? 'eyelidColor256' : 'eyelidColor16'] = saved.eyelid.colour;
+    }
   }
 
   /** The middle of the rectangle the dog is drawn in: the sprite's position (`XSprite::MoveSpriteRect`). */

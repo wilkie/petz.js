@@ -88,3 +88,34 @@ export function parseTricks(data: Uint8Array): TrickData {
 
   return { current: table(48), defaults: table(48 + TRICK_COUNT * RECORD) };
 }
+
+/**
+ * The file again, as `PetModule::SaveTrickData` (seg14:16e4) writes it as
+ * Dogz closes: the title and its terminating zero, then the current table
+ * and the defaults.
+ */
+export function writeTricks({ current, defaults }: TrickData): Uint8Array {
+  const data = new Uint8Array(48 + 2 * TRICK_COUNT * RECORD);
+  const view = new DataView(data.buffer);
+
+  data.set(new TextEncoder().encode(TRICKS_TITLE));
+  [...current, ...defaults].forEach((trick, n) => {
+    const at = 48 + RECORD * n;
+    [
+      trick.excitement,
+      trick.excitementRange,
+      trick.idleWeight,
+      trick.playWeight,
+      trick.facing,
+      trick.withBall,
+      trick.grabAfter,
+      trick.sickness,
+      trick.ham,
+      trick.groom,
+      trick.bark,
+      trick.unknown,
+    ].forEach((value, word) => view.setInt16(at + 2 * word, value, true));
+  });
+
+  return data;
+}

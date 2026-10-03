@@ -7,7 +7,7 @@
 
 import { type Aging, ageFactor, startOn } from '../behaviour/age.ts';
 import { Brain, type BrainMapping } from '../behaviour/brain.ts';
-import { Pet, type PetData } from '../behaviour/pet.ts';
+import { GLOBAL, Pet, type PetData } from '../behaviour/pet.ts';
 import { borlandRand } from '../behaviour/random.ts';
 import {
   BALL_SIZE,
@@ -21,6 +21,7 @@ import {
   isTreat,
   keepOnStage,
   PAINT_RAMPS,
+  type SavedColours,
   SHOE_SIZE,
   Stage,
 } from '../behaviour/stage.ts';
@@ -60,8 +61,8 @@ import {
   screenPalette,
 } from '../formats/palette.ts';
 import { parseScripts, readOpcodes, readStateNames, type Script } from '../formats/script.ts';
-import { type BrainFile, parseBrain } from '../formats/brain.ts';
-import { parseTricks } from '../formats/tricks.ts';
+import { type BrainFile, parseBrain, writeBrain } from '../formats/brain.ts';
+import { parseTricks, type Trick } from '../formats/tricks.ts';
 import { drawPet } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
 import { type Eyelids } from '../render/project.ts';
@@ -117,13 +118,63 @@ let aging = startOn(loadAging(), new Date());
 saveAging(aging);
 showAging(aging);
 
+/**
+ * The Options menu's `Clean up Toys` (`StandardButtonSwitch` 12, seg21:5461):
+ * every toy out and not held goes back in its box, and the dog, letting go of
+ * what it had, is left alone.
+ */
+element<HTMLButtonElement>('clean-up').addEventListener('click', () => {
+  if (!live) {
+    return;
+  }
+
+  live.pet.releaseAll();
+  putFoodAway((food) => !food.held);
+
+  if (live.stage.ball && !live.stage.ball.held) {
+    putBallAway();
+  }
+
+  if (live.stage.shoe && !live.stage.shoe.held) {
+    live.stage.shoe = null;
+    live.pet.shoePutAway();
+  }
+
+  live.pet.newGlobalState(GLOBAL.idle);
+});
+
+/** The Options menu's `Restore Original Colors` (`StandardButtonSwitch` 13). */
+element<HTMLButtonElement>('restore-colours').addEventListener('click', () => {
+  live?.stage.restoreColours(Number(coloursSelect.value) as 256 | 16);
+});
+
+/* Kept as the page goes, and now and then while it is open, as Dogz keeps it as it closes. */
+addEventListener('pagehide', keepDog);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    keepDog();
+  }
+});
+setInterval(keepDog, 30_000);
+
 newPuppy.addEventListener('click', () => {
+  /* A new dog: nothing it learned or was painted is kept. */
+  try {
+    localStorage.removeItem(DOG_KEY);
+  } catch {
+    /* Nothing kept to forget. */
+  }
+
+  /* The dog there now goes without being kept. */
+  const wasLive = live !== null;
+  live = null;
+
   aging = startOn({ age: -1, lastDay: 0, lastMonth: 0 }, new Date());
   saveAging(aging);
   showAging(aging);
 
   /* A new puppy live comes out of the kennel again; otherwise the frame shown is redrawn. */
-  if (live) {
+  if (wasLive) {
     startLive();
   } else if (sequence.length) {
     draw();
@@ -217,7 +268,74 @@ let live: {
   eyelids?: Eyelids;
   bristle?: number;
   iris: { x: number; y: number };
+  /** The dog's own trick weights, which it learns and which are kept. */
+  tricks: Trick[];
 } | null = null;
+
+/**
+ * The dog kept between visits, as Dogz keeps it as it closes: its colours,
+ * if painted (`SAVED.LNZ`, the `Ballz` destructor), its trick weights
+ * (`TRICKS.TDT`, `SaveTrickData`) and its brain (`WriteBrain`). Here in the
+ * browser, if it lets us; the age is kept beside it.
+ */
+const DOG_KEY = 'dogz-reverse.dog';
+
+interface KeptDog {
+  breed: string;
+  colours?: SavedColours;
+  tricks?: Trick[];
+  /** The brain file, in base 64. */
+  brain?: string;
+}
+
+function loadDog(): KeptDog | null {
+  try {
+    return JSON.parse(localStorage.getItem(DOG_KEY) ?? 'null') as KeptDog | null;
+  } catch {
+    return null;
+  }
+}
+
+/** The live dog kept as it is now. */
+function keepDog() {
+  if (!live) {
+    return;
+  }
+
+  const breed = breedSelect.value;
+  const before = loadDog();
+  const colours = live.stage.painted
+    ? live.stage.savedColours(Number(coloursSelect.value) as 256 | 16)
+    : before?.breed === breed
+      ? before.colours
+      : undefined;
+  const brain = live.pet.brain && writeBrain(live.pet.brain.toFile());
+
+  try {
+    localStorage.setItem(
+      DOG_KEY,
+      JSON.stringify({
+        breed,
+        colours,
+        tricks: live.tricks,
+        brain: brain && btoa(Array.from(brain, (byte) => String.fromCharCode(byte)).join('')),
+      } satisfies KeptDog)
+    );
+  } catch {
+    /* Not kept. */
+  }
+}
+
+/** A brain kept before, or none. */
+function keptBrain(kept: KeptDog | null) {
+  try {
+    return kept?.brain
+      ? parseBrain(Uint8Array.from(atob(kept.brain), (c) => c.charCodeAt(0)))
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 /** The stage, in Dogz's own pixels. */
 const STAGE = { width: canvas.width / zoom, height: canvas.height / zoom };
@@ -516,10 +634,19 @@ function stop() {
 
 /** The dog left to itself: a pet of the breed shown, on a stage the size of the canvas. */
 function startLive() {
+  /* A dog started again is the one kept: what it was keeps. */
+  keepDog();
+  const kept = loadDog();
+
   const breed = breeds.get(breedSelect.value)!;
   const age = Number(ageInput.value);
   const stage = new Stage(STAGE.width, STAGE.height, breed, header, allFrames, age);
   stage.bodyAreas = bodyAreas;
+
+  /* Its own colours, if this is its breed (`LoadSpecialBallInfo` reads `SAVED.LNZ`). */
+  if (kept?.breed === breedSelect.value && kept.colours) {
+    stage.restoreSaved(kept.colours, Number(coloursSelect.value) as 256 | 16);
+  }
 
   /* The kennel is the toolbox's dog button, beside the playpen: where the oracle's
    * screen has it, its middle 226 left of the playpen's top left corner and 98 above it. */
@@ -528,16 +655,16 @@ function startLive() {
   /* One stream of random numbers, as the engine has, for the dog and its brain. */
   const rand = borlandRand(Date.now());
 
-  /* A dog started again keeps what its brain has learned, as the game keeps it in the file. */
-  if (live?.pet.brain) {
-    brainFile = live.pet.brain.toFile();
-  }
-
-  const brain = brainFile ? new Brain(brainFile, brainMap, rand) : undefined;
+  /* What its brain has learned, and its trick weights, as kept; else the game's files. */
+  const learned = live?.pet.brain?.toFile() ?? keptBrain(kept) ?? brainFile;
+  const brain = learned ? new Brain(learned, brainMap, rand) : undefined;
+  const tricks = structuredClone(
+    kept?.tricks?.length === petData.tricks.length ? kept.tricks : petData.tricks
+  );
   const pet = new Pet(
     {
       ...petData,
-      tricks: structuredClone(petData.tricks),
+      tricks,
       flags: (frame) => allFrames[frame]?.tag ?? 3,
       brain,
     },
@@ -548,7 +675,7 @@ function startLive() {
   );
 
   pet.start(0);
-  live = { pet, stage, started: performance.now(), iris: { x: 0, y: 0 } };
+  live = { pet, stage, started: performance.now(), iris: { x: 0, y: 0 }, tricks };
 }
 
 /** A tick of the live dog: the engine's clock is milliseconds over 17. */

@@ -20,6 +20,7 @@ All little-endian.
 | The current table  | 59 records of 24 bytes | what the dog does now                               |
 | The defaults table | 59 records of 24 bytes | what the current table drifts back to               |
 
+- [[read out]] `SaveTrickData` writes the title with its terminating zero, then the two tables, as Dogz closes; `src/formats/tricks.ts` writes the oracle's file back byte for byte (`writeTricks`).
 - [[read out]] `LoadTrickData` reads the two tables, 0x18 bytes by 0x3b each. Without the file, both are the engine's own resource of type 123, id 454: the defaults table, then the word `0xd45`, which it checks.
 - [[measured]] The oracle's file is its two tables the same, and both are byte for byte resource 454: a dog that has learned nothing yet.
 - [[read out]] The 59 records are the engine's tricks in order, its states 0x2b `eTrickBegging` to 0x65 `eTrickBalanceBall` ([[topic:behaviour]]).

@@ -223,3 +223,29 @@ test('grows the dog a day older each new day it is opened, and not twice in a da
   await expect(page.locator('#days')).toHaveText('day 0');
   await expect(page.locator('#age')).toHaveValue('1');
 });
+
+test('keeps the dog as the page goes, as Dogz keeps it as it closes; a new puppy forgets it', async ({
+  page,
+}) => {
+  test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
+  await page.goto('/viewer.html');
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await page.check('#live');
+  await expect(page.locator('#mood')).toHaveText(/^e[A-Za-z]+/);
+
+  await page.evaluate(() => dispatchEvent(new Event('pagehide')));
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('dogz-reverse.dog')!));
+  expect(kept.tricks).toHaveLength(59);
+  expect(typeof kept.brain).toBe('string');
+
+  /* Painted, then a new puppy: kept again, it has the breed's own colours. */
+  await page.click('#restore-colours');
+  await page.evaluate(() => dispatchEvent(new Event('pagehide')));
+  const painted = await page.evaluate(() => JSON.parse(localStorage.getItem('dogz-reverse.dog')!));
+  expect(painted.colours.ballColor256.length).toBeGreaterThan(0);
+
+  await page.click('#new-puppy');
+  await page.evaluate(() => dispatchEvent(new Event('pagehide')));
+  const fresh = await page.evaluate(() => JSON.parse(localStorage.getItem('dogz-reverse.dog')!));
+  expect(fresh.colours).toBeUndefined();
+});
