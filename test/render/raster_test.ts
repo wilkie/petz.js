@@ -1,5 +1,6 @@
 import {
   fillBall,
+  fillLid,
   IndexedBitmap,
   random,
   rowWidth,
@@ -119,5 +120,56 @@ describe('a speckle colour', () => {
 
   it('on the 16-colour display, is the colour itself', () => {
     expect(speckleColour(9, 0, 0, 1)).toBe(9);
+  });
+});
+
+describe('an eyelid', () => {
+  /* A ball of 11 at (20, 20), covered 4 rows' worth, by the angle given. */
+  const lid = (angle: number) => {
+    const bitmap = new IndexedBitmap(40, 40);
+    fillLid(bitmap, { x: 20, y: 20, d: 11, colour: 4, cover: 4, angle });
+    const rows: string[] = [];
+
+    for (let y = 15; y < 27; y++) {
+      let row = '';
+
+      for (let x = 14; x < 27; x++) {
+        row += bitmap.get(x, y) === 4 ? '#' : '.';
+      }
+
+      rows.push(row);
+    }
+
+    return rows;
+  };
+  const covered = (rows: string[]) => rows.map((row) => row.includes('#'));
+
+  it('covers the top rows, less one, when level', () => {
+    expect(covered(lid(0))).toEqual([...Array(3).fill(true), ...Array(9).fill(false)]);
+    expect(lid(2)).toEqual(lid(0));
+  });
+
+  it('covers the bottom rows, less two, upside down', () => {
+    const rows = covered(lid(128));
+    expect(rows.filter(Boolean)).toHaveLength(2);
+    expect(rows.slice(0, 6).some(Boolean)).toBe(false);
+  });
+
+  it('covers one side when turned a quarter, by the angle’s sign', () => {
+    const right = lid(64).join('');
+    const left = lid(-64).join('');
+
+    expect(right).toContain('#');
+    expect(left).toContain('#');
+
+    /* Each row's covered pixels are at its right end, or its left. */
+    for (const row of lid(64).filter((row) => row.includes('#'))) {
+      expect(row.lastIndexOf('#')).toBeGreaterThan(row.indexOf('#') - 1);
+      expect(row.indexOf('#')).toBeGreaterThan(6);
+    }
+
+    for (const row of lid(-64).filter((row) => row.includes('#'))) {
+      expect(row.lastIndexOf('#')).toBeLessThan(6);
+    }
   });
 });

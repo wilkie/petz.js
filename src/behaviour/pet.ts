@@ -20,7 +20,7 @@ import {
 } from '../formats/engine.ts';
 import { type Script } from '../formats/script.ts';
 import { type Trick } from '../formats/tricks.ts';
-import { type Head } from '../render/project.ts';
+import { angle256, type Head } from '../render/project.ts';
 import { type Brain } from './brain.ts';
 import { type Ball, type Food, type Shoe, foodSize, ballRect, isTreat } from './stage.ts';
 import { type Rand } from './random.ts';
@@ -221,11 +221,6 @@ const LUBES = [
   [-0.0015, 0.000375],
 ].map(([min, max]) => ({ min, max, shortest: 3, longest: 20 }));
 
-/** The angle of a point from the origin, in 256ths of a turn (seg11:1e8a, as `atan2`). */
-function angle256(y: number, x: number) {
-  return Math.trunc((Math.atan2(y, x) * 128) / Math.PI);
-}
-
 /** The neck, by which the dog is scruffed (`DoScruffHandler`). */
 const NECK = 54;
 
@@ -357,6 +352,10 @@ export interface Tick extends Step {
 
   /** Where the eyes look: 0 as the frame has them, 1 toward a point (`x`, `y` from the dog's middle), 2 at the user. */
   eyes?: { mode: 0 | 1 | 2; x: number; y: number };
+
+  /** How far the eyelids are closed, in hundredths, and how many pixels wider each side the eyes are. */
+  lids?: number;
+  eyesWide?: number;
 }
 
 /** A state's handler runs as the state is entered, as it is left, and every tick between. */
@@ -370,6 +369,7 @@ type Item =
   | { ease: number }
   | { drift: number }
   | { headTrackMax: number }
+  | { lids: number }
   | { cue: number }
   | { trick: number }
   | { aim: { ball: number; at: { x: number; y: number } | null } }
@@ -605,6 +605,7 @@ export class Pet {
     this.world.updateBall?.();
     this.wearFullness();
     this.pulse();
+    this.blinkPulse();
     this.data.brain?.pulse();
     const centredAt = this.centreAt ?? undefined;
     this.centreAt = null;
@@ -619,6 +620,8 @@ export class Pet {
       centredAt,
       head,
       eyes: { mode: this.eyeMode, ...this.eyeTarget },
+      lids: this.lids,
+      eyesWide: this.eyesWide,
     };
   }
 
@@ -769,6 +772,8 @@ export class Pet {
         this.drift = item.drift;
       } else if ('headTrackMax' in item) {
         this.headTrackMax = item.headTrackMax;
+      } else if ('lids' in item) {
+        this.restLids(item.lids);
       }
     };
 
@@ -840,6 +845,14 @@ export class Pet {
         this.headTrackMax = step.headTrackMax;
       }
 
+      if (step.lids !== undefined) {
+        this.restLids(step.lids);
+      }
+
+      if (step.blink !== undefined) {
+        this.doBlink(step.blink);
+      }
+
       for (const cue of step.cues ?? []) {
         this.processCue(cue);
       }
@@ -870,11 +883,31 @@ export class Pet {
       this.setEyeTarget(null);
       this.targetsOn = false;
     } else if (cue === 3) {
-      this.ease = null;
-      this.drift = 0;
-      this.targetsOn = true;
-      this.lookAt(null);
+      this.resetParams();
     }
+  }
+
+  /**
+   * `ScriptSprite::ResetParams` (seg7:33ae), from cue 3, `ResetScript` and
+   * `ResetScriptHard`: the easing and drift of its angles stopped (every
+   * `Fudger` reset), nothing looked at and looking allowed again, the eyes
+   * their own size, and the eyelids and blinks as they start.
+   */
+  private resetParams() {
+    this.ease = null;
+    this.drift = 0;
+    this.blinkGap = 40;
+    this.blinkLength = 5;
+    this.blinkAsked = 0;
+
+    if (this.blinkAt !== 0) {
+      this.blinkAt = this.blinkShut;
+    }
+
+    this.lidRest = 30;
+    this.targetsOn = true;
+    this.lookAt(null);
+    this.eyesWide = 0;
   }
 
   /** `ScriptSprite::SetTargetLocation` (seg7:295e): steer to a point, or, with none, stop. */
@@ -1120,11 +1153,12 @@ export class Pet {
    * `ScriptSprite::ResetScript` (seg7:2dd0): the queue cleared, glued by
    * the ball given (the chest, for none), and the dog taken to be in the
    * position of the script it was playing — where it ends, unless it starts
-   * and ends the same.
+   * and ends the same; then `ResetParams`. `ResetScriptHard` is played so too.
    */
   private resetScript(glue = CHEST) {
     const script = this.data.scripts[this.playing];
     this.queue = [{ glue }];
+    this.resetParams();
 
     /* And the slide it was aimed over: inferred, as the queue it counted is gone. */
     this.slide = null;
@@ -1135,14 +1169,17 @@ export class Pet {
   }
 
   /**
-   * `ResetScriptSoft`: the script playing plays to its end, and what was
-   * queued after it is dropped. Inferred from its name and its callers.
+   * `ResetScriptSoft` (seg7:31f1): the script playing plays to its end, and
+   * what was queued after it is dropped; then cue 3, so `ResetParams` once
+   * it has played, and a glue — the one that followed, or the chest.
    */
   private resetSoft() {
     const end = this.queue.findIndex((item) => 'end' in item);
+    const after = end === -1 ? undefined : this.queue[end + 1];
     this.queue = end === -1 ? [] : this.queue.slice(0, end + 1);
     this.target = null;
     this.steer = null;
+    this.push({ cue: 3 }, { glue: after && 'glue' in after ? after.glue : CHEST });
   }
 
   private isOnscreen() {
@@ -1636,6 +1673,7 @@ export class Pet {
     if (mode === 'enter') {
       this.locomotion = this.pickLocomotion(0, true);
       this.target = this.newTarget();
+      this.push({ lids: this.eyelidHeight() });
       this.pushStored(this.locomotion);
       return undefined;
     }
@@ -1665,6 +1703,7 @@ export class Pet {
         this.locomotion = this.pickLocomotion(0, true);
       }
 
+      this.push({ lids: this.eyelidHeight() });
       this.pushStored(this.locomotion);
     }
 
@@ -1796,6 +1835,7 @@ export class Pet {
       const pace =
         state === STATE.chasingPetting ? 1 : state === STATE.chasingWall || ballMoving ? 2 : 0;
       this.locomotion = this.pickLocomotion(pace, false);
+      this.push({ lids: this.eyelidHeight() });
       this.pushStored(this.locomotion);
       this.waiting = false;
       return undefined;
@@ -1872,6 +1912,7 @@ export class Pet {
         return step;
       }
 
+      this.push({ lids: this.eyelidHeight() });
       this.pushStored(this.locomotion);
     }
 
@@ -4042,7 +4083,15 @@ export class Pet {
   headWobble = 0;
 
   /** The head's wobbles (`Lube`s, DS:0x1ba on). */
-  private lubes = LUBES.map((range) => ({ ...range, current: 0, from: 0, to: 0, frames: 0, count: -1, next: 1 }));
+  private lubes = LUBES.map((range) => ({
+    ...range,
+    current: 0,
+    from: 0,
+    to: 0,
+    frames: 0,
+    count: -1,
+    next: 1,
+  }));
 
   /** `ScriptSprite::SetHeadTarget` (seg5:0000): a point to look toward, kept from the dog's middle now. */
   setHeadTarget(point: { x: number; y: number } | null) {
@@ -4086,10 +4135,15 @@ export class Pet {
 
     this.setEyeTarget(null);
     this.eyeMode = 2;
+
+    /* Wide-eyed, the lids up a little. */
+    this.lidRest = 20;
+    this.eyesWide = 1;
   }
 
   /** `LookAtRandomPoint` (seg7:2b1c): the eyes and head toward somewhere on the stage. */
   private lookAtRandomPoint() {
+    this.eyesWide = 0;
     const point = { x: this.rand() % this.world.width, y: this.rand() % this.world.height };
     this.setEyeTarget(point);
     this.setHeadTarget(point);
@@ -4224,6 +4278,93 @@ export class Pet {
     }
 
     return lube.current;
+  }
+
+  // The eyelids.
+
+  /** How far the eyelids rest closed, in hundredths (`-0x721e`): 30, 20 looking at the user, or as `8ae0` sets. */
+  private lidRest = 30;
+
+  /** Frames between blinks, at least, and how long a blink is unless asked otherwise (`-0x7216`, `-0x7214`). */
+  private blinkGap = 40;
+  private blinkLength = 5;
+
+  /** A blink asked for, its length (`-0x7210`); the frame of the one under way and its length (`-0x720e`, `-0x7212`). */
+  private blinkAsked = 0;
+  private blinkAt = 0;
+  private blinkShut = 0;
+
+  /** Frames to the next blink (`-0x7218`). */
+  private blinkWait = 0;
+
+  /** How far the eyelids are closed this frame, in hundredths (`0x54a`). */
+  private lids = 0;
+
+  /** How many pixels wider each side the eyes are drawn (`0x548`): 1 looking at the user. */
+  private eyesWide = 0;
+
+  /**
+   * The eyelids each frame, from `ScriptSprite::Pulse` (seg7:7403): a blink
+   * comes every 40 to 49 frames, a third shut, then shut, two thirds for its
+   * last frame, and open; otherwise the lids rest where they are set.
+   */
+  private blinkPulse() {
+    let shut = 0;
+
+    if (this.blinkAt < 1) {
+      if (this.blinkWait-- < 0) {
+        this.blinkAt = 1;
+        shut = 33;
+        this.blinkShut = this.blinkAsked || this.blinkLength;
+        this.blinkAsked = 0;
+      }
+    } else {
+      this.blinkAt++;
+
+      if (this.blinkAt < this.blinkShut) {
+        shut = 100;
+      } else if (this.blinkAt === this.blinkShut) {
+        shut = 66;
+      } else {
+        this.blinkAt = -1;
+        const spread = Math.max(1, Math.trunc(this.blinkGap / 4));
+        this.blinkWait = (this.rand() % spread) + this.blinkGap;
+      }
+    }
+
+    this.lids = Math.max(shut, this.lidRest);
+  }
+
+  /**
+   * `PetModule::GetEyelidHeightFromExcitement` (seg21:78da), for each stride
+   * walking or running: the calmer the dog the droopier its lids,
+   * `(100 - excitement) × 0.4 + rand() % 20`, at most 45.
+   */
+  private eyelidHeight() {
+    const calm = (100 - this.factor(0)) * 0.4;
+    return Math.min(45, Math.trunc(calm + (this.rand() % 20)));
+  }
+
+  /** `ScriptSprite::DoBlink` (seg7:28fc, `8ae1 n`): a blink so many frames long, or the usual, now or next. */
+  private doBlink(frames: number) {
+    if (this.blinkAt > 0) {
+      this.blinkShut = frames || this.blinkLength;
+      this.blinkAt = 1;
+    } else {
+      this.blinkWait = 0;
+      this.blinkAsked = frames || this.blinkLength;
+    }
+  }
+
+  /** `8ae0 n` (seg7:59dc): the lids to rest so far closed, 30 for less than 0; a blink asked for is dropped, one under way ends. */
+  private restLids(closed: number) {
+    this.blinkAsked = 0;
+
+    if (this.blinkAt !== 0) {
+      this.blinkAt = this.blinkShut;
+    }
+
+    this.lidRest = closed >= 0 ? closed : 30;
   }
 
   // The kennel.

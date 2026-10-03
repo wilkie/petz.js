@@ -181,9 +181,17 @@ flowchart LR
 - [[read out]] The script opcodes `0x8afa`, `0x8afb` and `0x8afc` ([[format:scp]]) call `LookAtRandomPoint`, `LookAtUser` and `LookAhead`.
 - [[inferred]] The wobbles draw from the same `rand()` as the rest, and only while the head is turned. The reimplementation's clock for them is its tick times 17 milliseconds.
 
+## Blinking and the eyelids
+
+- [[read out]] How far the eyelids are closed, in hundredths, is set every frame by `ScriptSprite::Pulse` (seg7:7403): the greater of where they rest and a blink. A blink comes after a wait of 40 to 49 frames (`rand() % (40 / 4) + 40`, `-0x7216` and `-0x7218`) and lasts 5 frames (`-0x7214`): a third shut, then shut, two thirds shut on its last frame, and open. The wait is drawn as each blink ends.
+- [[read out]] The lids rest 30 closed (`-0x721e`, set by `ResetParams`), 20 looking at the user (`LookAtUser`), or as a script's `0x8ae0 n` says, 30 for a negative n; it also drops a blink asked for and cuts one under way short. `0x8ae1 n` blinks for n frames, or the usual 5 for 0 (`DoBlink`, seg7:28fc): at once if a blink is under way, else on the frame after next. The sleeping scripts blink for 5000 frames, so a sleeping dog's eyes stay shut; lying down, the scripts close them by steps.
+- [[read out]] Walking and running, before each stride the dog's lids are set by its calm: `(100 − excitement) × 0.4 + rand() % 20`, at most 45 (`GetEyelidHeightFromExcitement`, seg21:78da, pushed as `0x8ae0` by `DoLocomote` and `DoTargettedLocomote`).
+- [[read out]] `Pulse` also eases the lids toward their rest by up to 66 a frame (`-0x721c`) before setting them, to no effect. How they are drawn is [[topic:drawing-a-dog]], the eyes.
+- [[inferred]] The blinks draw from the same `rand()` as the rest, as each blink ends, in the order the reimplementation runs `Pulse`: after the state's frame, before the brain.
+
 ## Not yet
 
 - [[read out]] Guarding the screen (`eGuardingScreen`, 0xb, `DoGuardingScreen`, seg16:08fb), barking at it (`eGuardingBarking`, 0xc) and begging as an icon (global 0x3ea, `DoIconBeg`) are for Dogz on the Windows desktop: they are entered only when `PetParams` +0x5e, the way the pet is shown, is 3 (seg21:0000), or the window is an icon, and the viewer is a playpen. `eGuilty` (0x69, `DoPlayAnimation`), `eBirthing` (0x6a) and `ePoo` (0x6b) are entered by nothing in the engine. None is played; nor, at play, turning to the ball before a grab (`0x8ae8`), or the ball moved during a ball trick (`0x8aed`, `0x8af4`).
 - [[read out]] `eTumbling` (0x24, `DoTumbling`, seg19:253d: a trip, script 24, at whose cue 12 the ball is let go of and flies off at 20 to 49 along the dog's angles) is entered by nothing in the engine — no `NewState`, goto or table names it — and is not played.
 - [[read out]] `DoTargettedLocomote` passes the target's distance from a local it never sets; the reimplementation passes 4, as `DoLocomote` does.
-- [[inferred]] `ResetScriptSoft`, which a state calls leaving, is taken to let the script playing finish and drop the rest.
+- [[read out]] `ResetScriptSoft` (seg7:31f1), which a state calls leaving, lets the script playing finish and drops the rest, then queues cue 3 and a glue: the ball given, or the one the queue was glued by, or the chest. `ResetScript` and `ResetScriptHard` drop it all at once and call `ResetParams` (seg7:33ae) themselves; cue 3 calls it once the soft reset's script has played. It stops every `Fudger` easing and drifting the dog's angles, clears what the dog looks at and lets it look again, puts its eyes back to their size and its eyelids and blinks back to how they start. So a turn a trick leaves drifting stops when the next state begins.

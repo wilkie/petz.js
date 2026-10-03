@@ -112,7 +112,13 @@ describe('turning the head', () => {
   const balls = frame(
     Array.from({ length: 57 }, (_, n): [number, number, number] => (n < 2 ? [40, 0, 0] : [0, 0, 0]))
   );
-  const still = { yaw: 0, pitch: 0, roll: 0, offset: { x: 0, y: 0, z: 0 }, drift: { x: 0, y: 0, z: 0 } };
+  const still = {
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+    offset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0, y: 0, z: 0 },
+  };
   const place = (head?: typeof still) =>
     project(withHead, header, balls, { pet: 256, ball: 256 }, 0, 0, head);
 

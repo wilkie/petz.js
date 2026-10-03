@@ -13,6 +13,11 @@
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
 
+/** The angle of a point from the origin, in 256ths of a turn (seg11:1e8a, as `atan2`). */
+export function angle256(y: number, x: number) {
+  return Math.trunc((Math.atan2(y, x) * 128) / Math.PI);
+}
+
 /** The game's sine and cosine of an angle in 256ths of a turn, times 256. */
 function sine(angle: number) {
   return Math.trunc(Math.sin((angle * Math.PI) / 128) * 256);

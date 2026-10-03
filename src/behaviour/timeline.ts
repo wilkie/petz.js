@@ -3,8 +3,8 @@
  * happens as each is shown: what `ScriptSprite::PushScript` expands a script
  * into and `PopScript` steps through (DOGZDLL.DLL seg7:47e8 and 57ce). The
  * sounds, the turns, the glue between frames, the cues and the easing of
- * the dog's rotation are kept; blinks, the dog's factors and the rest are
- * not yet. See kb/formats/scp.md.
+ * the dog's rotation, the blinks and the eyelids are kept; the dog's factors
+ * and the rest are not yet. See kb/formats/scp.md.
  */
 
 import { type Element, type Operand, OP, type Script } from '../formats/script.ts';
@@ -57,6 +57,12 @@ export interface Step {
 
   /** How far the head may turn, in hundredths (`8ae6 17 to`, the fudger `HeadTrackMaxAll`). */
   headTrackMax?: number;
+
+  /** A blink, so many frames shut, or the length a blink has, at 0 (`8ae1 n`, `DoBlink`). */
+  blink?: number;
+
+  /** How far the eyelids rest closed, in hundredths, 30 when negative (`8ae0 n`). */
+  lids?: number;
 }
 
 /** The ball a script glues by when it says none: the belly (`GetDefaultGlueBall`). */
@@ -71,6 +77,8 @@ const TURN = 0x8ae5;
 const REFERENCE = 0x8ad3;
 const GRAB = 0x8b03;
 const RELEASE = 0x8b04;
+const LIDS = 0x8ae0;
+const BLINK = 0x8ae1;
 const CUE = 0x8ae3;
 const EASE = 0x8ae6;
 const DRIFT = 0x8ae9;
@@ -203,6 +211,12 @@ export function timeline(
             if (frames.length) {
               frames[frames.length - 1].reference = true;
             }
+            break;
+          case LIDS:
+            pending.lids = value(a);
+            break;
+          case BLINK:
+            pending.blink = value(a);
             break;
           case CUE:
             pending.cues = [...(pending.cues ?? []), value(a)];

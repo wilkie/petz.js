@@ -141,6 +141,112 @@ export function fillBall(bitmap: IndexedBitmap, ball: Ball, next: (below: number
   }
 }
 
+/** An angle in 256ths of a turn, brought within -128 to 128 (seg11:1f32). */
+export function wrapAngle(angle: number) {
+  let wrapped = angle;
+
+  while (wrapped < -0x80) {
+    wrapped += 0x100;
+  }
+
+  while (wrapped > 0x80) {
+    wrapped -= 0x100;
+  }
+
+  return wrapped;
+}
+
+/**
+ * Covers part of a ball of diameter `d` centred at `x`, `y` in one colour,
+ * from one side up to a line, as `XFillPartialCircleKernel` does in mode -2
+ * (seg8:3995 to 3db5): an eyelid. `cover` rows are covered, from the top
+ * when the line is level (the angle within 2 of 0), from the bottom when it
+ * is upside down (within 2 of 128); otherwise the line, `cover` in from the
+ * edge, is turned by the angle, and each row filled from the line to its
+ * end on the one side or the other, by the angle's sign.
+ */
+export function fillLid(
+  bitmap: IndexedBitmap,
+  {
+    x,
+    y,
+    d,
+    colour,
+    cover,
+    angle,
+  }: { x: number; y: number; d: number; colour: number; cover: number; angle: number }
+) {
+  const rows = d;
+  const top = Math.round(y - d / 2);
+  const rectLeft = Math.round(x) - Math.floor(d / 2);
+  const across = d + 1;
+  const a = wrapAngle(angle);
+  const row = (r: number) => {
+    const width = rowWidth(d, r);
+    return { width, start: Math.round(x) - Math.floor(width / 2), y: top + r - 1 };
+  };
+
+  if (a > -3 && a < 3) {
+    for (let r = 1; r < Math.min(cover, rows); r++) {
+      const { width, start, y: at } = row(r);
+      bitmap.span(start, at, width, colour);
+    }
+
+    return;
+  }
+
+  if (a > 0x7d || a < -0x7d) {
+    for (let r = rows - cover + 2; r < rows; r++) {
+      if (r >= 1) {
+        const { width, start, y: at } = row(r);
+        bitmap.span(start, at, width, colour);
+      }
+    }
+
+    return;
+  }
+
+  /* The line through the point `cover` in from the edge, turned: where it
+   * crosses each row, from the ball's rectangle's left, a slope a row. */
+  const offset = Math.trunc(rows / 2) - cover;
+  const theta = (wrapAngle(a + 0x40) * 6.283) / 256;
+  const slope = -Math.tan(theta);
+  let at =
+    (Math.sin(theta) * offset + Math.trunc(-rows / 2)) * slope +
+    (Math.cos(theta) * -offset + Math.trunc(across / 2));
+
+  for (let r = 1; r < rows; r++, at += slope) {
+    const { width, start, y: rowY } = row(r);
+    const from = start - rectLeft;
+
+    if (a > 0 && a <= 0x80) {
+      /* Right of the line. */
+      if (across < at) {
+        continue;
+      }
+
+      const p = at < 0 ? -Infinity : Math.trunc(at);
+
+      if (p > from) {
+        const length = width - (p - from);
+
+        if (length >= 0) {
+          bitmap.span(rectLeft + p, rowY, length, colour);
+        }
+      } else {
+        bitmap.span(start, rowY, width, colour);
+      }
+    } else if (at >= 0) {
+      /* Left of it. */
+      const n = across < at ? width : Math.min(Math.trunc(at) - from, width);
+
+      if (n > 0) {
+        bitmap.span(start, rowY, n, colour);
+      }
+    }
+  }
+}
+
 /**
  * The speckle colour `Ballz::GenerateSpeckleColors` gives a ball: its colour
  * reflected within its ramp, so a dark shade speckles light and a light one

@@ -10,8 +10,16 @@
 
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
-import { type Head, type Placed, project, scalesForAge } from './project.ts';
-import { drawTaperedLine, fillBall, IndexedBitmap, random, speckleColour } from './raster.ts';
+import { angle256, type Head, type Placed, project, scalesForAge } from './project.ts';
+import {
+  drawTaperedLine,
+  fillBall,
+  fillLid,
+  IndexedBitmap,
+  random,
+  speckleColour,
+  wrapAngle,
+} from './raster.ts';
 
 /** Something to draw: a ball, or a line between two balls, at a depth. */
 type Mark =
@@ -49,6 +57,12 @@ export interface DrawOptions {
    * drawing to the next; without it the irises are drawn where they are going.
    */
   iris?: { x: number; y: number };
+
+  /** How far the eyelids are closed, in hundredths (the `BallState`'s `+0x30`); 0 for not at all. */
+  lids?: number;
+
+  /** How many pixels wider each side the eyes are drawn (the `BallState`'s `+0x2e`). */
+  eyesWide?: number;
 
   /**
    * Something drawn with a ball, just after it and before the balls nearer
@@ -136,6 +150,8 @@ export function drawPet(
     head,
     eyes,
     iris,
+    lids = 0,
+    eyesWide = 0,
   }: DrawOptions
 ) {
   const next = random(seed);
@@ -181,11 +197,14 @@ export function drawPet(
       underHead = undefined;
     }
 
+    /* The eyes widened, looking at the user (`XInsetRect` by -n, seg10:51aa). */
+    const widened = breed.eyes.includes(ball) ? 2 * eyesWide : 0;
+
     fillBall(
       bitmap,
       {
         ...at(ball),
-        diameter: placed[ball].diameter,
+        diameter: placed[ball].diameter + widened,
         colour: numbers[ball],
         outlineColour: breed.outlineColor[ball],
         speckleColour: speckleColour(
@@ -213,6 +232,10 @@ export function drawPet(
 
     if (eye !== -1) {
       drawIris(bitmap, breed, placed, ball, breed.irises[eye], at, colours, eyes, iris);
+
+      if (lids > 0) {
+        drawLid(bitmap, breed, placed, eye, at, colours, lids, eyesWide);
+      }
     }
   }
 }
@@ -255,7 +278,11 @@ function drawIris(
 
   if (eased) {
     const toward = (value: number, goal: number) =>
-      Math.trunc(value) < goal ? value + IRIS_STEP : goal < Math.trunc(value) ? value - IRIS_STEP : value;
+      Math.trunc(value) < goal
+        ? value + IRIS_STEP
+        : goal < Math.trunc(value)
+          ? value - IRIS_STEP
+          : value;
 
     eased.x = toward(eased.x, target.x);
     eased.y = toward(eased.y, target.y);
@@ -281,4 +308,55 @@ function drawIris(
   if (iris.diameter > 7) {
     disc(iris.diameter - 4, pupilColour);
   }
+}
+
+/** The nose, which the eyelids slant by: ball 55 (`+0x676` of the placed balls). */
+const NOSE = 55;
+
+/**
+ * Draws an eyelid over an eye, as `DisplayBallzFrame` does after its iris
+ * (seg10:5746 to 5b60): closed by `lids` in hundredths, it covers that share
+ * of the eye's height in the breed's eyelid colour (`XFillPartialCircleRotate`),
+ * its edge slanted by the nose's bearing from between the eyes, less as the
+ * lids open. The engine works out the slant of the line between the eyes too,
+ * and a blend of the two, but draws by the nose's alone.
+ */
+function drawLid(
+  bitmap: IndexedBitmap,
+  breed: Breed,
+  placed: Placed[],
+  eye: number,
+  at: (ball: number) => { x: number; y: number },
+  colours: 256 | 16,
+  lids: number,
+  wide: number
+) {
+  const [right, left] = breed.eyes.map((ball) => placed[ball]);
+  const nose = placed[NOSE];
+
+  if (!right || !left || !nose) {
+    return;
+  }
+
+  /* The share left open (`+0x24`, `+0x26`, each eye 100). */
+  const open = Math.min(100, Math.trunc((100 * (100 - lids)) / 100));
+  const between = { x: Math.trunc((right.x - left.x) / 2), y: Math.trunc((right.y - left.y) / 2) };
+  const nx = Math.trunc(nose.x) - (Math.trunc(left.x) + between.x);
+  const ny = Math.trunc(nose.y) - (Math.trunc(left.y) + between.y);
+  const bearing = Math.abs(nx) > 1 || Math.abs(ny) > 1 ? -angle256(nx, ny) : 0;
+
+  /* Each eye's own slant, `+0x20` for the left and `+0x22` for the right, is 0. */
+  const angle = wrapAngle(Math.trunc((bearing * open) / 100));
+  const ball = placed[breed.eyes[eye]];
+  const d = Math.round(ball.diameter + 2 * wide);
+  const centre = at(breed.eyes[eye]);
+
+  fillLid(bitmap, {
+    x: centre.x,
+    y: centre.y,
+    d,
+    colour: (colours === 256 ? breed.eyelidColor256 : breed.eyelidColor16) ?? 4,
+    cover: Math.trunc(((d + 1) * (100 - open)) / 100),
+    angle,
+  });
 }

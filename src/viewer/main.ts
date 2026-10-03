@@ -141,8 +141,10 @@ let live: {
   pet: Pet;
   stage: Stage;
   started: number;
-  /** Where the eyes look, and the irises' eased offset, which the dog's `Ballz` keeps. */
+  /** Where the eyes look, the eyelids and the eyes' widening, and the irises' eased offset, which the dog's `Ballz` keeps. */
   eyes?: { mode: 0 | 1 | 2; x: number; y: number };
+  lids?: number;
+  eyesWide?: number;
   iris: { x: number; y: number };
 } | null = null;
 
@@ -282,6 +284,8 @@ function drawDog(
     head: stage?.head,
     eyes: live?.eyes,
     iris: live?.iris,
+    lids: live?.lids,
+    eyesWide: live?.eyesWide,
   });
 
   if (front) {
@@ -474,7 +478,7 @@ function tickLive() {
   const step = pet.tick((performance.now() - started) / 17);
 
   stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt, step.head);
-  live!.eyes = step.eyes;
+  Object.assign(live!, { eyes: step.eyes, lids: step.lids, eyesWide: step.eyesWide });
   drawDog(step.frame, stage.x, stage.y, step.rotation, stage);
 
   if (soundInput.checked) {

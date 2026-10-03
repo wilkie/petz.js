@@ -279,7 +279,7 @@ withOracle('the engine’s behaviour', () => {
       let tick = 0;
       const states: number[] = [];
       const sounds: number[][] = [];
-      const looks: Pick<Tick, 'head' | 'eyes'>[] = [];
+      const looks: Pick<Tick, 'head' | 'eyes' | 'lids'>[] = [];
 
       const run = (frameCount: number, act?: (n: number) => void) => {
         for (let n = 0; n < frameCount; n++, tick++) {
@@ -288,13 +288,46 @@ withOracle('the engine’s behaviour', () => {
           stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt, step.head);
           states.push(step.state);
           sounds.push(step.sounds ?? []);
-          looks.push({ head: step.head, eyes: step.eyes });
+          looks.push({ head: step.head, eyes: step.eyes, lids: step.lids });
         }
       };
 
       pet.start(0);
       return { stage, pet, run, states, sounds, looks, tricks: dogTricks };
     };
+
+    it('blinks every 50 frames or so, and rests its eyelids as the scripts say', () => {
+      const { run, looks } = setUp(3);
+      run(3000);
+      const lids = looks.map(({ lids }) => lids ?? 0);
+      const starts = lids.flatMap((lid, n) => (lid === 33 ? [n] : []));
+
+      /* A third shut, shut, two thirds, open; about every 50 frames. */
+      expect(lids.join(',')).toContain('33,100,100,100,66');
+      expect(starts.length).toBeGreaterThan(3000 / 75);
+      expect(starts.length).toBeLessThan(3000 / 40);
+
+      /* Open, the lids rest a little closed: 30, 20 once it has looked at
+       * the user, and walking, the calmer the droopier, up to 45. */
+      expect(lids.filter((lid) => lid === 30).length).toBeGreaterThan(50);
+      expect(lids.filter((lid) => lid > 30 && lid <= 45).length).toBeGreaterThan(50);
+    });
+
+    it('shuts its eyes asleep', () => {
+      const { pet, run, looks } = setUp(3);
+      run(300);
+      pet.newState(STATE.sleeping);
+      run(1);
+
+      expect(pet.state).toBe(STATE.sleeping);
+      const from = looks.length;
+      run(800);
+
+      /* Lying down, its eyelids close by steps (`8ae0`); asleep, the scripts
+       * blink for 5000 frames (`8ae1 5000`). */
+      const shut = looks.slice(from).filter(({ lids }) => lids === 100).length;
+      expect(shut).toBeGreaterThan(300);
+    });
 
     it('eases the irises 0.6 pixels for each eye drawn toward where the eyes look', () => {
       const iris = { x: 3, y: -3 };
@@ -314,7 +347,13 @@ withOracle('the engine’s behaviour', () => {
     it('turns its head and eyes to the cursor moving about, but only so far', () => {
       const { stage, pet, run, states, looks } = setUp(3);
       run(300);
-      expect(pet.global).toBe(GLOBAL.idle);
+
+      /* Idle, not at a trick. */
+      for (let n = 0; n < 2000 && pet.state !== STATE.idle; n++) {
+        run(1);
+      }
+
+      expect(pet.state).toBe(STATE.idle);
 
       const from = looks.length;
       run(120, (n) => {
@@ -796,43 +835,48 @@ withOracle('the engine’s behaviour', () => {
     });
 
     it('begging, follows a treat held level with it, on its hind legs', () => {
-      const { stage, pet, run, states } = setUp(4, 640, 480);
-      run(300);
+      /* Six times in ten, when the treat moves off level: so once in a few dogs. */
+      const beg = (seed: number) => {
+        const { stage, pet, run, states } = setUp(seed, 640, 480);
+        run(300);
 
-      const { width } = stage.standardSize();
-      const treat: Food = {
-        kind: FOOD.redTreat,
-        held: true,
-        x: 0,
-        y: 0,
-        servings: 0,
-        full: 0,
-        touched: 0,
-      };
-      stage.foods.push(treat);
-
-      /* Held level with its middle, ahead of it the way it faces, beyond its
-       * reach but not far: outside the box of its width, inside twice that.
-       * Its middle is kept from where it is, as its head turning moves it. */
-      const start = { centre: stage.centre(), at: stage.where() };
-      const hold = () => {
-        const at = stage.where();
-        const centre = {
-          x: at.x + start.centre.x - start.at.x,
-          y: at.y + start.centre.y - start.at.y,
+        const { width } = stage.standardSize();
+        const treat: Food = {
+          kind: FOOD.redTreat,
+          held: true,
+          x: 0,
+          y: 0,
+          servings: 0,
+          full: 0,
+          touched: 0,
         };
-        const ahead = Math.sin((pet.rotation * Math.PI) / 128) > 0 ? -1 : 1;
-        Object.assign(treat, { x: centre.x + ahead * width * 1.2, y: centre.y });
-        stage.pointer = { x: treat.x, y: treat.y, button: false };
+        stage.foods.push(treat);
+
+        /* Held level with its middle, ahead of it the way it faces, beyond its
+         * reach but not far: outside the box of its width, inside twice that.
+         * Its middle is kept from where it is, as its head turning moves it. */
+        const start = { centre: stage.centre(), at: stage.where() };
+        const hold = () => {
+          const at = stage.where();
+          const centre = {
+            x: at.x + start.centre.x - start.at.x,
+            y: at.y + start.centre.y - start.at.y,
+          };
+          const ahead = Math.sin((pet.rotation * Math.PI) / 128) > 0 ? -1 : 1;
+          Object.assign(treat, { x: centre.x + ahead * width * 1.2, y: centre.y });
+          stage.pointer = { x: treat.x, y: treat.y, button: false };
+        };
+
+        hold();
+        run(5, hold);
+        pet.foodTakenOut(treat);
+        run(1200, hold);
+        return states;
       };
+      const dogs = [3, 4, 5, 6, 7].map(beg);
 
-      hold();
-      run(5, hold);
-      pet.foodTakenOut(treat);
-      run(1200, hold);
-
-      expect(states).toContain(STATE.begging);
-      expect(states).toContain(STATE.beggingChasingHindLegs);
+      expect(dogs.every((states) => states.includes(STATE.begging))).toBe(true);
+      expect(dogs.some((states) => states.includes(STATE.beggingChasingHindLegs))).toBe(true);
     });
 
     it('has the bowls the size of their pictures: full, half, empty and the rim', () => {
