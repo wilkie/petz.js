@@ -61,6 +61,9 @@ export interface Breed {
 
   /** The head and the chest, by the file's comments. */
   keyBalls: number[];
+
+  /** The tongue's balls, hidden while the dog has something in its mouth (`[Tongue Balls]`). */
+  tongueBalls: number[];
   headBalls: number[];
   omissions: number[];
   lines: Line[];
@@ -195,6 +198,7 @@ export function parseLnz(text: string, balls = 65): Breed {
     irisColor16: optional('16 Iris Color'),
     pupilColor: optional('Pupil Color'),
     keyBalls: sections.has('Key Balls') ? numbers('Key Balls') : [],
+    tongueBalls: sections.has('Tongue Balls') ? numbers('Tongue Balls') : [],
     headBalls: numbers('Head Balls'),
     omissions: sections.has('Omissions') ? numbers('Omissions') : [],
     lines: section('Linez').map((line) => {

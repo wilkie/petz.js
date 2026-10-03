@@ -69,6 +69,15 @@ export interface DrawOptions {
   /** How many levels the fur bristles: added to every ball's fuzz (the `BallState`'s `+0x46`). */
   bristle?: number;
 
+  /**
+   * The order the balls were drawn in last, which `ZOrder` sorts from and
+   * which is kept for the next frame; without, the balls in turn.
+   */
+  order?: number[];
+
+  /** Whether the tongue shows (`Ballz` `+0x66`, cleared with something in its mouth); it does without. */
+  tongue?: boolean;
+
   /** Each eyelid's height and tilt, as the dog's fudgers have them: 100 and level without. */
   eyelids?: Eyelids;
 
@@ -119,27 +128,109 @@ export interface DrawOptions {
  */
 const RAMPS = { 256: { first: 16, length: 6 }, 16: { first: 0, length: 1 } } as const;
 
-/** Everything to draw for a frame, farthest first. */
-export function marks(breed: Breed, placed: Placed[]): Mark[] {
-  /* The irises are not drawn with the balls but in their eyes (`drawIris`). */
-  const omitted = new Set([...breed.omissions, ...breed.irises]);
-  const list: Mark[] = [];
+/** How much nearer a ball must be than the one before it to be drawn after it (`ZOrder`'s tolerance, seg10:4dee). */
+const Z_TOLERANCE = 4;
 
-  placed.forEach((ball, index) => {
-    if (!omitted.has(index) && ball.diameter > 0) {
-      list.push({ kind: 'ball', ball: index, depth: ball.depth });
-    }
-  });
+/** The jaw, chin and tongue, in the order they are drawn with the tongue out (`ds:1d16`). */
+const MOUTH = [53, 51, 63, 64];
 
-  for (const line of breed.lines) {
-    if (!omitted.has(line.from) && !omitted.has(line.to)) {
-      const depth = (placed[line.from].depth + placed[line.to].depth) / 2;
-      list.push({ kind: 'line', from: line.from, to: line.to, depth });
+/**
+ * The order the balls are drawn in, as `Ballz::ZOrder` (seg10:48ad) keeps
+ * it: from the order before (each ball in turn, at first), a ball moved
+ * before the one ahead of it only if farther than it by more than 4, so
+ * balls about as far apart keep their places; then an eye nearer than the
+ * head drawn after it, if it was not; and, with the tongue out, the jaw,
+ * chin and tongue in that order.
+ */
+export function drawOrder(breed: Breed, placed: Placed[], before?: number[], tongueOut = true) {
+  const order = before?.length === placed.length ? [...before] : placed.map((_, index) => index);
+  const z = (ball: number) => placed[ball]?.depth ?? 0;
+
+  for (let i = 0; i < order.length; i++) {
+    for (let j = 1; j <= i; j++) {
+      if (z(order[j]) - z(order[j - 1]) > Z_TOLERANCE) {
+        [order[j], order[j - 1]] = [order[j - 1], order[j]];
+      }
     }
   }
 
-  /* Farthest first; at the same depth a line goes under the balls it joins. */
-  return list.sort((a, b) => b.depth - a.depth || (a.kind === 'line' ? -1 : 1));
+  const swap = (a: number, b: number) => {
+    const [at, bt] = [order.indexOf(a), order.indexOf(b)];
+    [order[at], order[bt]] = [b, a];
+  };
+  const head = breed.keyBalls[0];
+
+  /* The left eye (`+0x365`), then the right (`+0x363`). */
+  for (const eye of [breed.eyes[1], breed.eyes[0]]) {
+    if (head !== undefined && z(eye) < z(head) && order.indexOf(eye) < order.indexOf(head)) {
+      swap(eye, head);
+    }
+  }
+
+  if (tongueOut) {
+    for (let i = 0; i < MOUTH.length; i++) {
+      for (let j = 0; j < i; j++) {
+        if (order.indexOf(MOUTH[j + 1]) < order.indexOf(MOUTH[j])) {
+          swap(MOUTH[j], MOUTH[j + 1]);
+        }
+      }
+    }
+  }
+
+  return order;
+}
+
+/**
+ * Everything to draw for a frame, in `DisplayBallzFrame`'s order (seg10:4e12
+ * on): each ball in the draw order, after the lines it joins that are not
+ * drawn yet — each line kept with both its balls, the end's first, up to
+ * four a ball (`LoadSpecialBallInfo`, seg10:1f96) — so a line goes under the
+ * first of its balls drawn. The irises are drawn in their eyes, and the
+ * tongue, and lines to it, only when it is out; a ball omitted is not drawn,
+ * but its lines are.
+ */
+export function marks(breed: Breed, placed: Placed[], order: number[], tongueOut = true): Mark[] {
+  const omitted = new Set(breed.omissions);
+  const irises = new Set(breed.irises);
+  const tongue = new Set(breed.tongueBalls);
+  const lines = new Map<number, number[]>();
+
+  breed.lines.forEach((line, n) => {
+    for (const ball of [line.to, line.from]) {
+      lines.set(ball, [...(lines.get(ball) ?? []), n].slice(0, 4));
+    }
+  });
+
+  const drawn = new Set<number>();
+  const list: Mark[] = [];
+
+  for (const ball of order) {
+    if ((!tongueOut && tongue.has(ball)) || irises.has(ball)) {
+      continue;
+    }
+
+    for (const n of lines.get(ball) ?? []) {
+      if (drawn.has(n)) {
+        continue;
+      }
+
+      const { from, to } = breed.lines[n];
+
+      /* A line to the tongue, put away, ends the ball's lines (seg10:4fc7). */
+      if (!tongueOut && (tongue.has(from) || tongue.has(to))) {
+        break;
+      }
+
+      drawn.add(n);
+      list.push({ kind: 'line', from, to, depth: placed[ball].depth });
+    }
+
+    if (!omitted.has(ball) && placed[ball].diameter > 0) {
+      list.push({ kind: 'ball', ball, depth: placed[ball].depth });
+    }
+  }
+
+  return list;
 }
 
 /**
@@ -198,6 +289,8 @@ export function drawPet(
     eyelids,
     blend,
     bristle = 0,
+    order,
+    tongue = true,
   }: DrawOptions
 ) {
   const tables = circleTables(seed);
@@ -218,7 +311,14 @@ export function drawPet(
   const ramps = RAMPS[colours];
   const at = (ball: number) => ({ x: originX + placed[ball].x, y: originY + placed[ball].y });
 
-  const list = marks(breed, placed);
+  const tongueOut = tongue;
+  const ballOrder = drawOrder(breed, placed, order, tongueOut);
+
+  if (order) {
+    order.splice(0, order.length, ...ballOrder);
+  }
+
+  const list = marks(breed, placed, ballOrder, tongueOut);
   const headCount = list.filter(
     (mark) => mark.kind === 'ball' && breed.headBalls.includes(mark.ball)
   ).length;

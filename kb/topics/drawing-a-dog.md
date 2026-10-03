@@ -27,7 +27,7 @@ flowchart LR
 
 `pnpm dev`, then `/viewer.html`, draws any breed in any frame of any animation, on either display, from the game's own files: the oracle's, in development, or the drive Dogz is installed on chosen in the page, which never leaves the browser.
 
-- [[read out]] Positions: x across, y down, a larger z farther ([[format:bdt]]). Every ball and line is drawn in order of depth, farthest first; a line's depth is its two ends' average.
+- [[read out]] Positions: x across, y down, a larger z farther ([[format:bdt]]). Balls and lines are drawn in the engine's order, kept from frame to frame (below).
 - Sizes and places: as Dogz places a ball, for the breed's scales at an age and a way the dog is turned (below), shown twice the size.
 - Lines: from the `Linez` section, between their two balls, in the first ball's colour, edged in black, as `XDrawLine` draws them (below).
 - Outlines: from `Outline Type` and `Outline Color`, as the kernel draws them (below). Not yet measured against the oracle.
@@ -74,6 +74,13 @@ flowchart LR
 - [[read out]] `InitPetModule` seeds `rand()` from the clock's low word (`GetTickCount`, seg21:0ce8) just before it opens the screen's draw port; so each session's ragged edges differ. [[inferred]] The tables are the first numbers drawn after it; the reimplementation makes them from a seed in the same order (`circleTables`), the viewer's once a session from its clock.
 - [[read out]] The third colour is the speckles'. `Ballz::GenerateSpeckleColors` (seg10:21da) makes it from the ball's colour, for every ball the breed gives a `Speckle Color` of 0 or more, by reflecting it within its ramp: `s + (s + R - 1 - c)`, where `s` is the first colour of `c`'s ramp. `XDrawPort::InitStaticDraw` sets the ramps on a 256-colour display at 20 of 6 colours from 16 — 16 to 21, up to 130 to 135 — and on 16 colours at one colour each.
 - [[measured]] That is what the oracle shows: the big dog's 131 speckles in 134, the far end of its ramp from 130. `src/render/raster.ts` draws by these rules, and the viewer with it.
+
+## The order a dog is drawn in
+
+- [[read out]] `Ballz::ZOrder` (seg10:48ad) does not sort the balls afresh each frame: it keeps their order from the frame before, each ball in turn at first, and makes one pass of an unfinished bubble sort over it, each ball `i` taken back through the ones before it, a pair swapped only when the later is farther by more than 4 (seg10:4dee). Balls about as far apart keep their places, and a dog held still settles over a few frames.
+- [[read out]] Then each eye, the left (`+0x365`) and then the right (`+0x363`), nearer than the head — the breed's first key ball — and drawn before it changes places with it; and with the tongue out the jaw, chin and tongue, 53, 51, 63 and 64 (`ds:1d16`), are put in that order among their places.
+- [[read out]] `LoadSpecialBallInfo` (seg10:1f96) keeps each line with its end ball, then its start, up to four a ball. `DisplayBallzFrame` (seg10:4e12 on) draws, before each ball in the order, its lines not yet drawn; so a line goes under the first of its two balls drawn. The irises are drawn in their eyes and not here; the tongue, flagged in (`+0x66`, `+0x68`), is not drawn, and a line to it ends its ball's lines (seg10:4fc7). A ball the breed omits is not drawn, but its lines are.
+- [[measured]] Drawn so, the port's big dog side-on (`--plain --hold 35`, [[guide:reproducing]]) differs from the oracle's in 618 of 4409 pixels, from 2060 drawn by depth alone. `src/render/ballz.ts` orders so (`drawOrder`, `marks`); the viewer keeps the order from frame to frame.
 
 ## What the dog holds
 

@@ -270,6 +270,8 @@ let live: {
   iris: { x: number; y: number };
   /** The dog's own trick weights, which it learns and which are kept. */
   tricks: Trick[];
+  /** The order its balls were drawn in, which `ZOrder` sorts on from frame to frame. */
+  order: number[];
 } | null = null;
 
 /**
@@ -478,6 +480,7 @@ function drawDog(
     lids: live?.lids,
     eyesWide: live?.eyesWide,
     eyelids: live?.eyelids,
+    order: live?.order,
     angles: stage?.angles,
     blend: stage?.blend && {
       scale: stage.blend.scale,
@@ -675,7 +678,7 @@ function startLive() {
   );
 
   pet.start(0);
-  live = { pet, stage, started: performance.now(), iris: { x: 0, y: 0 }, tricks };
+  live = { pet, stage, started: performance.now(), iris: { x: 0, y: 0 }, tricks, order: [] };
 }
 
 /** A tick of the live dog: the engine's clock is milliseconds over 17. */
