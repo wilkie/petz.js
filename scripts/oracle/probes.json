@@ -236,5 +236,38 @@
       "wrong": 1,
       "pixels": 5380
     }
+  },
+  {
+    "name": "vga35",
+    "about": "the big dog side-on on Windows' 16-colour VGA display, without fuzz or speckles",
+    "variant": ["--display", "vga", "--plain", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 15,
+      "pixels": 4323
+    }
+  },
+  {
+    "name": "vgafur35",
+    "about": "the same with its fuzz and speckles",
+    "variant": ["--display", "vga", "--plain", "--keep-fur", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 3,
+      "pixels": 4234
+    }
+  },
+  {
+    "name": "terriervga35",
+    "about": "the terrier side-on on the 16-colour display, with its fuzz and speckles",
+    "variant": ["--display", "vga", "--breed", "terrier", "--plain", "--keep-fur", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 0,
+      "pixels": 5642
+    }
   }
 ]

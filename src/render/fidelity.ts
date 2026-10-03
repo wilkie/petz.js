@@ -23,7 +23,7 @@ export interface Fidelity {
   /** `ZOrder`'s partial sort, kept from frame to frame; else sorted by depth afresh each frame. */
   partialSort: boolean;
 
-  /** Windows' dark static colours as the oracle's display driver shows them, at 192; else at Windows' 128. */
+  /** Windows' dark static colours as the oracle's display drivers show them — at 192 on 256 colours, the VGA driver's own on 16 — else as Dogz's palettes have them. */
   driverColours: boolean;
 }
 

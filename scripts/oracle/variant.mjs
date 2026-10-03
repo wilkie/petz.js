@@ -49,11 +49,11 @@ export const VARIANTS = join(BUILD, 'variants');
 /** The files Dogz keeps its dog in between runs. */
 const SAVED = ['SAVED.LNZ', 'BRAIN.BAK', 'TRICKS.TDT'];
 
-async function edit(path, change) {
+async function edit(path, change, { already = false } = {}) {
   const text = await readFile(path, 'latin1');
   const changed = change(text);
 
-  if (changed === text) {
+  if (changed === text && !already) {
     throw new Error(`nothing to change in ${path}`);
   }
 
@@ -177,8 +177,11 @@ export async function makeVariant(name, args) {
         throw new Error(`--set ${set}: not <section>[<line>]=<number>`);
       }
 
-      await edit(join(drive, 'DOGZ.DOG', 'DATA', `${pet.toUpperCase()}.LNZ`), (text) =>
-        setSection(text, section, value, only === undefined ? undefined : Number(only))
+      await edit(
+        join(drive, 'DOGZ.DOG', 'DATA', `${pet.toUpperCase()}.LNZ`),
+        (text) => setSection(text, section, value, only === undefined ? undefined : Number(only)),
+        /* A value it has already is set all the same. */
+        { already: true }
       );
       log(`  the ${pet}'s [${section}]${only === undefined ? '' : ` line ${only}`} ${value}`);
     }

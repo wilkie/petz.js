@@ -393,12 +393,13 @@ export function drawPet(
           diameter: placed[ball].diameter + widened,
           colour: numbers[ball],
           outlineColour: breed.outlineColor[ball],
-          speckleColour: speckleColour(
-            numbers[ball],
-            breed.speckleColor[ball],
-            ramps.first,
-            ramps.length
-          ),
+          /* Made from the ball's colour only on more than 4 bits a pixel
+           * (GenerateSpeckleColors, seg10:21da); on 16 colours the breed's
+           * own number is the speckles' colour. */
+          speckleColour:
+            colours === 256
+              ? speckleColour(numbers[ball], breed.speckleColor[ball], ramps.first, ramps.length)
+              : breed.speckleColor[ball],
           outline: breed.outlineType[ball],
           fuzz: breed.fuzz[ball] + bristle,
         },

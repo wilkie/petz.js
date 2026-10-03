@@ -59,6 +59,7 @@ import {
   PALETTE_256,
   readPalette,
   screenPalette,
+  screenPalette16,
 } from '../formats/palette.ts';
 import { parseScripts, readOpcodes, readStateNames, type Script } from '../formats/script.ts';
 import { type BrainFile, parseBrain, writeBrain } from '../formats/brain.ts';
@@ -210,6 +211,7 @@ const palettes = new Map<256 | 16, Colour[]>();
 
 /** Dogz's own 256 colours, before the screen makes its ramps and shows its static colours. */
 let dogzPalette: Colour[] = [];
+let dogzPalette16: Colour[] = [];
 
 const FIDELITY_KEY = 'dogz-reverse.fidelity';
 
@@ -219,6 +221,7 @@ function applyFidelity() {
 
   if (dogzPalette.length) {
     palettes.set(256, screenPalette(dogzPalette, { driverColours: FIDELITY.driverColours }));
+    palettes.set(16, screenPalette16(dogzPalette16, { driverColours: FIDELITY.driverColours }));
   }
 
   try {
@@ -1110,7 +1113,8 @@ async function start(files: GameFiles) {
   const engine = parseNe(await files.read('WINDOWS/DOGZDLL.DLL'));
   dogzPalette = readPalette(engine, PALETTE_256, 256);
   palettes.set(256, screenPalette(dogzPalette, { driverColours: FIDELITY.driverColours }));
-  palettes.set(16, readPalette(engine, PALETTE_16, 16));
+  dogzPalette16 = readPalette(engine, PALETTE_16, 16);
+  palettes.set(16, screenPalette16(dogzPalette16, { driverColours: FIDELITY.driverColours }));
   showPaintColours();
 
   const states = readStateNames(engine);

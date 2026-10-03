@@ -108,3 +108,36 @@ export function screenPalette(
         : colour
   );
 }
+
+/**
+ * The 16 colours as the oracle's Windows VGA driver shows them, after the
+ * VGA's six bits a channel: measured, each of a dog's balls given one in
+ * turn (`--display vga`). The bright eight are Windows' own; the dark ones
+ * and the greys are the driver's.
+ */
+export const VGA_SHOWN: Colour[] = [
+  [0, 0, 0],
+  [170, 0, 85],
+  [0, 170, 85],
+  [170, 170, 85],
+  [0, 0, 170],
+  [170, 85, 170],
+  [85, 170, 170],
+  [134, 138, 142],
+  [195, 199, 203],
+  [255, 0, 0],
+  [0, 255, 0],
+  [255, 255, 0],
+  [0, 0, 255],
+  [255, 0, 255],
+  [0, 255, 255],
+  [255, 255, 255],
+];
+
+/** The 16-colour palette as the screen shows it: the oracle's VGA driver's (`VGA_SHOWN`), or Dogz's own without `driverColours`. */
+export function screenPalette16(
+  palette: readonly Colour[],
+  { driverColours = true }: { driverColours?: boolean } = {}
+): Colour[] {
+  return driverColours ? VGA_SHOWN.map((colour) => [...colour] as Colour) : [...palette];
+}

@@ -14,7 +14,13 @@ import {
 } from '../../src/formats/animation.ts';
 import { type Breed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
-import { PALETTE_256, readPalette, screenPalette } from '../../src/formats/palette.ts';
+import {
+  PALETTE_16,
+  PALETTE_256,
+  readPalette,
+  screenPalette,
+  screenPalette16,
+} from '../../src/formats/palette.ts';
 import { drawPet } from '../../src/render/ballz.ts';
 import { extendFrames } from '../../src/render/extend.ts';
 import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
@@ -26,8 +32,8 @@ export const HEIGHT = 480;
 /** The playpen's ground in a `--plain` variant. */
 const MAGENTA = 0xff00ff;
 
-/** Windows' light grey, as this display shows it: a window's face. */
-const WINDOW_GREY = 0xc3c3c3;
+/** Windows' light grey, as the oracle's displays show it — 256 colours, then 16: a window's face. */
+const WINDOW_GREYS = new Set([0xc3c3c3, 0xc3c7cb]);
 
 type Box = { left: number; top: number; right: number; bottom: number };
 
@@ -169,7 +175,7 @@ export function findDog(rgb: Rgb, hand: Box | null = HAND): Dog | null {
         const index = stack.pop()!;
         const [px, py] = [index % WIDTH, Math.trunc(index / WIDTH)];
         size++;
-        grey += at(index) === WINDOW_GREY ? 1 : 0;
+        grey += WINDOW_GREYS.has(at(index)) ? 1 : 0;
         [box.left, box.top, box.right, box.bottom] = [
           Math.min(box.left, px),
           Math.min(box.top, py),
@@ -250,6 +256,9 @@ export interface Scene {
 
   /** Whether the screen's bitmap is bottom-up, as WinG recommended it on the variant's display. */
   bottomUp: boolean;
+
+  /** The display's colours: 16 with Windows' own VGA driver, else 256. */
+  depth: 256 | 16;
 }
 
 /**
@@ -286,10 +295,17 @@ export function loadScene(
     new TextDecoder('latin1').decode(read(`DOGZ.DOG/DATA/${pet.toUpperCase()}.LNZ`)),
     header.ballCount
   );
-  const palette = screenPalette(
-    readPalette(parseNe(read('WINDOWS/DOGZDLL.DLL')), PALETTE_256, 256),
-    { driverColours: FIDELITY.driverColours }
-  );
+  const system = new TextDecoder('latin1').decode(read('WINDOWS/SYSTEM.INI'));
+  const depth = /^display\.drv=vga\.drv/im.test(system) ? 16 : 256;
+  const engine = parseNe(read('WINDOWS/DOGZDLL.DLL'));
+  const palette =
+    depth === 16
+      ? screenPalette16(readPalette(engine, PALETTE_16, 16), {
+          driverColours: FIDELITY.driverColours,
+        })
+      : screenPalette(readPalette(engine, PALETTE_256, 256), {
+          driverColours: FIDELITY.driverColours,
+        });
   const colours = Int32Array.from(palette, ([r, g, b]) => pack(shown(r), shown(g), shown(b)));
   return {
     breed,
@@ -298,6 +314,7 @@ export function loadScene(
     colours,
     age,
     bristle,
+    depth,
     bottomUp,
   };
 }
@@ -332,7 +349,7 @@ export function draw(
   const bitmap = new IndexedBitmap(WIDTH, HEIGHT);
   setFidelity({ bottomUp: scene.bottomUp });
   drawPet(bitmap, scene.breed, scene.header, scene.frame, {
-    colours: 256,
+    colours: scene.depth,
     originX: ORIGIN.x,
     originY: ORIGIN.y,
     yaw,
