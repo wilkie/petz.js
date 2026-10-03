@@ -68,6 +68,8 @@ node scripts/oracle/shoot.mjs held35 --wait 12 --count 8 --every 3
 
 `--plain` takes the chance out of the drawing and the clutter from behind it: the adopted breed's balls without fuzz or speckles, the saved dog removed so its own colours are drawn, the playpen's paw tile solid magenta, and the playpen window 480 pixels square at the screen's right. [[measured]] `--plain --hold 35` shows the big dog side-on, wholly in view, the same in every picture.
 
+`--set "<section>=<n>"` gives every line of a section of the adopted breed's file one value, and `--set "<section>[<ball>]=<n>"` one ball's line, as many as wanted: `--set "Body Extension=100"` makes the dog long, `--set "256 Ball Color[45]=80"` one ball red, to find it on the screen.
+
 ## Check a Read out claim
 
 A **Read out** claim gives a file, a segment and an offset: `THINK.DLL` seg2:031a. The files are 16-bit Windows NE executables ([[format:ne]]), and segments are numbered from 1, as Windows numbers them. With the oracle built:

@@ -181,16 +181,24 @@ export function drawOrder(breed: Breed, placed: Placed[], before?: number[], ton
 }
 
 /**
+ * The toe the dog holds things by (`GrabObject`, seg14:06d7, the other way
+ * than in its mouth), never drawn itself: the pet module omits it as it
+ * makes the dog (`InitPetModule`, seg21:0fb9) and again whenever it reloads
+ * its lines, grabs or plays with a ball, whatever the breed's `[Omissions]`.
+ */
+export const HOLDING_TOE = 45;
+
+/**
  * Everything to draw for a frame, in `DisplayBallzFrame`'s order (seg10:4e12
  * on): each ball in the draw order, after the lines it joins that are not
  * drawn yet — each line kept with both its balls, the end's first, up to
  * four a ball (`LoadSpecialBallInfo`, seg10:1f96) — so a line goes under the
  * first of its balls drawn. The irises are drawn in their eyes, and the
- * tongue, and lines to it, only when it is out; a ball omitted is not drawn,
- * but its lines are.
+ * tongue, and lines to it, only when it is out; a ball omitted — or the
+ * holding toe — is not drawn, but its lines are.
  */
 export function marks(breed: Breed, placed: Placed[], order: number[], tongueOut = true): Mark[] {
-  const omitted = new Set(breed.omissions);
+  const omitted = new Set([...breed.omissions, HOLDING_TOE]);
   const irises = new Set(breed.irises);
   const tongue = new Set(breed.tongueBalls);
   const lines = new Map<number, number[]>();

@@ -53,7 +53,7 @@ export interface Frame {
   tag: number;
   balls: BallPosition[];
 
-  /** A few balls a frame says something more of, each with a signed byte; not yet known what. */
+  /** A few balls a frame sizes otherwise, each by a signed byte added to its size (`GetCartesianCoordinates`). */
   extras: { ball: number; value: number }[];
 
   /** The frame's length in its file. */

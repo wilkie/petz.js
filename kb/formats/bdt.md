@@ -67,7 +67,8 @@ All little-endian. With the skeleton's 65 balls, a frame is 405 bytes and two mo
 ## The extras
 
 - [[measured]] Up to six a frame. The balls they name are mostly the tongue's, 63 and 64 (2,765 and 2,821 times), then the chest (50), the neck (54), the belly (48), the eyes (8 and 32) and the irises (14 and 38). Their values run from -13 to 14 and are never 0.
-- Not yet known: what the value does to its ball. [[inferred]] Something about the ball's look rather than its place, since the place is already given.
+- [[read out]] Each changes its ball's size for that frame: `GetCartesianCoordinates` (seg10:367a) sizes the ball afresh from the breed's size plus the signed byte, its radius that times the ball scale `>> 9` as any other's. A size of nothing or less draws nothing. So the tongue is put away: frame 35, the dog standing, takes 10 and 11 from the tongue's two balls, whose skeleton sizes are 10 and 11. Ball 45 grows by 14 in 174 frames from 900 on.
+- [[measured]] The oracle's big dog, held in frame 35, shows no tongue; the reimplementation drew one, red under the chin, before it read these.
 
 ## What is not yet known
 

@@ -27,6 +27,10 @@
  *                 eyelids open (`0x8ae0 0`) and its head straight (cue 7:
  *                 nothing looked at), so whatever the dog plays first it
  *                 stays in. With --turn <n>, turned n 256ths first (`0x8ae5`).
+ * --set <section>=<value>  Every line of a section of the adopted breed's
+ *                 file given the value, as `--set "Body Extension=100"`,
+ *                 or one ball's line, as `--set "256 Ball Color[45]=80"`;
+ *                 as many as wanted.
  *
  * Then: node scripts/oracle/shoot.mjs <name>
  */
@@ -55,19 +59,26 @@ async function edit(path, change) {
   await writeFile(path, changed, 'latin1');
 }
 
-/** Each line of a section of a breed file given one value, its comment kept. */
-function setSection(text, name, value) {
+/** Each line of a section of a breed file, or only its line `only`, given one value, its comment kept. */
+function setSection(text, name, value, only) {
   const lines = text.split('\r\n');
   let inside = false;
+  let at = 0;
 
   return lines
     .map((line) => {
       if (line.startsWith('[')) {
         inside = line.startsWith(`[${name}]`);
+        at = 0;
         return line;
       }
 
-      return inside && /^\s*-?\d/.test(line) ? line.replace(/^\s*-?\d+/, value) : line;
+      if (!inside || !/^\s*-?\d/.test(line)) {
+        return line;
+      }
+
+      at += 1;
+      return only === undefined || at - 1 === only ? line.replace(/^\s*-?\d+/, value) : line;
     })
     .join('\r\n');
 }
@@ -146,6 +157,26 @@ async function main() {
       text.replace(/^Compound Window Location=.*$/m, 'Compound Window Location=160, 0, 640, 480')
     );
     log(`  the ${pet} without fuzz or speckles, on magenta`);
+  }
+
+  const sets = args.flatMap((arg, at) => (args[at - 1] === '--set' ? [arg] : []));
+
+  if (sets.length) {
+    const ini = await readFile(join(drive, 'DOGZ.DOG', 'DOGZ.INI'), 'latin1');
+    const pet = /^Your Pet=\.\\data\\(\w+)\.lnz/im.exec(ini)?.[1] ?? 'bigdog';
+
+    for (const set of sets) {
+      const [, section, only, value] = /^([^=[]+)(?:\[(\d+)\])?=(-?\d+)$/.exec(set) ?? [];
+
+      if (!section) {
+        throw new Error(`--set ${set}: not <section>[<line>]=<number>`);
+      }
+
+      await edit(join(drive, 'DOGZ.DOG', 'DATA', `${pet.toUpperCase()}.LNZ`), (text) =>
+        setSection(text, section, value, only === undefined ? undefined : Number(only))
+      );
+      log(`  the ${pet}'s [${section}]${only === undefined ? '' : ` line ${only}`} ${value}`);
+    }
   }
 
   const hold = option('--hold');

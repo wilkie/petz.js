@@ -1,5 +1,5 @@
 import { type Breed } from '../../src/formats/lnz.ts';
-import { drawOrder, marks } from '../../src/render/ballz.ts';
+import { drawOrder, HOLDING_TOE, marks } from '../../src/render/ballz.ts';
 import { type Placed } from '../../src/render/project.ts';
 
 const at = (depth: number): Placed => ({ x: 0, y: 0, depth, diameter: 10 });
@@ -34,5 +34,17 @@ describe('the order balls are drawn in', () => {
     expect(
       marks(withLine, placed, order).map((mark) => (mark.kind === 'line' ? 'line' : mark.ball))
     ).toEqual([1, 'line', 2, 0]);
+  });
+
+  it('never draws the toe the dog holds things by, but draws its lines', () => {
+    const placed = Array.from({ length: HOLDING_TOE + 2 }, (_, ball) => at(ball));
+    const withLine = {
+      ...breed,
+      lines: [{ from: HOLDING_TOE, to: HOLDING_TOE + 1, fuzz: 1 }],
+    } as unknown as Breed;
+    const list = marks(withLine, placed, drawOrder(withLine, placed));
+
+    expect(list.some((mark) => mark.kind === 'ball' && mark.ball === HOLDING_TOE)).toBe(false);
+    expect(list.filter((mark) => mark.kind === 'line')).toHaveLength(1);
   });
 });

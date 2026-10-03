@@ -123,7 +123,8 @@ export const HEAD_PIVOT = 54;
  * if it is; rolled, spun and tilted by the dog's angles; turned by `yaw`
  * less the spin about the upright axis, then tilted by the pitch the game
  * derives from that, `-7 - |64 - |yaw|| / 10` in 256ths of a turn; sized
- * by `ballSize` (`GetCartesianCoordinates`, seg10:367a).
+ * by `ballSize`, less or more for the balls the frame's extras name — the
+ * tongue, mostly, put away so (`GetCartesianCoordinates`, seg10:367a).
  */
 export function project(
   breed: Breed,
@@ -161,6 +162,8 @@ export function project(
       y: Math.trunc(shift(neck.y * scales.pet) + head.drift.y),
       z: Math.trunc(shift(neck.z * scales.pet) + head.drift.z),
     };
+
+  const resized = new Map(frame.extras.map(({ ball, value }) => [ball, value]));
 
   return frame.balls.map((_, index) => {
     const ball = at(index);
@@ -207,10 +210,9 @@ export function project(
     const depth = shift(cp * turnedZ - sp * y);
     const tiltedY = shift(sp * turnedZ + cp * y);
 
-    /* Radius `size × ball scale >> 9`: the diameter is twice that. */
-    const radius = Math.floor(
-      (Math.max(0, ballSize(breed, header, index, puppiness)) * scales.ball) / 512
-    );
+    /* Radius `size × ball scale >> 9`, the size changed by the frame's extra for the ball, if any: the diameter is twice that. */
+    const size = ballSize(breed, header, index, puppiness) + (resized.get(index) ?? 0);
+    const radius = Math.floor((Math.max(0, size) * scales.ball) / 512);
 
     return { x: turnedX, y: tiltedY, depth, diameter: 2 * radius };
   });

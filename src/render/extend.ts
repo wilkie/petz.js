@@ -19,7 +19,11 @@ const JAW = 53;
 const NOSE = 55;
 const TAIL = [57, 58, 59, 60, 61, 62];
 
-/** What `ExtendBody` (seg6:1dee) moves back with the butt: the tail and the hind legs, but the right's middle toe. */
+/**
+ * What `ExtendBody` (seg6:1dee) moves back with the butt: the tail and the
+ * hind legs, but the right's middle toe — the one the dog holds things by,
+ * which is never drawn (`HOLDING_TOE`).
+ */
 const HIND_END = [BUTT, ...TAIL, 43, 19, 40, 16, 24, 0, 36, 12, 44, 46, 20, 21, 22];
 
 /** What moves with the shoulders (`ExtendLegLength`): the chest, neck and the whole head. */

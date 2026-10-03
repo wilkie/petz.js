@@ -10,8 +10,8 @@ const breed = {
 
 const header = { ballSizes: [10, 30] } as unknown as AnimationHeader;
 
-const frame = (balls: [number, number, number][]) =>
-  ({ balls: balls.map(([x, y, z]) => ({ x, y, z })) }) as unknown as Frame;
+const frame = (balls: [number, number, number][], extras: Frame['extras'] = []) =>
+  ({ balls: balls.map(([x, y, z]) => ({ x, y, z })), extras }) as unknown as Frame;
 
 describe('a breed’s scales', () => {
   it('are the puppy’s at age 0 and the adult’s at 100', () => {
@@ -52,6 +52,27 @@ describe('placing a frame', () => {
 
     // (10 × 200) >> 9 = 3, twice is 6; (31 × 200) >> 9 = 12, twice is 24.
     expect(placed.map((ball) => ball.diameter)).toEqual([6, 24]);
+  });
+
+  it('sizes a ball the frame’s extras name by so much more, or less, to nothing', () => {
+    const placed = project(
+      breed,
+      header,
+      frame(
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        [
+          { ball: 0, value: -10 },
+          { ball: 1, value: 5 },
+        ]
+      ),
+      { pet: 256, ball: 200 }
+    );
+
+    // 10 − 10 is nothing; (36 × 200) >> 9 = 14, twice is 28.
+    expect(placed.map((ball) => ball.diameter)).toEqual([0, 28]);
   });
 
   it('tilts a dog facing out by 13 256ths of a turn, and side-on by 7', () => {
