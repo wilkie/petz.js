@@ -9,6 +9,15 @@
 
 import { type Element, type Operand, OP, type Script } from '../formats/script.ts';
 
+/** A fudger set by a script: see `Step.fudges`. */
+export interface Fudge {
+  kind: 'ease' | 'by' | 'target' | 'drift';
+  axis: number;
+  to: number;
+  speed?: number;
+  frames?: number;
+}
+
 /** One tick: the frame shown, and what happens as it is. */
 export interface Step {
   frame: number;
@@ -55,8 +64,12 @@ export interface Step {
    */
   look?: 'random' | 'user' | 'ahead';
 
-  /** How far the head may turn, in hundredths (`8ae6 17 to`, the fudger `HeadTrackMaxAll`). */
-  headTrackMax?: number;
+  /**
+   * The dog's other fudgers set (`8ae6 axis to`, eased over the frames left
+   * in the script; `8ae7 axis by speed`, `8ae8 axis to speed`; `8ae9 axis
+   * by`, a drift), and the rotation's by `8ae7` and `8ae8`. See fudger.ts.
+   */
+  fudges?: Fudge[];
 
   /** A blink, so many frames shut, or the length a blink has, at 0 (`8ae1 n`, `DoBlink`). */
   blink?: number;
@@ -84,8 +97,8 @@ const EASE = 0x8ae6;
 const DRIFT = 0x8ae9;
 const LOOKS = { 0x8afa: 'random', 0x8afb: 'user', 0x8afc: 'ahead' } as const;
 
-/** The fudger that limits every way the head turns (`HeadTrackMaxAll`). */
-const HEAD_TRACK_MAX_ALL = 17;
+const BY = 0x8ae7;
+const TARGET = 0x8ae8;
 
 /** The angle the fudge opcodes name the dog's rotation by. */
 const ROTATION = 1;
@@ -120,10 +133,14 @@ export function timeline(
   /* Eases, whose frames are counted once the script is played out. */
   const eases: Step[] = [];
 
+  const fudge = (each: Fudge) => {
+    pending.fudges = [...(pending.fudges ?? []), each];
+  };
+
   const show = (frame: number) => {
     const step = { frame, ...pending };
 
-    if (step.ease) {
+    if (step.ease || step.fudges?.some((each) => each.kind === 'ease')) {
       eases.push(step);
     }
 
@@ -224,9 +241,15 @@ export function timeline(
           case EASE:
             if (value(a) === ROTATION) {
               pending.ease = { to: value(b), frames: frames.length };
-            } else if (value(a) === HEAD_TRACK_MAX_ALL) {
-              pending.headTrackMax = value(b);
+            } else {
+              fudge({ kind: 'ease', axis: value(a), to: value(b), frames: frames.length });
             }
+            break;
+          case BY:
+            fudge({ kind: 'by', axis: value(a), to: value(b), speed: value(c) });
+            break;
+          case TARGET:
+            fudge({ kind: 'target', axis: value(a), to: value(b), speed: value(c) });
             break;
           case 0x8afa:
           case 0x8afb:
@@ -236,6 +259,8 @@ export function timeline(
           case DRIFT:
             if (value(a) === ROTATION) {
               pending.drift = value(b);
+            } else {
+              fudge({ kind: 'drift', axis: value(a), to: value(b) });
             }
             break;
           case TURN:
@@ -270,7 +295,13 @@ export function timeline(
 
   /* An ease is spread over the frames from where it is to the script's end. */
   for (const step of eases) {
-    step.ease = { to: step.ease!.to, frames: frames.length - step.ease!.frames };
+    if (step.ease) {
+      step.ease = { to: step.ease.to, frames: frames.length - step.ease.frames };
+    }
+
+    step.fudges = step.fudges?.map((each) =>
+      each.kind === 'ease' ? { ...each, frames: frames.length - each.frames! } : each
+    );
   }
 
   return frames;

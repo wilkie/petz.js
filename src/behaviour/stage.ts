@@ -13,7 +13,7 @@
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
 import { ballAt } from '../render/ballz.ts';
-import { type Head, type Placed, project, scalesForAge } from '../render/project.ts';
+import { type Angles, type Head, type Placed, project, scalesForAge } from '../render/project.ts';
 import { type PetWorld } from './pet.ts';
 import { DEFAULT_GLUE, type Step } from './timeline.ts';
 
@@ -220,6 +220,9 @@ export class Stage implements PetWorld {
   /** The head turned toward what the dog looks at, as the last frame shown has it. */
   head: Head | undefined = undefined;
 
+  /** The dog's tilt, spin and roll, as the last frame shown has them. */
+  angles: Angles | undefined = undefined;
+
   /** The breed as it came, before any painting. */
   readonly original: Breed;
 
@@ -298,8 +301,19 @@ export class Stage implements PetWorld {
     this.frame = frames[0];
   }
 
-  private ballOf(frame: Frame, ball: number, rotation: number, head = this.head) {
-    return ballAt(this.breed, this.header, frame, ball, { age: this.age, yaw: rotation, head });
+  private ballOf(
+    frame: Frame,
+    ball: number,
+    rotation: number,
+    head = this.head,
+    angles = this.angles
+  ) {
+    return ballAt(this.breed, this.header, frame, ball, {
+      age: this.age,
+      yaw: rotation,
+      head,
+      angles,
+    });
   }
 
   /** The centre of the rectangle a frame is drawn in, from the dog's origin. */
@@ -311,7 +325,8 @@ export class Stage implements PetWorld {
       scalesForAge(this.breed, this.age),
       rotation,
       100 - this.age,
-      this.head
+      this.head,
+      this.angles
     );
     const left = Math.min(...placed.map((ball) => ball.x - ball.diameter / 2));
     const right = Math.max(...placed.map((ball) => ball.x + ball.diameter / 2));
@@ -330,16 +345,18 @@ export class Stage implements PetWorld {
     reference?: number,
     pinned?: { ball: number; x: number; y: number },
     centredAt?: { x: number; y: number },
-    head?: Head
+    head?: Head,
+    angles?: Angles
   ) {
     const next = this.frames[step.frame];
 
-    /* The frame before as it was drawn, the new one with the head as it now turns. */
-    const was = this.head;
+    /* The frame before as it was drawn, the new one with the head and the dog's angles as they now are. */
+    const was = { head: this.head, angles: this.angles };
     this.head = head;
+    this.angles = angles;
 
     if (step.glue !== undefined) {
-      const before = this.ballOf(this.frame, step.glue, this.rotation, was);
+      const before = this.ballOf(this.frame, step.glue, this.rotation, was.head, was.angles);
       const after = this.ballOf(next, step.glue, rotation);
       this.x += before.x - after.x;
       this.y += before.y - after.y;
@@ -378,7 +395,8 @@ export class Stage implements PetWorld {
       scalesForAge(this.breed, this.age),
       this.rotation,
       100 - this.age,
-      this.head
+      this.head,
+      this.angles
     ).map((ball) => ({ ...ball, x: this.x + ball.x, y: this.y + ball.y }));
   }
 

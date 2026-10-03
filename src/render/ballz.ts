@@ -11,7 +11,15 @@
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { SHINE } from '../formats/palette.ts';
 import { type Breed } from '../formats/lnz.ts';
-import { angle256, type Head, type Placed, project, scalesForAge } from './project.ts';
+import {
+  type Angles,
+  angle256,
+  type Eyelids,
+  type Head,
+  type Placed,
+  project,
+  scalesForAge,
+} from './project.ts';
 import {
   drawTaperedLine,
   fillBall,
@@ -47,6 +55,12 @@ export interface DrawOptions {
 
   /** The head turned toward what the dog looks at (`HeadTrackPrep`), if it is. */
   head?: Head;
+
+  /** The dog's tilt, spin and roll. */
+  angles?: Angles;
+
+  /** Each eyelid's height and tilt, as the dog's fudgers have them: 100 and level without. */
+  eyelids?: Eyelids;
 
   /**
    * Where the eyes look (the `BallState`'s `+0x2c` and `+0x28`): 0 as the
@@ -127,9 +141,18 @@ export function ballAt(
   header: AnimationHeader,
   frame: Frame,
   ball: number,
-  { age = 0, yaw = 0, head }: Pick<DrawOptions, 'age' | 'yaw' | 'head'>
+  { age = 0, yaw = 0, head, angles }: Pick<DrawOptions, 'age' | 'yaw' | 'head' | 'angles'>
 ) {
-  const placed = project(breed, header, frame, scalesForAge(breed, age), yaw, 100 - age, head);
+  const placed = project(
+    breed,
+    header,
+    frame,
+    scalesForAge(breed, age),
+    yaw,
+    100 - age,
+    head,
+    angles
+  );
   return { x: placed[ball].x, y: placed[ball].y };
 }
 
@@ -154,12 +177,23 @@ export function drawPet(
     iris,
     lids = 0,
     eyesWide = 0,
+    angles,
+    eyelids,
   }: DrawOptions
 ) {
   const next = random(seed);
   /* How much of a puppy: 100 less the age, as SetBallScaleFromAge asks.
    * Not yet read where it is applied. */
-  const placed = project(breed, header, frame, scalesForAge(breed, age), yaw, 100 - age, head);
+  const placed = project(
+    breed,
+    header,
+    frame,
+    scalesForAge(breed, age),
+    yaw,
+    100 - age,
+    head,
+    angles
+  );
   const numbers = colours === 256 ? breed.ballColor256 : breed.ballColor16;
   const ramps = RAMPS[colours];
   const at = (ball: number) => ({ x: originX + placed[ball].x, y: originY + placed[ball].y });
@@ -246,7 +280,7 @@ export function drawPet(
       drawIris(bitmap, breed, placed, ball, breed.irises[eye], at, colours, eyes, iris);
 
       if (lids > 0) {
-        drawLid(bitmap, breed, placed, eye, at, colours, lids, eyesWide);
+        drawLid(bitmap, breed, placed, eye, at, colours, lids, eyesWide, eyelids);
       }
     }
   }
@@ -332,6 +366,9 @@ const NOSE = 55;
  */
 const SHINY = [17, 41, 55];
 
+/** Eyelids as the dog starts: each 100 high and level. */
+const LEVEL_LIDS: Eyelids = { left: { height: 100, tilt: 0 }, right: { height: 100, tilt: 0 } };
+
 /**
  * Draws an eyelid over an eye, as `DisplayBallzFrame` does after its iris
  * (seg10:5746 to 5b60): closed by `lids` in hundredths, it covers that share
@@ -348,7 +385,8 @@ function drawLid(
   at: (ball: number) => { x: number; y: number },
   colours: 256 | 16,
   lids: number,
-  wide: number
+  wide: number,
+  eyelids: Eyelids = LEVEL_LIDS
 ) {
   const [right, left] = breed.eyes.map((ball) => placed[ball]);
   const nose = placed[NOSE];
@@ -357,15 +395,17 @@ function drawLid(
     return;
   }
 
-  /* The share left open (`+0x24`, `+0x26`, each eye 100). */
-  const open = Math.min(100, Math.trunc((100 * (100 - lids)) / 100));
+  /* The share left open, by the eye's height (`+0x24` the left's, `+0x26` the right's). */
+  const own = eye === 1 ? eyelids.left : eyelids.right;
+  const open = Math.min(100, Math.trunc((own.height * (100 - lids)) / 100));
   const between = { x: Math.trunc((right.x - left.x) / 2), y: Math.trunc((right.y - left.y) / 2) };
   const nx = Math.trunc(nose.x) - (Math.trunc(left.x) + between.x);
   const ny = Math.trunc(nose.y) - (Math.trunc(left.y) + between.y);
   const bearing = Math.abs(nx) > 1 || Math.abs(ny) > 1 ? -angle256(nx, ny) : 0;
 
-  /* Each eye's own slant, `+0x20` for the left and `+0x22` for the right, is 0. */
-  const angle = wrapAngle(Math.trunc((bearing * open) / 100));
+  /* Each eye's own tilt, `+0x20` added for the left and `+0x22` taken for the right. */
+  const tilt = eye === 1 ? eyelids.left.tilt : -eyelids.right.tilt;
+  const angle = wrapAngle(Math.trunc(((bearing + tilt) * open) / 100));
   const ball = placed[breed.eyes[eye]];
   const d = Math.round(ball.diameter + 2 * wide);
   const centre = at(breed.eyes[eye]);

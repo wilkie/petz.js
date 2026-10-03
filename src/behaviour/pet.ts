@@ -20,11 +20,20 @@ import {
 } from '../formats/engine.ts';
 import { type Script } from '../formats/script.ts';
 import { type Trick } from '../formats/tricks.ts';
-import { angle256, type Head } from '../render/project.ts';
+import { angle256, type Angles, type Eyelids, type Head } from '../render/project.ts';
+import {
+  AXIS,
+  fudgeFrame,
+  type Fudger,
+  fudgeTo,
+  makeFudgers,
+  selects,
+  setTarget,
+} from './fudger.ts';
 import { type Brain } from './brain.ts';
 import { type Ball, type Food, type Shoe, foodSize, ballRect, isTreat } from './stage.ts';
 import { type Rand } from './random.ts';
-import { DEFAULT_GLUE, type Step, timeline } from './timeline.ts';
+import { DEFAULT_GLUE, type Fudge, type Step, timeline } from './timeline.ts';
 import { AUTO, findTransition, type TransitionTable } from './transitions.ts';
 
 /** The engine's states this file plays, by the numbers `readEngineStateNames` names. */
@@ -224,6 +233,10 @@ const LUBES = [
 /** The neck, by which the dog is scruffed (`DoScruffHandler`). */
 const NECK = 54;
 
+/** The group axes for both eyelids' tilts, and the head's whole reach (which selects no fudger). */
+const BOTH_EYELID_TILTS = 14;
+const HEAD_TRACK_MAX_ALL = 17;
+
 /** How fast the dog turns towards a target, in 256ths of a turn a frame (`DoLocomote`). */
 const TURN_RATE = 6;
 
@@ -356,6 +369,12 @@ export interface Tick extends Step {
   /** How far the eyelids are closed, in hundredths, and how many pixels wider each side the eyes are. */
   lids?: number;
   eyesWide?: number;
+
+  /** The dog's tilt, spin and roll, in 256ths of a turn. */
+  angles?: Angles;
+
+  /** Each eyelid's height, in hundredths open at most, and tilt (`BallState` `+0x24`, `+0x26`, `+0x20`, `+0x22`). */
+  eyelids?: Eyelids;
 }
 
 /** A state's handler runs as the state is entered, as it is left, and every tick between. */
@@ -368,7 +387,7 @@ type Item =
   | { goto: number }
   | { ease: number }
   | { drift: number }
-  | { headTrackMax: number }
+  | { fudge: Fudge }
   | { lids: number }
   | { cue: number }
   | { trick: number }
@@ -622,6 +641,21 @@ export class Pet {
       eyes: { mode: this.eyeMode, ...this.eyeTarget },
       lids: this.lids,
       eyesWide: this.eyesWide,
+      angles: {
+        tilt: this.fudged(AXIS.tilt),
+        spin: this.fudged(AXIS.spin),
+        roll: this.fudged(AXIS.roll),
+      },
+      eyelids: {
+        left: {
+          height: this.fudged(AXIS.leftEyelidHeight),
+          tilt: this.fudged(AXIS.leftEyelidTilt),
+        },
+        right: {
+          height: this.fudged(AXIS.rightEyelidHeight),
+          tilt: this.fudged(AXIS.rightEyelidTilt),
+        },
+      },
     };
   }
 
@@ -770,8 +804,8 @@ export class Pet {
         this.startEase(item.ease, this.framesAhead());
       } else if ('drift' in item) {
         this.drift = item.drift;
-      } else if ('headTrackMax' in item) {
-        this.headTrackMax = item.headTrackMax;
+      } else if ('fudge' in item) {
+        this.applyFudge(item.fudge, this.framesAhead());
       } else if ('lids' in item) {
         this.restLids(item.lids);
       }
@@ -841,8 +875,8 @@ export class Pet {
         this.lookAhead();
       }
 
-      if (step.headTrackMax !== undefined) {
-        this.headTrackMax = step.headTrackMax;
+      for (const each of step.fudges ?? []) {
+        this.applyFudge(each, each.frames ?? 1);
       }
 
       if (step.lids !== undefined) {
@@ -868,7 +902,7 @@ export class Pet {
    * A cue raised (`0x8ae3`): the states see it, and `ProcessCue` (seg7:7c1d)
    * acts on some itself: cue 2 ends a slide (`0x8af4`), cue 3 resets the
    * dog's easing and drift (`ResetParams`, seg7:33ae, through every
-   * `Fudger`) and what it looks at, cue 7 stops it looking at anything and
+   * `Fudger`, the eyelids' tilts eased level) and what it looks at, cue 7 stops it looking at anything and
    * cue 6 lets it again.
    */
   private processCue(cue: number) {
@@ -896,6 +930,17 @@ export class Pet {
   private resetParams() {
     this.ease = null;
     this.drift = 0;
+
+    /* Every fudger stopped, and the eyelids' tilts back level at 10 a frame. */
+    for (const fudger of this.fudgers) {
+      fudger.by = 0;
+      fudger.drift = 0;
+
+      if (selects(BOTH_EYELID_TILTS, fudger.axis)) {
+        setTarget(fudger, 0, 10);
+      }
+    }
+
     this.blinkGap = 40;
     this.blinkLength = 5;
     this.blinkAsked = 0;
@@ -1024,6 +1069,60 @@ export class Pet {
     }
 
     this.rotation = wrap(this.rotation + this.drift);
+    this.fudgers.forEach(fudgeFrame);
+  }
+
+  /** The dog's other fudgers: its tilt, spin and roll, eyelids and the head's reach. */
+  private fudgers = makeFudgers();
+
+  /** A fudger's number. */
+  private fudged(axis: number) {
+    return this.fudgers.find((fudger) => fudger.axis === axis)?.value ?? 0;
+  }
+
+  /**
+   * A fudger set by a script or a state: every one its axis selects. The
+   * rotation is eased as the dog turns, its target the shorter way round.
+   */
+  private applyFudge(each: Fudge, frames: number) {
+    for (const fudger of this.fudgers) {
+      if (!selects(each.axis, fudger.axis)) {
+        continue;
+      }
+
+      if (each.kind === 'ease') {
+        fudgeTo(fudger, each.to, frames);
+      } else if (each.kind === 'by') {
+        setTarget(fudger, fudger.value + each.to, each.speed ?? 0);
+      } else if (each.kind === 'target') {
+        setTarget(fudger, each.to, each.speed ?? 0);
+      } else {
+        fudger.drift = each.to;
+      }
+    }
+
+    if (selects(each.axis, AXIS.rotation)) {
+      if (each.kind === 'ease') {
+        this.startEase(each.to, frames);
+      } else if (each.kind === 'drift') {
+        this.drift = each.to;
+      } else {
+        const rotation: Fudger = {
+          axis: AXIS.rotation,
+          angle: true,
+          value: this.rotation,
+          target: 0,
+          by: 0,
+          drift: 0,
+        };
+        setTarget(
+          rotation,
+          each.kind === 'by' ? this.rotation + each.to : each.to,
+          each.speed ?? 0
+        );
+        this.ease = rotation.by === 0 ? null : { to: rotation.target, by: rotation.by };
+      }
+    }
   }
 
   // The state machine.
@@ -3360,14 +3459,19 @@ export class Pet {
   private doChasingChargingCursor(mode: Mode): Step | undefined {
     if (mode === 'exit') {
       this.resetSoft();
-      this.push({ ease: 0 }, { headTrackMax: 100 });
+
+      /* Level, and the head's reach back to all of it (`HeadTrackMaxAll`, which moves no fudger). */
+      this.push(
+        { fudge: { kind: 'ease', axis: AXIS.tilt, to: 0 } },
+        { fudge: { kind: 'ease', axis: HEAD_TRACK_MAX_ALL, to: 100 } }
+      );
       this.headWobble = 100;
       return undefined;
     }
 
     if (mode === 'enter') {
-      /* Its head turned at most a fifth of the way, and wobbling a fifth as much. */
-      this.push({ headTrackMax: 20 });
+      /* Its head's reach a fifth (which moves no fudger), and wobbling a fifth as much. */
+      this.push({ fudge: { kind: 'ease', axis: HEAD_TRACK_MAX_ALL, to: 20 } });
       this.pushStored(SCRIPT.run);
       this.headWobble = 20;
       this.going = false;
@@ -4076,9 +4180,6 @@ export class Pet {
   private headPitch = 0;
   private headTracking = false;
 
-  /** How far the head may turn, in hundredths of its reach (`HeadTrackMaxAll`, `8ae6 17`). */
-  private headTrackMax = 100;
-
   /** How much the head wobbles, in hundredths, 0 for all of it (`0x550`). */
   headWobble = 0;
 
@@ -4198,10 +4299,16 @@ export class Pet {
       pitch = Math.trunc(was.pitch + ((pitch - was.pitch) * 13) / most);
     }
 
-    const across = Math.trunc((this.headTrackMax * 0x33) / 100);
-    const updown = Math.trunc((this.headTrackMax * 0x2a) / 100);
-    this.headYaw = Math.max(-across, Math.min(across, yaw));
-    this.headPitch = Math.max(-updown, Math.min(updown, pitch));
+    /* Within its reach each way (`HeadTrackMaxLeft` and so on, 100 each). */
+    const reach = (axis: number, share: number) => Math.trunc((this.fudged(axis) * share) / 100);
+    this.headYaw = Math.max(
+      -reach(AXIS.headTrackMaxLeft, 0x33),
+      Math.min(reach(AXIS.headTrackMaxRight, 0x33), yaw)
+    );
+    this.headPitch = Math.max(
+      -reach(AXIS.headTrackMaxDown, 0x2a),
+      Math.min(reach(AXIS.headTrackMaxUp, 0x2a), pitch)
+    );
 
     if (this.headTarget) {
       this.headWeight = 1 - (1 - this.headWeight) * 0.8;

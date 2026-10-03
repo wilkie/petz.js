@@ -13,6 +13,19 @@
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
 
+/** The dog's tilt, spin and roll (`BallState` `+0xe`, `+0x10`, `+0x12`), in 256ths of a turn. */
+export interface Angles {
+  tilt: number;
+  spin: number;
+  roll: number;
+}
+
+/** Each eyelid's height, the share of the eye it may leave open, in hundredths, and its tilt. */
+export interface Eyelids {
+  left: { height: number; tilt: number };
+  right: { height: number; tilt: number };
+}
+
 /** The angle of a point from the origin, in 256ths of a turn (seg11:1e8a, as `atan2`). */
 export function angle256(y: number, x: number) {
   return Math.trunc((Math.atan2(y, x) * 128) / Math.PI);
@@ -97,10 +110,11 @@ export interface Head {
 export const HEAD_PIVOT = 56;
 
 /**
- * Places each ball of a frame: scaled by the pet scale, turned by `yaw`
- * about the upright axis, then tilted by the pitch the game derives from
- * the yaw, `-7 - |64 - |yaw|| / 10` in 256ths of a turn; sized by
- * `ballSize`.
+ * Places each ball of a frame: scaled by the pet scale; the head turned,
+ * if it is; rolled, spun and tilted by the dog's angles; turned by `yaw`
+ * less the spin about the upright axis, then tilted by the pitch the game
+ * derives from that, `-7 - |64 - |yaw|| / 10` in 256ths of a turn; sized
+ * by `ballSize` (`GetCartesianCoordinates`, seg10:367a).
  */
 export function project(
   breed: Breed,
@@ -109,9 +123,10 @@ export function project(
   scales: Scales,
   yaw = 0,
   puppiness = 0,
-  head?: Head
+  head?: Head,
+  { tilt = 0, spin = 0, roll = 0 }: Partial<Angles> = {}
 ): Placed[] {
-  const turn = wrap(yaw);
+  const turn = wrap(yaw - spin);
   const pitch = -7 - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
   const [cy, sy, cp, sp] = [cosine(turn), sine(turn), cosine(pitch), sine(pitch)];
   const heads = head ? new Set(breed.headBalls) : null;
@@ -145,6 +160,20 @@ export function project(
       x = shift(sw * e + cw * b) + head.offset.x + pivot.x;
       y = shift(sq * dz + cq * a) + head.offset.y + pivot.y;
       z = shift(cw * e - sw * b) + head.offset.z + pivot.z;
+    }
+
+    /* The dog's own angles: its roll in the screen's plane, its spin about
+     * the upright axis, its tilt about the across one (seg10:3e19, 3e91 and 3f09). */
+    if (roll) {
+      [x, y] = [shift(sine(roll) * y + cosine(roll) * x), shift(cosine(roll) * y - sine(roll) * x)];
+    }
+
+    if (spin) {
+      [x, z] = [shift(sine(spin) * z + cosine(spin) * x), shift(cosine(spin) * z - sine(spin) * x)];
+    }
+
+    if (tilt) {
+      [y, z] = [shift(sine(tilt) * z + cosine(tilt) * y), shift(cosine(tilt) * z - sine(tilt) * y)];
     }
 
     // About the upright axis, then about the across one.

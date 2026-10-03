@@ -61,6 +61,7 @@ import { parseScripts, readOpcodes, readStateNames, type Script } from '../forma
 import { type BrainFile, parseBrain } from '../formats/brain.ts';
 import { parseTricks } from '../formats/tricks.ts';
 import { drawPet } from '../render/ballz.ts';
+import { type Eyelids } from '../render/project.ts';
 import { drawPicture, mapColours } from '../render/picture.ts';
 import { IndexedBitmap, random } from '../render/raster.ts';
 
@@ -151,6 +152,7 @@ let live: {
   eyes?: { mode: 0 | 1 | 2; x: number; y: number };
   lids?: number;
   eyesWide?: number;
+  eyelids?: Eyelids;
   iris: { x: number; y: number };
 } | null = null;
 
@@ -292,6 +294,8 @@ function drawDog(
     iris: live?.iris,
     lids: live?.lids,
     eyesWide: live?.eyesWide,
+    eyelids: live?.eyelids,
+    angles: stage?.angles,
   });
 
   if (front) {
@@ -483,8 +487,21 @@ function tickLive() {
   const breed = breeds.get(breedSelect.value)!;
   const step = pet.tick((performance.now() - started) / 17);
 
-  stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt, step.head);
-  Object.assign(live!, { eyes: step.eyes, lids: step.lids, eyesWide: step.eyesWide });
+  stage.show(
+    step,
+    step.rotation,
+    step.placedBy,
+    step.pinned,
+    step.centredAt,
+    step.head,
+    step.angles
+  );
+  Object.assign(live!, {
+    eyes: step.eyes,
+    lids: step.lids,
+    eyesWide: step.eyesWide,
+    eyelids: step.eyelids,
+  });
   drawDog(step.frame, stage.x, stage.y, step.rotation, stage);
 
   if (soundInput.checked) {

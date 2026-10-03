@@ -165,14 +165,19 @@ export function fillShaded(
   const fuzz = Math.max(0, Math.min(7, ball.fuzz));
   const top = Math.round(ball.y - d / 2);
   const shaded = Math.max(1, Math.trunc(0.3 * d));
-  const step = Math.trunc((-1 / shaded) * 256 / 4) || -5;
+  const step = Math.trunc(((-1 / shaded) * 256) / 4) || -5;
   let phase = 0x40;
 
   for (let r = 1; r <= d; r++, phase += step) {
     const width = rowWidth(d, r);
     const level = Math.max(0, Math.min(7, sine(phase) >> 5));
     const colour = phase > 0 ? ramp + level : ramp;
-    bitmap.span(Math.round(ball.x) - Math.floor(width / 2) + next(fuzz + 1), top + r - 1, width, colour);
+    bitmap.span(
+      Math.round(ball.x) - Math.floor(width / 2) + next(fuzz + 1),
+      top + r - 1,
+      width,
+      colour
+    );
   }
 }
 

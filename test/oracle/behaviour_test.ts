@@ -19,6 +19,7 @@ import {
   Stage,
   TREAT_SIZE,
 } from '../../src/behaviour/stage.ts';
+import { timeline } from '../../src/behaviour/timeline.ts';
 import { findTransition, transitionTable } from '../../src/behaviour/transitions.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import {
@@ -65,6 +66,28 @@ withOracle('the engine’s behaviour', () => {
   const breedNames = parseLnz(new TextDecoder('latin1').decode(read('DATA/TERRIER.LNZ'))).ballNames;
   const at = (script: number) =>
     `${positions[scripts[script].from]} to ${positions[scripts[script].to]}`;
+
+  it('turns the dog round with 0x8ae7, and slants its eyelids with 0x8ae8', () => {
+    const play = (script: number, variant: number) =>
+      timeline(scripts, script, variant, { flags: () => 3, random: () => 0 });
+
+    /* Round, 128 at 10 a frame (scripts 78 to 80). */
+    expect(play(78, 0)[0].fudges).toEqual([{ kind: 'by', axis: 1, to: 128, speed: 10 }]);
+
+    /* Shaking off the spray, both eyelids slant -30 and level again. */
+    const tilts = play(323, 5).flatMap((step) => step.fudges ?? []);
+    expect(tilts).toEqual([
+      { kind: 'target', axis: 14, to: -30, speed: 10 },
+      { kind: 'target', axis: 14, to: 0, speed: 10 },
+    ]);
+
+    /* Level and unspun, eased over what is left of the script (script 5). */
+    const level = play(5, 0).flatMap((step) => step.fudges ?? []);
+    expect(level.map(({ kind, axis, to }) => ({ kind, axis, to }))).toEqual([
+      { kind: 'ease', axis: 2, to: 0 },
+      { kind: 'ease', axis: 0, to: 0 },
+    ]);
+  });
 
   it('names 109 states, from eNOTASTATE to eIconBeg, the tricks from 0x2b', () => {
     expect(names).toHaveLength(109);
@@ -285,7 +308,15 @@ withOracle('the engine’s behaviour', () => {
         for (let n = 0; n < frameCount; n++, tick++) {
           act?.(n);
           const step = pet.tick((tick * 45) / 17);
-          stage.show(step, step.rotation, step.placedBy, step.pinned, step.centredAt, step.head);
+          stage.show(
+            step,
+            step.rotation,
+            step.placedBy,
+            step.pinned,
+            step.centredAt,
+            step.head,
+            step.angles
+          );
           states.push(step.state);
           sounds.push(step.sounds ?? []);
           looks.push({ head: step.head, eyes: step.eyes, lids: step.lids });
