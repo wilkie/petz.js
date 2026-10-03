@@ -28,6 +28,7 @@ import {
   fillShaded,
   IndexedBitmap,
   circleTables,
+  type CircleTables,
   speckleColour,
   wrapAngle,
 } from './raster.ts';
@@ -411,7 +412,7 @@ export function drawPet(
     }
 
     if (eye !== -1) {
-      drawIris(bitmap, breed, placed, ball, breed.irises[eye], at, colours, eyes, iris);
+      drawIris(bitmap, breed, placed, ball, breed.irises[eye], at, colours, eyes, iris, tables);
 
       if (lids > 0) {
         drawLid(bitmap, breed, placed, eye, at, colours, lids, eyesWide, eyelids);
@@ -434,7 +435,10 @@ const IRIS_STEP = 0.6;
  * pixels toward that on each axis for every eye drawn, and is kept within the
  * eye by the eye's radius less 0.8 of the iris's; the iris is filled flat in
  * the breed's iris colour, and if it is more than 7 pixels across, the pupil,
- * the iris inset 2 pixels each side, in the pupil colour.
+ * the iris inset 2 pixels each side, in the pupil colour. Both go through the
+ * kernel as a ball without speckles does: its speckle spot from the circle
+ * tables, in its own colour, which shows only one past a row's end (the
+ * kernel takes a speckle colour below 0 for the ball's, seg8:3555).
  */
 function drawIris(
   bitmap: IndexedBitmap,
@@ -445,7 +449,8 @@ function drawIris(
   at: (ball: number) => { x: number; y: number },
   colours: 256 | 16,
   eyes: DrawOptions['eyes'],
-  eased: DrawOptions['iris']
+  eased: DrawOptions['iris'],
+  tables: CircleTables
 ) {
   const eye = placed[eyeBall];
   const iris = placed[irisBall];
@@ -476,17 +481,22 @@ function drawIris(
   const y = centre.y + offset.y;
   const irisColour = (colours === 256 ? breed.irisColor256 : breed.irisColor16) ?? 3;
   const pupilColour = breed.pupilColor ?? 0;
+  /* Through the kernel as any ball, its speckle in its own colour (seg10:56b6 on). */
   const disc = (diameter: number, colour: number) =>
-    fillBall(bitmap, {
-      x,
-      y,
-      diameter,
-      colour,
-      outlineColour: 0,
-      speckleColour: -1,
-      outline: -1,
-      fuzz: 0,
-    });
+    fillBall(
+      bitmap,
+      {
+        x,
+        y,
+        diameter,
+        colour,
+        outlineColour: 0,
+        speckleColour: -1,
+        outline: -1,
+        fuzz: 0,
+      },
+      tables
+    );
 
   disc(iris.diameter, irisColour);
 

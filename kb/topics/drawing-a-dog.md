@@ -114,4 +114,6 @@ flowchart LR
 
 ## Still to find
 
+- [[measured]] The big dog's hind end — everything `ExtendBody` moves — is drawn on the oracle about 2 units (a pixel) further forward than the reimplementation puts it: held in frame 35, the butt, hind feet and toes and tail are each a pixel nearer the head, and the drawing fits best with the body extension 2 less than the file's halved: 5 for 15, 48 for 100 (`--set "Body Extension=100"`), −2 for 0. With no leg extension it is the same. [[refused]] A blend toward a reference frame (frames 0 and 35 hold the same pose), a smaller scale along the body, small tilts, spins or rolls: each fits worse. What moves it is not yet found; `ExtendBody` (seg6:1dee), `ExtendLegLength` and `ModifyBallzData` read as the reimplementation does.
+
 The extras each frame lists; and how fast frames are shown. What the dog does with them is [[format:scp]].
