@@ -180,7 +180,6 @@ export function circleTables(seed = 1): CircleTables {
 /** Whether the screen's bitmap is bottom-up: then the kernel walks a ball's rows, and its tables, from the bottom. */
 export const BITMAP = { bottomUp: true };
 
-
 function circleRows(
   ball: { x: number; y: number; diameter: number },
   level: number,
@@ -209,7 +208,10 @@ function circleRows(
     const at = (d * (d - 1)) / 2 + k - 1;
     rows.push({
       r,
-      y: top + r - 1,
+      /* Both the kernel and XDrawLine find a row as the port's bottom less
+       * it, where a bottom-up bitmap's row is that less one: so a ball's rows,
+       * counted up from below its square, land a row lower than top-down. */
+      y: top + r - (BITMAP.bottomUp ? 0 : 1),
       /* The square's left, plus half of D rounded up, less half the width. */
       start: x - Math.floor(width / 2) + (inTable ? fuzz.fuzz[level][at] - carry : 0),
       width,
@@ -433,12 +435,12 @@ export function drawLine(
   colour: number
 ) {
   /* On a bottom-up bitmap the points are turned upside down first, from the
-   * port's bottom (seg8:5004), and the quad is scanned in memory's order,
-   * from the bottom up, so its edges round the other way. Measured against
-   * the oracle, a line so drawn sits two rows above where the balls' rows
-   * put its points (`flip` and the row each scanned row lands on). */
+   * port's bottom (seg8:505e), and the quad is scanned in memory's order,
+   * from the bottom up, so its edges round the other way; the port's bottom
+   * less a point is the row above the point's on such a bitmap, so a line
+   * lands a row higher than top-down, as a ball lands a row lower. */
   const { width, height } = bitmap;
-  const flip = (y: number) => (BITMAP.bottomUp ? height + 1 - y : y);
+  const flip = (y: number) => (BITMAP.bottomUp ? height - y : y);
   const [ax, ay, bx, by] = [from.x, flip(from.y), to.x, flip(to.y)].map(Math.trunc);
   const [px, py] = [by - ay, ax - bx];
   const length = Math.trunc(Math.sqrt(px * px + py * py));

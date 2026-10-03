@@ -69,10 +69,11 @@ describe('a ball', () => {
     fillBall(bitmap, ball, steadyTables());
     const rows = picture(bitmap);
 
-    /* Rows 1 to 8 of a circle of 9, from y 3 (8 less its radius). */
-    expect(rows.slice(0, 3).every((row) => !row.includes('1'))).toBe(true);
+    /* Rows 1 to 8 of a circle of 9, from y 4: the square's top, 8 less its
+     * radius, and a row lower on a bottom-up bitmap. */
+    expect(rows.slice(0, 4).every((row) => !row.includes('1'))).toBe(true);
     expect(rowsOf(bitmap).map((row) => row.length)).toEqual([5, 7, 8, 8, 8, 8, 7, 5]);
-    expect(rows[3].search(/[17]/)).toBe(8 - 2);
+    expect(rows[4].search(/[17]/)).toBe(8 - 2);
   });
 
   it('with a half outline, has a pixel of it before each row, which is one shorter', () => {
@@ -113,8 +114,8 @@ describe('a ball', () => {
     const speckled = picture(bitmap).map((row) => row.includes('7'));
 
     /* On a bottom-up bitmap, the rows counted from the bottom past 9 / 2: rows 1 to 4 of 8. */
-    expect(speckled.slice(3, 7)).toEqual([true, true, true, true]);
-    expect(speckled.slice(7)).not.toContain(true);
+    expect(speckled.slice(4, 8)).toEqual([true, true, true, true]);
+    expect(speckled.slice(8)).not.toContain(true);
   });
 
   it('moves a whole ball left by the move carried into its diameter', () => {
@@ -149,9 +150,9 @@ describe('a ball', () => {
 
     const moved = draw(1);
     const steady = draw(0);
-    /* Rows 1 to 8 from y 3: only the bottom one, y 10, moves. */
+    /* Rows 1 to 8 from y 4: only the bottom one, y 11, moves. */
     expect(moved.map((x, y) => x - steady[y])).toEqual([
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
     ]);
   });
 
@@ -246,9 +247,9 @@ describe('a shining ball', () => {
   it('is shaded from the ramp’s eighth colour at the top to its first, which fills the rest', () => {
     const bitmap = new IndexedBitmap(40, 40);
     fillShaded(bitmap, { x: 20, y: 20, diameter: 20, fuzz: 0 }, 164);
-    const rows = Array.from({ length: 20 }, (_, r) => bitmap.get(20, 10 + r));
+    const rows = Array.from({ length: 20 }, (_, r) => bitmap.get(20, 11 + r));
 
-    /* A circle of 19: the top 0.3 of its rows, 5, step down a quarter turn by 64 / 5 = 12. */
+    /* A circle of 19, from y 11: the top 0.3 of its rows, 5, step down a quarter turn by 64 / 5 = 12. */
     expect(rows.slice(0, 7)).toEqual([171, 171, 170, 169, 167, 164, 164]);
     expect(rows.slice(7, 18).every((colour) => colour === 164)).toBe(true);
   });
@@ -267,9 +268,10 @@ describe('a line', () => {
     const bitmap = new IndexedBitmap(16, 12);
     drawLine(bitmap, { x: 3, y: 5 }, { x: 12, y: 5 }, 2, 2, 7);
 
-    /* Corners at y 3 and 7, turned over and scanned from the bitmap's
-     * bottom: four rows, landing two above where the points put them. */
-    expect(rows(bitmap, 1, 7)).toEqual([
+    /* Corners at y 3 and 7, turned over, scanned from the bitmap's bottom
+     * and landing a row higher: rows 3 to 6 again, the corner's row left
+     * out now the top one. */
+    expect(rows(bitmap, 2, 8)).toEqual([
       '................',
       '...0777777770...',
       '...0777777770...',
