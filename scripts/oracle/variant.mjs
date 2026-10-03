@@ -17,6 +17,12 @@
  *                 names DATA\<name>.LNZ (bigdog, bulldog, chiua, scotty,
  *                 terrier), and the saved dog is removed, so Dogz starts
  *                 with that breed rather than the one it saved.
+ * --hold <frame>  The dog held still in one frame as it comes out of its
+ *                 kennel: scripts 92 and 93 in ALL_PTZ.SCP, which it plays
+ *                 first with its angles straight at the kennel, rewritten
+ *                 to show that frame for ever, its eyelids open (`0x8ae0
+ *                 0`) and its head straight (cue 7: nothing looked at). With
+ *                 --turn <n>, turned n 256ths first (`0x8ae5`).
  *
  * Then: node scripts/oracle/shoot.mjs <name>
  */
@@ -24,10 +30,15 @@
 import { copyFile, cp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { parseNe } from '../../src/formats/ne.ts';
+import { OP, parseScripts, readOpcodes, writeScripts } from '../../src/formats/script.ts';
 import { DISPLAY } from './fetch.mjs';
 import { BUILD, DRIVE, exists, log } from './lib.mjs';
 
 export const VARIANTS = join(BUILD, 'variants');
+
+/** The scripts the dog comes out of its kennel by, the first it plays (`DoPlayAnimation`). */
+const KENNEL_SCRIPTS = [92, 93];
 
 /** The files Dogz keeps its dog in between runs. */
 const SAVED = ['SAVED.LNZ', 'BRAIN.BAK', 'TRICKS.TDT'];
@@ -92,6 +103,35 @@ async function main() {
     }
 
     log(`  the dog a ${breed}`);
+  }
+
+  const hold = option('--hold');
+
+  if (hold !== null) {
+    const frame = Number(hold);
+    const turn = Number(option('--turn') ?? 0);
+    const engine = parseNe(new Uint8Array(await readFile(join(drive, 'WINDOWS', 'DOGZDLL.DLL'))));
+    const path = join(drive, 'DOGZ.DOG', 'DATA', 'ALL_PTZ.SCP');
+    const original = new Uint8Array(await readFile(path));
+    const scripts = parseScripts(original, readOpcodes(engine));
+    const held = [
+      { op: OP.begin, operands: [] },
+      { op: 0x8ae0, operands: [0] },
+      /* Cue 7: nothing looked at, and nothing to be, so the head stays straight. */
+      { op: 0x8ae3, operands: [7] },
+      ...(turn ? [{ op: 0x8ae5, operands: [1, turn, frame] }] : []),
+      { op: OP.repeat, operands: [999] },
+      { frame },
+      { op: OP.endRepeat, operands: [] },
+      { op: OP.end, operands: [] },
+    ];
+
+    for (const index of KENNEL_SCRIPTS) {
+      scripts[index].variants = scripts[index].variants.map(() => held);
+    }
+
+    await writeFile(path, writeScripts(original, scripts));
+    log(`  held in frame ${frame}${turn ? `, turned ${turn}` : ''}`);
   }
 
   log(`The variant is in ${drive}.`);

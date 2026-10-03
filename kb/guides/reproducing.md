@@ -59,6 +59,13 @@ node scripts/oracle/shoot.mjs terrier16
 
 The first copies the installation to `oracle/build/variants/terrier16/` with one thing changed: Windows' 16-colour VGA driver, or the adopted dog made another breed (`bigdog`, `bulldog`, `chiua`, `scotty` or `terrier`). The second runs Dogz on it and keeps pictures of the screen in `oracle/build/screens/`. The installation itself is never changed.
 
+```shell
+node scripts/oracle/variant.mjs held35 --hold 35
+node scripts/oracle/shoot.mjs held35 --wait 12 --count 8 --every 3
+```
+
+`--hold <frame>` holds the dog still in one frame, to compare with a drawing: it rewrites the two scripts the dog comes out of its kennel by (92 and 93 of `ALL_PTZ.SCP`), which the engine plays first with the dog's angles set straight, to show that frame for ever, the eyelids open and the head looking at nothing (cue 7); `--turn <n>` turns it first. [[measured]] Its body then holds the frame at the playpen's left edge in every picture; its head still turns, from something not yet found that gives it a point to look at.
+
 ## Check a Read out claim
 
 A **Read out** claim gives a file, a segment and an offset: `THINK.DLL` seg2:031a. The files are 16-bit Windows NE executables ([[format:ne]]), and segments are numbered from 1, as Windows numbers them. With the oracle built:

@@ -10,7 +10,12 @@ import { join } from 'node:path';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
-import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/script.ts';
+import {
+  parseScripts,
+  readOpcodes,
+  readStateNames,
+  writeScripts,
+} from '../../src/formats/script.ts';
 import { timeline } from '../../src/behaviour/timeline.ts';
 import { random } from '../../src/render/raster.ts';
 import { PALETTE_16, PALETTE_256, readPalette, screenPalette } from '../../src/formats/palette.ts';
@@ -193,6 +198,11 @@ withOracle("the oracle's scripts", () => {
     expect(states).toHaveLength(59);
     expect([states[0], states[9], states[58]]).toEqual(['NONE', 'standing', 'talk']);
     expect(scripts.every((script) => script.from < 59 && script.to < 59)).toBe(true);
+  });
+
+  it('are written back byte for byte', () => {
+    const data = read('ALL_PTZ.SCP');
+    expect(writeScripts(data, parseScripts(data, readOpcodes(engine)))).toEqual(data);
   });
 
   it('play out, every variant, as frames that exist', () => {

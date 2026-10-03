@@ -187,3 +187,59 @@ export function parseScripts(data: Uint8Array, arity: Map<number, number>): Scri
     };
   });
 }
+
+/**
+ * `ALL_PTZ.SCP` again, from its scripts, after the title of the file they
+ * came from: the records, then each variant in turn, its length first, an
+ * operand drawn at random as `0x8b05 lo hi`. For the oracle's variants,
+ * which change a script to measure the engine by.
+ */
+export function writeScripts(original: Uint8Array, scripts: Script[]): Uint8Array {
+  const header = original.subarray(0, original.indexOf(0) + 1);
+  const body: number[] = [];
+  const records = scripts.map((script) => {
+    const offset = body.length;
+
+    for (const variant of script.variants) {
+      const words: number[] = [];
+
+      for (const element of variant) {
+        if ('frame' in element) {
+          words.push(element.frame);
+          continue;
+        }
+
+        words.push(element.op);
+
+        for (const operand of element.operands) {
+          words.push(...(typeof operand === 'number' ? [operand] : [OP.random, ...operand.random]));
+        }
+      }
+
+      body.push(words.length + 1, ...words);
+    }
+
+    return { script, offset };
+  });
+
+  const data = new Uint8Array(header.length + 2 + 12 * scripts.length + 4 + 2 * body.length);
+  const view = new DataView(data.buffer);
+  data.set(header);
+  let at = header.length;
+  view.setUint16(at, scripts.length, true);
+  at += 2;
+
+  for (const { script, offset } of records) {
+    view.setUint16(at, script.variants.length, true);
+    view.setUint16(at + 2, script.from, true);
+    view.setUint16(at + 4, script.to, true);
+    view.setUint16(at + 6, script.flag, true);
+    view.setUint32(at + 8, offset, true);
+    at += 12;
+  }
+
+  view.setUint32(at, body.length, true);
+  at += 4;
+  body.forEach((word, n) => view.setUint16(at + 2 * n, word & 0xffff, true));
+  return data;
+}
