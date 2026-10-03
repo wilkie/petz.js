@@ -17,12 +17,11 @@
  *                 names DATA\<name>.LNZ (bigdog, bulldog, chiua, scotty,
  *                 terrier), and the saved dog is removed, so Dogz starts
  *                 with that breed rather than the one it saved.
- * --hold <frame>  The dog held still in one frame as it comes out of its
- *                 kennel: scripts 92 and 93 in ALL_PTZ.SCP, which it plays
- *                 first with its angles straight at the kennel, rewritten
- *                 to show that frame for ever, its eyelids open (`0x8ae0
- *                 0`) and its head straight (cue 7: nothing looked at). With
- *                 --turn <n>, turned n 256ths first (`0x8ae5`).
+ * --hold <frame>  The dog held still in one frame: every script in
+ *                 ALL_PTZ.SCP rewritten to show that frame for ever, its
+ *                 eyelids open (`0x8ae0 0`) and its head straight (cue 7:
+ *                 nothing looked at), so whatever the dog plays first it
+ *                 stays in. With --turn <n>, turned n 256ths first (`0x8ae5`).
  *
  * Then: node scripts/oracle/shoot.mjs <name>
  */
@@ -36,9 +35,6 @@ import { DISPLAY } from './fetch.mjs';
 import { BUILD, DRIVE, exists, log } from './lib.mjs';
 
 export const VARIANTS = join(BUILD, 'variants');
-
-/** The scripts the dog comes out of its kennel by, the first it plays (`DoPlayAnimation`). */
-const KENNEL_SCRIPTS = [92, 93];
 
 /** The files Dogz keeps its dog in between runs. */
 const SAVED = ['SAVED.LNZ', 'BRAIN.BAK', 'TRICKS.TDT'];
@@ -126,8 +122,9 @@ async function main() {
       { op: OP.end, operands: [] },
     ];
 
-    for (const index of KENNEL_SCRIPTS) {
-      scripts[index].variants = scripts[index].variants.map(() => held);
+    /* Every script, whatever the dog plays first. */
+    for (const script of scripts) {
+      script.variants = script.variants.map(() => held);
     }
 
     await writeFile(path, writeScripts(original, scripts));

@@ -25,28 +25,28 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 
 ## The sections
 
-| Section              | Lines    | What                                                                                                                                                |
-| -------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Skeleton Type`      | 1        | 0 to 4, different for each breed: picks how far one toe is lowered in a few frames ([[topic:drawing-a-dog]], a breed's own shape) |
-| `Eyes`               | 2        | The eye balls, then the iris balls, right then left: 32, 8 and 38, 14 in every breed                                                                |
-| `256 Eyelid Color` … | 1 each   | The eyelids' and irises' colours on the 256- and the 16-colour display; the bulldog and chihuahua give no iris colours                              |
-| `Key Balls`          | 2        | 52 "head" and 50 "chest"                                                                                                                            |
-| `Tongue Balls`       | 2        | 63 and 64                                                                                                                                           |
-| `Default Scales`     | 4        | The adult's pet and ball scales, then the puppy's, in 256ths; the dog's are between by its age ([[topic:drawing-a-dog]])                            |
+| Section              | Lines    | What                                                                                                                                                      |
+| -------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Skeleton Type`      | 1        | 0 to 4, different for each breed: picks how far one toe is lowered in a few frames ([[topic:drawing-a-dog]], a breed's own shape)                         |
+| `Eyes`               | 2        | The eye balls, then the iris balls, right then left: 32, 8 and 38, 14 in every breed                                                                      |
+| `256 Eyelid Color` … | 1 each   | The eyelids' and irises' colours on the 256- and the 16-colour display; the bulldog and chihuahua give no iris colours                                    |
+| `Key Balls`          | 2        | 52 "head" and 50 "chest"                                                                                                                                  |
+| `Tongue Balls`       | 2        | 63 and 64                                                                                                                                                 |
+| `Default Scales`     | 4        | The adult's pet and ball scales, then the puppy's, in 256ths; the dog's are between by its age ([[topic:drawing-a-dog]])                                  |
 | `Leg Extension` …    | 1 or 2   | `Leg` (front, then hind), `Body` and `Face Extension`: how much longer than the skeleton's, halved as read ([[topic:drawing-a-dog]], a breed's own shape) |
-| `Head Balls`         | 28       | The balls of the head                                                                                                                               |
-| `Omissions`          | 0        | Balls not drawn; empty in every breed                                                                                                               |
-| `Linez`              | 29 to 34 | "start ball, end ball, fuzz amount": thick lines between balls, such as `snout, head` and the tail's                                                |
-| `256 Ball Color`     | 65       | An index into Dogz's 256-colour palette for each ball: a coat is a ramp of them ([[topic:drawing-a-dog]])                                           |
-| `16 Ball Color`      | 65       | On the 16-colour display: "0blk, 1dkRed, 2dkGrn, 3dkYel, 4dkBlu, 5dkMag, 6dkCyan, 7dkGry, 8ltGry, 9Rd, 10Grn, 11Yel, 12Blu, 13Mag, 14Cyan, 15White" |
-| `Speckle Color`      | 65       | -1, or a colour for speckles on the ball                                                                                                            |
-| `Ball Size Diffs`    | 65       | How much larger or smaller the breed draws each ball than the skeleton's size                                                                       |
-| `Puppy Balls`        | 65       | "how much balls are enlarged when in puppy mode"                                                                                                    |
-| `Outline Type`       | 65       | "-1 = no outline, 0 = half outline, > 0 = outline thickness"                                                                                        |
-| `Outline Color`      | 65       | The outline's colour, from the 16                                                                                                                   |
-| `Fuzz`               | 65       | "how fuzzy is ball 0 = no fuzz, 1 = some fuzz, 2 = more fuzz, 3 = boocoo fuzz"                                                                      |
-| `Default Factors`    | 11       | Pairs for "excitement", "naughty", "grab object", "clumsy", "groom", "ham", "bark", "sickness", "spray fear", "frustaiton" and "age"                |
-| `Sound List`         | 3        | The adult's and the puppy's sound lists, and "% of maturity for playing adult sounds"                                                               |
+| `Head Balls`         | 28       | The balls of the head                                                                                                                                     |
+| `Omissions`          | 0        | Balls not drawn; empty in every breed                                                                                                                     |
+| `Linez`              | 29 to 34 | "start ball, end ball, fuzz amount": thick lines between balls, such as `snout, head` and the tail's                                                      |
+| `256 Ball Color`     | 65       | An index into Dogz's 256-colour palette for each ball: a coat is a ramp of them ([[topic:drawing-a-dog]])                                                 |
+| `16 Ball Color`      | 65       | On the 16-colour display: "0blk, 1dkRed, 2dkGrn, 3dkYel, 4dkBlu, 5dkMag, 6dkCyan, 7dkGry, 8ltGry, 9Rd, 10Grn, 11Yel, 12Blu, 13Mag, 14Cyan, 15White"       |
+| `Speckle Color`      | 65       | -1, or a colour for speckles on the ball                                                                                                                  |
+| `Ball Size Diffs`    | 65       | How much larger or smaller the breed draws each ball than the skeleton's size                                                                             |
+| `Puppy Balls`        | 65       | "how much balls are enlarged when in puppy mode"                                                                                                          |
+| `Outline Type`       | 65       | "-1 = no outline, 0 = half outline, > 0 = outline thickness"                                                                                              |
+| `Outline Color`      | 65       | The outline's colour, from the 16                                                                                                                         |
+| `Fuzz`               | 65       | "how fuzzy is ball 0 = no fuzz, 1 = some fuzz, 2 = more fuzz, 3 = boocoo fuzz"                                                                            |
+| `Default Factors`    | 11       | Pairs for "excitement", "naughty", "grab object", "clumsy", "groom", "ham", "bark", "sickness", "spray fear", "frustaiton" and "age"                      |
+| `Sound List`         | 3        | The adult's and the puppy's sound lists, and "% of maturity for playing adult sounds"                                                                     |
 
 - [[measured]] The ball names come from the per-ball sections' comments, `eBall_Lankle, // 0` to `eBall_tongue2, // 64`, in the order of the skeleton. They are C enumerators, so the game's source called its balls this.
 - [[measured]] The bulldog has 29 lines where the others have 34.

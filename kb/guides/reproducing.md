@@ -64,7 +64,7 @@ node scripts/oracle/variant.mjs held35 --hold 35
 node scripts/oracle/shoot.mjs held35 --wait 12 --count 8 --every 3
 ```
 
-`--hold <frame>` holds the dog still in one frame, to compare with a drawing: it rewrites the two scripts the dog comes out of its kennel by (92 and 93 of `ALL_PTZ.SCP`), which the engine plays first with the dog's angles set straight, to show that frame for ever, the eyelids open and the head looking at nothing (cue 7); `--turn <n>` turns it first. [[measured]] Its body then holds the frame at the playpen's left edge in every picture; its head still turns, from something not yet found that gives it a point to look at.
+`--hold <frame>` holds the dog still in one frame, to compare with a drawing: it rewrites every script in `ALL_PTZ.SCP` to show that frame for ever, the eyelids open and the head looking at nothing (cue 7), so whatever the dog plays first it stays in; `--turn <n>` turns it first. [[measured]] Held so, seven of eight pictures three seconds apart are identical to the byte; the eighth differs by a blink, 168 pixels of one eyelid. Rewriting only the kennel scripts (92 and 93) holds nothing: the dog does not play them as Dogz starts, but idles at the playpen's left edge, looking about.
 
 ## Check a Read out claim
 
