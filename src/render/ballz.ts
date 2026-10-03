@@ -421,7 +421,7 @@ export function drawPet(
   }
 }
 
-/** The factor of the iris's radius kept inside the eye: `ds:1d3e` of DOGZDLL.DLL. */
+/** The share of the eye's radius the iris's offset may not use: `ds:1d3e` of DOGZDLL.DLL. */
 const IRIS_INSET = 0.8;
 
 /** How far the irises move toward where they look each eye drawn: `ds:1d36`. */
@@ -433,7 +433,10 @@ const IRIS_STEP = 0.6;
  * frame puts it relative to its eye, the point looked at from the dog's
  * middle, or the eye's centre. The irises share one offset, which moves 0.6
  * pixels toward that on each axis for every eye drawn, and is kept within the
- * eye by the eye's radius less 0.8 of the iris's; the iris is filled flat in
+ * eye's radius less 0.8 of the eye's radius again (seg10:5537 — not the
+ * iris's), a couple of pixels; the iris's square is the first iris's size,
+ * whichever eye (`+0x367`), set a pixel left of the eye's centre plus the
+ * offset (seg10:565d); the iris is filled flat in
  * the breed's iris colour, and if it is more than 7 pixels across, the pupil,
  * the iris inset 2 pixels each side, in the pupil colour. Both go through the
  * kernel as a ball without speckles does: its speckle spot from the circle
@@ -454,7 +457,8 @@ function drawIris(
 ) {
   const eye = placed[eyeBall];
   const iris = placed[irisBall];
-  const limit = eye.diameter / 2 - Math.trunc((iris.diameter / 2) * IRIS_INSET);
+  const radius = eye.diameter / 2;
+  const limit = radius - Math.trunc(radius * IRIS_INSET);
   const clamp = (value: number) => Math.max(-limit, Math.min(limit, value));
   const mode = eyes?.mode ?? 0;
   const target =
@@ -477,7 +481,7 @@ function drawIris(
   }
 
   const centre = at(eyeBall);
-  const x = centre.x + offset.x;
+  const x = centre.x + offset.x - 1;
   const y = centre.y + offset.y;
   const irisColour = (colours === 256 ? breed.irisColor256 : breed.irisColor16) ?? 3;
   const pupilColour = breed.pupilColor ?? 0;
@@ -498,10 +502,11 @@ function drawIris(
       tables
     );
 
-  disc(iris.diameter, irisColour);
+  const size = placed[breed.irises[0]]?.diameter ?? iris.diameter;
+  disc(size, irisColour);
 
-  if (iris.diameter > 7) {
-    disc(iris.diameter - 4, pupilColour);
+  if (size > 7) {
+    disc(size - 4, pupilColour);
   }
 }
 

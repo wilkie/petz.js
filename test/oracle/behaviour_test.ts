@@ -43,6 +43,7 @@ import {
 import { parseLnz, readFactors } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import { drawPet } from '../../src/render/ballz.ts';
+import { project, scalesForAge } from '../../src/render/project.ts';
 import { IndexedBitmap } from '../../src/render/raster.ts';
 import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/script.ts';
 import { parseTricks, writeTricks } from '../../src/formats/tricks.ts';
@@ -424,7 +425,7 @@ withOracle('the engine’s behaviour', () => {
     });
 
     it('eases the irises 0.6 pixels for each eye drawn toward where the eyes look', () => {
-      const iris = { x: 3, y: -3 };
+      const iris = { x: 1.5, y: -1.5 };
       drawPet(new IndexedBitmap(320, 240), breed, header, frames[0], {
         colours: 256,
         originX: 160,
@@ -433,9 +434,30 @@ withOracle('the engine’s behaviour', () => {
         iris,
       });
 
-      /* Straight out, from 3 and -3, two eyes drawn. */
-      expect(iris.x).toBeCloseTo(1.8);
-      expect(iris.y).toBeCloseTo(-1.8);
+      /* Straight out, from 1.5 and -1.5: 0.6 nearer for the first eye; the
+       * second takes 0.9 for 0, where it is going, and leaves it. */
+      expect(iris.x).toBeCloseTo(0.9);
+      expect(iris.y).toBeCloseTo(-0.9);
+    });
+
+    it('keeps the irises within the eye’s radius less 0.8 of it again', () => {
+      const iris = { x: 0, y: 0 };
+      const eye = Math.trunc(
+        project(breed, header, frames[0], scalesForAge(breed, 0), 0, 100)[breed.eyes[0]].diameter /
+          2
+      );
+
+      for (let n = 0; n < 40; n++) {
+        drawPet(new IndexedBitmap(320, 240), breed, header, frames[0], {
+          colours: 256,
+          originX: 160,
+          originY: 120,
+          eyes: { mode: 1, x: 30, y: -30 },
+          iris,
+        });
+      }
+
+      expect(iris).toEqual({ x: eye - Math.trunc(eye * 0.8), y: -(eye - Math.trunc(eye * 0.8)) });
     });
 
     it('turns its head and eyes to the cursor moving about, but only so far', () => {

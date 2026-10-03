@@ -6,8 +6,8 @@
     "frame": 35,
     "yaw": 64,
     "expect": {
-      "wrong": 185,
-      "pixels": 4317
+      "wrong": 158,
+      "pixels": 4266
     }
   },
   {
@@ -17,7 +17,7 @@
     "frame": 35,
     "yaw": 64,
     "expect": {
-      "wrong": 187,
+      "wrong": 161,
       "pixels": 4348
     }
   },
@@ -58,8 +58,8 @@
     "frame": 35,
     "yaw": 64,
     "expect": {
-      "wrong": 185,
-      "pixels": 4323
+      "wrong": 125,
+      "pixels": 4020
     }
   },
   {
@@ -85,7 +85,7 @@
     "frame": 35,
     "yaw": 64,
     "expect": {
-      "wrong": 137,
+      "wrong": 112,
       "pixels": 4192
     }
   }
