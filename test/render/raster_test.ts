@@ -1,4 +1,5 @@
 import {
+  drawLine,
   fillBall,
   fillLid,
   fillShaded,
@@ -184,5 +185,39 @@ describe('a shining ball', () => {
     /* The top 0.3 of 20 rows, 6, step down a quarter turn by 64 / 6 = 10. */
     expect(rows.slice(0, 7)).toEqual([171, 171, 171, 169, 168, 166, 164]);
     expect(rows.slice(7, 19).every((colour) => colour === 164)).toBe(true);
+  });
+});
+
+describe('a line', () => {
+  const rows = (bitmap: IndexedBitmap, top: number, bottom: number) =>
+    Array.from({ length: bottom - top }, (_, r) =>
+      Array.from({ length: bitmap.width }, (_, x) => {
+        const pixel = bitmap.get(x, top + r);
+        return pixel === IndexedBitmap.TRANSPARENT ? '.' : String(pixel);
+      }).join('')
+    );
+
+  it('is filled between edges its width out either side, black at each end of a row', () => {
+    const bitmap = new IndexedBitmap(16, 12);
+    drawLine(bitmap, { x: 3, y: 5 }, { x: 12, y: 5 }, 2, 2, 7);
+
+    /* Corners at y 3 and 7: rows 3 to 6, the last corner's row not drawn. */
+    expect(rows(bitmap, 2, 8)).toEqual([
+      '................',
+      '...0777777770...',
+      '...0777777770...',
+      '...0777777770...',
+      '...0777777770...',
+      '................',
+    ]);
+  });
+
+  it('tapers from one end’s width to the other’s', () => {
+    const bitmap = new IndexedBitmap(12, 24);
+    drawLine(bitmap, { x: 6, y: 2 }, { x: 6, y: 20 }, 4, 1, 3);
+    const widths = rows(bitmap, 2, 20).map((row) => row.replace(/\./g, '').length);
+
+    expect(widths[0]).toBeGreaterThan(widths.at(-1)!);
+    expect(rows(bitmap, 10, 11)[0]).toMatch(/^\.*0[3]+0\.*$/);
   });
 });

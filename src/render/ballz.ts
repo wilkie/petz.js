@@ -22,7 +22,7 @@ import {
   scalesForAge,
 } from './project.ts';
 import {
-  drawTaperedLine,
+  drawLine,
   fillBall,
   fillLid,
   fillShaded,
@@ -223,10 +223,16 @@ export function drawPet(
 
   for (const mark of list) {
     if (mark.kind === 'line') {
-      /* Each end as thick as its ball's radius × 256 / 300, as
-       * DisplayBallzFrame works them out for XDrawLine, not yet read. */
-      const width = (ball: number) => ((placed[ball].diameter / 2) * 256) / 300;
-      drawTaperedLine(
+      /* Each end its ball's radius × 256 / 300 out either side, in the
+       * first ball's colour; the line's fuzz XDrawLine leaves unused
+       * (DisplayBallzFrame, seg10:50a4 to 5134). */
+      const width = (ball: number) => Math.trunc(((placed[ball].diameter / 2) * 256) / 300);
+
+      if (width(mark.from) === 0 || width(mark.to) === 0) {
+        continue;
+      }
+
+      drawLine(
         bitmap,
         at(mark.from),
         at(mark.to),

@@ -304,10 +304,16 @@ export function speckleColour(colour: number, speckle: number, first: number, le
 }
 
 /**
- * A line between two points, as thick at each end as given and tapering
- * between, built of rows of pixels round each point along it.
+ * A line between two points as `XDrawPort::XDrawLine` draws one (seg8:4fda):
+ * a four-cornered shape, each end `width` out either side of its point,
+ * square to the line (`width × the line's direction / its length`, rounded
+ * toward 0), the corners kept on the bitmap. It is filled a row at a time
+ * from the top corner down, its two edges stepped by their slopes in
+ * 1024ths, each row's first and last pixels black (0) and the colour
+ * between; an edge turns toward the next corner when the row of the one
+ * it was heading for is reached. The last corner's row is not drawn.
  */
-export function drawTaperedLine(
+export function drawLine(
   bitmap: IndexedBitmap,
   from: { x: number; y: number },
   to: { x: number; y: number },
@@ -315,18 +321,114 @@ export function drawTaperedLine(
   toWidth: number,
   colour: number
 ) {
-  const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y)));
+  const [ax, ay, bx, by] = [from.x, from.y, to.x, to.y].map(Math.trunc);
+  const [px, py] = [by - ay, ax - bx];
+  const length = Math.trunc(Math.sqrt(px * px + py * py));
 
-  for (let step = 0; step <= steps; step++) {
-    const along = step / steps;
-    const x = Math.round(from.x + (to.x - from.x) * along);
-    const y = Math.round(from.y + (to.y - from.y) * along);
-    const radius = Math.max(0.5, (fromWidth + (toWidth - fromWidth) * along) / 2);
-    const reach = Math.ceil(radius);
+  if (length === 0) {
+    return;
+  }
 
-    for (let dy = -reach; dy <= reach; dy++) {
-      const half = Math.floor(Math.sqrt(Math.max(0, radius * radius - dy * dy)));
-      bitmap.span(x - half, y + dy, 2 * half + 1, colour);
+  const offset = (width: number) => [
+    Math.trunc((px * width) / length),
+    Math.trunc((py * width) / length),
+  ];
+  const [fx, fy] = offset(fromWidth);
+  const [tx, ty] = offset(toWidth);
+  const keep = (value: number, size: number) => Math.max(0, Math.min(size - 1, value));
+  const corners = [
+    [ax + fx, ay + fy],
+    [ax - fx, ay - fy],
+    [bx - tx, by - ty],
+    [bx + tx, by + ty],
+  ].map(([x, y]) => ({ x: keep(x, bitmap.width), y: keep(y, bitmap.height) }));
+
+  /* The corners from the top down, by four passes of swaps (seg8:5165). */
+  const order = [0, 1, 2, 3];
+
+  for (let pass = 0; pass < 4; pass++) {
+    for (let n = 0; n < 3; n++) {
+      if (corners[order[n + 1]].y < corners[order[n]].y) {
+        [order[n], order[n + 1]] = [order[n + 1], order[n]];
+      }
+    }
+  }
+
+  const slope = (from: number, toward: number) => {
+    const dx = corners[toward].x - corners[from].x;
+    const dy = corners[toward].y - corners[from].y;
+    return dy === 0 ? dx * 1024 : Math.trunc((dx * 1024) / dy);
+  };
+
+  const top = order[0];
+  let ahead = (top + 3) % 4;
+  let behind = (top + 1) % 4;
+  let rightSlope = slope(top, ahead);
+  let leftSlope = slope(top, behind);
+
+  /* The steeper to the right is the right edge. */
+  if (rightSlope < leftSlope) {
+    [ahead, behind] = [behind, ahead];
+    [rightSlope, leftSlope] = [leftSlope, rightSlope];
+  }
+
+  let left: number;
+  let right: number;
+
+  if (corners[order[1]].y === corners[top].y) {
+    /* The top edge level: from its two ends (seg8:54ca). */
+    right = Math.max(corners[order[1]].x, corners[top].x);
+    left = Math.min(corners[order[1]].x, corners[top].x);
+  } else {
+    left = right = corners[top].x;
+  }
+
+  let [leftPart, rightPart] = [0, 0];
+  let row = corners[top].y;
+  let rows = corners[order[1]].y - corners[top].y;
+
+  const step = (at: number, part: number, by: number): [number, number] => {
+    part += by;
+
+    while (part > 0x400) {
+      part -= 0x400;
+      at++;
+    }
+
+    while (part < -0x400) {
+      part += 0x400;
+      at--;
+    }
+
+    return [at, part];
+  };
+
+  for (let segment = 0; segment < 3; segment++) {
+    for (let n = rows - 1; n >= 0; n--, row++) {
+      [left, leftPart] = step(left, leftPart, leftSlope);
+      [right, rightPart] = step(right, rightPart, rightSlope);
+      bitmap.set(left, row, 0);
+
+      if (right - left - 1 > 0) {
+        bitmap.span(left + 1, row, right - left - 1, colour);
+        bitmap.set(right, row, 0);
+      }
+    }
+
+    const reached = order[segment + 1];
+
+    if (segment < 2) {
+      rows = corners[order[segment + 2]].y - corners[reached].y;
+    }
+
+    if (reached === ahead) {
+      ahead = (ahead + 3) % 4;
+      rightSlope = slope(reached, ahead);
+    }
+
+    if (reached === behind) {
+      behind = (behind + 1) % 4;
+      leftSlope = slope(reached, behind);
     }
   }
 }
