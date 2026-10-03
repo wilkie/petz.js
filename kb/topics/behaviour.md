@@ -189,6 +189,13 @@ flowchart LR
 - [[read out]] `ResetParams` stops every fudger (`Fudger::Reset`: no step, no drift) and eases the eyelids' tilts level at 10 a frame (seg7:3430 to 3453). The engine sets the tilt itself only to level it: scruffing (0 at 10 a frame), leaping for the ball (0 at 4), begging as an icon and birthing (0 at 180) — through the pet sprite's method at 0x80 (seg7:82d1). `0x8af3` would tilt the dog toward the point it steers at (seg7:6c79 to 6d1c), but nothing uses it, and `0x8ae2` only prints a message. So in play the dog is never tilted, spun or rolled.
 - `src/behaviour/fudger.ts` plays the fudgers, and the drawing turns the dog by them ([[topic:drawing-a-dog]]).
 
+## Growing up
+
+- [[read out]] The adopted dog is a puppy and grows up a day at a time. As Dogz starts, `InitStaticIni` (seg2:0190) reads the dog's `age` from [[file:DOGZ.DOG/DOGZ.INI]], and the day and month it was last started (`last day use`, `last month use`, by `getdate`, seg2:030a); started on another day, it adds one to the age and writes the age and today back (seg2:0367 to 03a6), with a message, "incrementing age". The year is not kept, so the same day a year on is no new day.
+- [[read out]] `PetModule::LoadFactors` (seg21:1ec5) makes the age factor, 11th of the dog's factors, `age × 100 / 10`: ten a day, kept to 1 to 100 by `SetFactor`, so a dog is grown at ten days. With no `Your Pet` in the INI (`PetParams` +0x58, set by `InitStaticIni`) the age is 0 and the factor 99, or 1 if +0x5a is set too. `DOGZ.WAD` sets +0x58 at seg4:06d8 and then +0x5a (seg4:0712), on a path not yet followed.
+- [[read out]] The age factor makes a puppy: on every frame drawn (`ReallyDoDrawFrame`, seg21:49a0) `SetBallScaleFromAge` (seg21:4c4c) sets the scales between the puppy's and the adult's by it, and the puppiness, `100 − age`, which enlarges balls by `[Puppy Balls]` ([[topic:drawing-a-dog]]); `LoadSoundList` (seg7:02f1) plays the puppy's sounds until it is past the breed's maturity ([[format:lnz]], `[Sound List]`); and `LoadFactors` makes a puppy clumsier, its clumsiness centred `(100 − age) / 3` higher, up to 33.
+- `src/behaviour/age.ts` grows the dog so (`startOn`, `ageFactor`); the viewer's age slider sets the factor directly.
+
 ## Breathing and bristling
 
 - [[read out]] The dog has a heart rate, in tenths, 40 to start (`0x2094`). As each script starts (`0x8b0a`, `UpdateHeartRate`, seg7:79ab), it goes toward the rate of the positions the script goes between — their average, one standing in for the other if it has none — up 1.5 or down 0.5 a script. The rates are `ScriptSprite`'s, a word a position at seg26:0x70: 20 asleep, 30 sitting, 40 walking or panting, 60 standing, 80 sitting up or rolling over, 110 running.

@@ -33,6 +33,7 @@ import {
 import { type Brain } from './brain.ts';
 import { type Ball, type Food, type Shoe, foodSize, ballRect, isTreat } from './stage.ts';
 import { type Rand } from './random.ts';
+import { ageFactor } from './age.ts';
 import { DEFAULT_GLUE, type Fudge, type Step, timeline } from './timeline.ts';
 import { AUTO, findTransition, type TransitionTable } from './transitions.ts';
 
@@ -528,7 +529,8 @@ export class Pet {
 
   /** `PetModule::LoadFactors`: each factor near its breed's centre, the spread either side. */
   private loadFactors(factors: { centre: number; spread: number }[], age: number) {
-    this.setFactor(10, Math.min(99, age * 10));
+    /* Ten a day played, as `LoadFactors` has it (seg21:1f99): grown at ten days. */
+    this.setFactor(10, ageFactor(age));
     this.centres[3] += Math.trunc((100 - this.factor(10)) / 3);
 
     for (let n = 0; n < 10; n++) {
