@@ -5,6 +5,7 @@
  * drawing with the oracle's.
  */
 
+import { type Aging, ageFactor, startOn } from '../behaviour/age.ts';
 import { Brain, type BrainMapping } from '../behaviour/brain.ts';
 import { Pet, type PetData } from '../behaviour/pet.ts';
 import { borlandRand } from '../behaviour/random.ts';
@@ -75,6 +76,59 @@ const picker = element<HTMLInputElement>('picker');
 const breedSelect = element<HTMLSelectElement>('breed');
 const coloursSelect = element<HTMLSelectElement>('colours');
 const ageInput = element<HTMLInputElement>('age');
+const daysOutput = element<HTMLOutputElement>('days');
+const newPuppy = element<HTMLButtonElement>('new-puppy');
+
+/**
+ * The viewer's dog grows up as Dogz's does (`InitStaticIni`): a day older
+ * each new day it is opened, its age and the day kept as `DOGZ.INI` keeps
+ * them — here in the browser, if it lets us. Grown at ten days.
+ */
+const AGING_KEY = 'dogz-reverse.aging';
+
+function loadAging(): Aging {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AGING_KEY) ?? 'null') as Aging | null;
+
+    if (saved && [saved.age, saved.lastDay, saved.lastMonth].every(Number.isInteger)) {
+      return saved;
+    }
+  } catch {
+    /* Nothing kept: a puppy never played, as a fresh INI has it. */
+  }
+
+  return { age: 0, lastDay: 0, lastMonth: 0 };
+}
+
+function saveAging(aging: Aging) {
+  try {
+    localStorage.setItem(AGING_KEY, JSON.stringify(aging));
+  } catch {
+    /* Not kept: it grows up again next time. */
+  }
+}
+
+function showAging(aging: Aging) {
+  ageInput.value = String(ageFactor(aging.age));
+  daysOutput.value = `day ${aging.age}${aging.age >= 10 ? ', grown' : ''}`;
+}
+
+let aging = startOn(loadAging(), new Date());
+saveAging(aging);
+showAging(aging);
+
+newPuppy.addEventListener('click', () => {
+  aging = startOn({ age: -1, lastDay: 0, lastMonth: 0 }, new Date());
+  saveAging(aging);
+  showAging(aging);
+
+  /* A new puppy live comes out of the kennel again; otherwise the frame shown is redrawn. */
+  if (live) {
+    startLive();
+  } else if (sequence.length) {
+    draw();
+  }
+});
 const yawInput = element<HTMLInputElement>('yaw');
 const animationSelect = element<HTMLSelectElement>('animation');
 const scriptSelect = element<HTMLSelectElement>('script');

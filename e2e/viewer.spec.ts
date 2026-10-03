@@ -190,3 +190,36 @@ test('comes when called with a double click', async ({ page }) => {
   await page.mouse.dblclick(box.x + box.width * corner, box.y + box.height * 0.9);
   await expect(page.locator('#mood')).toHaveText(/^eChasingOwner/, { timeout: 2000 });
 });
+
+test('grows the dog a day older each new day it is opened, and not twice in a day', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('seeded')) {
+      sessionStorage.setItem('seeded', '1');
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      localStorage.setItem(
+        'dogz-reverse.aging',
+        JSON.stringify({
+          age: 3,
+          lastDay: yesterday.getDate(),
+          lastMonth: yesterday.getMonth() + 1,
+        })
+      );
+    }
+  });
+  await page.goto('/viewer.html');
+
+  /* Four days played: an age factor of 40. */
+  await expect(page.locator('#days')).toHaveText('day 4');
+  await expect(page.locator('#age')).toHaveValue('40');
+
+  /* Opened again the same day, no older. */
+  await page.reload();
+  await expect(page.locator('#days')).toHaveText('day 4');
+
+  /* A new puppy is on its first day. */
+  await page.click('#new-puppy');
+  await expect(page.locator('#days')).toHaveText('day 0');
+  await expect(page.locator('#age')).toHaveValue('1');
+});
