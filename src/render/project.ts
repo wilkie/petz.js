@@ -19,7 +19,7 @@ export function angle256(y: number, x: number) {
 }
 
 /** The game's sine and cosine of an angle in 256ths of a turn, times 256. */
-function sine(angle: number) {
+export function sine(angle: number) {
   return Math.trunc(Math.sin((angle * Math.PI) / 128) * 256);
 }
 

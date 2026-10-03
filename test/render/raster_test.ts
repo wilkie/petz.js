@@ -1,6 +1,7 @@
 import {
   fillBall,
   fillLid,
+  fillShaded,
   IndexedBitmap,
   random,
   rowWidth,
@@ -171,5 +172,17 @@ describe('an eyelid', () => {
     for (const row of lid(-64).filter((row) => row.includes('#'))) {
       expect(row.lastIndexOf('#')).toBeLessThan(6);
     }
+  });
+});
+
+describe('a shining ball', () => {
+  it('is shaded from the ramp’s eighth colour at the top to its first, which fills the rest', () => {
+    const bitmap = new IndexedBitmap(40, 40);
+    fillShaded(bitmap, { x: 20, y: 20, diameter: 20, fuzz: 0 }, 164, () => 0);
+    const rows = Array.from({ length: 20 }, (_, r) => bitmap.get(20, 10 + r));
+
+    /* The top 0.3 of 20 rows, 6, step down a quarter turn by 64 / 6 = 10. */
+    expect(rows.slice(0, 7)).toEqual([171, 171, 171, 169, 168, 166, 164]);
+    expect(rows.slice(7, 19).every((colour) => colour === 164)).toBe(true);
   });
 });

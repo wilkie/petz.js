@@ -14,6 +14,8 @@
  * each row has one pixel at a random place in it in the speckle colour.
  */
 
+import { sine } from './project.ts';
+
 /** A bitmap of palette indices. `TRANSPARENT` is nothing drawn. */
 export class IndexedBitmap {
   static readonly TRANSPARENT = -1;
@@ -138,6 +140,39 @@ export function fillBall(bitmap: IndexedBitmap, ball: Ball, next: (below: number
     if (r < d / 2 && width > 0) {
       bitmap.set(left + next(width + 1), y, speckle);
     }
+  }
+}
+
+/**
+ * Draws a ball shaded down its rows, as `XFillPartialCircleKernel` does in
+ * mode -4 (seg8:37ae to 398e): the top `0.3` of its rows (at least one) go
+ * from the ramp's eighth colour down through a quarter turn of the sine,
+ * `sin × 256 >> 5`, to its first, which fills the rest. No outline, no
+ * speckles; the rows' starts fuzzed as ever.
+ */
+export function fillShaded(
+  bitmap: IndexedBitmap,
+  ball: Pick<Ball, 'x' | 'y' | 'diameter' | 'fuzz'>,
+  ramp: number,
+  next: (below: number) => number
+) {
+  const d = Math.round(ball.diameter);
+
+  if (d < 1) {
+    return;
+  }
+
+  const fuzz = Math.max(0, Math.min(7, ball.fuzz));
+  const top = Math.round(ball.y - d / 2);
+  const shaded = Math.max(1, Math.trunc(0.3 * d));
+  const step = Math.trunc((-1 / shaded) * 256 / 4) || -5;
+  let phase = 0x40;
+
+  for (let r = 1; r <= d; r++, phase += step) {
+    const width = rowWidth(d, r);
+    const level = Math.max(0, Math.min(7, sine(phase) >> 5));
+    const colour = phase > 0 ? ramp + level : ramp;
+    bitmap.span(Math.round(ball.x) - Math.floor(width / 2) + next(fuzz + 1), top + r - 1, width, colour);
   }
 }
 

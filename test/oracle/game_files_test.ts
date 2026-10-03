@@ -13,7 +13,7 @@ import { parseNe } from '../../src/formats/ne.ts';
 import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/script.ts';
 import { timeline } from '../../src/behaviour/timeline.ts';
 import { random } from '../../src/render/raster.ts';
-import { PALETTE_16, PALETTE_256, readPalette } from '../../src/formats/palette.ts';
+import { PALETTE_16, PALETTE_256, readPalette, screenPalette } from '../../src/formats/palette.ts';
 import { describeWithOracle } from './with-oracle.ts';
 
 const DATA = join(process.cwd(), 'oracle', 'build', 'drive-c', 'DOGZ.DOG', 'DATA');
@@ -142,6 +142,22 @@ withOracle("the oracle's DOGZDLL.DLL", () => {
       [255, 0, 255],
       [0, 255, 255],
       [255, 255, 255],
+    ]);
+  });
+
+  it('has the screen make three ramps of eight over 164 to 187, the first grey for the nose', () => {
+    const palette = readPalette(engine, PALETTE_256, 256);
+    const screen = screenPalette(palette);
+
+    expect(screen.slice(164, 172)).toEqual(
+      [0, 25, 50, 76, 101, 127, 153, 178].map((grey) => [grey, grey, grey])
+    );
+    expect(screen[172]).toEqual([255, 255, 255]);
+    expect(screen[179]).toEqual([212, 229, 255]);
+    expect(screen[180]).toEqual(palette[3]);
+    expect([...screen.slice(0, 164), ...screen.slice(188)]).toEqual([
+      ...palette.slice(0, 164),
+      ...palette.slice(188),
     ]);
   });
 

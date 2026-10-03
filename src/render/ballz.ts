@@ -9,12 +9,14 @@
  */
 
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
+import { SHINE } from '../formats/palette.ts';
 import { type Breed } from '../formats/lnz.ts';
 import { angle256, type Head, type Placed, project, scalesForAge } from './project.ts';
 import {
   drawTaperedLine,
   fillBall,
   fillLid,
+  fillShaded,
   IndexedBitmap,
   random,
   speckleColour,
@@ -200,24 +202,34 @@ export function drawPet(
     /* The eyes widened, looking at the user (`XInsetRect` by -n, seg10:51aa). */
     const widened = breed.eyes.includes(ball) ? 2 * eyesWide : 0;
 
-    fillBall(
-      bitmap,
-      {
-        ...at(ball),
-        diameter: placed[ball].diameter + widened,
-        colour: numbers[ball],
-        outlineColour: breed.outlineColor[ball],
-        speckleColour: speckleColour(
-          numbers[ball],
-          breed.speckleColor[ball],
-          ramps.first,
-          ramps.length
-        ),
-        outline: breed.outlineType[ball],
-        fuzz: breed.fuzz[ball],
-      },
-      next
-    );
+    if (colours === 256 && SHINY.includes(ball)) {
+      /* The nose and nostrils shine (mode -4, seg10:523d). */
+      fillShaded(
+        bitmap,
+        { ...at(ball), diameter: placed[ball].diameter, fuzz: breed.fuzz[ball] },
+        SHINE,
+        next
+      );
+    } else {
+      fillBall(
+        bitmap,
+        {
+          ...at(ball),
+          diameter: placed[ball].diameter + widened,
+          colour: numbers[ball],
+          outlineColour: breed.outlineColor[ball],
+          speckleColour: speckleColour(
+            numbers[ball],
+            breed.speckleColor[ball],
+            ramps.first,
+            ramps.length
+          ),
+          outline: breed.outlineType[ball],
+          fuzz: breed.fuzz[ball],
+        },
+        next
+      );
+    }
 
     const eye = breed.eyes.indexOf(ball);
 
@@ -312,6 +324,13 @@ function drawIris(
 
 /** The nose, which the eyelids slant by: ball 55 (`+0x676` of the placed balls). */
 const NOSE = 55;
+
+/**
+ * The balls drawn shining, shaded down the screen's first shine ramp: the
+ * left nostril, the right and the nose (`DisplayBallzFrame`, seg10:523d).
+ * On a 16-colour display there is no ramp; they are drawn as any other.
+ */
+const SHINY = [17, 41, 55];
 
 /**
  * Draws an eyelid over an eye, as `DisplayBallzFrame` does after its iris

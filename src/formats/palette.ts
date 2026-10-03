@@ -44,3 +44,43 @@ export function readPalette(module: NeModule, id: number, count: number): Colour
 export function css([red, green, blue]: Colour) {
   return `rgb(${red}, ${green}, ${blue})`;
 }
+
+/**
+ * `XDrawPort::MakeColorRamp` (seg8:1a71): `count` colours from `start`,
+ * `from` blended toward `to`, `amount` of the way by the last, each channel
+ * clamped at 255 and rounded down.
+ */
+export function colorRamp(from: Colour, to: Colour, count: number, amount: number): Colour[] {
+  const step = (1 / (count - 1)) * amount;
+  const ramp: Colour[] = [];
+
+  /* The share added up a colour at a time, as the engine's double is. */
+  for (let n = 0, t = 0; n < count; n++, t += step) {
+    ramp.push(
+      from.map((channel, at) => Math.trunc(Math.min(255, channel * (1 - t) + to[at] * t))) as Colour
+    );
+  }
+
+  return ramp;
+}
+
+/** Where the shine ramps go, eight colours each (`XInitScreenPort`, seg8:16c9 to 1775). */
+export const SHINE = 0xa4;
+
+/**
+ * The 256-colour palette as the screen has it: `XDrawPort::XInitScreenPort`
+ * overwrites entries 164 to 187 with three ramps of eight — black toward
+ * white, white toward a pale blue (`ds:1cba` to `1cc6`), and colour 3 toward
+ * that blue — which the nose's shine is drawn from.
+ */
+export function screenPalette(palette: readonly Colour[]): Colour[] {
+  const blue: Colour = [170, 204, 255];
+  const ramps = [
+    ...colorRamp([0, 0, 0], [255, 255, 255], 8, 0.7),
+    ...colorRamp([255, 255, 255], blue, 8, 0.5),
+    ...colorRamp(palette[3], blue, 8, 0.7),
+  ];
+  return palette.map((colour, n) =>
+    n >= SHINE && n < SHINE + ramps.length ? ramps[n - SHINE] : colour
+  );
+}

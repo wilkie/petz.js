@@ -50,7 +50,13 @@ import {
 import type { Dib } from '../formats/dib.ts';
 import { type Breed, parseLnz, readFactors } from '../formats/lnz.ts';
 import { parseNe } from '../formats/ne.ts';
-import { type Colour, PALETTE_16, PALETTE_256, readPalette } from '../formats/palette.ts';
+import {
+  type Colour,
+  PALETTE_16,
+  PALETTE_256,
+  readPalette,
+  screenPalette,
+} from '../formats/palette.ts';
 import { parseScripts, readOpcodes, readStateNames, type Script } from '../formats/script.ts';
 import { type BrainFile, parseBrain } from '../formats/brain.ts';
 import { parseTricks } from '../formats/tricks.ts';
@@ -849,7 +855,7 @@ async function start(files: GameFiles) {
   }
 
   const engine = parseNe(await files.read('WINDOWS/DOGZDLL.DLL'));
-  palettes.set(256, readPalette(engine, PALETTE_256, 256));
+  palettes.set(256, screenPalette(readPalette(engine, PALETTE_256, 256)));
   palettes.set(16, readPalette(engine, PALETTE_16, 16));
   showPaintColours();
 
