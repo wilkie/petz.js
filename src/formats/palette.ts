@@ -68,10 +68,27 @@ export function colorRamp(from: Colour, to: Colour, count: number, amount: numbe
 export const SHINE = 0xa4;
 
 /**
+ * Windows' six dark static colours, entries 1 to 6, as the oracle's screen
+ * shows them: at 192 a channel where Windows' own table, and Dogz's palette,
+ * have 128 — the display driver's, not Dogz's. Dogz takes the screen's
+ * static colours as they are for its first ten (seg8:15d2), so an iris of
+ * colour 2 is this green.
+ */
+const DRIVER_DARK: Colour[] = [
+  [192, 0, 0],
+  [0, 192, 0],
+  [192, 192, 0],
+  [0, 0, 192],
+  [192, 0, 192],
+  [0, 192, 192],
+];
+
+/**
  * The 256-colour palette as the screen has it: `XDrawPort::XInitScreenPort`
  * overwrites entries 164 to 187 with three ramps of eight — black toward
  * white, white toward a pale blue (`ds:1cba` to `1cc6`), and colour 3 toward
- * that blue — which the nose's shine is drawn from.
+ * that blue — which the nose's shine is drawn from; and the static colours
+ * are the display's (`DRIVER_DARK`).
  */
 export function screenPalette(palette: readonly Colour[]): Colour[] {
   const blue: Colour = [170, 204, 255];
@@ -81,6 +98,10 @@ export function screenPalette(palette: readonly Colour[]): Colour[] {
     ...colorRamp(palette[3], blue, 8, 0.7),
   ];
   return palette.map((colour, n) =>
-    n >= SHINE && n < SHINE + ramps.length ? ramps[n - SHINE] : colour
+    n >= SHINE && n < SHINE + ramps.length
+      ? ramps[n - SHINE]
+      : n >= 1 && n <= DRIVER_DARK.length
+        ? DRIVER_DARK[n - 1]
+        : colour
   );
 }

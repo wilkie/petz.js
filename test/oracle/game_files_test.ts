@@ -160,9 +160,25 @@ withOracle("the oracle's DOGZDLL.DLL", () => {
     expect(screen[172]).toEqual([255, 255, 255]);
     expect(screen[179]).toEqual([212, 229, 255]);
     expect(screen[180]).toEqual(palette[3]);
-    expect([...screen.slice(0, 164), ...screen.slice(188)]).toEqual([
-      ...palette.slice(0, 164),
+    expect([...screen.slice(7, 164), ...screen.slice(188)]).toEqual([
+      ...palette.slice(7, 164),
       ...palette.slice(188),
+    ]);
+  });
+
+  it('shows Windows’ dark static colours at 192 a channel, as the oracle’s display does', () => {
+    const palette = readPalette(engine, PALETTE_256, 256);
+
+    expect(palette[2]).toEqual([0, 128, 0]);
+    expect(screenPalette(palette).slice(0, 8)).toEqual([
+      [0, 0, 0],
+      [192, 0, 0],
+      [0, 192, 0],
+      [192, 192, 0],
+      [0, 0, 192],
+      [192, 0, 192],
+      [0, 192, 192],
+      palette[7],
     ]);
   });
 
