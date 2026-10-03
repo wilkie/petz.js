@@ -1,4 +1,5 @@
 import {
+  BITMAP,
   drawLine,
   fillBall,
   fillLid,
@@ -266,7 +267,28 @@ describe('a line', () => {
     const bitmap = new IndexedBitmap(16, 12);
     drawLine(bitmap, { x: 3, y: 5 }, { x: 12, y: 5 }, 2, 2, 7);
 
-    /* Corners at y 3 and 7: rows 3 to 6, the last corner's row not drawn. */
+    /* Corners at y 3 and 7, turned over and scanned from the bitmap's
+     * bottom: four rows, landing two above where the points put them. */
+    expect(rows(bitmap, 1, 7)).toEqual([
+      '................',
+      '...0777777770...',
+      '...0777777770...',
+      '...0777777770...',
+      '...0777777770...',
+      '................',
+    ]);
+  });
+
+  it('on a top-down bitmap, is scanned from the top, the last corner’s row not drawn', () => {
+    const bitmap = new IndexedBitmap(16, 12);
+    BITMAP.bottomUp = false;
+
+    try {
+      drawLine(bitmap, { x: 3, y: 5 }, { x: 12, y: 5 }, 2, 2, 7);
+    } finally {
+      BITMAP.bottomUp = true;
+    }
+
     expect(rows(bitmap, 2, 8)).toEqual([
       '................',
       '...0777777770...',

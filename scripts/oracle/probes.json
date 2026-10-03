@@ -2,44 +2,63 @@
   {
     "name": "side35",
     "about": "the big dog held side-on in frame 35, without fuzz or speckles",
-    "variant": ["--plain", "--hold", "35"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
-      "wrong": 158,
+      "wrong": 0,
       "pixels": 4266
     }
   },
   {
     "name": "fur35",
     "about": "the same with its fuzz and speckles: the session's seed, the circle tables walked bottom-up and carried",
-    "variant": ["--plain", "--keep-fur", "--hold", "35"],
+    "variant": [
+      "--plain",
+      "--keep-fur",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
-      "wrong": 161,
+      "wrong": 0,
       "pixels": 4348
     }
   },
   {
     "name": "upright497",
     "about": "the big dog sitting up in frame 497: the hind end not far out, so the engine's short sines do not show",
-    "variant": ["--plain", "--hold", "497"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "497"
+    ],
     "frame": 497,
     "yaw": 64,
     "expect": {
-      "wrong": 250,
+      "wrong": 1,
       "pixels": 3336
     }
   },
   {
     "name": "long35",
     "about": "frame 35 with a body extension of 100: the hind end moved back 50 by ExtendBody",
-    "variant": ["--plain", "--hold", "35", "--set", "Body Extension=100"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "35",
+      "--set",
+      "Body Extension=100"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
-      "wrong": 6,
+      "wrong": 1,
       "pixels": 4830
     }
   },
@@ -58,7 +77,7 @@
     "frame": 35,
     "yaw": 64,
     "expect": {
-      "wrong": 125,
+      "wrong": 9,
       "pixels": 4020
     }
   },
@@ -85,7 +104,7 @@
     "frame": 35,
     "yaw": 64,
     "expect": {
-      "wrong": 112,
+      "wrong": 4,
       "pixels": 4192
     }
   }

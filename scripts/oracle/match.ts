@@ -17,7 +17,7 @@ import { parseNe } from '../../src/formats/ne.ts';
 import { PALETTE_256, readPalette, screenPalette } from '../../src/formats/palette.ts';
 import { drawPet } from '../../src/render/ballz.ts';
 import { extendFrames } from '../../src/render/extend.ts';
-import { IndexedBitmap } from '../../src/render/raster.ts';
+import { BITMAP, IndexedBitmap } from '../../src/render/raster.ts';
 
 export const WIDTH = 640;
 export const HEIGHT = 480;
@@ -219,6 +219,25 @@ export interface Scene {
 
   /** How many levels the fur bristles, a session's state: added to every ball's fuzz. */
   bristle: number;
+
+  /** Whether the screen's bitmap is bottom-up, as WinG recommended it on the variant's display. */
+  bottomUp: boolean;
+}
+
+/**
+ * Whether WinG made the screen's bitmap bottom-up, by the newest of its
+ * timings of the display in WIN.INI (keyed by the DOS date it timed it on):
+ * the next to last character of the timing, 0 for bottom-up, 1 for top-down.
+ */
+export function bottomUpFromWinIni(winIni: string) {
+  const timings = [...winIni.matchAll(/^.*-([0-9A-F]{4})-[\d.]+=\w*([01])F\s*$/gim)];
+
+  if (!timings.length) {
+    return true;
+  }
+
+  const newest = timings.reduce((a, b) => (parseInt(b[1], 16) > parseInt(a[1], 16) ? b : a));
+  return newest[2] === '0';
 }
 
 /** The scene for a frame of a variant, its files read by `read` (paths under its drive). */
@@ -228,6 +247,7 @@ export function loadScene(
   age: number,
   bristle = 0
 ): Scene {
+  const bottomUp = bottomUpFromWinIni(new TextDecoder('latin1').decode(read('WINDOWS/WIN.INI')));
   const ini = new TextDecoder('latin1').decode(read('DOGZ.DOG/DOGZ.INI'));
   const pet = /^Your Pet=\.\\data\\(\w+)\.lnz/im.exec(ini)?.[1] ?? 'bigdog';
   const header = parseBhd(read('DOGZ.DOG/DATA/ALL_PTZ.BHD'));
@@ -242,7 +262,15 @@ export function loadScene(
     readPalette(parseNe(read('WINDOWS/DOGZDLL.DLL')), PALETTE_256, 256)
   );
   const colours = Int32Array.from(palette, ([r, g, b]) => pack(shown(r), shown(g), shown(b)));
-  return { breed, header, frame: extendFrames(frames, breed)[frame], colours, age, bristle };
+  return {
+    breed,
+    header,
+    frame: extendFrames(frames, breed)[frame],
+    colours,
+    age,
+    bristle,
+    bottomUp,
+  };
 }
 
 const ORIGIN = { x: 320, y: 240 };
@@ -265,8 +293,15 @@ export interface Drawing {
 }
 
 /** The reimplementation's drawing of the scene. */
-export function draw(scene: Scene, yaw: number, order: number[], seed: number): Drawing {
+export function draw(
+  scene: Scene,
+  yaw: number,
+  order: number[],
+  seed: number,
+  { lids = 0 }: { lids?: number } = {}
+): Drawing {
   const bitmap = new IndexedBitmap(WIDTH, HEIGHT);
+  BITMAP.bottomUp = scene.bottomUp;
   drawPet(bitmap, scene.breed, scene.header, scene.frame, {
     colours: 256,
     originX: ORIGIN.x,
@@ -276,6 +311,7 @@ export function draw(scene: Scene, yaw: number, order: number[], seed: number): 
     order,
     seed,
     bristle: scene.bristle,
+    lids,
   });
   const { pixels } = bitmap;
   let count = 0;

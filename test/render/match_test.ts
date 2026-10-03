@@ -1,4 +1,12 @@
-import { findDog, HAND, HEIGHT, score, shown, WIDTH } from '../../scripts/oracle/match.ts';
+import {
+  bottomUpFromWinIni,
+  findDog,
+  HAND,
+  HEIGHT,
+  score,
+  shown,
+  WIDTH,
+} from '../../scripts/oracle/match.ts';
 
 /** A screen of magenta ground in the playpen's place, grey elsewhere, with rectangles painted on. */
 function screen(
@@ -77,5 +85,23 @@ describe('matching a drawing against the oracle', () => {
       wrong: 1 + 70 * 49,
     });
     expect(score(found, { at, colour }, 100, 99).extra).toBe(70);
+  });
+});
+
+describe('the screen bitmap’s orientation', () => {
+  const timing = (date: string, flag: string) =>
+    `svga256.drv640x480x8(0,12)v4.0.0.52490-${date}-1.0.0.37=ECHGECHGZZZZFFFFDDFF${flag}F`;
+
+  it('is as WinG’s newest timing of the display says: 0 bottom-up, 1 top-down', () => {
+    expect(
+      bottomUpFromWinIni(`[WinG]\r\n${timing('5D42', '0')}\r\n${timing('5D43', '1')}\r\n`)
+    ).toBe(false);
+    expect(
+      bottomUpFromWinIni(`[WinG]\r\n${timing('5D43', '0')}\r\n${timing('5D42', '1')}\r\n`)
+    ).toBe(true);
+  });
+
+  it('is bottom-up where WinG has not timed the display', () => {
+    expect(bottomUpFromWinIni('[windows]\r\n')).toBe(true);
   });
 });

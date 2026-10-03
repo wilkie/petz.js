@@ -180,6 +180,7 @@ export function circleTables(seed = 1): CircleTables {
 /** Whether the screen's bitmap is bottom-up: then the kernel walks a ball's rows, and its tables, from the bottom. */
 export const BITMAP = { bottomUp: true };
 
+
 function circleRows(
   ball: { x: number; y: number; diameter: number },
   level: number,
@@ -431,7 +432,14 @@ export function drawLine(
   toWidth: number,
   colour: number
 ) {
-  const [ax, ay, bx, by] = [from.x, from.y, to.x, to.y].map(Math.trunc);
+  /* On a bottom-up bitmap the points are turned upside down first, from the
+   * port's bottom (seg8:5004), and the quad is scanned in memory's order,
+   * from the bottom up, so its edges round the other way. Measured against
+   * the oracle, a line so drawn sits two rows above where the balls' rows
+   * put its points (`flip` and the row each scanned row lands on). */
+  const { width, height } = bitmap;
+  const flip = (y: number) => (BITMAP.bottomUp ? height + 1 - y : y);
+  const [ax, ay, bx, by] = [from.x, flip(from.y), to.x, flip(to.y)].map(Math.trunc);
   const [px, py] = [by - ay, ax - bx];
   const length = Math.trunc(Math.sqrt(px * px + py * py));
 
@@ -451,7 +459,7 @@ export function drawLine(
     [ax - fx, ay - fy],
     [bx - tx, by - ty],
     [bx + tx, by + ty],
-  ].map(([x, y]) => ({ x: keep(x, bitmap.width), y: keep(y, bitmap.height) }));
+  ].map(([x, y]) => ({ x: keep(x, width), y: keep(y, height) }));
 
   /* The corners from the top down, by four passes of swaps (seg8:5165). */
   const order = [0, 1, 2, 3];
@@ -517,11 +525,12 @@ export function drawLine(
     for (let n = rows - 1; n >= 0; n--, row++) {
       [left, leftPart] = step(left, leftPart, leftSlope);
       [right, rightPart] = step(right, rightPart, rightSlope);
-      bitmap.set(left, row, 0);
+      const y = BITMAP.bottomUp ? height - 1 - row : row;
+      bitmap.set(left, y, 0);
 
       if (right - left - 1 > 0) {
-        bitmap.span(left + 1, row, right - left - 1, colour);
-        bitmap.set(right, row, 0);
+        bitmap.span(left + 1, y, right - left - 1, colour);
+        bitmap.set(right, y, 0);
       }
     }
 

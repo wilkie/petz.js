@@ -150,9 +150,24 @@ async function run(probe, { reuse }) {
     }
   }
 
-  const drawing = draw(best.scene, best.yaw, [...best.order], best.seed);
-  await writePicture(join(OUT, `${probe.name}.png`), differences(dog, drawing, best));
-  return best;
+  /* The eyelids where a blink, which goes on while the dog is held, may have caught them. */
+  let final = null;
+
+  for (const lids of [0, 33, 66, 100]) {
+    for (let dx = best.dx - 1; dx <= best.dx + 1; dx++) {
+      for (let dy = best.dy - 1; dy <= best.dy + 1; dy++) {
+        const drawing = draw(best.scene, best.yaw, [...best.order], best.seed, { lids });
+        const result = score(dog, drawing, dx, dy);
+
+        if (!final || result.wrong < final.score.wrong) {
+          final = { ...best, dx, dy, lids, score: result, drawing };
+        }
+      }
+    }
+  }
+
+  await writePicture(join(OUT, `${probe.name}.png`), differences(dog, final.drawing, final));
+  return final;
 }
 
 async function main() {
@@ -172,7 +187,9 @@ async function main() {
       (probe.seed === false
         ? ''
         : `, seed ${result.seed}${result.runnerUp ? ` (next best ${result.runnerUp.wrong})` : ''}`) +
-      (result.bristle ? `, bristling ${result.bristle}` : '');
+      (result.bristle ? `, bristling ${result.bristle}` : '') +
+      (result.lids ? `, eyelids ${result.lids} closed` : '') +
+      (result.scene.bottomUp ? '' : ', top-down');
     const verdict =
       probe.expect === undefined
         ? 'measured'

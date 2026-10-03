@@ -85,7 +85,7 @@ A probe holds the dog still in a variant, takes a picture of the oracle's screen
 
 It prints each probe's count, the seed it found and the next best seed's count, and fails if a probe differs by more than 12 pixels beyond what was recorded. `--reuse` measures the pictures already taken, `--record` keeps what is measured as expected. Pictures of the oracle's dog, the drawing and where they differ, side by side, are kept in `oracle/build/probes/`, never committed; only the counts are. A claim measured so names its probe.
 
-[[measured]] The same probe differs by different amounts from one session to the next, beyond its seed: `side35` by 27 pixels in one session and 182 and 185 in two others, `toe45` by 185 and 149. The difference is a pixel's move of a few balls — the elbows, an ankle, the tail's tip — and the leg lines' edges along them. Not yet known what moves them; the expected counts are a usual session's.
+[[measured]] Beyond its seed, a session's picture depends on the eyelids, which a blink may catch half or wholly closed, and on which way up WinG made the screen's bitmap, which `probe.mjs` reads from the variant's WIN.INI (its newest timing of the display: 0 bottom-up, 1 top-down; see [[topic:drawing-a-dog]]). It tries the eyelids at 0, 33, 66 and 100 closed, and reports what it found. Measured so, the probes differ from the oracle's pictures by 0 to 9 pixels.
 
 ## Check a Read out claim
 
