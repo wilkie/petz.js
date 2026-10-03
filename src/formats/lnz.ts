@@ -33,6 +33,14 @@ export interface Breed {
   sections: LnzSections;
   skeletonType: number;
 
+  /**
+   * How much longer the front and hind legs, the body and the face are than
+   * the shared skeleton's, in its units (`[Leg Extension]`, front then hind;
+   * `[Body Extension]`; `[Face Extension]`), as `Ballz::ModifyBallzData`
+   * reshapes every frame. 0 where a breed leaves them out.
+   */
+  extensions: { frontLeg: number; hindLeg: number; body: number; face: number };
+
   /** The balls' names, as the per-ball sections' comments give them: `eBall_head`. */
   ballNames: string[];
 
@@ -172,6 +180,12 @@ export function parseLnz(text: string, balls = 65): Breed {
   return {
     sections,
     skeletonType: numbers('Skeleton Type')[0],
+    extensions: {
+      frontLeg: (sections.has('Leg Extension') ? numbers('Leg Extension')[0] : 0) ?? 0,
+      hindLeg: (sections.has('Leg Extension') ? numbers('Leg Extension')[1] : 0) ?? 0,
+      body: (sections.has('Body Extension') ? numbers('Body Extension')[0] : 0) ?? 0,
+      face: (sections.has('Face Extension') ? numbers('Face Extension')[0] : 0) ?? 0,
+    },
     ballNames: section('Ball Size Diffs').map((line) => /eBall_\w+/.exec(line.comment)?.[0] ?? ''),
     eyes: pair(eyes[0], 'Eyes'),
     irises: pair(eyes[1], 'Eyes'),

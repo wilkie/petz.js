@@ -369,10 +369,16 @@ function drawIris(
   const irisColour = (colours === 256 ? breed.irisColor256 : breed.irisColor16) ?? 3;
   const pupilColour = breed.pupilColor ?? 0;
   const disc = (diameter: number, colour: number) =>
-    fillBall(
-      bitmap,
-      { x, y, diameter, colour, outlineColour: 0, speckleColour: -1, outline: -1, fuzz: 0 }
-    );
+    fillBall(bitmap, {
+      x,
+      y,
+      diameter,
+      colour,
+      outlineColour: 0,
+      speckleColour: -1,
+      outline: -1,
+      fuzz: 0,
+    });
 
   disc(iris.diameter, irisColour);
 

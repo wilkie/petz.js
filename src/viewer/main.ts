@@ -62,6 +62,7 @@ import { parseScripts, readOpcodes, readStateNames, type Script } from '../forma
 import { type BrainFile, parseBrain } from '../formats/brain.ts';
 import { parseTricks } from '../formats/tricks.ts';
 import { drawPet } from '../render/ballz.ts';
+import { extendFrames } from '../render/extend.ts';
 import { type Eyelids } from '../render/project.ts';
 import { drawPicture, mapColours } from '../render/picture.ts';
 import { IndexedBitmap, random } from '../render/raster.ts';
@@ -287,7 +288,9 @@ function drawDog(
     loose.forEach(([picture, at, mirrored]) => draw(picture, at, mirrored));
   }
 
-  drawPet(bitmap, breed, header, allFrames[frameNumber], {
+  const frames = extendFrames(allFrames, breeds.get(breedSelect.value)!);
+
+  drawPet(bitmap, breed, header, frames[frameNumber], {
     colours,
     originX,
     originY,
@@ -306,7 +309,7 @@ function drawDog(
     angles: stage?.angles,
     blend: stage?.blend && {
       scale: stage.blend.scale,
-      reference: allFrames[stage.blend.reference],
+      reference: frames[stage.blend.reference],
     },
     bristle: live?.bristle,
   });

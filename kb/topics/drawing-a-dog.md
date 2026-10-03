@@ -79,9 +79,18 @@ flowchart LR
 
 - [[read out]] Each ball may have a bonus drawing: a function and a sprite set by `Ballz::SetBonusDrawProc` (seg10:24f8). `DisplayBallzFrame` calls it with the ball's centre just after drawing that ball, before its iris, and even for a ball not drawn. The dog holds a ball or treat so, by its chin ([[topic:behaviour]], fetch). Two more procs of the frame, at `0x40c` and `0x414`, are called just before the first ball of the breed's `[Head Balls]` is drawn (seg10:5235) and once all but the last two head balls are drawn (seg10:5334): `DoEating` sets them to draw the food the dog eats under its head, and a bowl's rim over it. The pictures are drawn by `XPicture::XDrawPicture` (seg8:7041), every pixel but those of the colour given, 10, Windows' bright green, copied as it is; their colours are Windows' sixteen, which both of Dogz's palettes hold. `src/render/picture.ts` draws them so.
 
+## A breed's own shape
+
+- [[read out]] Every breed shares the skeleton's frames ([[format:bdt]]), but as `GetRawFramePtr` (seg10:3465) loads an animation it reshapes all its frames for the breed (`Ballz::ModifyBallzData`, seg6:0000, called at seg10:357a) by its extensions, each halved ([[format:lnz]]). The frames' balls are words x, y, z from offset 0xe of each frame's record; all the sums are C's whole numbers, a length the square root rounded down, a division rounded toward 0.
+- [[read out]] `ExtendBody` (seg6:1dee) takes the line from the chest (ball 50) to the butt (49) and moves the hind end the body extension along it, backward for a longer body: the butt, the six tail balls and both hind legs from thigh to toes — but not ball 45, the right hind leg's middle toe, which it leaves out — and the belly half as far.
+- [[read out]] `ExtendLegLength` (seg6:02a1) rebuilds each leg from its foot up: three segments in turn, each the old segment lengthened — the first by a fifth of the extension, the next two by all of it — from where the ball below now is. The hind legs go foot, ankle, knee, thigh (36, 24, 40, 43 and 12, 0, 16, 19). The front legs go wrist, elbow, shoulder (47, 31, 42 and 23, 7, 18) — but from the hind feet, 36 and 12, not the hands, as the engine has it; the hands and fingers stay. The butt and tail then move as far as the thighs' middle did, the chest and the whole head as far as the shoulders' middle, and the belly half of both.
+- [[read out]] `ExtendFace` (seg6:2350) moves the muzzle the face extension along the line from the jaw (53) to the nose (55): the nose, nostrils, chin, jowls and tongue.
+- [[read out]] `PostProcess` (seg6:0087) lowers ball 45 in frames 912 to 980 by the front leg and face extensions together times a factor of the skeleton type: 0.9 for type 1, the bulldog, 1.7 for type 4, the big dog, and 0 for the others (`ds:0662`).
+- So the big dog stands taller and longer with a longer muzzle, the bulldog is short in body and hind leg with a short face, the Scottie long-bodied and short-legged. A breed with a body extension leaves that one toe where it was: a stray ball by the right hind foot. `src/render/extend.ts` reshapes so (`extendFrames`).
+
 ## The head turned
 
-- [[read out]] When the dog looks at something, `GetCartesianCoordinates` (seg10:367a) turns the breed's `[Head Balls]` before placing the dog (seg10:3c94 on). Each head ball's distance from the snout, ball 56, is turned by the head's roll, then its nod, then its turn, by Dogz's 256ths-of-a-turn sines and cosines in 256ths (`ds:3b5e` and `ds:3b62`), each step shifted down 8; and put back at the snout, moved by a drift, plus an offset. `HeadTrackPrep` works out these angles and offsets each frame ([[topic:behaviour]], where the dog looks). `src/render/project.ts` turns the head so.
+- [[read out]] When the dog looks at something, `GetCartesianCoordinates` (seg10:367a) turns the breed's `[Head Balls]` before placing the dog (seg10:3c94 on). Each head ball's distance from the neck, ball 54, is turned by the head's roll, then its nod, then its turn, by Dogz's 256ths-of-a-turn sines and cosines in 256ths (`ds:3b5e` and `ds:3b62`), each step shifted down 8; and put back at the neck, moved by a drift, plus an offset. `HeadTrackPrep` works out these angles and offsets each frame ([[topic:behaviour]], where the dog looks). `src/render/project.ts` turns the head so.
 
 ## The eyes
 
@@ -95,4 +104,4 @@ flowchart LR
 
 ## Still to find
 
-`Puppy Balls` and the extensions; the extras each frame lists; and how fast frames are shown. What the dog does with them is [[format:scp]].
+Where `Puppy Balls`' puppiness comes from; the extras each frame lists; and how fast frames are shown. What the dog does with them is [[format:scp]].

@@ -203,7 +203,12 @@ export function fillBall(bitmap: IndexedBitmap, ball: Ball, fuzz: CircleTables =
       } else {
         bitmap.span(edge, y, thick, ball.outlineColour);
         bitmap.span(edge + thick, y, width - 1 - 2 * thick, ball.colour);
-        bitmap.span(edge + thick + Math.max(0, width - 1 - 2 * thick), y, thick, ball.outlineColour);
+        bitmap.span(
+          edge + thick + Math.max(0, width - 1 - 2 * thick),
+          y,
+          thick,
+          ball.outlineColour
+        );
       }
 
       continue;

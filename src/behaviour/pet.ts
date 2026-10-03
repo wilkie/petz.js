@@ -4401,7 +4401,7 @@ export class Pet {
 
   /**
    * `Ballz::HeadTrackPrep` (seg5:05ba), each frame drawn: tracking, the
-   * head's turn and nod, a roll, a drift of the snout it turns about and
+   * head's turn and nod, a roll, a drift of the neck it turns about and
    * an offset, each a wobble (`Lube::Next`, seg5:0468) — waiting a while,
    * then easing to somewhere in its range — some in proportion to the turn,
    * scaled by `headWobble`; not tracking, the wobbles are put back.

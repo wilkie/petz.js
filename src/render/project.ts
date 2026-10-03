@@ -100,7 +100,7 @@ export interface Placed {
  * The head turned toward what the dog looks at, as `Ballz::HeadTrackPrep`
  * (seg5:05ba) works it out each frame and `GetCartesianCoordinates` applies
  * it to the breed's head balls: turned by `yaw`, `pitch` and `roll` (in
- * 256ths of a turn) about the snout, then moved by `offset`.
+ * 256ths of a turn) about the neck, then moved by `offset`.
  */
 export interface Head {
   yaw: number;
@@ -108,12 +108,15 @@ export interface Head {
   roll: number;
   offset: { x: number; y: number; z: number };
 
-  /** Added to the snout's place before it is taken as the pivot. */
+  /** Added to the neck's place before it is taken as the pivot. */
   drift: { x: number; y: number; z: number };
 }
 
-/** The ball the head turns about: the snout (offset 0x152 of a frame, `HeadTrackPrep`). */
-export const HEAD_PIVOT = 56;
+/**
+ * The ball the head turns about: the neck, ball 54 (offset 0x152 of a frame
+ * as `GetRawFramePtr` holds it, its balls from 0xe; `HeadTrackPrep`).
+ */
+export const HEAD_PIVOT = 54;
 
 /**
  * Places each ball of a frame: scaled by the pet scale; the head turned,
@@ -151,12 +154,12 @@ export function project(
   const pitch = -7 - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
   const [cy, sy, cp, sp] = [cosine(turn), sine(turn), cosine(pitch), sine(pitch)];
   const heads = head ? new Set(breed.headBalls) : null;
-  const snout = frame.balls[HEAD_PIVOT] && at(HEAD_PIVOT);
+  const neck = frame.balls[HEAD_PIVOT] && at(HEAD_PIVOT);
   const pivot = head &&
-    snout && {
-      x: Math.trunc(shift(snout.x * scales.pet) + head.drift.x),
-      y: Math.trunc(shift(snout.y * scales.pet) + head.drift.y),
-      z: Math.trunc(shift(snout.z * scales.pet) + head.drift.z),
+    neck && {
+      x: Math.trunc(shift(neck.x * scales.pet) + head.drift.x),
+      y: Math.trunc(shift(neck.y * scales.pet) + head.drift.y),
+      z: Math.trunc(shift(neck.z * scales.pet) + head.drift.z),
     };
 
   return frame.balls.map((_, index) => {
@@ -165,7 +168,7 @@ export function project(
     let y = shift(ball.y * scales.pet);
     let z = shift(ball.z * scales.pet);
 
-    /* The head turned about the snout (`GetCartesianCoordinates`, seg10:3c94 on): roll, then pitch, then yaw. */
+    /* The head turned about the neck (`GetCartesianCoordinates`, seg10:3c94 on): roll, then pitch, then yaw. */
     if (head && pivot && heads?.has(index)) {
       const [dx, dy, dz] = [x - pivot.x, y - pivot.y, z - pivot.z];
       const [cr, sr, cq, sq, cw, sw] = [

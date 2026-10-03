@@ -27,13 +27,13 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 
 | Section              | Lines    | What                                                                                                                                                |
 | -------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Skeleton Type`      | 1        | 0 to 4, different for each breed; not yet known what it does, since every breed shares the animations                                               |
+| `Skeleton Type`      | 1        | 0 to 4, different for each breed: picks how far one toe is lowered in a few frames ([[topic:drawing-a-dog]], a breed's own shape) |
 | `Eyes`               | 2        | The eye balls, then the iris balls, right then left: 32, 8 and 38, 14 in every breed                                                                |
 | `256 Eyelid Color` … | 1 each   | The eyelids' and irises' colours on the 256- and the 16-colour display; the bulldog and chihuahua give no iris colours                              |
 | `Key Balls`          | 2        | 52 "head" and 50 "chest"                                                                                                                            |
 | `Tongue Balls`       | 2        | 63 and 64                                                                                                                                           |
 | `Default Scales`     | 4        | The adult's pet and ball scales, then the puppy's, in 256ths; the dog's are between by its age ([[topic:drawing-a-dog]])                            |
-| `Leg Extension` …    | 1 or 2   | `Leg`, `Body` and `Face Extension`; not yet known                                                                                                   |
+| `Leg Extension` …    | 1 or 2   | `Leg` (front, then hind), `Body` and `Face Extension`: how much longer than the skeleton's, halved as read ([[topic:drawing-a-dog]], a breed's own shape) |
 | `Head Balls`         | 28       | The balls of the head                                                                                                                               |
 | `Omissions`          | 0        | Balls not drawn; empty in every breed                                                                                                               |
 | `Linez`              | 29 to 34 | "start ball, end ball, fuzz amount": thick lines between balls, such as `snout, head` and the tail's                                                |
@@ -52,4 +52,5 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 - [[measured]] The bulldog has 29 lines where the others have 34.
 - [[read out]] `Ballz::LoadSpecialBallInfo` (DOGZDLL.DLL seg10:1421) reads the per-ball sections into tables of the engine, each with a default for a ball the section does not reach and a limit: `[Puppy Balls]` (-10, then halved), `[Outline Type]` (-1), `[Outline Color]`, `[Fuzz]` (0, up to 8), both `Ball Color` sections, `[Ball Size Diffs]` (halved and added to the skeleton's sizes), `[Speckle Color]` (-1), and the three extensions, halved. It reads `[Eyes]`, the eyelid and iris colours, a `[Pupil Color]` no breed has, and `[Key Balls]` ([[topic:drawing-a-dog]]).
 - [[read out]] `Default Factors` line 11 is "age": `PetModule::SetBallScaleFromAge` asks for factor 10, counting from 0.
-- Not yet known: how the extensions and `Puppy Balls` are applied, and the other behaviour factors.
+- [[read out]] `LoadSpecialBallInfo` reads `[Leg Extension]`, `[Body Extension]` and `[Face Extension]` into `Ballz` +0x1641 to +0x1647, each halved, rounding toward 0, and `[Skeleton Type]` into +0x38 (seg10:1595 to 1a14). `ModifyBallzData` reshapes the frames by them ([[topic:drawing-a-dog]]).
+- Not yet known: the other behaviour factors.

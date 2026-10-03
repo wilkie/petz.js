@@ -107,7 +107,7 @@ describe('a ball’s size', () => {
 });
 
 describe('turning the head', () => {
-  /* Ball 0 is of the head, ball 1 is not; ball 56, the snout, is what it turns about. */
+  /* Ball 0 is of the head, ball 1 is not; ball 54, the neck, is what it turns about. */
   const withHead = { ...breed, headBalls: [0] } as unknown as Breed;
   const balls = frame(
     Array.from({ length: 57 }, (_, n): [number, number, number] => (n < 2 ? [40, 0, 0] : [0, 0, 0]))
@@ -126,12 +126,12 @@ describe('turning the head', () => {
     expect(place(still)).toEqual(place());
   });
 
-  it('turns the head’s balls about the snout, and no others', () => {
+  it('turns the head’s balls about the neck, and no others', () => {
     const turned = place({ ...still, yaw: 64 });
     const [head, body] = place();
 
     expect(turned[1]).toEqual(body);
-    expect(Math.abs(turned[0].x - turned[56].x)).toBeLessThan(Math.abs(head.x - turned[56].x));
+    expect(Math.abs(turned[0].x - turned[54].x)).toBeLessThan(Math.abs(head.x - turned[54].x));
   });
 
   it('moves the head by its offset', () => {

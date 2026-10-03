@@ -21,7 +21,8 @@ import {
 } from '../../src/behaviour/stage.ts';
 import { timeline } from '../../src/behaviour/timeline.ts';
 import { findTransition, transitionTable } from '../../src/behaviour/transitions.ts';
-import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
+import { type Frame, parseAnimation, parseBhd } from '../../src/formats/animation.ts';
+import { extendFrames } from '../../src/render/extend.ts';
 import {
   AREA,
   BALL_PICTURE,
@@ -198,6 +199,41 @@ withOracle('the engine’s behaviour', () => {
         expect(findTransition(table, scripts, standing, start).length).toBeGreaterThan(0);
       }
     }
+  });
+
+  describe('the breeds’ own shapes', () => {
+    const header = parseBhd(read('DATA/ALL_PTZ.BHD'));
+    const frames = header.animations.flatMap((_, n) =>
+      parseAnimation(header, n, read(`DATA/${n}.BDT`))
+    );
+    const breedOf = (name: string) =>
+      parseLnz(new TextDecoder('latin1').decode(read(`DATA/${name}.LNZ`)), header.ballCount);
+    const span = (frame: Frame, a: number, b: number) =>
+      Math.hypot(
+        frame.balls[a].x - frame.balls[b].x,
+        frame.balls[a].y - frame.balls[b].y,
+        frame.balls[a].z - frame.balls[b].z
+      );
+
+    it('leaves a breed without extensions as the skeleton is', () => {
+      expect(extendFrames(frames, breedOf('TERRIER'))).toBe(frames);
+    });
+
+    it('lengthens the big dog’s legs and muzzle, and shortens the bulldog’s body', () => {
+      const plain = frames[35];
+      const big = extendFrames(frames, breedOf('BIGDOG'))[35];
+      const bull = extendFrames(frames, breedOf('BULLDOG'))[35];
+
+      /* Hind knee to thigh, the jaw to the nose, the butt to the chest. */
+      expect(span(big, 40, 43)).toBeGreaterThan(span(plain, 40, 43) + 8);
+      expect(span(big, 53, 55)).toBeGreaterThan(span(plain, 53, 55) + 6);
+      expect(span(bull, 49, 50)).toBeLessThan(span(plain, 49, 50) - 10);
+
+      /* The feet stay on the ground; the right hind leg's middle toe stays behind (ExtendBody's slip). */
+      expect(big.balls[36].y).toBe(plain.balls[36].y);
+      expect(bull.balls[45]).toEqual(plain.balls[45]);
+      expect(bull.balls[44]).not.toEqual(plain.balls[44]);
+    });
   });
 
   describe('a terrier left to itself', () => {

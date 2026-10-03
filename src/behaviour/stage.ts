@@ -13,6 +13,7 @@
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
 import { ballAt } from '../render/ballz.ts';
+import { extendFrames } from '../render/extend.ts';
 import { type Angles, type Head, type Placed, project, scalesForAge } from '../render/project.ts';
 import { type PetWorld } from './pet.ts';
 import { DEFAULT_GLUE, type Step } from './timeline.ts';
@@ -297,7 +298,8 @@ export class Stage implements PetWorld {
     };
     this.original = breed;
     this.header = header;
-    this.frames = frames;
+    /* Reshaped for the breed, as the engine loads them (`ModifyBallzData`). */
+    this.frames = extendFrames(frames, breed);
     this.age = age;
     this.x = width / 2;
     this.y = (height * 5) / 8;
