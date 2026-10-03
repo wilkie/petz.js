@@ -20,12 +20,12 @@ import { exists, log } from './lib.mjs';
 import { exitWindows, withWindows } from './session.mjs';
 import { VARIANTS } from './variant.mjs';
 
-async function main() {
-  const [name, ...args] = process.argv.slice(2);
-  const number = (flag, otherwise) => {
-    const at = args.indexOf(flag);
-    return at === -1 ? otherwise : Number(args[at + 1]);
-  };
+/**
+ * Runs Dogz on the variant `name` and returns the pictures it kept: `count`
+ * of them `every` seconds apart, after `wait` seconds (by default 45, or 150
+ * when WinG has not timed the display).
+ */
+export async function shoot(name, { wait: waitFor, count = 3, every = 6 } = {}) {
   const drive = join(VARIANTS, name ?? '');
 
   if (!name || !(await exists(drive))) {
@@ -39,9 +39,8 @@ async function main() {
   const driver = /^display\.drv=(.*)$/im.exec(systemIni)?.[1].trim().toLowerCase() ?? '';
   const timed = new RegExp(`^${driver.replace('.', '\\.')}`, 'im').test(winIni);
 
-  const wait = number('--wait', timed ? 45 : 150);
-  const count = number('--count', 3);
-  const every = number('--every', 6);
+  const wait = waitFor ?? (timed ? 45 : 150);
+  const pictures = [];
 
   log(`Running Dogz on ${name}, ${count} pictures after ${wait} seconds...`);
 
@@ -52,7 +51,9 @@ async function main() {
       await session.pause(wait);
 
       for (let shot = 0; shot < count; shot++) {
-        log(`  ${await session.screen(`dogz-${shot}`)}`);
+        const picture = await session.screen(`dogz-${shot}`);
+        pictures.push(picture);
+        log(`  ${picture}`);
         await session.pause(every);
       }
 
@@ -62,11 +63,21 @@ async function main() {
     },
     { drive, limit: 40 }
   );
+
+  return pictures;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((error) => {
-    console.error(`shoot: ${error.message}`);
-    process.exitCode = 1;
-  });
+  const [name, ...args] = process.argv.slice(2);
+  const number = (flag) => {
+    const at = args.indexOf(flag);
+    return at === -1 ? undefined : Number(args[at + 1]);
+  };
+
+  shoot(name, { wait: number('--wait'), count: number('--count'), every: number('--every') }).catch(
+    (error) => {
+      console.error(`shoot: ${error.message}`);
+      process.exitCode = 1;
+    }
+  );
 }

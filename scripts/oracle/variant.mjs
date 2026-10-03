@@ -84,8 +84,8 @@ function setSection(text, name, value, only) {
     .join('\r\n');
 }
 
-async function main() {
-  const [name, ...args] = process.argv.slice(2);
+/** Makes the variant `name` from the installation, changed as `args` say (the command line's options). */
+export async function makeVariant(name, args) {
   const option = (flag) => {
     const at = args.indexOf(flag);
     return at === -1 ? null : args[at + 1];
@@ -219,7 +219,8 @@ async function main() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((error) => {
+  const [name, ...args] = process.argv.slice(2);
+  makeVariant(name, args).catch((error) => {
     console.error(`variant: ${error.message}`);
     process.exitCode = 1;
   });

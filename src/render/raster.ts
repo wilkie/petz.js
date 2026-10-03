@@ -166,6 +166,12 @@ export function circleTables(seed = 1): CircleTables {
   }
 
   const result = { fuzz, carry, speckle, outline };
+
+  /* A few kept: a session draws with one seed, a search with each in turn. */
+  if (tables.size >= 4) {
+    tables.delete(tables.keys().next().value!);
+  }
+
   tables.set(seed, result);
   return result;
 }

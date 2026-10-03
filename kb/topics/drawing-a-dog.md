@@ -121,4 +121,6 @@ flowchart LR
 
 ## Still to find
 
+- [[measured]] A held dog's drawing is not quite the same from one oracle session to the next: a few balls — the elbows (7, 31), an ankle (24), the tail's tip (62) — are a pixel apart, so the probes ([[guide:reproducing]]) differ by 27 pixels in one session and 150 to 185 in others. [[refused]] The session's seed, bristling, a turn up to 8 either way, a 256th of a turn's tilt, spin or roll, the age, a blend toward frame 0, and the draw order settled from another start. And in every session the iris is a pixel left of the oracle's: the eased iris offset is not yet as Dogz keeps it.
+
 How fast frames are shown. What the dog does with them is [[format:scp]].

@@ -74,6 +74,19 @@ node scripts/oracle/shoot.mjs held35 --wait 12 --count 8 --every 3
 
 [[measured]] WinG profiles the display the first time a variant runs on a new day: its key in `WIN.INI`'s `[WinG]` section changes with the date (`...-5D42-...` one day, `...-5D43-...` the next), and the profiling covers the screen for minutes. Shoot a fresh variant a second time; the first run has written the key.
 
+## Probe the drawing
+
+```shell
+node scripts/oracle/probe.mjs
+node scripts/oracle/probe.mjs fur35 --reuse
+```
+
+A probe holds the dog still in a variant, takes a picture of the oracle's screen, and measures the reimplementation's drawing against it. The probes are in `scripts/oracle/probes.json`: each is a variant's options, the frame it is held in, and how many pixels differed when it was last measured. For each, `probe.mjs` makes the variant, shoots it, and finds the dog in the picture: the largest patch on the magenta ground that is not a window, the tool panel told by its grey. Where the playpen's edge or a window cuts the dog off, it compares only what shows, and lines the two up by the sides that are whole; a dog cut off both ways, or a screen without the playpen (WinG timing the display), is shot again. Then it searches all 65,536 seeds for the session's (`scripts/oracle/seed-worker.mjs`, a share of them in each thread, half a minute in all), lines the drawing up with the dog, and counts the pixels that differ, colours compared as the VGA shows them, six bits a channel.
+
+It prints each probe's count, the seed it found and the next best seed's count, and fails if a probe differs by more than 12 pixels beyond what was recorded. `--reuse` measures the pictures already taken, `--record` keeps what is measured as expected. Pictures of the oracle's dog, the drawing and where they differ, side by side, are kept in `oracle/build/probes/`, never committed; only the counts are. A claim measured so names its probe.
+
+[[measured]] The same probe differs by different amounts from one session to the next, beyond its seed: `side35` by 27 pixels in one session and 182 and 185 in two others, `toe45` by 185 and 149. The difference is a pixel's move of a few balls — the elbows, an ankle, the tail's tip — and the leg lines' edges along them. Not yet known what moves them; the expected counts are a usual session's.
+
 ## Check a Read out claim
 
 A **Read out** claim gives a file, a segment and an offset: `THINK.DLL` seg2:031a. The files are 16-bit Windows NE executables ([[format:ne]]), and segments are numbered from 1, as Windows numbers them. With the oracle built:
