@@ -12,6 +12,7 @@
 
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
+import { FIDELITY } from './fidelity.ts';
 
 /** The dog's tilt, spin and roll (`BallState` `+0xe`, `+0x10`, `+0x12`), in 256ths of a turn. */
 export interface Angles {
@@ -34,24 +35,25 @@ export interface Eyelids {
 
 /** The angle of a point from the origin, in 256ths of a turn (seg11:1e8a, as `atan2`), by the engine's own 2π, 6.283 (`ds:1d60`). */
 export function angle256(y: number, x: number) {
-  return Math.trunc((Math.atan2(y, x) * 256) / 6.283);
+  return Math.trunc((Math.atan2(y, x) * 256) / (FIDELITY.shortPi ? 6.283 : 2 * Math.PI));
 }
 
 /**
  * The engine's π (`ds:1d50`), short: its tables of sines and cosines are
  * made with it (seg11:1c3e), so a quarter turn falls just short and its sine
  * is 255, not 256 — which, rounded down, puts a point that far out a pixel
- * nearer the middle.
+ * nearer the middle. Its 2π, for turning a direction into an angle, is 6.283
+ * (`ds:1d60`). The true ones when `FIDELITY.shortPi` is off.
  */
-const PI = 3.1415;
+const pi = () => (FIDELITY.shortPi ? 3.1415 : Math.PI);
 
 /** The game's sine and cosine of an angle in 256ths of a turn, times 256, rounded toward 0 (`ds:3b62`, `3b5e`). */
 export function sine(angle: number) {
-  return Math.trunc(Math.sin((angle * PI * 2) / 256) * 256);
+  return Math.trunc(Math.sin((angle * pi() * 2) / 256) * 256);
 }
 
 function cosine(angle: number) {
-  return Math.trunc(Math.cos((angle * PI * 2) / 256) * 256);
+  return Math.trunc(Math.cos((angle * pi() * 2) / 256) * 256);
 }
 
 /** An angle into -128 to 128. */

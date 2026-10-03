@@ -131,6 +131,13 @@
             <option value="16">16</option>
           </select></label
         >
+        <label
+          >Drawn
+          <select id="fidelity">
+            <option value="dogz">as Dogz drew</option>
+            <option value="modern">as meant</option>
+          </select></label
+        >
         <label>Frame <input id="frame" type="range" min="0" value="0" /></label>
         <output id="frame-number" for="frame">0</output>
         <label>Age <input id="age" type="range" min="0" max="100" value="0" /></label>
@@ -178,18 +185,21 @@
       <canvas id="stage" width="640" height="480" aria-label="The dog, drawn"></canvas>
       <p class="note">
         Drawn as Dogz draws, at twice its size: each ball placed, turned and tilted as the game
-        places it, and filled with its fuzz, speckles and outline, in Dogz's own palettes; not yet
-        the lines as the game draws them. Live, the dog is left to itself as Dogz leaves it: it
-        wanders, idles, does the tricks its mood suits and sleeps, choosing as the engine chooses.
-        Hold the button down and stroke it to pet it; click its face, paws or tail and it minds.
-        Take out a treat and hold it up and it begs, and does the tricks its brain chooses; click to
-        put the treat down and it eats it, and its brain learns from it. Put down a bowl of food or
-        water and it eats or drinks; it comes back to them now and then. Take out the ball and it
-        waits for a throw: drag and let go to throw it, and it fetches it back. Take out the spray
-        bottle and click on the dog to spray it: what it was doing it will do less. Take out the
-        shoe and tease the dog with it: it chases, stalks and lunges, and grabs and tugs. Choose a
-        paint colour, take out the brush, and click on the dog to paint it. Double-click to call the
-        dog; pick it up by the scruff with the right button.
+        places it, filled with its fuzz, speckles and outline, and joined by its lines, in Dogz's
+        own palettes, as it matches the game on the oracle's screen to the pixel. Drawn as meant,
+        the engine's accidents are left out: true sines, a top-down bitmap, fuzz not carried from
+        one size of ball to the next, the irises by their own size, the balls sorted afresh, and
+        Windows' own dark colours. Live, the dog is left to itself as Dogz leaves it: it wanders,
+        idles, does the tricks its mood suits and sleeps, choosing as the engine chooses. Hold the
+        button down and stroke it to pet it; click its face, paws or tail and it minds. Take out a
+        treat and hold it up and it begs, and does the tricks its brain chooses; click to put the
+        treat down and it eats it, and its brain learns from it. Put down a bowl of food or water
+        and it eats or drinks; it comes back to them now and then. Take out the ball and it waits
+        for a throw: drag and let go to throw it, and it fetches it back. Take out the spray bottle
+        and click on the dog to spray it: what it was doing it will do less. Take out the shoe and
+        tease the dog with it: it chases, stalks and lunges, and grabs and tugs. Choose a paint
+        colour, take out the brush, and click on the dog to paint it. Double-click to call the dog;
+        pick it up by the scruff with the right button.
       </p>
     </main>
     <script type="module" src="/src/viewer/main.ts"></script>

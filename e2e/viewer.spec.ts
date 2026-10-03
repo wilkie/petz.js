@@ -249,3 +249,20 @@ test('keeps the dog as the page goes, as Dogz keeps it as it closes; a new puppy
   const fresh = await page.evaluate(() => JSON.parse(localStorage.getItem('dogz-reverse.dog')!));
   expect(fresh.colours).toBeUndefined();
 });
+
+test('draws as Dogz drew, or as meant, and remembers which', async ({ page }) => {
+  test.skip(!ORACLE, 'needs the oracle: pnpm oracle');
+  await page.goto('/viewer.html');
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await expect(page.locator('#fidelity')).toHaveValue('dogz');
+  const picture = () => page.evaluate(() => document.querySelector('canvas')!.toDataURL());
+  await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(5000);
+  const asDrawn = await picture();
+
+  await page.selectOption('#fidelity', 'modern');
+  await expect.poll(picture).not.toBe(asDrawn);
+
+  await page.reload();
+  await expect(page.locator('#status')).toHaveText(/5 breeds/);
+  await expect(page.locator('#fidelity')).toHaveValue('modern');
+});

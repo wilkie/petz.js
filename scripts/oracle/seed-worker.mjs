@@ -7,9 +7,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parentPort, workerData } from 'node:worker_threads';
 
+import { setFidelity } from '../../src/render/fidelity.ts';
 import { draw, loadScene, score } from './match.ts';
 
-const { drive, frame, age, bristle, yaw, dx, dy, order, dog, from, to } = workerData;
+const { drive, frame, age, bristle, yaw, dx, dy, order, dog, from, to, fidelity } = workerData;
+setFidelity(fidelity);
 const scene = loadScene(
   (path) => new Uint8Array(readFileSync(join(drive, path))),
   frame,

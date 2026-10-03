@@ -17,7 +17,8 @@ import { parseNe } from '../../src/formats/ne.ts';
 import { PALETTE_256, readPalette, screenPalette } from '../../src/formats/palette.ts';
 import { drawPet } from '../../src/render/ballz.ts';
 import { extendFrames } from '../../src/render/extend.ts';
-import { BITMAP, IndexedBitmap } from '../../src/render/raster.ts';
+import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
+import { IndexedBitmap } from '../../src/render/raster.ts';
 
 export const WIDTH = 640;
 export const HEIGHT = 480;
@@ -259,7 +260,8 @@ export function loadScene(
     header.ballCount
   );
   const palette = screenPalette(
-    readPalette(parseNe(read('WINDOWS/DOGZDLL.DLL')), PALETTE_256, 256)
+    readPalette(parseNe(read('WINDOWS/DOGZDLL.DLL')), PALETTE_256, 256),
+    { driverColours: FIDELITY.driverColours }
   );
   const colours = Int32Array.from(palette, ([r, g, b]) => pack(shown(r), shown(g), shown(b)));
   return {
@@ -301,7 +303,7 @@ export function draw(
   { lids = 0 }: { lids?: number } = {}
 ): Drawing {
   const bitmap = new IndexedBitmap(WIDTH, HEIGHT);
-  BITMAP.bottomUp = scene.bottomUp;
+  setFidelity({ bottomUp: scene.bottomUp });
   drawPet(bitmap, scene.breed, scene.header, scene.frame, {
     colours: 256,
     originX: ORIGIN.x,

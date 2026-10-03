@@ -88,9 +88,12 @@ const DRIVER_DARK: Colour[] = [
  * overwrites entries 164 to 187 with three ramps of eight — black toward
  * white, white toward a pale blue (`ds:1cba` to `1cc6`), and colour 3 toward
  * that blue — which the nose's shine is drawn from; and the static colours
- * are the display's (`DRIVER_DARK`).
+ * are the display's (`DRIVER_DARK`), or Windows' own without `driverColours`.
  */
-export function screenPalette(palette: readonly Colour[]): Colour[] {
+export function screenPalette(
+  palette: readonly Colour[],
+  { driverColours = true }: { driverColours?: boolean } = {}
+): Colour[] {
   const blue: Colour = [170, 204, 255];
   const ramps = [
     ...colorRamp([0, 0, 0], [255, 255, 255], 8, 0.7),
@@ -100,7 +103,7 @@ export function screenPalette(palette: readonly Colour[]): Colour[] {
   return palette.map((colour, n) =>
     n >= SHINE && n < SHINE + ramps.length
       ? ramps[n - SHINE]
-      : n >= 1 && n <= DRIVER_DARK.length
+      : driverColours && n >= 1 && n <= DRIVER_DARK.length
         ? DRIVER_DARK[n - 1]
         : colour
   );

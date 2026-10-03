@@ -65,6 +65,7 @@ import { type BrainFile, parseBrain, writeBrain } from '../formats/brain.ts';
 import { parseTricks, type Trick } from '../formats/tricks.ts';
 import { drawPet } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
+import { DOGZ, FIDELITY, MODERN, setFidelity } from '../render/fidelity.ts';
 import { type Eyelids } from '../render/project.ts';
 import { drawPicture, mapColours } from '../render/picture.ts';
 import { IndexedBitmap, random } from '../render/raster.ts';
@@ -76,6 +77,7 @@ const choose = element<HTMLParagraphElement>('choose');
 const picker = element<HTMLInputElement>('picker');
 const breedSelect = element<HTMLSelectElement>('breed');
 const coloursSelect = element<HTMLSelectElement>('colours');
+const fidelitySelect = element<HTMLSelectElement>('fidelity');
 const ageInput = element<HTMLInputElement>('age');
 const daysOutput = element<HTMLOutputElement>('days');
 const newPuppy = element<HTMLButtonElement>('new-puppy');
@@ -205,6 +207,34 @@ let zoom = 2;
 let header: AnimationHeader;
 const breeds = new Map<string, Breed>();
 const palettes = new Map<256 | 16, Colour[]>();
+
+/** Dogz's own 256 colours, before the screen makes its ramps and shows its static colours. */
+let dogzPalette: Colour[] = [];
+
+const FIDELITY_KEY = 'dogz-reverse.fidelity';
+
+/** Draws as Dogz drew, or as meant (`src/render/fidelity.ts`), and remembers which. */
+function applyFidelity() {
+  setFidelity(fidelitySelect.value === 'modern' ? MODERN : DOGZ);
+
+  if (dogzPalette.length) {
+    palettes.set(256, screenPalette(dogzPalette, { driverColours: FIDELITY.driverColours }));
+  }
+
+  try {
+    localStorage.setItem(FIDELITY_KEY, fidelitySelect.value);
+  } catch {
+    /* Kept only where the browser lets it be. */
+  }
+}
+
+try {
+  fidelitySelect.value = localStorage.getItem(FIDELITY_KEY) === 'modern' ? 'modern' : 'dogz';
+} catch {
+  fidelitySelect.value = 'dogz';
+}
+
+applyFidelity();
 
 /** Every frame of every animation, numbered over them all, as the scripts number them. */
 let allFrames: Frame[] = [];
@@ -1042,6 +1072,11 @@ play.addEventListener('click', () => {
   timer = window.setInterval(advance, 1000 / FRAMES_PER_SECOND);
 });
 
+fidelitySelect.addEventListener('change', () => {
+  applyFidelity();
+  draw();
+});
+
 for (const control of [breedSelect, coloursSelect]) {
   control.addEventListener('change', () => {
     if (live) {
@@ -1073,7 +1108,8 @@ async function start(files: GameFiles) {
   }
 
   const engine = parseNe(await files.read('WINDOWS/DOGZDLL.DLL'));
-  palettes.set(256, screenPalette(readPalette(engine, PALETTE_256, 256)));
+  dogzPalette = readPalette(engine, PALETTE_256, 256);
+  palettes.set(256, screenPalette(dogzPalette, { driverColours: FIDELITY.driverColours }));
   palettes.set(16, readPalette(engine, PALETTE_16, 16));
   showPaintColours();
 

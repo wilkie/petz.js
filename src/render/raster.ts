@@ -14,6 +14,7 @@
  * for a full outline, one speckle in each row of its upper half.
  */
 
+import { FIDELITY } from './fidelity.ts';
 import { sine } from './project.ts';
 
 /** A bitmap of palette indices. `TRANSPARENT` is nothing drawn. */
@@ -177,8 +178,6 @@ export function circleTables(seed = 1): CircleTables {
 }
 
 /** A ball's circle, as the kernel lays it out: its rows, each one's place and width. */
-/** Whether the screen's bitmap is bottom-up: then the kernel walks a ball's rows, and its tables, from the bottom. */
-export const BITMAP = { bottomUp: true };
 
 function circleRows(
   ball: { x: number; y: number; diameter: number },
@@ -190,7 +189,7 @@ function circleRows(
   const x = Math.round(ball.x);
   const top = Math.round(ball.y) - radius;
   const inTable = d >= 1 && d <= LARGEST;
-  const carry = inTable ? fuzz.carry[level][d] : 0;
+  const carry = inTable && FIDELITY.carriedFuzz ? fuzz.carry[level][d] : 0;
   const rows: {
     r: number;
     y: number;
@@ -204,20 +203,20 @@ function circleRows(
   for (let r = 1; r < d; r++) {
     const width = rowWidth(d, r);
     /* The table's row for this one: counted from the top, or from the bottom. */
-    const k = BITMAP.bottomUp ? d - r : r;
+    const k = FIDELITY.bottomUp ? d - r : r;
     const at = (d * (d - 1)) / 2 + k - 1;
     rows.push({
       r,
       /* Both the kernel and XDrawLine find a row as the port's bottom less
        * it, where a bottom-up bitmap's row is that less one: so a ball's rows,
        * counted up from below its square, land a row lower than top-down. */
-      y: top + r - (BITMAP.bottomUp ? 0 : 1),
+      y: top + r - (FIDELITY.bottomUp ? 0 : 1),
       /* The square's left, plus half of D rounded up, less half the width. */
       start: x - Math.floor(width / 2) + (inTable ? fuzz.fuzz[level][at] - carry : 0),
       width,
       spot: inTable ? fuzz.speckle[at] : 0,
       /* A speckle in each row of the upper half, as the kernel counts it either way up. */
-      speckled: BITMAP.bottomUp ? k > Math.trunc(d / 2) : k < Math.trunc(d / 2),
+      speckled: FIDELITY.bottomUp ? k > Math.trunc(d / 2) : k < Math.trunc(d / 2),
       /* The full outlines' rows: the square's left plus half what the row leaves. */
       edge: x - radius + Math.trunc((d - width) / 2) + fuzz.outline[level][(k - 1) & 0xff],
     });
@@ -440,7 +439,7 @@ export function drawLine(
    * less a point is the row above the point's on such a bitmap, so a line
    * lands a row higher than top-down, as a ball lands a row lower. */
   const { width, height } = bitmap;
-  const flip = (y: number) => (BITMAP.bottomUp ? height - y : y);
+  const flip = (y: number) => (FIDELITY.bottomUp ? height - y : y);
   const [ax, ay, bx, by] = [from.x, flip(from.y), to.x, flip(to.y)].map(Math.trunc);
   const [px, py] = [by - ay, ax - bx];
   const length = Math.trunc(Math.sqrt(px * px + py * py));
@@ -527,7 +526,7 @@ export function drawLine(
     for (let n = rows - 1; n >= 0; n--, row++) {
       [left, leftPart] = step(left, leftPart, leftSlope);
       [right, rightPart] = step(right, rightPart, rightSlope);
-      const y = BITMAP.bottomUp ? height - 1 - row : row;
+      const y = FIDELITY.bottomUp ? height - 1 - row : row;
       bitmap.set(left, y, 0);
 
       if (right - left - 1 > 0) {

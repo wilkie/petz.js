@@ -1,5 +1,5 @@
+import { FIDELITY } from '../../src/render/fidelity.ts';
 import {
-  BITMAP,
   drawLine,
   fillBall,
   fillLid,
@@ -283,12 +283,12 @@ describe('a line', () => {
 
   it('on a top-down bitmap, is scanned from the top, the last corner’s row not drawn', () => {
     const bitmap = new IndexedBitmap(16, 12);
-    BITMAP.bottomUp = false;
+    FIDELITY.bottomUp = false;
 
     try {
       drawLine(bitmap, { x: 3, y: 5 }, { x: 12, y: 5 }, 2, 2, 7);
     } finally {
-      BITMAP.bottomUp = true;
+      FIDELITY.bottomUp = true;
     }
 
     expect(rows(bitmap, 2, 8)).toEqual([

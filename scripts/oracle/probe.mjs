@@ -12,6 +12,8 @@
  *   node scripts/oracle/probe.mjs side35 fur35    those
  *   node scripts/oracle/probe.mjs --reuse         the pictures already taken
  *   node scripts/oracle/probe.mjs --record        keep what is measured as expected
+ *   node scripts/oracle/probe.mjs --without shortPi   drawn without one of Dogz's
+ *                                                 quirks (src/render/fidelity.ts), to see what it does
  *
  * Pictures of the oracle, the drawing and where they differ are kept in
  * oracle/build/probes/; only the numbers are kept in probes.json.
@@ -25,6 +27,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 
+import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
 import { BUILD, exists, log } from './lib.mjs';
 import { align, differences, draw, findDog, loadScene, score, settleToPicture } from './match.ts';
 import { shoot } from './shoot.mjs';
@@ -98,7 +101,7 @@ async function picture(probe, reuse) {
   throw new Error(`${probe.name}: no picture with the whole dog in three tries`);
 }
 
-async function run(probe, { reuse }) {
+async function run(probe, { reuse, without }) {
   const drive = join(VARIANTS, probe.name);
 
   if (!reuse || !(await exists(drive))) {
@@ -117,7 +120,9 @@ async function run(probe, { reuse }) {
 
   /* The fur's bristling is the session's, as the seed is: each level tried, with its own seed. */
   for (const bristle of probe.bristle ?? [0, 1, 2, 3]) {
-    const scene = loadScene(read, probe.frame, age, bristle);
+    const loaded = loadScene(read, probe.frame, age, bristle);
+    /* The bitmap's way up is WinG's, unless the probe is drawn without it. */
+    const scene = without.bottomUp === false ? { ...loaded, bottomUp: false } : loaded;
     const placed = align(scene, dog, yaws);
     let seed = 1;
     let seeds = null;
@@ -128,6 +133,7 @@ async function run(probe, { reuse }) {
         frame: probe.frame,
         age,
         bristle,
+        fidelity: { ...FIDELITY, ...without },
         yaw: placed.yaw,
         dx: placed.dx,
         dy: placed.dy,
@@ -172,7 +178,18 @@ async function run(probe, { reuse }) {
 
 async function main() {
   const args = process.argv.slice(2);
-  const names = args.filter((arg) => !arg.startsWith('--'));
+  const without = Object.fromEntries(
+    args.flatMap((arg, at) => (args[at - 1] === '--without' ? [[arg, false]] : []))
+  );
+
+  for (const flag of Object.keys(without)) {
+    if (!(flag in FIDELITY)) {
+      throw new Error(`no quirk ${flag}: ${Object.keys(FIDELITY).join(', ')}`);
+    }
+  }
+
+  setFidelity(without);
+  const names = args.filter((arg, at) => !arg.startsWith('--') && args[at - 1] !== '--without');
   const probes = JSON.parse(await readFile(PROBES, 'utf8'));
   const chosen = names.length ? probes.filter((probe) => names.includes(probe.name)) : probes;
   let failed = 0;
@@ -181,7 +198,7 @@ async function main() {
 
   for (const probe of chosen) {
     log(`${probe.name}: ${probe.about}`);
-    const result = await run(probe, { reuse: args.includes('--reuse') });
+    const result = await run(probe, { reuse: args.includes('--reuse'), without });
     const { wrong } = result.score;
     const seedNote =
       (probe.seed === false
@@ -191,7 +208,7 @@ async function main() {
       (result.lids ? `, eyelids ${result.lids} closed` : '') +
       (result.scene.bottomUp ? '' : ', top-down');
     const verdict =
-      probe.expect === undefined
+      probe.expect === undefined || Object.keys(without).length
         ? 'measured'
         : wrong <= probe.expect.wrong + SLACK
           ? 'ok'
@@ -206,7 +223,7 @@ async function main() {
       failed++;
     }
 
-    if (args.includes('--record')) {
+    if (args.includes('--record') && !Object.keys(without).length) {
       probe.expect = { wrong, pixels: result.pixels };
     }
   }

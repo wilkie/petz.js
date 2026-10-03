@@ -11,6 +11,7 @@
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { SHINE } from '../formats/palette.ts';
 import { type Breed } from '../formats/lnz.ts';
+import { FIDELITY } from './fidelity.ts';
 import {
   type Angles,
   angle256,
@@ -147,12 +148,17 @@ export function drawOrder(breed: Breed, placed: Placed[], before?: number[], ton
   const order = before?.length === placed.length ? [...before] : placed.map((_, index) => index);
   const z = (ball: number) => placed[ball]?.depth ?? 0;
 
-  for (let i = 0; i < order.length; i++) {
-    for (let j = 1; j <= i; j++) {
-      if (z(order[j]) - z(order[j - 1]) > Z_TOLERANCE) {
-        [order[j], order[j - 1]] = [order[j - 1], order[j]];
+  if (FIDELITY.partialSort) {
+    for (let i = 0; i < order.length; i++) {
+      for (let j = 1; j <= i; j++) {
+        if (z(order[j]) - z(order[j - 1]) > Z_TOLERANCE) {
+          [order[j], order[j - 1]] = [order[j - 1], order[j]];
+        }
       }
     }
+  } else {
+    /* Farther first, each frame afresh; balls as far apart in the skeleton's order. */
+    order.sort((a, b) => z(b) - z(a) || a - b);
   }
 
   const swap = (a: number, b: number) => {
@@ -457,8 +463,10 @@ function drawIris(
 ) {
   const eye = placed[eyeBall];
   const iris = placed[irisBall];
+  /* By the eye's radius as the engine has it, or the iris's, as meant. */
   const radius = eye.diameter / 2;
-  const limit = radius - Math.trunc(radius * IRIS_INSET);
+  const limit =
+    radius - Math.trunc((FIDELITY.irisAsDrawn ? radius : iris.diameter / 2) * IRIS_INSET);
   const clamp = (value: number) => Math.max(-limit, Math.min(limit, value));
   const mode = eyes?.mode ?? 0;
   const target =
@@ -481,7 +489,7 @@ function drawIris(
   }
 
   const centre = at(eyeBall);
-  const x = centre.x + offset.x - 1;
+  const x = centre.x + offset.x - (FIDELITY.irisAsDrawn ? 1 : 0);
   const y = centre.y + offset.y;
   const irisColour = (colours === 256 ? breed.irisColor256 : breed.irisColor16) ?? 3;
   const pupilColour = breed.pupilColor ?? 0;
@@ -502,7 +510,9 @@ function drawIris(
       tables
     );
 
-  const size = placed[breed.irises[0]]?.diameter ?? iris.diameter;
+  const size = FIDELITY.irisAsDrawn
+    ? (placed[breed.irises[0]]?.diameter ?? iris.diameter)
+    : iris.diameter;
   disc(size, irisColour);
 
   if (size > 7) {
