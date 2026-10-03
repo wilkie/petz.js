@@ -105,8 +105,8 @@
     "variant": ["--plain", "--hold", "1908"],
     "frame": 1908,
     "expect": {
-      "wrong": 5,
-      "pixels": 3608
+      "wrong": 0,
+      "pixels": 3613
     }
   },
   {
@@ -125,8 +125,8 @@
     "variant": ["--plain", "--hold", "2651"],
     "frame": 2651,
     "expect": {
-      "wrong": 13,
-      "pixels": 3914
+      "wrong": 6,
+      "pixels": 3921
     }
   },
   {
@@ -135,8 +135,8 @@
     "variant": ["--plain", "--hold", "35", "--turn", "-64"],
     "frame": 35,
     "expect": {
-      "wrong": 9,
-      "pixels": 2610
+      "wrong": 7,
+      "pixels": 2612
     }
   },
   {
@@ -147,6 +147,94 @@
     "expect": {
       "wrong": 0,
       "pixels": 3605
+    }
+  },
+  {
+    "name": "bulldog35",
+    "about": "the bulldog held side-on in frame 35, without fuzz or speckles",
+    "variant": ["--breed", "bulldog", "--plain", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 1,
+      "pixels": 4053
+    }
+  },
+  {
+    "name": "bulldogfur35",
+    "about": "the bulldog side-on with its fuzz and speckles",
+    "variant": ["--breed", "bulldog", "--plain", "--keep-fur", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 0,
+      "pixels": 3703
+    }
+  },
+  {
+    "name": "chiua35",
+    "about": "the chihuahua held side-on in frame 35, without fuzz or speckles",
+    "variant": ["--breed", "chiua", "--plain", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 9,
+      "pixels": 3281
+    }
+  },
+  {
+    "name": "chiuafur35",
+    "about": "the chihuahua side-on with its fuzz and speckles",
+    "variant": ["--breed", "chiua", "--plain", "--keep-fur", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 2,
+      "pixels": 3365
+    }
+  },
+  {
+    "name": "scotty35",
+    "about": "the Scottie held side-on in frame 35, without fuzz or speckles",
+    "variant": ["--breed", "scotty", "--plain", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 0,
+      "pixels": 5569
+    }
+  },
+  {
+    "name": "scottyfur35",
+    "about": "the Scottie side-on with its fuzz and speckles",
+    "variant": ["--breed", "scotty", "--plain", "--keep-fur", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 0,
+      "pixels": 5541
+    }
+  },
+  {
+    "name": "terrier35",
+    "about": "the terrier held side-on in frame 35, without fuzz or speckles",
+    "variant": ["--breed", "terrier", "--plain", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 2,
+      "pixels": 5598
+    }
+  },
+  {
+    "name": "terrierfur35",
+    "about": "the terrier side-on with its fuzz and speckles",
+    "variant": ["--breed", "terrier", "--plain", "--keep-fur", "--hold", "35"],
+    "frame": 35,
+    "yaw": 64,
+    "expect": {
+      "wrong": 1,
+      "pixels": 5380
     }
   }
 ]

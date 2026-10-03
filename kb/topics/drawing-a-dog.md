@@ -125,6 +125,6 @@ flowchart LR
 
 ## Still to find
 
-- [[measured]] With the lines scanned as the bitmap is laid out, the bitmap's way up taken from WinG's timing, and the eyelids where the blink, which goes on while the dog is held, caught them, every probe ([[guide:reproducing]]) matches the oracle's picture to within 13 pixels of 2,600 to 5,000: side-on with and without fur exactly; sitting (frame 1131) and asleep on its back (1690) to a pixel; asleep lying (1908) to 5; playing dead (2651), upside down, to 13; turned to face out (`--turn -64`, found at yaw 0) to 9, and turned an eighth (`--turn 32`, yaw 96) exactly.
+- [[measured]] With the lines scanned as the bitmap is laid out, the bitmap's way up taken from WinG's timing, and the eyelids where the blink, which goes on while the dog is held, caught them, every probe ([[guide:reproducing]]) matches the oracle's picture to within 9 pixels of 2,600 to 5,600: the big dog side-on with and without fur, sitting (frame 1131), asleep lying (1908) and on its back (1690) to a pixel; playing dead (2651), upside down, to 6; turned to face out (`--turn -64`, found at yaw 0) to 7, and an eighth (`--turn 32`, yaw 96) exactly; and the other four breeds side-on, with and without their fur (`--breed`): the bulldog, its tail omitted, to a pixel, the Scottie exactly, the terrier to 2, the chihuahua to 9.
 
 How fast frames are shown. What the dog does with them is [[format:scp]].

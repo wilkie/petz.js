@@ -82,6 +82,25 @@ export function findDog(rgb: Rgb, hand: Box | null = HAND): Dog | null {
     ].filter((next) => next >= 0);
   };
 
+  /* The dog's own pixels are joined corner to corner too: a thin line, as a
+   * tail's, may touch the rest of the dog only so. */
+  const around = (index: number) => {
+    const [x, y] = [index % WIDTH, Math.trunc(index / WIDTH)];
+    const near: number[] = [];
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const [nx, ny] = [x + dx, y + dy];
+
+        if ((dx || dy) && nx >= 0 && ny >= 0 && nx < WIDTH && ny < HEIGHT) {
+          near.push(ny * WIDTH + nx);
+        }
+      }
+    }
+
+    return near;
+  };
+
   /* The ground: the largest stretch of magenta, side to side (icons have some too). */
   const seen = new Uint8Array(WIDTH * HEIGHT);
   let ground = { size: 0, left: 0, top: 0, right: -1, bottom: -1 };
@@ -158,7 +177,7 @@ export function findDog(rgb: Rgb, hand: Box | null = HAND): Dog | null {
           Math.max(box.bottom, py),
         ];
 
-        for (const next of neighbours(index)) {
+        for (const next of around(index)) {
           const [nx, ny] = [next % WIDTH, Math.trunc(next / WIDTH)];
 
           if (nx >= left && nx <= right && ny >= top && ny <= bottom && patch[next] === -1) {
@@ -196,14 +215,22 @@ export function findDog(rgb: Rgb, hand: Box | null = HAND): Dog | null {
     }
   }
 
-  /* Cut off by the playpen's edge, or by a window over it beside the dog. */
+  /* Cut off by the playpen's edge, or by a window or the hand beside the
+   * dog or over part of it, reaching past that side of it. */
   const across = (w: Box) => w.top <= box.bottom && w.bottom >= box.top;
   const along = (w: Box) => w.left <= box.right && w.right >= box.left;
   const cut = {
-    left: box.left <= left || hidden.some((w) => across(w) && w.right + 1 === box.left),
-    top: box.top <= top || hidden.some((w) => along(w) && w.bottom + 1 === box.top),
-    right: box.right >= right || hidden.some((w) => across(w) && w.left - 1 === box.right),
-    bottom: box.bottom >= bottom || hidden.some((w) => along(w) && w.top - 1 === box.bottom),
+    left:
+      box.left <= left ||
+      hidden.some((w) => across(w) && w.left < box.left && w.right + 1 >= box.left),
+    top:
+      box.top <= top || hidden.some((w) => along(w) && w.top < box.top && w.bottom + 1 >= box.top),
+    right:
+      box.right >= right ||
+      hidden.some((w) => across(w) && w.right > box.right && w.left - 1 <= box.right),
+    bottom:
+      box.bottom >= bottom ||
+      hidden.some((w) => along(w) && w.bottom > box.bottom && w.top - 1 <= box.bottom),
   };
   return { pixels, box, count: best.size, inside: { left, top, right, bottom }, hidden, cut };
 }

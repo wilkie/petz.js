@@ -57,6 +57,27 @@ describe('matching a drawing against the oracle', () => {
     expect(found.box).toEqual({ left: 342, top: 230, right: 420, bottom: 280 });
   });
 
+  it('keeps with the dog what touches it only corner to corner, as a thin tail may', () => {
+    const tail = { left: 470, top: 299, right: 470, bottom: 299, rgb: BROWN };
+    const found = findDog(
+      screen(
+        dog,
+        { ...tail, left: 470, top: 299 },
+        { ...tail, left: 471, top: 298, right: 471, bottom: 298 }
+      )
+    )!;
+
+    expect(found.box.right).toBe(471);
+    expect(found.count).toBe(70 * 50 + 2);
+  });
+
+  it('knows a dog the hand hides the end of is cut off there', () => {
+    const found = findDog(screen({ ...dog, left: 330, right: 420, top: 230, bottom: 280 }, hand))!;
+
+    expect(found.box.left).toBe(330);
+    expect(found.cut.left).toBe(true);
+  });
+
   it('knows a dog cut off by the playpen’s edge', () => {
     expect(findDog(screen({ ...dog, left: 560, right: 635 }))!.cut).toEqual({
       left: false,
