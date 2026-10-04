@@ -20,12 +20,15 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { type NeModule, parseNe, type Target } from '../../src/formats/ne.ts';
 
 const DRIVE = join(process.cwd(), 'oracle', 'build', 'drive-c');
+
+/** Catz's drive, searched after Dogz's: CATZDLL.DLL is only there. */
+const CATZ_DRIVE = join(process.cwd(), 'oracle', 'build', 'catz-drive-c');
 
 /** Every file on the drive, by its name in upper case. */
 function index(at: string, found = new Map<string, string>()) {
@@ -43,6 +46,10 @@ function index(at: string, found = new Map<string, string>()) {
 }
 
 const FILES = index(DRIVE);
+
+if (existsSync(CATZ_DRIVE)) {
+  index(CATZ_DRIVE, FILES);
+}
 
 /** The file a module name is in: KERNEL is KRNL386.EXE; the rest, NAME.DLL, .EXE or .DRV. */
 function fileFor(module: string) {

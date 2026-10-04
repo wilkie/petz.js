@@ -18,12 +18,15 @@
 
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { BUILD, DRIVE, exists, log, ROOT } from '../oracle/lib.mjs';
 import { toolPaths } from './fetch-tools.mjs';
+import { neForGhidra } from './ne-for-ghidra.mjs';
 
 const PROJECTS = join(BUILD, 'ghidra');
+const INPUT = join(BUILD, 'ghidra-input');
 
 function find(at, name) {
   for (const entry of readdirSync(at)) {
@@ -60,6 +63,13 @@ function headless(args, javaHome, headlessPath) {
   });
 }
 
+/** The module itself, or a copy Ghidra can read (ne-for-ghidra.mjs). */
+async function importable(file, module) {
+  await mkdir(INPUT, { recursive: true });
+  const copy = join(INPUT, module.toUpperCase());
+  return (await neForGhidra(file, copy)) ? copy : file;
+}
+
 async function main() {
   const [module, ...functions] = process.argv.slice(2);
 
@@ -67,7 +77,9 @@ async function main() {
     throw new Error('decompile.mjs <module> <segment:offset | name>...');
   }
 
-  const file = find(DRIVE, module);
+  /* Dogz's drive, then Catz's, where CATZDLL.DLL is. */
+  const catz = join(BUILD, 'catz-drive-c');
+  const file = find(DRIVE, module) ?? ((await exists(catz)) ? find(catz, module) : undefined);
 
   if (!file) {
     throw new Error(`no ${module} on the oracle's drive`);
@@ -84,7 +96,7 @@ async function main() {
 
   const args = imported
     ? [PROJECTS, project, '-process', module, '-noanalysis', '-readOnly']
-    : [PROJECTS, project, '-import', file];
+    : [PROJECTS, project, '-import', await importable(file, module)];
 
   const output = await headless(
     [...args, ...scripts, '-postScript', 'Decompile.java', ...functions],
