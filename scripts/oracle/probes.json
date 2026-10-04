@@ -415,6 +415,10 @@
     "seed": false,
     "bristle": [
       0
-    ]
+    ],
+    "expect": {
+      "wrong": 1079,
+      "pixels": 4445
+    }
   }
 ]
