@@ -530,11 +530,13 @@ export function drawPet(
 
     if (colours === 256 && shiny.includes(ball)) {
       /* The nose and nostrils shine (mode -4, seg10:523d). */
+      /* Catz's ramp by the ball's number: the second for 8 and 32 (seg44:3b83). */
       fillShaded(
         bitmap,
         { ...at(ball), diameter: placed[ball].diameter, fuzz: breed.fuzz[ball] + bristle },
-        SHINE,
-        tables
+        shades && (ball === 8 || ball === 32) ? SHINE + 8 : SHINE,
+        tables,
+        shades ? { translate } : undefined
       );
     } else {
       fillBall(

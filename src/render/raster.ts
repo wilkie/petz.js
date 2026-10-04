@@ -303,10 +303,36 @@ export function fillShaded(
   bitmap: IndexedBitmap,
   ball: Pick<Ball, 'x' | 'y' | 'diameter' | 'fuzz'>,
   ramp: number,
-  fuzz: CircleTables = circleTables()
+  fuzz: CircleTables = circleTables(),
+  catz?: { translate: (colour: number) => number }
 ) {
   const level = Math.max(0, Math.min(7, ball.fuzz));
   const { rows, d } = circleRows(ball, level, fuzz);
+
+  if (catz) {
+    /* Catz's `HackSpecular` (CATZDLL.DLL seg44:38fc): the band from the top
+     * row down, whichever way up the bitmap is (seg44:3b55), by the true
+     * sine; the band's colours translated, the rest the ramp's first, raw. */
+    const walked = rows.length - 1;
+    const shaded = 0.3 * walked > 1 ? Math.trunc(0.3 * walked) : 1;
+    const step = Math.trunc(((-1 / shaded) * 256) / 4) || -5;
+    const top = Math.min(...rows.map((row) => row.y));
+
+    for (const { y, start, width } of rows) {
+      const phase = 0x40 + step * (y - top);
+      const shade = Math.max(
+        0,
+        Math.min(7, Math.trunc(Math.sin((phase * 2 * Math.PI) / 256) * 256) >> 5)
+      );
+
+      if (width > 0) {
+        bitmap.span(start, y, width, phase > 0 ? catz.translate(ramp + shade) : ramp);
+      }
+    }
+
+    return;
+  }
+
   const shaded = Math.max(1, Math.trunc(0.3 * d));
   const step = Math.trunc(((-1 / shaded) * 256) / 4) || -5;
   let phase = 0x40;

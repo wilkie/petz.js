@@ -168,7 +168,15 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 
   `sophisto900` is Sophisto, the Siamese's kitten, held in frame 900. Drawn other than all their kitten file, both match worse, by hundreds of pixels at 90 hundredths: so the Adoption Kit's kittens are drawn from their kitten files alone.
 
-- **Still to find:** the nose. Catz's nose kernel (`HackSpecular`, seg44:38fc) would draw a grey band, as Dogz's does, but the oracle's kittens' noses are black. Also the whiskers' and shades' edges, a pixel off.
+- **The nose** (`HackSpecular`, seg44:38fc) is shaded down a ramp as Dogz's is, with differences:
+  - its band always runs from the top row down, whichever way up the bitmap is;
+  - the sine is the true one;
+  - the band's colours are translated, while the rest is the ramp's first colour, raw;
+  - it is not shaded by depth.
+
+  The oracle's kittens' noses match it, a thin grey band over black.
+
+- **Still to find:** the whiskers. The oracle's are longer at both ends than ours, so their start balls, the jowls, and their end balls are placed farther apart there. Turning the sideways moves the other way only makes it worse. The edges of the depth shades are also a pixel off here and there.
 
 ## Still to find
 
