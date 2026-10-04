@@ -468,9 +468,15 @@ function averageProjections(
  * extensions, enlargements, moves, projections, fuzz, ball size
  * differences and the first two scales are averaged. Catz reads only those
  * two of `[Default Scales]`, pet and ball, and halves the size differences
- * as it reads them, before they are averaged.
+ * as it reads them, before they are averaged. The Move Up list is lost, as
+ * the engine loses it, unless `loseUp` is false.
  */
-export function averageBreed(adult: Breed, young: Breed, percent: number): Breed {
+export function averageBreed(
+  adult: Breed,
+  young: Breed,
+  percent: number,
+  { loseUp = true }: { loseUp?: boolean } = {}
+): Breed {
   const mix = (a: number, b: number) => between(a, b, percent);
   const shape = adult.catz;
   const little = young.catz;
@@ -503,7 +509,11 @@ export function averageBreed(adult: Breed, young: Breed, percent: number): Breed
               extra: mix(shape.feet.extra, little.feet.extra),
             },
             ears: mix(shape.ears, little.ears),
-            up: averageMoves(shape.up, little.up, percent),
+            /* [[measured]] Lost, as the engine loses it: `AverageBallMoveList`
+             * clears the Move Up list's count, `+0x2aa2`, every time it is
+             * called, and it is called for the forward and sideways lists
+             * after (seg39:3245). Kept with `loseUp: false`. */
+            up: loseUp ? [] : averageMoves(shape.up, little.up, percent),
             forward: averageMoves(shape.forward, little.forward, percent),
             sideways: averageMoves(shape.sideways, little.sideways, percent),
             project: averageProjections(shape.project, little.project, percent),

@@ -96,6 +96,7 @@ The harness runs Catz's engine, `CATZDLL.DLL` from the CD-ROM's install, on [win
 - [[measured]] **So far, both agree on every case:**
   - `Mag` (seg48:1a95), on 875 vectors;
   - `XBallz::GenerateZDepthColor` (seg47:5d04), on every colour at every shift from -8 to 8, on 256 colours and on 16, against `catzShade`.
+  - `Linez::LoadLinezFile` and `Linez::Average` (seg39:085c, seg39:2b00), on the Hunter's adult and kitten files and their averages at 0, 40 and 100: in every field `parseLnz` and `averageBreed` read. That was once the averages' Move Up list was made to be lost as the engine loses it ([[format:lnz]]).
 
 ## Play with it
 

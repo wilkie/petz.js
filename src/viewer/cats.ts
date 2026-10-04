@@ -24,6 +24,7 @@ import {
 } from '../formats/palette.ts';
 import { ballAt, drawPet } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
+import { FIDELITY } from '../render/fidelity.ts';
 import { IndexedBitmap } from '../render/raster.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
 import { type CatzPositions, catzTimeline } from '../behaviour/catz-timeline.ts';
@@ -73,7 +74,9 @@ let sequence: { frame: number; x: number; y: number }[] = [];
 /** The breed chosen, averaged toward its kitten's file by the slider. */
 function breed() {
   const { adult, kitten } = files.get(breedSelect.value)!;
-  return averageBreed(adult, kitten, Number(kittenInput.value));
+  return averageBreed(adult, kitten, Number(kittenInput.value), {
+    loseUp: FIDELITY.averageLosesUp,
+  });
 }
 
 function draw() {

@@ -25,6 +25,9 @@ export interface Fidelity {
 
   /** Windows' dark static colours as the oracle's display drivers show them — at 192 on 256 colours, the VGA driver's own on 16 — else as Dogz's palettes have them. */
   driverColours: boolean;
+
+  /** Catz's averaged breeds without their Move Up list, as `AverageBallMoveList` clears it (seg39:3245); else averaged as the others. */
+  averageLosesUp: boolean;
 }
 
 /** As Dogz draws on the oracle. */
@@ -35,6 +38,7 @@ export const DOGZ: Fidelity = {
   irisAsDrawn: true,
   partialSort: true,
   driverColours: true,
+  averageLosesUp: true,
 };
 
 /** As evidently meant. */
@@ -45,6 +49,7 @@ export const MODERN: Fidelity = {
   irisAsDrawn: false,
   partialSort: false,
   driverColours: false,
+  averageLosesUp: false,
 };
 
 /** How the dog is drawn now: Dogz's way unless set otherwise. */
