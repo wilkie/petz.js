@@ -13,6 +13,7 @@
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
 import { FIDELITY } from './fidelity.ts';
+import { skeletonOf } from './skeleton.ts';
 
 /** The dog's tilt, spin and roll (`BallState` `+0xe`, `+0x10`, `+0x12`), in 256ths of a turn. */
 export interface Angles {
@@ -123,8 +124,9 @@ export interface Head {
 }
 
 /**
- * The ball the head turns about: the neck, ball 54 (offset 0x152 of a frame
- * as `GetRawFramePtr` holds it, its balls from 0xe; `HeadTrackPrep`).
+ * The ball the head turns about: Dogz's neck, ball 54 (offset 0x152 of a
+ * frame as `GetRawFramePtr` holds it, its balls from 0xe; `HeadTrackPrep`);
+ * a Catz creature's, as it names it (`skeletonOf`).
  */
 export const HEAD_PIVOT = 54;
 
@@ -165,7 +167,8 @@ export function project(
   const pitch = -7 - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
   const [cy, sy, cp, sp] = [cosine(turn), sine(turn), cosine(pitch), sine(pitch)];
   const heads = head ? new Set(breed.headBalls) : null;
-  const neck = frame.balls[HEAD_PIVOT] && at(HEAD_PIVOT);
+  const pivotBall = skeletonOf(breed).neck;
+  const neck = pivotBall >= 0 && frame.balls[pivotBall] && at(pivotBall);
   const pivot = head &&
     neck && {
       x: Math.trunc(shift(neck.x * scales.pet) + head.drift.x),

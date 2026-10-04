@@ -106,7 +106,13 @@ export function parseLnzSections(text: string): LnzSections {
 
     if (heading) {
       current = [];
-      sections.set(heading[1], current);
+
+      /* The engine finds a section from the top of the file, so a section
+       * given twice — Catz's cats give three twice — is its first. */
+      if (!sections.has(heading[1])) {
+        sections.set(heading[1], current);
+      }
+
       continue;
     }
 
@@ -122,7 +128,10 @@ export function parseLnzSections(text: string): LnzSections {
     if (run) {
       current.push({
         values: run[0].split(',').map((token) => value(token.trim())),
-        comment: line.slice(run[0].length).replace(/^\s*,?/, '').trim(),
+        comment: line
+          .slice(run[0].length)
+          .replace(/^\s*,?/, '')
+          .trim(),
       });
       continue;
     }

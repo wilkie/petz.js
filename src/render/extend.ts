@@ -9,6 +9,7 @@
 
 import { type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
+import { skeletonOf } from './skeleton.ts';
 
 type Point = { x: number; y: number; z: number };
 
@@ -157,7 +158,8 @@ const reshaped = new WeakMap<Breed, WeakMap<readonly Frame[], Frame[]>>();
 export function extendFrames(frames: readonly Frame[], breed: Breed): Frame[] {
   const { frontLeg, hindLeg, body, face } = breed.extensions;
 
-  if (!frontLeg && !hindLeg && !body && !face) {
+  /* Only Dogz's skeleton is reshaped so; a Catz creature's own sections are not yet read. */
+  if (!skeletonOf(breed).dogzShaped || (!frontLeg && !hindLeg && !body && !face)) {
     return frames as Frame[];
   }
 

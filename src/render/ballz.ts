@@ -12,6 +12,7 @@ import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { SHINE } from '../formats/palette.ts';
 import { type Breed } from '../formats/lnz.ts';
 import { FIDELITY } from './fidelity.ts';
+import { type Skeleton, skeletonOf } from './skeleton.ts';
 import {
   type Angles,
   angle256,
@@ -133,8 +134,9 @@ const RAMPS = { 256: { first: 16, length: 6 }, 16: { first: 0, length: 1 } } as 
 /** How much nearer a ball must be than the one before it to be drawn after it (`ZOrder`'s tolerance, seg10:4dee). */
 const Z_TOLERANCE = 4;
 
-/** The jaw, chin and tongue, in the order they are drawn with the tongue out (`ds:1d16`). */
-const MOUTH = [53, 51, 63, 64];
+/** The jaw, chin and tongue, in the order they are drawn with the tongue out (`ds:1d16`): Dogz's 53, 51, 63 and 64. */
+const mouthOf = (skeleton: Skeleton) =>
+  [skeleton.jaw, skeleton.chin, ...skeleton.tongue].filter((ball) => ball >= 0);
 
 /**
  * The order the balls are drawn in, as `Ballz::ZOrder` (seg10:48ad) keeps
@@ -165,7 +167,8 @@ export function drawOrder(breed: Breed, placed: Placed[], before?: number[], ton
     const [at, bt] = [order.indexOf(a), order.indexOf(b)];
     [order[at], order[bt]] = [b, a];
   };
-  const head = breed.keyBalls[0];
+  const skeleton = skeletonOf(breed);
+  const head = skeleton.head;
 
   /* The left eye (`+0x365`), then the right (`+0x363`). */
   for (const eye of [breed.eyes[1], breed.eyes[0]]) {
@@ -174,11 +177,13 @@ export function drawOrder(breed: Breed, placed: Placed[], before?: number[], ton
     }
   }
 
+  const mouth = mouthOf(skeleton);
+
   if (tongueOut) {
-    for (let i = 0; i < MOUTH.length; i++) {
+    for (let i = 0; i < mouth.length; i++) {
       for (let j = 0; j < i; j++) {
-        if (order.indexOf(MOUTH[j + 1]) < order.indexOf(MOUTH[j])) {
-          swap(MOUTH[j], MOUTH[j + 1]);
+        if (order.indexOf(mouth[j + 1]) < order.indexOf(mouth[j])) {
+          swap(mouth[j], mouth[j + 1]);
         }
       }
     }
@@ -205,9 +210,10 @@ export const HOLDING_TOE = 45;
  * holding toe — is not drawn, but its lines are.
  */
 export function marks(breed: Breed, placed: Placed[], order: number[], tongueOut = true): Mark[] {
-  const omitted = new Set([...breed.omissions, HOLDING_TOE]);
+  const skeleton = skeletonOf(breed);
+  const omitted = new Set([...breed.omissions, skeleton.holdingToe]);
   const irises = new Set(breed.irises);
-  const tongue = new Set(breed.tongueBalls);
+  const tongue = new Set(skeleton.tongue.filter((ball) => ball >= 0));
   const lines = new Map<number, number[]>();
 
   breed.lines.forEach((line, n) => {
@@ -333,6 +339,7 @@ export function drawPet(
     order.splice(0, order.length, ...ballOrder);
   }
 
+  const shiny = shinyOf(skeletonOf(breed));
   const list = marks(breed, placed, ballOrder, tongueOut);
   const headCount = list.filter(
     (mark) => mark.kind === 'ball' && breed.headBalls.includes(mark.ball)
@@ -377,7 +384,7 @@ export function drawPet(
     /* The eyes widened, looking at the user (`XInsetRect` by -n, seg10:51aa). */
     const widened = breed.eyes.includes(ball) ? 2 * eyesWide : 0;
 
-    if (colours === 256 && SHINY.includes(ball)) {
+    if (colours === 256 && shiny.includes(ball)) {
       /* The nose and nostrils shine (mode -4, seg10:523d). */
       fillShaded(
         bitmap,
@@ -521,15 +528,14 @@ function drawIris(
   }
 }
 
-/** The nose, which the eyelids slant by: ball 55 (`+0x676` of the placed balls). */
-const NOSE = 55;
-
 /**
  * The balls drawn shining, shaded down the screen's first shine ramp: the
- * left nostril, the right and the nose (`DisplayBallzFrame`, seg10:523d).
- * On a 16-colour display there is no ramp; they are drawn as any other.
+ * left nostril, the right and the nose (`DisplayBallzFrame`, seg10:523d;
+ * Dogz's 17, 41 and 55). On a 16-colour display there is no ramp; they are
+ * drawn as any other.
  */
-const SHINY = [17, 41, 55];
+const shinyOf = (skeleton: Skeleton) =>
+  [...skeleton.nostrils, skeleton.nose].filter((ball) => ball >= 0);
 
 /** Eyelids as the dog starts: each 100 high and level. */
 const LEVEL_LIDS: Eyelids = { left: { height: 100, tilt: 0 }, right: { height: 100, tilt: 0 } };
@@ -554,7 +560,8 @@ function drawLid(
   eyelids: Eyelids = LEVEL_LIDS
 ) {
   const [right, left] = breed.eyes.map((ball) => placed[ball]);
-  const nose = placed[NOSE];
+  /* The nose, which the eyelids slant by: Dogz's ball 55 (`+0x676` of the placed balls). */
+  const nose = placed[skeletonOf(breed).nose];
 
   if (!right || !left || !nose) {
     return;

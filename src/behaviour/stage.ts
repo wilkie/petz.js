@@ -15,6 +15,7 @@ import { type Breed } from '../formats/lnz.ts';
 import { ballAt } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
 import { type Angles, type Head, type Placed, project, scalesForAge } from '../render/project.ts';
+import { skeletonOf } from '../render/skeleton.ts';
 import { type PetWorld } from './pet.ts';
 import { DEFAULT_GLUE, type Step } from './timeline.ts';
 
@@ -736,7 +737,7 @@ export class Stage implements PetWorld {
    * sixteenth of a turn on the frame it is showing.
    */
   aim(target: { x: number; y: number }) {
-    const head = this.breed.keyBalls[0];
+    const head = skeletonOf(this.breed).head;
     const at = this.where();
     const want = Math.atan2(target.y - at.y, target.x - at.x);
     let best = 0;

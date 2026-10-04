@@ -11,8 +11,11 @@
 
 import { type NeModule } from './ne.ts';
 
-/** The resource type, `0x7f01` with its high bit set. */
+/** The resource type, `0x7f01` with its high bit set: DOGZDLL.DLL's palettes'. */
 const TYPE = 32513;
+
+/** CATZDLL.DLL's palettes' type, `0x7f03`: its `0x7f01` holds other things. */
+export const CATZ_PALETTE_TYPE = 32515;
 
 /** On a display of more than 4 bits a pixel. */
 export const PALETTE_256 = 10256;
@@ -23,8 +26,13 @@ export const PALETTE_16 = 10016;
 export type Colour = [number, number, number];
 
 /** A palette resource of `DOGZDLL.DLL`, as its first `count` colours. */
-export function readPalette(module: NeModule, id: number, count: number): Colour[] {
-  const resource = module.resources().find((each) => each.type === TYPE && each.id === id);
+export function readPalette(
+  module: NeModule,
+  id: number,
+  count: number,
+  type: number = TYPE
+): Colour[] {
+  const resource = module.resources().find((each) => each.type === type && each.id === id);
 
   if (!resource) {
     throw new Error(`${module.name} has no palette ${id}`);
