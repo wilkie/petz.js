@@ -63,6 +63,8 @@ These install Catz from its CD-ROM, which `fetch.mjs` also fetches from archive.
 - [[measured]] **What the CD adds:** all 275 of the cat's animations (9,246 frames), where the demo has the first 98; nine more Clowns (`W1ACLOWN.LNZ` to `W9ACLOWN.LNZ`, each with its kitten's); and a slightly different build of `CATZDLL.DLL` with the same 64 opcodes. The scripts, the cat's skeleton and the five breeds are the demo's, byte for byte.
 - [[measured]] **What it does not:** it is the same Adoption Kit, its `KITTENZ.INI` allowing two visits of 15 minutes. The CD also holds demos of Dogz and Oddballz.
 - `/cats.html` reads it where it is installed, else the demo.
+- **Registered,** the CD-ROM's Catz asks first for the 12-digit serial number from its CD's folder. It then opens on the full product, with no visits counted, and even the Adoption Kit's kitten goes out over the whole desktop.
+- **Adopting:** `scripts/oracle/adopt-catz.mjs` adopts a kitten in the registered copy, as its owner would, through Options, "Choose Another Kitten...", the Adoption Kit's "Adopt me Now", a breed and a name. It does so on a copy of its own, `oracle/build/variants/catz-adopted`. [[measured]] So adopted, the kitten lives in "<name>'s Playpen", the whole screen, and goes where it likes in it; Catz saves it as `CATZ.DOG\CATZ0.CAT`.
 
 ```shell
 node scripts/oracle/variant.mjs cathold300 --game catz --hold 300
