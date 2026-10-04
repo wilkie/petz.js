@@ -195,10 +195,21 @@ function catzColours(palette: readonly Colour[]): Colour[] {
  */
 export function catzIdealPalette(
   palette: readonly Colour[],
-  { driverColours = true }: { driverColours?: boolean } = {}
+  {
+    driverColours = true,
+    system,
+  }: {
+    driverColours?: boolean;
+    /** The system palette's own entries, where they are known: its 0 to 15 and 246 to 255 are taken. */
+    system?: readonly Colour[];
+  } = {}
 ): Colour[] {
   const own = catzColours(palette);
   return own.map((colour, n): Colour => {
+    if (system && (n < 16 || n >= 246)) {
+      return [...system[n]] as Colour;
+    }
+
     if (n < 10) {
       return driverColours && n >= 1 && n <= DRIVER_DARK.length
         ? DRIVER_DARK[n - 1]
@@ -224,8 +235,11 @@ export function catzIdealPalette(
  * sum of squares, the first of equals. Neighbouring shades of a ramp may
  * come out the same.
  */
-export function catzTranslation(palette: readonly Colour[]): (colour: number) => number {
-  const screen = catzIdealPalette(palette, { driverColours: false });
+export function catzTranslation(
+  palette: readonly Colour[],
+  system?: readonly Colour[]
+): (colour: number) => number {
+  const screen = catzIdealPalette(palette, { driverColours: false, system });
   const own = catzColours(palette);
   const table = new Uint8Array(4096);
 

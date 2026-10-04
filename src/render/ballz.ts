@@ -463,9 +463,10 @@ export function drawPet(
 
     if (mark.kind === 'line' && breed.catz) {
       /* Each end its ball's radius × the line's thickness / 100, at least 1;
-       * its colour its own, or its start's or end's ball's; its edges the
-       * same, or its left's -- the right's never, as the engine reads the
-       * left's for both (`PrepareDrawLine` seg47:7008, `XDrawLine` seg44:70e0). */
+       * its colour its own, or its start's or end's ball's; its left edge
+       * the same or its left colour, its right edge the same or, where it
+       * has a right colour, its left colour again (`PrepareDrawLine`
+       * seg47:7008, `XDrawLine` seg44:70e0). */
       const line = breed.lines[mark.line];
       const [start, end] = line.thickness ?? [90, 90];
       const width = (ball: number, thickness: number) =>
@@ -486,7 +487,12 @@ export function drawPet(
         width(mark.from, start),
         width(mark.to, end),
         translate(colour),
-        { edges: translate(left >= 0 ? left : colour) }
+        /* The right edge the left's colour where the line gives one of its
+         * own, the line's otherwise: XDrawLine reads the left's for it (seg44:70e0). */
+        {
+          left: translate(left >= 0 ? left : colour),
+          right: translate((line.rightColour ?? -1) >= 0 && left >= 0 ? left : colour),
+        }
       );
       continue;
     }

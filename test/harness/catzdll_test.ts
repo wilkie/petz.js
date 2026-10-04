@@ -14,7 +14,16 @@ import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { averageBreed, type Breed, parseLnz } from '../../src/formats/lnz.ts';
+import { parseNe } from '../../src/formats/ne.ts';
+import {
+  CATZ_PALETTE_TYPE,
+  type Colour,
+  catzTranslation,
+  PALETTE_256,
+  readPalette,
+} from '../../src/formats/palette.ts';
 import { catzShade } from '../../src/render/ballz.ts';
+import { drawLine, IndexedBitmap } from '../../src/render/raster.ts';
 
 const ROOT = process.cwd();
 const WINBOX = join(ROOT, '..', 'winbox.js', 'test', 'win16', 'run-probe.ts');
@@ -34,7 +43,12 @@ const ready = [WINBOX, join(HARNESS, 'CATZMAG.EXE'), join(SYSTEM, 'CATZDLL.DLL')
 const describeHarness = ready ? describe : describe.skip;
 
 /** Runs a driver in winbox.js beside CATZDLL.DLL, SOSLIB03.DLL and any of the cat's files; its output's lines. */
-async function run(program: string, output: string, files: string[] = []) {
+async function run(
+  program: string,
+  output: string,
+  files: string[] = [],
+  { display = 'vga' }: { display?: string } = {}
+) {
   const stage = join(HARNESS, `stage-${program}`);
   mkdirSync(stage, { recursive: true });
   cpSync(join(HARNESS, `${program}.EXE`), join(stage, `${program}.EXE`));
@@ -48,7 +62,8 @@ async function run(program: string, output: string, files: string[] = []) {
   }
 
   const { runProbe } = await import(WINBOX);
-  const result = await runProbe(program.toLowerCase(), 20000, false, false, 60, {
+  const result = await runProbe(program.toLowerCase(), 40000, false, false, 120, {
+    display,
     program: { directory: stage, file: `${program}.EXE`, folder: program },
   });
 
@@ -165,4 +180,75 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
 
     expect(differences).toEqual([]);
   }, 300000);
+
+  it('translates colours, and draws lines, as XDrawPort does on 256 colours', async () => {
+    const lines = await run('CATZLINE', 'CATZLINE.OUT', [], { display: 'vga256' });
+    const system: Colour[] = [];
+    const theirs: number[] = [];
+
+    for (const line of lines) {
+      const [kind, ...values] = line.split(' ');
+
+      if (kind === 'system') {
+        system[Number(values[0])] = values.slice(1).map(Number) as Colour;
+      } else if (kind === 'translate') {
+        theirs[Number(values[0])] = Number(values[1]);
+      }
+    }
+
+    /* The translation, from the palette of the system it ran on. */
+    const engine = parseNe(new Uint8Array(readFileSync(join(SYSTEM, 'CATZDLL.DLL'))));
+    const translate = catzTranslation(
+      readPalette(engine, PALETTE_256, 256, CATZ_PALETTE_TYPE),
+      system
+    );
+    const translated = Array.from({ length: 256 }, (_, n) => translate(n));
+
+    expect(translated).toEqual(theirs);
+
+    /* Each line, on a 640-square bottom-up port, in the engine's own colours. */
+    const wrong: string[] = [];
+    let at = 0;
+
+    for (let n = 0; n < lines.length; n++) {
+      const line = /^line (.*)$/.exec(lines[n]);
+
+      if (!line) {
+        continue;
+      }
+
+      const [x1, y1, x2, y2, wS, wE, colour, edge] = line[1].split(' ').map(Number);
+      const [top, left, width, height] = lines[n + 1].split(' ').slice(1).map(Number);
+      const rows = lines.slice(n + 2, n + 2 + height);
+      const bitmap = new IndexedBitmap(640, 640);
+
+      /* The driver gives no right colour: the right edge is the line's own. */
+      drawLine(bitmap, { x: x1, y: y1 }, { x: x2, y: y2 }, wS, wE, theirs[colour], {
+        left: theirs[edge >= 0 ? edge : colour],
+        right: theirs[colour],
+      });
+
+      let differ = 0;
+
+      rows.forEach((row, r) => {
+        for (let x = 0; x < width; x++) {
+          const pixel = bitmap.get(left + x, top + r);
+          const ours = pixel === IndexedBitmap.TRANSPARENT ? 0xfe : pixel;
+
+          if (parseInt(row.slice(2 * x, 2 * x + 2), 16) !== ours) {
+            differ++;
+          }
+        }
+      });
+
+      if (differ) {
+        wrong.push(`line ${at}: ${line[1]}: ${differ} pixels`);
+      }
+
+      at++;
+    }
+
+    expect(at).toBe(100);
+    expect(wrong).toEqual([]);
+  }, 600000);
 });

@@ -130,7 +130,7 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 
 - **Lines.** A line's end is its ball's radius × the line's own thickness / 100, at least 1 (`XBallz::PrepareDrawLine`, seg47:7008), where Dogz uses 256/300 of the radius and skips a line with an end of 0.
   - **Colour:** the line's own, or the start ball's (-1) or the end ball's (less than -1).
-  - **Edges:** its left colour, or else the line's own. They are never black, as Dogz's are, unless the breed says so. The right colour is never used: `XDrawLine` reads the left's for both (seg44:70e0).
+  - **Edges:** the left edge is its left colour, or else the line's own. The right edge is the left colour again where the line gives a right colour, and the line's own where it does not: `XDrawLine` tests the right colour but reads the left's (seg44:70e0). They are never black, as Dogz's are, unless the breed says so. [[measured]] The harness holds `drawLine` to `XDrawLine` on 100 random lines, every pixel ([[guide:reproducing]]).
   - **Rasterizing** is Dogz's but for two things. A row with nothing between its edges is not drawn at all. And two corners alike are made one, the shape walked as three corners (seg44:7387), which is what makes an ear: a line from a big ball to a tip of size 1.
 - **Whiskers.** Each is drawn just after its start ball, one pixel a column from that ball's centre toward its end ball, which is never drawn (`XDrawWhiskerLine`, seg44:6d3d).
   - **Its path:** a row further every `k + 1` columns, `k` the columns a row its slope makes, rounded toward 0; so it is never steeper than a diagonal.

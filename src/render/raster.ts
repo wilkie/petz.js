@@ -488,7 +488,7 @@ export function speckleColour(colour: number, speckle: number, first: number, le
  * it was heading for is reached. The last corner's row is not drawn.
  *
  * Catz's (`catz`, CATZDLL.DLL seg44:704e) differs in three things: a row's
- * edges are in `edges`' colour, not black, and a row with nothing between
+ * edges are in colours of the line's own, `left` and `right`, not black, and a row with nothing between
  * them is not drawn at all; and two corners alike -- a line's 1-wide end,
  * an ear's tip -- are taken for one, the shape walked as three corners
  * (seg44:7387), its neighbours by their own numbers, so that where it is
@@ -501,7 +501,7 @@ export function drawLine(
   fromWidth: number,
   toWidth: number,
   colour: number,
-  catz?: { edges: number }
+  catz?: { left: number; right: number }
 ) {
   /* On a bottom-up bitmap the points are turned upside down first, from the
    * port's bottom (seg8:505e), and the quad is scanned in memory's order,
@@ -609,7 +609,7 @@ export function drawLine(
     return [at, part];
   };
 
-  const edge = catz ? catz.edges : 0;
+  const [leftEdge, rightEdge] = catz ? [catz.left, catz.right] : [0, 0];
 
   for (let segment = 0; segment < count - 1; segment++) {
     for (let n = rows - 1; n >= 0; n--, row++) {
@@ -619,16 +619,16 @@ export function drawLine(
 
       /* Dogz writes the left edge whatever; Catz only a row with an inside. */
       if (!catz) {
-        bitmap.set(left, y, edge);
+        bitmap.set(left, y, leftEdge);
       }
 
       if (right - left - 1 > 0) {
         if (catz) {
-          bitmap.set(left, y, edge);
+          bitmap.set(left, y, leftEdge);
         }
 
         bitmap.span(left + 1, y, right - left - 1, colour);
-        bitmap.set(right, y, edge);
+        bitmap.set(right, y, rightEdge);
       }
     }
 

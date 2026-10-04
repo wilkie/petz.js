@@ -315,7 +315,7 @@ describe('a line', () => {
 
   it('in Catz, has edges in a colour of its own', () => {
     const bitmap = new IndexedBitmap(16, 12);
-    drawLine(bitmap, { x: 3, y: 5 }, { x: 12, y: 5 }, 2, 2, 7, { edges: 5 });
+    drawLine(bitmap, { x: 3, y: 5 }, { x: 12, y: 5 }, 2, 2, 7, { left: 5, right: 5 });
 
     expect(rows(bitmap, 3, 5)).toEqual(['...5777777775...', '...5777777775...']);
   });
