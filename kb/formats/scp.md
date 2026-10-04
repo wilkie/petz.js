@@ -64,4 +64,36 @@ The Catz demo has a script file a creature, `CAT.SCP`, `MOUSE.SCP` and the rest,
 - [[read out]] Opcodes run from 30000 to 30063, not from `0x8ad0`. CATZDLL.DLL names them in a table, 44 bytes an opcode from `0x524` in its data segment: how many operands it takes, a letter for each, and its name (`ScriptSprite::PushScriptElements`, seg40:6069, indexes it). Its names end with their operands' count: 30000 `startPos` begins a variant and 30063 `endPos` ends it; 30031 `sequence2 s s` shows frames s to s, as Dogz's `0x8ad4` does; 30028 `rand2 # #` is a random operand, as `0x8b05` is; 30025 `playAction2 a #` plays a script, numbered by its record; and on, through `cueCode1`, `lookAtUser0`, `soundPlay1` to `soundPlay5`, `setFudgerTarget2`, `startLoop1` and `endLoop0`. The letters say what an operand is: `#` a number, `a` an action (a script), `b` a ball, `c` a cue, `d` a sound, `f` a fudger, `o` a sprite, `s` a frame. Two of the entries disagree with themselves: `setFudgeAimDefaults5` counts five operands but has six letters, and `targetSprite4` counts three. The engine goes by the count.
 - [[measured]] Read so, all five creatures' files parse exactly and are written back byte for byte (`test/oracle/catz_files_test.ts`). The cat has 805 scripts, 658 of them with one variant and one with 25. `playAction2` is the commonest opcode (1,475 times), then `sequence2` (914); 1,098 operands are random. Every action played is one of the file's scripts.
 
-`src/formats/script.ts` reads either game's (`SCRIPTS.dogz`, `SCRIPTS.catz`; `readCatzOpcodes`). Not yet known: how Catz plays them — its actions, layered actions and tweens.
+`src/formats/script.ts` reads either game's (`SCRIPTS.dogz`, `SCRIPTS.catz`; `readCatzOpcodes`).
+
+### How Catz plays them
+
+All [[read out]] from CATZDLL.DLL, `ScriptSprite` in segments 40 and 41:
+
+- **The preamble.** The first word, 123 for the cat, is the number of positions. The second, 66, is the neutral position, where a cat starts and where layered actions go from and to. The third, 0, means any position: an action from or to it leaves the cat's position as it is.
+- **Playing an action** (a script, by its record; `PushStoredAction`, seg40:57bb) works as follows:
+  1. The engine plays the transitions from where the cat is to the action's from-position. Each transition is itself an action, and a chain of up to five is found from a table of the records whose flag is 1 (`BuildTransition`, seg40:3a75).
+  2. It picks a variant at random, from a table of 150 numbers the engine fills from C's `rand`.
+  3. It queues the variant between `actionStart1` and `alignScripts0 actionDone0`.
+- **The record's first unknown word**, 67 or 68 for the cat, is whether the action may be interrupted once begun. It is also the ball to glue by on a hard reset; 67, the ball count, means the default.
+- **Expanded as queued** (`PushScript`, seg40:5ece): `sequence2 a b` (inclusive, counting down where b < a), `sequenceToEnd1` and `sequenceToStart1`. Their `rand2`s are drawn once, from the table. Everything else is queued as it is, and its `rand2`s are drawn with `rand` each time they are reached.
+- **One frame a tick** (`PopScript`, seg41:0052): opcodes run until a frame. What follows a script's last frame runs the next tick, as in Dogz.
+  - `alignScripts0` makes the next frame a reference, not shown. The frame after it is placed by it: the default glue ball is kept where it was, and the cat is turned by any difference over six 256ths in an axis of the frames. Each action's first frame is the last one's last.
+  - `playAction2 a n` plays action a n times, each with its own transition and a random variant, as a subroutine on a stack of its own (at most six deep). n = 0 plays nothing.
+  - `startLoop1 n` … `endLoop0` repeats n times, 999 for ever. n = 0 skips to the first `endLoop0` or `endLoopAlign0`.
+  - `cueCode1 c` raises cue c for that tick only.
+  - `soundPlay1`–`5` play one of their sounds at random.
+- **Fudgers.** `setFudgerTarget2 f t`, `setFudgerRate2`, `setFudgerDrift2` and `resetFudger1` steer the cat's 14 fudgers:
+  - 0 rotation, 1 roll, 2 tilt;
+  - 3 head rotation, 4 head tilt, 5 head cock;
+  - 6 and 7 the eyelids' heights, 8 and 9 their tilts;
+  - 10 and 11 where the eyes look;
+  - 12 and 13 the cat moved across and up.
+
+  14 means both eyelid heights, 15 both tilts, 16 all.
+
+- **Looking.** `lookAtUser0`, `lookFoward0`, `lookAtRandomPt0` and `lookAtSprite1 o` aim the head and eyes.
+- **Layered actions.** `playLayeredAction1 a` plays action a alongside: each tick, every ball of the shown frame is moved by how far the layer's frame has moved it from the layer's first frame.
+- **Tweens.** `GenerateTweenFrame` blends a tick's frame with the one before when drawing; the script's frames are as queued.
+
+Not yet played by the viewer.

@@ -28,6 +28,13 @@
  *                 eyelids open (`0x8ae0 0`) and its head straight (cue 7:
  *                 nothing looked at), so whatever the dog plays first it
  *                 stays in. With --turn <n>, turned n 256ths first (`0x8ae5`).
+ * --game catz    A variant of the Catz demo's drive (install-catz.mjs) in place
+ *                 of Dogz's; of the rest, only --hold, which for Catz keeps
+ *                 every script's opcodes -- its cues, loops and actions,
+ *                 without which no kitten comes out -- and makes every frame
+ *                 it shows the one held, `sequence2 a b` becoming
+ *                 `sequence2 f f` so that CAT.SCP stays its size: Catz
+ *                 refuses a larger one as "Data Corruption".
  * --set <section>=<value>  Every line of a section of the adopted breed's
  *                 file given the value, as `--set "Body Extension=100"`,
  *                 or one ball's line, as `--set "256 Ball Color[45]=80"`;
@@ -40,8 +47,17 @@ import { copyFile, cp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { parseNe } from '../../src/formats/ne.ts';
-import { OP, parseScripts, readOpcodes, writeScripts } from '../../src/formats/script.ts';
+import {
+  catzArity,
+  OP,
+  parseScripts,
+  readCatzOpcodes,
+  readOpcodes,
+  SCRIPTS,
+  writeScripts,
+} from '../../src/formats/script.ts';
 import { DISPLAY } from './fetch.mjs';
+import { CATZ_DRIVE } from './install-catz.mjs';
 import { BUILD, DRIVE, exists, log } from './lib.mjs';
 
 export const VARIANTS = join(BUILD, 'variants');
@@ -93,6 +109,16 @@ export async function makeVariant(name, args) {
 
   if (!name || name.startsWith('-')) {
     throw new Error('name the variant: variant.mjs <name> [--display vga] [--breed <name>]');
+  }
+
+  const game = option('--game') ?? 'dogz';
+
+  if (game === 'catz') {
+    return makeCatzVariant(name, option);
+  }
+
+  if (game !== 'dogz') {
+    throw new Error(`no game ${game}: dogz or catz`);
   }
 
   if (!(await exists(join(DRIVE, 'DOGZ.DOG', 'DOGZ.INI')))) {
@@ -215,6 +241,55 @@ export async function makeVariant(name, args) {
 
     await writeFile(path, writeScripts(original, scripts));
     log(`  held in frame ${frame}${turn ? `, turned ${turn}` : ''}`);
+  }
+
+  log(`The variant is in ${drive}.`);
+  log(`Next: node scripts/oracle/shoot.mjs ${name}`);
+}
+
+/** A variant of the Catz demo's drive: see `--game catz`. */
+async function makeCatzVariant(name, option) {
+  if (!(await exists(join(CATZ_DRIVE, 'CATZ.DOG', 'CATZ.EXE')))) {
+    throw new Error('Catz is not installed; run scripts/oracle/install-catz.mjs first');
+  }
+
+  const drive = join(VARIANTS, name);
+  await rm(drive, { recursive: true, force: true });
+  await cp(CATZ_DRIVE, drive, { recursive: true });
+
+  const hold = option('--hold');
+
+  if (hold !== null) {
+    const frame = Number(hold);
+    const engine = parseNe(
+      new Uint8Array(await readFile(join(drive, 'WINDOWS', 'SYSTEM', 'CATZDLL.DLL')))
+    );
+    const arity = catzArity(readCatzOpcodes(engine));
+    const path = join(drive, 'CATZ.DOG', 'PTZFILES', 'CAT', 'RESOURCE', 'CAT.SCP');
+    const original = new Uint8Array(await readFile(path));
+    const scripts = parseScripts(original, arity, SCRIPTS.catz);
+    const SEQUENCE = 30031;
+
+    for (const script of scripts) {
+      script.variants = script.variants.map((variant) =>
+        variant.map((element) =>
+          'frame' in element
+            ? { frame }
+            : element.op === SEQUENCE
+              ? { op: SEQUENCE, operands: [frame, frame] }
+              : element
+        )
+      );
+    }
+
+    const written = writeScripts(original, scripts, SCRIPTS.catz);
+
+    if (written.length !== original.length) {
+      throw new Error('the held scripts are not the size of the original');
+    }
+
+    await writeFile(path, written);
+    log(`  every cat's frame ${frame}`);
   }
 
   log(`The variant is in ${drive}.`);

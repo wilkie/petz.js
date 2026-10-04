@@ -11,6 +11,11 @@
  * `--every` seconds apart, into oracle/build/screens/<variant>-*.png; then
  * Dogz is closed from its Options menu, which saves its dog, and Windows is
  * ended. The variant is from variant.mjs.
+ *
+ * A Catz variant (`variant.mjs --game catz`) runs Catz, past its welcome and
+ * on with "Use a Visit", the default -- a fresh drive's visit, so the
+ * demo's own allowance is never touched -- into the playpen; the pictures
+ * are taken from there, and Windows is stopped, not ended.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -41,6 +46,36 @@ export async function shoot(name, { wait: waitFor, count = 3, every = 6 } = {}) 
 
   const wait = waitFor ?? (timed ? 45 : 150);
   const pictures = [];
+  const catz = await exists(join(drive, 'CATZ.DOG', 'CATZ.EXE'));
+
+  if (catz) {
+    log(`Running Catz on ${name}, ${count} pictures in the playpen...`);
+
+    await withWindows(
+      name,
+      'C:\\CATZ.DOG\\CATZ.EXE',
+      async (session) => {
+        /* WinG's timing, if it has to, then the welcome; Return on it, and on
+         * the supply shelf's Use a Visit. */
+        await session.pause(waitFor ?? (timed ? 30 : 150));
+        await session.keys('Return');
+        await session.pause(8);
+        await session.keys('Return');
+        await session.pause(12);
+
+        for (let shot = 0; shot < count; shot++) {
+          const picture = await session.screen(`catz-${shot}`);
+          pictures.push(picture);
+          log(`  ${picture}`);
+          await session.pause(every);
+        }
+      },
+      /* The dynamic core stops on Catz's second run (session.mjs). */
+      { drive, core: 'normal', ends: false }
+    );
+
+    return pictures;
+  }
 
   log(`Running Dogz on ${name}, ${count} pictures after ${wait} seconds...`);
 

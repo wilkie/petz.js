@@ -53,6 +53,13 @@ node scripts/oracle/install-catz.mjs
 
 [[measured]] Catz runs on DOSBox's `normal` CPU core (`withWindows`' `core`): on the dynamic one, its second run stops DOSBox outright, "CacheBlock overrun". The demo allows two visits of 15 minutes; its first run writes its state to `KITTENZ.INI`, a section of WIN.INI and three files of Windows' own (`CATZ.INI`, `PFFOO.VAL`, `SYSTEM\CATNEURN.DLL`). Each variant is a fresh copy of the installation, so each run is one of the demo's own visits.
 
+```shell
+node scripts/oracle/variant.mjs cathold300 --game catz --hold 300
+node scripts/oracle/shoot.mjs cathold300 --count 2
+```
+
+The first copies Catz's drive with every frame the cat's scripts show made frame 300; the second runs Catz on it — past the welcome, on with Use a Visit — and keeps pictures of the playpen. [[measured]] Catz's first run on a drive times the display with WinG, for about two minutes, as Dogz's does. Rewriting every script to show one frame for ever, as Dogz's `--hold` does, leaves no kitten in sight: the scripts' cues and actions are what bring one out. So Catz's `--hold` keeps every opcode and changes only the frames, and keeps `CAT.SCP` its size: [[measured]] Catz refuses a larger one, "Data Corruption". Held so, Pouncer comes out of the fourth basket and stays, facing the viewer, on every run so far.
+
 ## Play with it
 
 ```shell

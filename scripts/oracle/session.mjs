@@ -65,13 +65,14 @@ function configuration(drive, command, core) {
  * @param {(session: Session) => Promise<void>} steps
  * Options: `limit`, `drive`, and `core`: DOSBox's CPU core, `auto` but for
  * Catz, whose second run stops DOSBox's dynamic core outright ("CacheBlock
- * overrun"), so it runs on `normal`.
+ * overrun"), so it runs on `normal`; and `ends`: false where the steps
+ * leave Windows running, to be stopped once they are done.
  */
 export async function withWindows(
   name,
   program,
   steps,
-  { limit = 60, drive = DRIVE, core = 'auto' } = {}
+  { limit = 60, drive = DRIVE, core = 'auto', ends = true } = {}
 ) {
   const config = join(BUILD, `${name}.conf`);
   await writeFile(config, configuration(drive, `win /s ${program}`.trim(), core));
@@ -137,11 +138,11 @@ export async function withWindows(
 
     const ending = Date.now();
 
-    while (dosbox.exitCode === null && Date.now() - ending < limit * 1000) {
+    while (ends && dosbox.exitCode === null && Date.now() - ending < limit * 1000) {
       await pause(1);
     }
 
-    if (dosbox.exitCode === null) {
+    if (ends && dosbox.exitCode === null) {
       await session().screen('stuck');
       throw new Error(`Windows did not end; see oracle/build/screens/${name}-*.png`);
     }
