@@ -220,7 +220,7 @@ async function start(game: GameFiles) {
   const text = async (path: string) => new TextDecoder('latin1').decode(await game.read(path));
   const adults = game
     .list()
-    .filter((path) => /[\\/]CAT[\\/]RESOURCE[\\/]A\w+\.LNZ$/i.test(path))
+    .filter((path) => /[\\/]CAT[\\/]RESOURCE[\\/](W\d)?A\w+\.LNZ$/i.test(path))
     .sort();
 
   for (const path of adults) {
@@ -235,7 +235,8 @@ async function start(game: GameFiles) {
     const name = path
       .split(/[\\/]/)
       .pop()!
-      .replace(/^A|\.LNZ$/gi, '');
+      .replace(/^((W\d)?)A/i, '$1')
+      .replace(/\.LNZ$/i, '');
     files.set(name, { adult, kitten });
     breedSelect.add(new Option(name.toLowerCase(), name));
   }

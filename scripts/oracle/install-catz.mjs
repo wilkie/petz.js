@@ -11,16 +11,26 @@
  *
  *   node scripts/oracle/install-windows.mjs --drive catz-drive-c
  *   node scripts/oracle/install-catz.mjs
+ *
+ * With `--cd`, from the Catz CD-ROM's image (`fetch.mjs`, the manifest's
+ * `catzRetail`) mounted as D:, its Setup in `D:\CATZ`, onto a drive of its
+ * own, oracle/build/catz-retail-drive-c:
+ *
+ *   node scripts/oracle/install-windows.mjs --drive catz-retail-drive-c
+ *   node scripts/oracle/install-catz.mjs --cd
  */
 
 import { cp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { CATZ_STAGE } from './fetch.mjs';
+import { CATZ_CD, CATZ_STAGE } from './fetch.mjs';
 import { BUILD, exists, log, readManifest, walk } from './lib.mjs';
 import { exitWindows, withWindows } from './session.mjs';
 
 export const CATZ_DRIVE = join(BUILD, 'catz-drive-c');
+
+/** The drive the CD-ROM's Catz is installed on (`--cd`). */
+export const CATZ_RETAIL_DRIVE = join(BUILD, 'catz-retail-drive-c');
 
 const STAGE = 'CATZSET';
 
@@ -37,29 +47,39 @@ const REQUIRED = [
 
 async function main() {
   const { install } = await readManifest();
+  const fromCd = process.argv.includes('--cd');
+  const drive = fromCd ? CATZ_RETAIL_DRIVE : CATZ_DRIVE;
+  const driveName = fromCd ? 'catz-retail-drive-c' : 'catz-drive-c';
 
-  if (!(await exists(join(CATZ_DRIVE, 'WINDOWS', 'WIN.COM')))) {
+  if (!(await exists(join(drive, 'WINDOWS', 'WIN.COM')))) {
     throw new Error(
-      'Windows is not installed for Catz; run scripts/oracle/install-windows.mjs --drive catz-drive-c'
+      `Windows is not installed for Catz; run scripts/oracle/install-windows.mjs --drive ${driveName}`
     );
   }
 
-  if (await exists(join(CATZ_DRIVE, 'CATZ.DOG'))) {
+  if (await exists(join(drive, 'CATZ.DOG'))) {
     throw new Error(
-      'Catz is already installed; install-windows.mjs --drive catz-drive-c --force starts again'
+      `Catz is already installed; install-windows.mjs --drive ${driveName} --force starts again`
     );
   }
 
-  if (!(await exists(CATZ_STAGE))) {
+  if (fromCd && !(await exists(CATZ_CD))) {
+    throw new Error('the Catz CD-ROM is not fetched; run scripts/oracle/fetch.mjs first');
+  }
+
+  if (!fromCd && !(await exists(CATZ_STAGE))) {
     throw new Error('the Catz demo is not fetched; run scripts/oracle/fetch.mjs first');
   }
 
-  await cp(CATZ_STAGE, join(CATZ_DRIVE, STAGE), { recursive: true });
-  log('Running Catz Setup...');
+  if (!fromCd) {
+    await cp(CATZ_STAGE, join(drive, STAGE), { recursive: true });
+  }
+
+  log(`Running Catz Setup${fromCd ? ' from the CD-ROM' : ''}...`);
 
   await withWindows(
-    'install-catz',
-    `C:\\${STAGE}\\SETUP.EXE`,
+    fromCd ? 'install-catz-cd' : 'install-catz',
+    fromCd ? 'D:\\CATZ\\SETUP.EXE' : `C:\\${STAGE}\\SETUP.EXE`,
     async (session) => {
       await session.pause(15);
 
@@ -92,11 +112,11 @@ async function main() {
       await session.screen('program-manager');
       await exitWindows(session);
     },
-    { drive: CATZ_DRIVE, limit: 30 }
+    { drive, limit: 30, ...(fromCd ? { cd: CATZ_CD } : {}) }
   );
 
-  await rm(join(CATZ_DRIVE, STAGE), { recursive: true, force: true });
-  const files = new Set((await walk(CATZ_DRIVE)).map((file) => file.toUpperCase()));
+  await rm(join(drive, STAGE), { recursive: true, force: true });
+  const files = new Set((await walk(drive)).map((file) => file.toUpperCase()));
   const missing = REQUIRED.filter((file) => !files.has(file));
 
   if (missing.length) {
@@ -106,13 +126,13 @@ async function main() {
     );
   }
 
-  const progman = await readFile(join(CATZ_DRIVE, 'WINDOWS', 'PROGMAN.INI'), 'latin1');
+  const progman = await readFile(join(drive, 'WINDOWS', 'PROGMAN.INI'), 'latin1');
 
   if (!/CATZ/i.test(progman)) {
     log("  warning: Setup made no program group; Program Manager did not answer Setup's DDE");
   }
 
-  log(`Catz is in ${join(CATZ_DRIVE, 'CATZ.DOG')}.`);
+  log(`Catz is in ${join(drive, 'CATZ.DOG')}.`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

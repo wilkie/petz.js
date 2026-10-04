@@ -33,7 +33,7 @@ const DISPLAY = ':94';
  * captured, DOSBox computes Windows' pointer motion from where the host's
  * pointer is in its window, which is what lets a script put it anywhere.
  */
-function configuration(drive, command, core) {
+function configuration(drive, command, core, cd) {
   return [
     '[dosbox]',
     `machine=${MACHINE}`,
@@ -49,6 +49,7 @@ function configuration(drive, command, core) {
     'aspect=false',
     '[autoexec]',
     `mount c ${drive}`,
+    ...(cd ? [`imgmount d "${cd}" -t iso`] : []),
     'c:',
     'cd \\WINDOWS',
     command,
@@ -68,17 +69,18 @@ function configuration(drive, command, core) {
  * @param {(session: Session) => Promise<void>} steps
  * Options: `limit`, `drive`, and `core`: DOSBox's CPU core, `auto` but for
  * Catz, whose second run stops DOSBox's dynamic core outright ("CacheBlock
- * overrun"), so it runs on `normal`; and `ends`: false where the steps
- * leave Windows running, to be stopped once they are done.
+ * overrun"), so it runs on `normal`; `ends`: false where the steps leave
+ * Windows running, to be stopped once they are done; and `cd`: a CD-ROM's
+ * image, mounted as drive D:.
  */
 export async function withWindows(
   name,
   program,
   steps,
-  { limit = 60, drive = DRIVE, core = 'auto', ends = true } = {}
+  { limit = 60, drive = DRIVE, core = 'auto', ends = true, cd = null } = {}
 ) {
   const config = join(BUILD, `${name}.conf`);
-  await writeFile(config, configuration(drive, `win /s ${program}`.trim(), core));
+  await writeFile(config, configuration(drive, `win /s ${program}`.trim(), core, cd));
   await mkdir(SCREENS, { recursive: true });
 
   /* `-extension GLX` turns GLX off: with it on, DOSBox draws nothing at all

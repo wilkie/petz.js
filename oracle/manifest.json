@@ -63,6 +63,13 @@
     "sha256": "aeb3488d5db502694adce7c7cb6c92c30f2dd1581c3505346aaff0c0198578f8",
     "bytes": 2573617
   },
+  "catzRetail": {
+    "description": "Catz, Your Computer Petz (PF.Magic, 1996), the retail CD-ROM, as an ISO image",
+    "item": "https://archive.org/details/Catz_Your_Computer_Petz_PFMagic_1996",
+    "url": "https://archive.org/download/Catz_Your_Computer_Petz_PFMagic_1996/Catz%20-%20Your%20Computer%20Petz%20%28PFMagic%29%281996%29.ISO",
+    "bytes": 52797440,
+    "sha256": "7d1e5c7cf5308c2a0c282b7de6cb70f011506a464b7121facbb6d75f98d36eef"
+  },
   "install": {
     "firstName": "Dogz",
     "lastName": "Oracle"

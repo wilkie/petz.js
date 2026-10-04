@@ -29,7 +29,9 @@ test('draws a cat from the Catz demo’s files, as kitten or grown', async ({ pa
   await page.goto('/cats.html');
 
   await expect(page.locator('#status')).toHaveText(
-    /5 breeds, 98 animations and \d+ of 805 scripts/
+    /\d+ breeds, (98|275) animations and \d+ of 805 scripts/,
+    /* The CD-ROM's 275 animations take a while to read. */
+    { timeout: 30_000 }
   );
   await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(5000);
 
@@ -45,7 +47,7 @@ test('plays a Catz script out as its frames', async ({ page }) => {
   test.skip(!CATZ, 'needs the Catz demo: scripts/oracle/install-catz.mjs');
   await page.goto('/cats.html');
 
-  await expect(page.locator('#status')).toHaveText(/scripts/);
+  await expect(page.locator('#status')).toHaveText(/scripts/, { timeout: 30_000 });
   /* Script 7 plays frames 430 to 441. */
   await page.selectOption('#script', '7');
   await expect(page.locator('#frame-number')).toHaveText('430');

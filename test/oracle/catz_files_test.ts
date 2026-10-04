@@ -156,3 +156,33 @@ describe('the Catz demo’s files', () => {
     expect(files).toHaveLength(98);
   });
 });
+
+const RETAIL = 'oracle/build/catz-retail-drive-c';
+const describeRetail = describeWithOracle(join(RETAIL, 'CATZ.DOG'));
+
+describeRetail('the Catz CD-ROM’s files', () => {
+  const resource = join(RETAIL, 'CATZ.DOG', 'PTZFILES', 'CAT', 'RESOURCE');
+  const read = (name: string) => new Uint8Array(readFileSync(join(resource, name)));
+
+  it('ship all 275 of the cat’s animations, every frame of them', () => {
+    const header = parseBhd(read('CAT.BHD'));
+    let frames = 0;
+
+    header.animations.forEach((_, n) => {
+      frames += parseAnimation(header, n, read(`CAT${n}.BDT`)).length;
+    });
+
+    expect(header.animations).toHaveLength(275);
+    expect(frames).toBe(header.frameCount);
+  });
+
+  it('play the demo’s scripts, by an engine of their own with the same opcodes', () => {
+    const engine = parseNe(
+      new Uint8Array(readFileSync(join(RETAIL, 'WINDOWS', 'SYSTEM', 'CATZDLL.DLL')))
+    );
+    const data = read('CAT.SCP');
+
+    expect(readCatzOpcodes(engine).size).toBe(64);
+    expect(parseScripts(data, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz)).toHaveLength(805);
+  });
+});

@@ -60,6 +60,9 @@ export const CATZ = join(CACHE, 'catz');
 /** The Catz demo's installer, unpacked; see install-catz.mjs. */
 export const CATZ_STAGE = join(CATZ, 'stage');
 
+/** The retail Catz CD-ROM's image, which a session mounts as drive D:. */
+export const CATZ_CD = join(CACHE, 'catz-retail', 'catz.iso');
+
 const SITE = 'https://winworldpc.com';
 
 /** WinWorld serves the library to browsers; say so rather than pretending. */
@@ -234,6 +237,19 @@ async function fetchCatz(manifest, pin) {
   log(`  ${files.length} files`);
 }
 
+async function fetchCatzRetail(manifest, pin) {
+  const { catzRetail } = manifest;
+
+  log('Catz: the retail CD-ROM');
+  const data = await fetchPinned(catzRetail.url, CATZ_CD, pin ? null : catzRetail.sha256);
+
+  if (pin) {
+    Object.assign(catzRetail, { sha256: sha256(data), bytes: data.length });
+  }
+
+  log(`  ${data.length} bytes`);
+}
+
 async function main() {
   const pin = process.argv.includes('--pin');
   const manifest = await readManifest();
@@ -242,6 +258,7 @@ async function main() {
   await fetchDisplay(manifest, pin);
   await fetchDogz(manifest, pin);
   await fetchCatz(manifest, pin);
+  await fetchCatzRetail(manifest, pin);
 
   if (pin) {
     await writeManifest(manifest);

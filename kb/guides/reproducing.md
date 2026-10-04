@@ -54,6 +54,17 @@ node scripts/oracle/install-catz.mjs
 [[measured]] Catz runs on DOSBox's `normal` CPU core (`withWindows`' `core`): on the dynamic one, its second run stops DOSBox outright, "CacheBlock overrun". The demo allows two visits of 15 minutes; its first run writes its state to `KITTENZ.INI`, a section of WIN.INI and three files of Windows' own (`CATZ.INI`, `PFFOO.VAL`, `SYSTEM\CATNEURN.DLL`). Each variant is a fresh copy of the installation, so each run is one of the demo's own visits.
 
 ```shell
+node scripts/oracle/install-windows.mjs --drive catz-retail-drive-c
+node scripts/oracle/install-catz.mjs --cd
+```
+
+These install Catz from its CD-ROM, which `fetch.mjs` also fetches from archive.org and pins in `oracle/manifest.json` (`catzRetail`), an ISO image that sessions mount as drive D:, onto a drive of its own, `oracle/build/catz-retail-drive-c/`. Setup asks the same as the demo's.
+
+- [[measured]] **What the CD adds:** all 275 of the cat's animations (9,246 frames), where the demo has the first 98; nine more Clowns (`W1ACLOWN.LNZ` to `W9ACLOWN.LNZ`, each with its kitten's); and a slightly different build of `CATZDLL.DLL` with the same 64 opcodes. The scripts, the cat's skeleton and the five breeds are the demo's, byte for byte.
+- [[measured]] **What it does not:** it is the same Adoption Kit, its `KITTENZ.INI` allowing two visits of 15 minutes. The CD also holds demos of Dogz and Oddballz.
+- `/cats.html` reads it where it is installed, else the demo.
+
+```shell
 node scripts/oracle/variant.mjs cathold300 --game catz --hold 300
 node scripts/oracle/shoot.mjs cathold300 --count 2
 ```

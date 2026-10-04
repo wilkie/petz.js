@@ -16,7 +16,10 @@ const DRIVES = [
   },
   {
     at: '/oracle-catz',
-    drive: resolve('oracle/build/catz-drive-c'),
+    /* The CD-ROM's Catz where it is installed, with all the cat's animations; else the demo's. */
+    drive: existsSync(resolve('oracle/build/catz-retail-drive-c/CATZ.DOG'))
+      ? resolve('oracle/build/catz-retail-drive-c')
+      : resolve('oracle/build/catz-drive-c'),
     served: [/^CATZ\.DOG\//i, /^WINDOWS\/SYSTEM\/CATZDLL\.DLL$/i],
   },
 ];
