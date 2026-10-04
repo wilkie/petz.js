@@ -12,9 +12,10 @@ import {
   type AnimationHeader,
   type Frame,
 } from '../../src/formats/animation.ts';
-import { type Breed, parseLnz } from '../../src/formats/lnz.ts';
+import { averageBreed, type Breed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import {
+  CATZ_PALETTE_TYPE,
   PALETTE_16,
   PALETTE_256,
   readPalette,
@@ -68,6 +69,9 @@ export interface Dog {
 
   /** Which of the dog's sides the playpen's edge cuts off. */
   cut: { left: boolean; top: boolean; right: boolean; bottom: boolean };
+
+  /** Pixels the picture cannot say anything of, 1 each: for a cat, what its basket hides. */
+  masked?: Uint8Array;
 }
 
 /**
@@ -277,13 +281,24 @@ export function bottomUpFromWinIni(winIni: string) {
   return newest[2] === '0';
 }
 
+/** Which cat, for a Catz variant: its adult breed file, and how far toward its kitten's (`averageBreed`). */
+export interface CatChoice {
+  breed: string;
+  percent: number;
+}
+
 /** The scene for a frame of a variant, its files read by `read` (paths under its drive). */
 export function loadScene(
   read: (path: string) => Uint8Array,
   frame: number,
   age: number,
-  bristle = 0
+  bristle = 0,
+  cat?: CatChoice
 ): Scene {
+  if (cat) {
+    return loadCatScene(read, frame, age, bristle, cat);
+  }
+
   const bottomUp = bottomUpFromWinIni(new TextDecoder('latin1').decode(read('WINDOWS/WIN.INI')));
   const ini = new TextDecoder('latin1').decode(read('DOGZ.DOG/DOGZ.INI'));
   const pet = /^Your Pet=\.\\data\\(\w+)\.lnz/im.exec(ini)?.[1] ?? 'bigdog';
@@ -316,6 +331,171 @@ export function loadScene(
     bristle,
     depth,
     bottomUp,
+  };
+}
+
+/**
+ * A Catz variant's scene: the cat's breed averaged with its kitten's, the
+ * animations the demo ships (the first 98, numbered from the first), and
+ * CATZDLL.DLL's palette, on 256 colours.
+ */
+function loadCatScene(
+  read: (path: string) => Uint8Array,
+  frame: number,
+  age: number,
+  bristle: number,
+  cat: CatChoice
+): Scene {
+  const text = (path: string) => new TextDecoder('latin1').decode(read(path));
+  const resource = 'CATZ.DOG/PTZFILES/CAT/RESOURCE';
+  const header = parseBhd(read(`${resource}/CAT.BHD`));
+  const frames: Frame[] = [];
+
+  for (let n = 0; n < header.animations.length; n++) {
+    let data: Uint8Array;
+
+    try {
+      data = read(`${resource}/CAT${n}.BDT`);
+    } catch {
+      break;
+    }
+
+    frames.push(...parseAnimation(header, n, data));
+  }
+
+  const adult = parseLnz(text(`${resource}/A${cat.breed.toUpperCase()}.LNZ`), header.ballCount);
+  const little = adult.catz?.littleOne ?? `K${cat.breed}.LNZ`;
+  const young = parseLnz(text(`${resource}/${little.toUpperCase()}`), header.ballCount);
+  const breed = averageBreed(adult, young, cat.percent);
+  const engine = parseNe(read('WINDOWS/SYSTEM/CATZDLL.DLL'));
+  const palette = screenPalette(readPalette(engine, PALETTE_256, 256, CATZ_PALETTE_TYPE), {
+    driverColours: FIDELITY.driverColours,
+  });
+
+  return {
+    breed,
+    header,
+    frame: extendFrames(frames, breed)[frame],
+    colours: Int32Array.from(palette, ([r, g, b]) => pack(shown(r), shown(g), shown(b))),
+    age,
+    bristle,
+    depth: 256,
+    bottomUp: bottomUpFromWinIni(text('WINDOWS/WIN.INI')),
+  };
+}
+
+/**
+ * Finds a cat: within `region`, the pixels of `rgb` that differ from
+ * `background` -- a picture of the same playpen without it -- and are not a
+ * basket's yellows and browns, joined into patches and the largest kept. A
+ * basket with its kitten out is drawn brighter than without, so it differs
+ * too, and is told by its colour. Where the background is not the floor and
+ * the picture shows no cat -- a basket's front, a label -- nothing can be
+ * said, as the cat may be behind it, and it is masked.
+ */
+export function findCat(rgb: Rgb, background: Rgb, region: Box): Dog | null {
+  const at = (image: Rgb, index: number) =>
+    pack(image[3 * index], image[3 * index + 1], image[3 * index + 2]);
+  const inRegion = (x: number, y: number) =>
+    x >= region.left && x <= region.right && y >= region.top && y <= region.bottom;
+  const wicker = (index: number) => {
+    const [r, g, b] = [rgb[3 * index], rgb[3 * index + 1], rgb[3 * index + 2]];
+    return r > b + 40 && g > b + 40;
+  };
+  const counts = new Map<number, number>();
+
+  for (let y = region.top; y <= region.bottom; y++) {
+    for (let x = region.left; x <= region.right; x++) {
+      const colour = at(background, y * WIDTH + x);
+      counts.set(colour, (counts.get(colour) ?? 0) + 1);
+    }
+  }
+
+  const floor = [...counts].reduce((a, b) => (b[1] > a[1] ? b : a))[0];
+  const changed = new Uint8Array(WIDTH * HEIGHT);
+  const masked = new Uint8Array(WIDTH * HEIGHT).fill(1);
+
+  for (let y = region.top; y <= region.bottom; y++) {
+    for (let x = region.left; x <= region.right; x++) {
+      const index = y * WIDTH + x;
+      const cat = at(rgb, index) !== at(background, index) && !wicker(index);
+      changed[index] = cat ? 1 : 0;
+      masked[index] = !cat && at(background, index) !== floor ? 1 : 0;
+    }
+  }
+
+  /* The largest patch of changed pixels, joined corner to corner. */
+  const patch = new Int32Array(WIDTH * HEIGHT).fill(-1);
+  let best = { id: -1, size: 0 };
+
+  for (let start = 0; start < WIDTH * HEIGHT; start++) {
+    if (!changed[start] || patch[start] !== -1) {
+      continue;
+    }
+
+    const stack = [start];
+    patch[start] = start;
+    let size = 0;
+
+    while (stack.length) {
+      const index = stack.pop()!;
+      const [x, y] = [index % WIDTH, Math.trunc(index / WIDTH)];
+      size++;
+
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const [nx, ny] = [x + dx, y + dy];
+          const next = ny * WIDTH + nx;
+
+          if (inRegion(nx, ny) && changed[next] && patch[next] === -1) {
+            patch[next] = start;
+            stack.push(next);
+          }
+        }
+      }
+    }
+
+    if (size > best.size) {
+      best = { id: start, size };
+    }
+  }
+
+  if (best.id === -1) {
+    return null;
+  }
+
+  const pixels = new Int32Array(WIDTH * HEIGHT).fill(-1);
+  const box = { left: WIDTH, top: HEIGHT, right: -1, bottom: -1 };
+
+  for (let index = 0; index < WIDTH * HEIGHT; index++) {
+    if (patch[index] === best.id) {
+      pixels[index] = at(rgb, index);
+      const [x, y] = [index % WIDTH, Math.trunc(index / WIDTH)];
+      [box.left, box.top, box.right, box.bottom] = [
+        Math.min(box.left, x),
+        Math.min(box.top, y),
+        Math.max(box.right, x),
+        Math.max(box.bottom, y),
+      ];
+    } else if (changed[index]) {
+      /* A change apart from the cat, as the caption's: not compared. */
+      masked[index] = 1;
+    }
+  }
+
+  return {
+    pixels,
+    box,
+    count: best.size,
+    inside: region,
+    hidden: [],
+    masked,
+    cut: {
+      left: box.left <= region.left,
+      top: box.top <= region.top,
+      right: box.right >= region.right,
+      bottom: box.bottom >= region.bottom,
+    },
   };
 }
 
@@ -407,7 +587,8 @@ export function score(dog: Dog, drawing: Drawing, dx: number, dy: number): Score
       y < inside.top ||
       x > inside.right ||
       y > inside.bottom ||
-      hidden.some((w) => under(w, x, y))
+      hidden.some((w) => under(w, x, y)) ||
+      dog.masked?.[y * WIDTH + x]
     ) {
       continue;
     }

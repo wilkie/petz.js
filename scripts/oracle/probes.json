@@ -2,7 +2,11 @@
   {
     "name": "side35",
     "about": "the big dog held side-on in frame 35, without fuzz or speckles",
-    "variant": ["--plain", "--hold", "35"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -13,7 +17,12 @@
   {
     "name": "fur35",
     "about": "the same with its fuzz and speckles: the session's seed, the circle tables walked bottom-up and carried",
-    "variant": ["--plain", "--keep-fur", "--hold", "35"],
+    "variant": [
+      "--plain",
+      "--keep-fur",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -24,7 +33,11 @@
   {
     "name": "upright497",
     "about": "the big dog sitting up in frame 497: the hind end not far out, so the engine's short sines do not show",
-    "variant": ["--plain", "--hold", "497"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "497"
+    ],
     "frame": 497,
     "yaw": 64,
     "expect": {
@@ -35,7 +48,13 @@
   {
     "name": "long35",
     "about": "frame 35 with a body extension of 100: the hind end moved back 50 by ExtendBody",
-    "variant": ["--plain", "--hold", "35", "--set", "Body Extension=100"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "35",
+      "--set",
+      "Body Extension=100"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -92,7 +111,11 @@
   {
     "name": "sit1131",
     "about": "the big dog sitting, frame 1131 (script 105, sitting)",
-    "variant": ["--plain", "--hold", "1131"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "1131"
+    ],
     "frame": 1131,
     "expect": {
       "wrong": 1,
@@ -102,7 +125,11 @@
   {
     "name": "sleep1908",
     "about": "asleep, lying, frame 1908 (script 129, sleeping)",
-    "variant": ["--plain", "--hold", "1908"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "1908"
+    ],
     "frame": 1908,
     "expect": {
       "wrong": 0,
@@ -112,7 +139,11 @@
   {
     "name": "back1690",
     "about": "asleep on its back, frame 1690 (script 139, sleep_back)",
-    "variant": ["--plain", "--hold", "1690"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "1690"
+    ],
     "frame": 1690,
     "expect": {
       "wrong": 1,
@@ -122,7 +153,11 @@
   {
     "name": "dead2651",
     "about": "playing dead, frame 2651 (script 152, playDead)",
-    "variant": ["--plain", "--hold", "2651"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "2651"
+    ],
     "frame": 2651,
     "expect": {
       "wrong": 6,
@@ -132,7 +167,13 @@
   {
     "name": "turn35left",
     "about": "frame 35 turned a quarter (0x8ae5 -64)",
-    "variant": ["--plain", "--hold", "35", "--turn", "-64"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "35",
+      "--turn",
+      "-64"
+    ],
     "frame": 35,
     "expect": {
       "wrong": 7,
@@ -142,7 +183,13 @@
   {
     "name": "turn35eighth",
     "about": "frame 35 turned an eighth (0x8ae5 32)",
-    "variant": ["--plain", "--hold", "35", "--turn", "32"],
+    "variant": [
+      "--plain",
+      "--hold",
+      "35",
+      "--turn",
+      "32"
+    ],
     "frame": 35,
     "expect": {
       "wrong": 0,
@@ -152,7 +199,13 @@
   {
     "name": "bulldog35",
     "about": "the bulldog held side-on in frame 35, without fuzz or speckles",
-    "variant": ["--breed", "bulldog", "--plain", "--hold", "35"],
+    "variant": [
+      "--breed",
+      "bulldog",
+      "--plain",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -163,7 +216,14 @@
   {
     "name": "bulldogfur35",
     "about": "the bulldog side-on with its fuzz and speckles",
-    "variant": ["--breed", "bulldog", "--plain", "--keep-fur", "--hold", "35"],
+    "variant": [
+      "--breed",
+      "bulldog",
+      "--plain",
+      "--keep-fur",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -174,7 +234,13 @@
   {
     "name": "chiua35",
     "about": "the chihuahua held side-on in frame 35, without fuzz or speckles",
-    "variant": ["--breed", "chiua", "--plain", "--hold", "35"],
+    "variant": [
+      "--breed",
+      "chiua",
+      "--plain",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -185,7 +251,14 @@
   {
     "name": "chiuafur35",
     "about": "the chihuahua side-on with its fuzz and speckles",
-    "variant": ["--breed", "chiua", "--plain", "--keep-fur", "--hold", "35"],
+    "variant": [
+      "--breed",
+      "chiua",
+      "--plain",
+      "--keep-fur",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -196,7 +269,13 @@
   {
     "name": "scotty35",
     "about": "the Scottie held side-on in frame 35, without fuzz or speckles",
-    "variant": ["--breed", "scotty", "--plain", "--hold", "35"],
+    "variant": [
+      "--breed",
+      "scotty",
+      "--plain",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -207,7 +286,14 @@
   {
     "name": "scottyfur35",
     "about": "the Scottie side-on with its fuzz and speckles",
-    "variant": ["--breed", "scotty", "--plain", "--keep-fur", "--hold", "35"],
+    "variant": [
+      "--breed",
+      "scotty",
+      "--plain",
+      "--keep-fur",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -218,7 +304,13 @@
   {
     "name": "terrier35",
     "about": "the terrier held side-on in frame 35, without fuzz or speckles",
-    "variant": ["--breed", "terrier", "--plain", "--hold", "35"],
+    "variant": [
+      "--breed",
+      "terrier",
+      "--plain",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -229,7 +321,14 @@
   {
     "name": "terrierfur35",
     "about": "the terrier side-on with its fuzz and speckles",
-    "variant": ["--breed", "terrier", "--plain", "--keep-fur", "--hold", "35"],
+    "variant": [
+      "--breed",
+      "terrier",
+      "--plain",
+      "--keep-fur",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -240,7 +339,13 @@
   {
     "name": "vga35",
     "about": "the big dog side-on on Windows' 16-colour VGA display, without fuzz or speckles",
-    "variant": ["--display", "vga", "--plain", "--hold", "35"],
+    "variant": [
+      "--display",
+      "vga",
+      "--plain",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -251,7 +356,14 @@
   {
     "name": "vgafur35",
     "about": "the same with its fuzz and speckles",
-    "variant": ["--display", "vga", "--plain", "--keep-fur", "--hold", "35"],
+    "variant": [
+      "--display",
+      "vga",
+      "--plain",
+      "--keep-fur",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
@@ -262,12 +374,47 @@
   {
     "name": "terriervga35",
     "about": "the terrier side-on on the 16-colour display, with its fuzz and speckles",
-    "variant": ["--display", "vga", "--breed", "terrier", "--plain", "--keep-fur", "--hold", "35"],
+    "variant": [
+      "--display",
+      "vga",
+      "--breed",
+      "terrier",
+      "--plain",
+      "--keep-fur",
+      "--hold",
+      "35"
+    ],
     "frame": 35,
     "yaw": 64,
     "expect": {
       "wrong": 0,
       "pixels": 5642
     }
+  },
+  {
+    "name": "pouncer300",
+    "about": "Catz: Pouncer, the Hunter's kitten, held in frame 300 in its basket, told from the playpen without it",
+    "variant": [
+      "--game",
+      "catz",
+      "--hold",
+      "300"
+    ],
+    "frame": 300,
+    "age": 100,
+    "cat": {
+      "breed": "hunter",
+      "percent": 100
+    },
+    "region": {
+      "left": 420,
+      "top": 180,
+      "right": 570,
+      "bottom": 402
+    },
+    "seed": false,
+    "bristle": [
+      0
+    ]
   }
 ]

@@ -25,6 +25,7 @@ import {
 } from './project.ts';
 import {
   drawLine,
+  drawWhisker,
   fillBall,
   fillLid,
   fillShaded,
@@ -38,7 +39,8 @@ import {
 /** Something to draw: a ball, or a line between two balls, at a depth. */
 type Mark =
   | { kind: 'ball'; ball: number; depth: number }
-  | { kind: 'line'; from: number; to: number; depth: number };
+  | { kind: 'line'; line: number; from: number; to: number; depth: number }
+  | { kind: 'whisker'; whisker: number; depth: number };
 
 export interface DrawOptions {
   /** Which of the breed's colour sections to draw in. */
@@ -208,10 +210,20 @@ export const HOLDING_TOE = 45;
  * first of its balls drawn. The irises are drawn in their eyes, and the
  * tongue, and lines to it, only when it is out; a ball omitted — or the
  * holding toe — is not drawn, but its lines are.
+ *
+ * Catz (`XBallz::DisplayBallzFrame`, CATZDLL.DLL seg47:5e0b) draws a ball's
+ * whiskers just after it, and never the ball a whisker ends at; and a line
+ * to the tongue put away is passed over, not the end of the ball's lines.
  */
 export function marks(breed: Breed, placed: Placed[], order: number[], tongueOut = true): Mark[] {
   const skeleton = skeletonOf(breed);
-  const omitted = new Set([...breed.omissions, skeleton.holdingToe]);
+  const whiskers = breed.whiskers ?? [];
+  const catz = !!breed.catz;
+  const omitted = new Set([
+    ...breed.omissions,
+    skeleton.holdingToe,
+    ...whiskers.map((whisker) => whisker.to),
+  ]);
   const irises = new Set(breed.irises);
   const tongue = new Set(skeleton.tongue.filter((ball) => ball >= 0));
   const lines = new Map<number, number[]>();
@@ -237,17 +249,28 @@ export function marks(breed: Breed, placed: Placed[], order: number[], tongueOut
 
       const { from, to } = breed.lines[n];
 
-      /* A line to the tongue, put away, ends the ball's lines (seg10:4fc7). */
+      /* A line to the tongue, put away, ends the ball's lines (seg10:4fc7);
+       * in Catz it is only not drawn (seg47:61a0). */
       if (!tongueOut && (tongue.has(from) || tongue.has(to))) {
+        if (catz) {
+          drawn.add(n);
+          continue;
+        }
+
         break;
       }
 
       drawn.add(n);
-      list.push({ kind: 'line', from, to, depth: placed[ball].depth });
+      list.push({ kind: 'line', line: n, from, to, depth: placed[ball].depth });
     }
 
     if (!omitted.has(ball) && placed[ball].diameter > 0) {
       list.push({ kind: 'ball', ball, depth: placed[ball].depth });
+      whiskers.forEach((whisker, n) => {
+        if (whisker.from === ball) {
+          list.push({ kind: 'whisker', whisker: n, depth: placed[ball].depth });
+        }
+      });
     }
   }
 
@@ -347,6 +370,38 @@ export function drawPet(
   let headsDrawn = 0;
 
   for (const mark of list) {
+    if (mark.kind === 'whisker') {
+      /* In its own palette colour, from its ball's centre (seg47:64e7). */
+      const { from, to, colour } = breed.whiskers![mark.whisker];
+      drawWhisker(bitmap, at(from), at(to), colour, Math.trunc(placed[from].diameter / 2));
+      continue;
+    }
+
+    if (mark.kind === 'line' && breed.catz) {
+      /* Each end its ball's radius × the line's thickness / 100, at least 1;
+       * its colour its own, or its start's or end's ball's; its edges the
+       * same, or its left's -- the right's never, as the engine reads the
+       * left's for both (`PrepareDrawLine` seg47:7008, `XDrawLine` seg44:70e0). */
+      const line = breed.lines[mark.line];
+      const [start, end] = line.thickness ?? [90, 90];
+      const width = (ball: number, thickness: number) =>
+        Math.max(1, Math.trunc((Math.trunc(placed[ball].diameter / 2) * thickness) / 100));
+      const own = line.colour ?? -1;
+      const colour = own === -1 ? numbers[mark.from] : own < -1 ? numbers[mark.to] : own;
+      const left = line.leftColour ?? -1;
+
+      drawLine(
+        bitmap,
+        at(mark.from),
+        at(mark.to),
+        width(mark.from, start),
+        width(mark.to, end),
+        colour,
+        { edges: left >= 0 ? left : colour }
+      );
+      continue;
+    }
+
     if (mark.kind === 'line') {
       /* Each end its ball's radius × 256 / 300 out either side, in the
        * first ball's colour; the line's fuzz XDrawLine leaves unused

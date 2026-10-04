@@ -424,6 +424,13 @@ export function speckleColour(colour: number, speckle: number, first: number, le
  * 1024ths, each row's first and last pixels black (0) and the colour
  * between; an edge turns toward the next corner when the row of the one
  * it was heading for is reached. The last corner's row is not drawn.
+ *
+ * Catz's (`catz`, CATZDLL.DLL seg44:704e) differs in three things: a row's
+ * edges are in `edges`' colour, not black, and a row with nothing between
+ * them is not drawn at all; and two corners alike -- a line's 1-wide end,
+ * an ear's tip -- are taken for one, the shape walked as three corners
+ * (seg44:7387), its neighbours by their own numbers, so that where it is
+ * the start's two that are alike the walk takes in a corner it dropped.
  */
 export function drawLine(
   bitmap: IndexedBitmap,
@@ -431,7 +438,8 @@ export function drawLine(
   to: { x: number; y: number },
   fromWidth: number,
   toWidth: number,
-  colour: number
+  colour: number,
+  catz?: { edges: number }
 ) {
   /* On a bottom-up bitmap the points are turned upside down first, from the
    * port's bottom (seg8:505e), and the quad is scanned in memory's order,
@@ -479,9 +487,26 @@ export function drawLine(
     return dy === 0 ? dx * 1024 : Math.trunc((dx * 1024) / dy);
   };
 
+  /* Catz: the first two alike of the top three, in order, made one. */
+  let count = 4;
+
+  if (catz) {
+    for (let k = 0; k < 2; k++) {
+      const [a, b] = [corners[order[k]], corners[order[k + 1]]];
+
+      if (a.x === b.x && a.y === b.y) {
+        count = 3;
+        order.splice(k + 1, 1);
+        break;
+      }
+    }
+  }
+
+  const before = (corner: number) => (corner - 1 < 0 ? count - 1 : corner - 1);
+  const after = (corner: number) => (corner + 1 > count - 1 ? 0 : corner + 1);
   const top = order[0];
-  let ahead = (top + 3) % 4;
-  let behind = (top + 1) % 4;
+  let ahead = before(top);
+  let behind = after(top);
   let rightSlope = slope(top, ahead);
   let leftSlope = slope(top, behind);
 
@@ -522,33 +547,87 @@ export function drawLine(
     return [at, part];
   };
 
-  for (let segment = 0; segment < 3; segment++) {
+  const edge = catz ? catz.edges : 0;
+
+  for (let segment = 0; segment < count - 1; segment++) {
     for (let n = rows - 1; n >= 0; n--, row++) {
       [left, leftPart] = step(left, leftPart, leftSlope);
       [right, rightPart] = step(right, rightPart, rightSlope);
       const y = FIDELITY.bottomUp ? height - 1 - row : row;
-      bitmap.set(left, y, 0);
+
+      /* Dogz writes the left edge whatever; Catz only a row with an inside. */
+      if (!catz) {
+        bitmap.set(left, y, edge);
+      }
 
       if (right - left - 1 > 0) {
+        if (catz) {
+          bitmap.set(left, y, edge);
+        }
+
         bitmap.span(left + 1, y, right - left - 1, colour);
-        bitmap.set(right, y, 0);
+        bitmap.set(right, y, edge);
       }
     }
 
     const reached = order[segment + 1];
 
-    if (segment < 2) {
+    if (segment < count - 2) {
       rows = corners[order[segment + 2]].y - corners[reached].y;
     }
 
     if (reached === ahead) {
-      ahead = (ahead + 3) % 4;
+      ahead = before(ahead);
       rightSlope = slope(reached, ahead);
     }
 
     if (reached === behind) {
-      behind = (behind + 1) % 4;
+      behind = after(behind);
       leftSlope = slope(reached, behind);
+    }
+  }
+}
+
+/**
+ * A Catz whisker as `XDrawPort::XDrawWhiskerLine` (CATZDLL.DLL seg44:6d3d)
+ * draws one: a pixel a column from the start ball's centre toward the end
+ * ball's, a row further every `k + 1` columns, `k` the columns a row the
+ * whisker's slope makes, rounded toward 0 (1000 where it is level) -- so it
+ * is never steeper than a diagonal, and stops short of the end's row. The
+ * first `radius / 2` columns, under the ball, are not drawn, nor the end's.
+ * Nothing at all where either end is within 3 pixels of the bitmap's edge.
+ * On a bottom-up bitmap it starts a row higher, as a line does. `twitch`,
+ * where the engine twitches it -- the last 6 of every 36 whiskers drawn --
+ * moves its end's row by -2 to 2.
+ */
+export function drawWhisker(
+  bitmap: IndexedBitmap,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  colour: number,
+  radius: number,
+  twitch = 0
+) {
+  const { width, height } = bitmap;
+  const [sx, sy, ex] = [from.x, from.y, to.x].map(Math.trunc);
+  const ey = Math.trunc(to.y) + twitch;
+  const inside = (x: number, y: number) =>
+    x >= 3 && x <= width - 1 - 3 && y >= 3 && y <= height - 1 - 3;
+
+  if (!inside(sx, sy) || !inside(ex, Math.trunc(to.y))) {
+    return;
+  }
+
+  const skip = Math.trunc((Math.max(0, radius) * 2) / 4);
+  const dx = ex - sx;
+  const k = ey === sy ? 1000 : Math.abs(Math.trunc(dx / (ey - sy)));
+  const across = Math.sign(dx);
+  const down = ey < sy ? -1 : 1;
+  const top = FIDELITY.bottomUp ? sy - 1 : sy;
+
+  for (let i = 0; i < Math.abs(dx); i++) {
+    if (i >= skip) {
+      bitmap.set(sx + across * i, top + down * Math.floor(i / (k + 1)), colour);
     }
   }
 }

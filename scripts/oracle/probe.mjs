@@ -29,7 +29,16 @@ import { Worker } from 'node:worker_threads';
 
 import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
 import { BUILD, exists, log } from './lib.mjs';
-import { align, differences, draw, findDog, loadScene, score, settleToPicture } from './match.ts';
+import {
+  align,
+  differences,
+  draw,
+  findCat,
+  findDog,
+  loadScene,
+  score,
+  settleToPicture,
+} from './match.ts';
 import { shoot } from './shoot.mjs';
 import { makeVariant, VARIANTS } from './variant.mjs';
 
@@ -78,6 +87,8 @@ async function searchSeeds(work) {
  */
 async function picture(probe, reuse) {
   const kept = join(OUT, `${probe.name}-oracle.png`);
+  const background = probe.cat ? await catless(probe, reuse) : null;
+  const find = (rgb) => (background ? findCat(rgb, background, probe.region) : findDog(rgb));
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const path =
@@ -85,7 +96,7 @@ async function picture(probe, reuse) {
         ? kept
         : (await shoot(probe.name, { count: 1 }))[0];
     const rgb = readPicture(path);
-    const dog = findDog(rgb);
+    const dog = find(rgb);
 
     if (dog && !(dog.cut.left && dog.cut.right) && !(dog.cut.top && dog.cut.bottom)) {
       if (path !== kept) {
@@ -99,6 +110,25 @@ async function picture(probe, reuse) {
   }
 
   throw new Error(`${probe.name}: no picture with the whole dog in three tries`);
+}
+
+/**
+ * A Catz probe's playpen without a cat, to tell its cat from: its variant
+ * made with `--hide` in place of `--hold`, shot once and kept.
+ */
+async function catless(probe, reuse) {
+  const name = `${probe.name}-catless`;
+  const kept = join(OUT, `${name}.png`);
+
+  if (!reuse || !(await exists(kept))) {
+    const at = probe.variant.indexOf('--hold');
+    const args = [...probe.variant.slice(0, at), '--hide', ...probe.variant.slice(at + 2)];
+    await makeVariant(name, args);
+    const [path] = await shoot(name, { count: 1 });
+    await writeFile(kept, await readFile(path));
+  }
+
+  return readPicture(kept);
 }
 
 async function run(probe, { reuse, without }) {
@@ -120,7 +150,7 @@ async function run(probe, { reuse, without }) {
 
   /* The fur's bristling is the session's, as the seed is: each level tried, with its own seed. */
   for (const bristle of probe.bristle ?? [0, 1, 2, 3]) {
-    const loaded = loadScene(read, probe.frame, age, bristle);
+    const loaded = loadScene(read, probe.frame, age, bristle, probe.cat);
     /* The bitmap's way up is WinG's, unless the probe is drawn without it. */
     const scene = without.bottomUp === false ? { ...loaded, bottomUp: false } : loaded;
     const placed = align(scene, dog, yaws);
@@ -139,6 +169,7 @@ async function run(probe, { reuse, without }) {
         dy: placed.dy,
         order: placed.order,
         dog,
+        cat: probe.cat,
       });
       seed = seeds[0].seed;
     }

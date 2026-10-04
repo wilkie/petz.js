@@ -10,13 +10,14 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { setFidelity } from '../../src/render/fidelity.ts';
 import { draw, loadScene, score } from './match.ts';
 
-const { drive, frame, age, bristle, yaw, dx, dy, order, dog, from, to, fidelity } = workerData;
+const { drive, frame, age, bristle, yaw, dx, dy, order, dog, from, to, fidelity, cat } = workerData;
 setFidelity(fidelity);
 const scene = loadScene(
   (path) => new Uint8Array(readFileSync(join(drive, path))),
   frame,
   age,
-  bristle
+  bristle,
+  cat
 );
 const best = [];
 

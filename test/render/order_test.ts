@@ -32,7 +32,7 @@ describe('the order balls are drawn in', () => {
     const order = drawOrder(withLine, placed);
 
     expect(
-      marks(withLine, placed, order).map((mark) => (mark.kind === 'line' ? 'line' : mark.ball))
+      marks(withLine, placed, order).map((mark) => (mark.kind === 'ball' ? mark.ball : mark.kind))
     ).toEqual([1, 'line', 2, 0]);
   });
 

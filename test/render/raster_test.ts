@@ -1,6 +1,7 @@
 import { FIDELITY } from '../../src/render/fidelity.ts';
 import {
   drawLine,
+  drawWhisker,
   fillBall,
   fillLid,
   fillShaded,
@@ -255,6 +256,37 @@ describe('a shining ball', () => {
   });
 });
 
+describe('a Catz whisker', () => {
+  it('runs a pixel a column, a row on every k + 1, the first half radius and the end left out', () => {
+    const bitmap = new IndexedBitmap(20, 12);
+    drawWhisker(bitmap, { x: 5, y: 5 }, { x: 15, y: 7 }, 8, 4);
+    const drawn: string[] = [];
+
+    for (let y = 0; y < 12; y++) {
+      for (let x = 0; x < 20; x++) {
+        if (bitmap.get(x, y) === 8) {
+          drawn.push(`${x},${y}`);
+        }
+      }
+    }
+
+    /* Bottom-up, from the row above the ball's centre; 10 across over 2 down, k 5. */
+    expect(drawn).toEqual(
+      ['7,4', '8,4', '9,4', '10,4', '11,5', '12,5', '13,5', '14,5'].sort((a, b) => {
+        const [ax, ay] = a.split(',').map(Number);
+        const [bx, by] = b.split(',').map(Number);
+        return ay - by || ax - bx;
+      })
+    );
+  });
+
+  it('is not drawn near the bitmap’s edge', () => {
+    const bitmap = new IndexedBitmap(20, 12);
+    drawWhisker(bitmap, { x: 5, y: 5 }, { x: 18, y: 7 }, 8, 0);
+    expect(bitmap.pixels.every((pixel) => pixel === IndexedBitmap.TRANSPARENT)).toBe(true);
+  });
+});
+
 describe('a line', () => {
   const rows = (bitmap: IndexedBitmap, top: number, bottom: number) =>
     Array.from({ length: bottom - top }, (_, r) =>
@@ -279,6 +311,13 @@ describe('a line', () => {
       '...0777777770...',
       '................',
     ]);
+  });
+
+  it('in Catz, has edges in a colour of its own', () => {
+    const bitmap = new IndexedBitmap(16, 12);
+    drawLine(bitmap, { x: 3, y: 5 }, { x: 12, y: 5 }, 2, 2, 7, { edges: 5 });
+
+    expect(rows(bitmap, 3, 5)).toEqual(['...5777777775...', '...5777777775...']);
   });
 
   it('on a top-down bitmap, is scanned from the top, the last corner’s row not drawn', () => {

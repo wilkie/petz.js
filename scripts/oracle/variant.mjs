@@ -34,7 +34,10 @@
  *                 without which no kitten comes out -- and makes every frame
  *                 it shows the one held, `sequence2 a b` becoming
  *                 `sequence2 f f` so that CAT.SCP stays its size: Catz
- *                 refuses a larger one as "Data Corruption".
+ *                 refuses a larger one as "Data Corruption". And --hide:
+ *                 every script one frame for ever, as Dogz's --hold, so
+ *                 that no kitten comes out at all -- the playpen as it is
+ *                 without one, for a probe to tell a cat from.
  * --set <section>=<value>  Every line of a section of the adopted breed's
  *                 file given the value, as `--set "Body Extension=100"`,
  *                 or one ball's line, as `--set "256 Ball Color[45]=80"`;
@@ -114,7 +117,7 @@ export async function makeVariant(name, args) {
   const game = option('--game') ?? 'dogz';
 
   if (game === 'catz') {
-    return makeCatzVariant(name, option);
+    return makeCatzVariant(name, option, args);
   }
 
   if (game !== 'dogz') {
@@ -248,7 +251,7 @@ export async function makeVariant(name, args) {
 }
 
 /** A variant of the Catz demo's drive: see `--game catz`. */
-async function makeCatzVariant(name, option) {
+async function makeCatzVariant(name, option, args) {
   if (!(await exists(join(CATZ_DRIVE, 'CATZ.DOG', 'CATZ.EXE')))) {
     throw new Error('Catz is not installed; run scripts/oracle/install-catz.mjs first');
   }
@@ -258,9 +261,10 @@ async function makeCatzVariant(name, option) {
   await cp(CATZ_DRIVE, drive, { recursive: true });
 
   const hold = option('--hold');
+  const hide = args.includes('--hide');
 
-  if (hold !== null) {
-    const frame = Number(hold);
+  if (hold !== null || hide) {
+    const frame = Number(hold ?? 0);
     const engine = parseNe(
       new Uint8Array(await readFile(join(drive, 'WINDOWS', 'SYSTEM', 'CATZDLL.DLL')))
     );
@@ -270,26 +274,37 @@ async function makeCatzVariant(name, option) {
     const scripts = parseScripts(original, arity, SCRIPTS.catz);
     const SEQUENCE = 30031;
 
+    /* Hidden: shown one frame for ever, which brings no kitten out. */
+    const still = [
+      { op: 30000, operands: [] },
+      { op: 30058, operands: [999] },
+      { op: SEQUENCE, operands: [frame, frame] },
+      { op: 30014, operands: [] },
+      { op: 30063, operands: [] },
+    ];
+
     for (const script of scripts) {
       script.variants = script.variants.map((variant) =>
-        variant.map((element) =>
-          'frame' in element
-            ? { frame }
-            : element.op === SEQUENCE
-              ? { op: SEQUENCE, operands: [frame, frame] }
-              : element
-        )
+        hide
+          ? still
+          : variant.map((element) =>
+              'frame' in element
+                ? { frame }
+                : element.op === SEQUENCE
+                  ? { op: SEQUENCE, operands: [frame, frame] }
+                  : element
+            )
       );
     }
 
     const written = writeScripts(original, scripts, SCRIPTS.catz);
 
-    if (written.length !== original.length) {
+    if (!hide && written.length !== original.length) {
       throw new Error('the held scripts are not the size of the original');
     }
 
     await writeFile(path, written);
-    log(`  every cat's frame ${frame}`);
+    log(hide ? '  no kitten coming out' : `  every cat's frame ${frame}`);
   }
 
   log(`The variant is in ${drive}.`);

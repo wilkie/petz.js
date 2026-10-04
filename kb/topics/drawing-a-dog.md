@@ -124,6 +124,29 @@ flowchart LR
 - [[read out]] Looking at the user (`LookAtUser`, `+0x2e` set to 1), each eye's rectangle is widened by a pixel on every side before it is drawn (`XInsetRect` by −1, seg10:51aa), and its lid covers the wider eye. `LookAtRandomPoint` and `ResetParams` put it back.
 - [[measured]] On the oracle's 16-colour display, the terrier's irises are a dark-yellow ring with a black pupil, colour 3 then 0, and the big dog's green, its `[16 Iris Color]` of 2.
 
+## In Catz
+
+Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these differences, all [[read out]]:
+
+- **Lines.** A line's end is its ball's radius × the line's own thickness / 100, at least 1 (`XBallz::PrepareDrawLine`, seg47:7008), where Dogz uses 256/300 of the radius and skips a line with an end of 0.
+  - **Colour:** the line's own, or the start ball's (-1) or the end ball's (less than -1).
+  - **Edges:** its left colour, or else the line's own. They are never black, as Dogz's are, unless the breed says so. The right colour is never used: `XDrawLine` reads the left's for both (seg44:70e0).
+  - **Rasterizing** is Dogz's but for two things. A row with nothing between its edges is not drawn at all. And two corners alike are made one, the shape walked as three corners (seg44:7387), which is what makes an ear: a line from a big ball to a tip of size 1.
+- **Whiskers.** Each is drawn just after its start ball, one pixel a column from that ball's centre toward its end ball, which is never drawn (`XDrawWhiskerLine`, seg44:6d3d).
+  - **Its path:** a row further every `k + 1` columns, `k` the columns a row its slope makes, rounded toward 0; so it is never steeper than a diagonal.
+  - **What is left out:** the first half-radius of columns, under the ball, and the end's column. Nothing is drawn within 3 pixels of the port's edge.
+  - **Colour:** a raw palette number, 8 for the cats, which the screen shows as Windows' static colour 8, (192, 220, 192).
+  - **Twitch:** the last 6 of every 36 whiskers drawn have their end moved a random -2 to 2 rows.
+- **The tongue.** A line to the tongue put away is passed over, not the end of its ball's lines.
+- **Order.** Lines are drawn under the first of their balls drawn, as in Dogz, unless the breed's `[Draw Linez Before Ballz]` says 0. No cat's does.
+
+`src/render/raster.ts` (`drawLine`'s `catz`, `drawWhisker`) and `marks` and `drawPet` in `src/render/ballz.ts` do this.
+
+[[measured]] The probe `pouncer300` (`scripts/oracle/probes.json`) holds Pouncer, the Hunter's kitten, in frame 300 and tells it from the playpen without it (`variant.mjs --hide`); its basket is masked where it may hide the cat.
+
+- **What matches:** drawn from the kitten's file alone (`averageBreed` at 100), the outline lines up at yaw 0, and the whiskers fall where the oracle's do.
+- **What does not:** nearly every colour. The oracle's cat is shaded by depth along its colours' ramps (`GenerateZDepthColor`, seg47:5d04), and shows colours its own palette does not have, as #101010. Catz turns each colour index to its RGB and back through an inverse table into the palette on the screen (`ColorIndexTranslate`, seg44:0000). Neither is drawn yet.
+
 ## Still to find
 
 - [[measured]] With the lines scanned as the bitmap is laid out, the bitmap's way up taken from WinG's timing, and the eyelids where the blink, which goes on while the dog is held, caught them, every probe ([[guide:reproducing]]) matches the oracle's picture to within 9 pixels of 2,600 to 5,600: the big dog side-on with and without fur, sitting (frame 1131), asleep lying (1908) and on its back (1690) to a pixel; playing dead (2651), upside down, to 6; turned to face out (`--turn -64`, found at yaw 0) to 7, and an eighth (`--turn 32`, yaw 96) exactly; and the other four breeds side-on, with and without their fur (`--breed`): the bulldog, its tail omitted, to a pixel, the Scottie exactly, the terrier to 2, the chihuahua to 9; and on the 16-colour display, the big dog side-on to 15 without its fur and 3 with it, and the terrier with its fur exactly.

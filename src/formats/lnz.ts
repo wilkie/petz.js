@@ -26,6 +26,24 @@ export interface Line {
   from: number;
   to: number;
   fuzz: number;
+
+  /**
+   * Catz's further fields (`srt end fuzz col lfCol rtCol sThck eThick`):
+   * its colour, -1 the start ball's and less the end ball's; its edges'
+   * colours, -1 its own; and each end's thickness, in hundredths of its
+   * ball's radius, `[Default Linez Thickness]` where not given.
+   */
+  colour?: number;
+  leftColour?: number;
+  rightColour?: number;
+  thickness?: [number, number];
+}
+
+/** A Catz whisker: drawn from one ball toward another, which is never drawn itself, in a palette colour. */
+export interface Whisker {
+  from: number;
+  to: number;
+  colour: number;
 }
 
 /**
@@ -115,6 +133,9 @@ export interface Breed {
 
   /** A Catz breed's further shaping, where the file has any of its sections. */
   catz?: CatzShape;
+
+  /** A Catz breed's `[Whiskers]`. */
+  whiskers?: Whisker[];
 }
 
 function value(token: string): number | string {
@@ -291,6 +312,9 @@ export function parseLnz(text: string, balls = 65): Breed {
       }
     : undefined;
 
+  /* Catz's lines' thickness where a line gives none (seg39:2371): 90 unless the file says. */
+  const thickness = firstTwo('Default Linez Thickness', [90, 0]).percent;
+
   const eyes = section('Eyes');
   const optional = (name: string) => (sections.has(name) ? (numbers(name)[0] ?? null) : null);
 
@@ -316,14 +340,33 @@ export function parseLnz(text: string, balls = 65): Breed {
     headBalls: numbers('Head Balls'),
     omissions: sections.has('Omissions') ? numbers('Omissions') : [],
     lines: section('Linez').map((line) => {
-      const [from, to, fuzz] = line.values;
+      const [from, to, fuzz, ...more] = line.values;
 
       if (typeof from !== 'number' || typeof to !== 'number') {
         throw new Error(`[Linez] needs a start and an end ball: ${line.values.join(', ')}`);
       }
 
-      return { from, to, fuzz: typeof fuzz === 'number' ? fuzz : 0 };
+      const base = { from, to, fuzz: typeof fuzz === 'number' ? fuzz : 0 };
+
+      if (!catz) {
+        return base;
+      }
+
+      /* Each field the loader's default where not given (Linez::ReallyLoadLinezFile, seg39:2371). */
+      const [colour, left, right, start, end] = more.map((v) =>
+        typeof v === 'number' ? v : undefined
+      );
+      return {
+        ...base,
+        colour: colour ?? -1,
+        leftColour: left ?? -1,
+        rightColour: right ?? -1,
+        thickness: [start ?? thickness, end ?? thickness] as [number, number],
+      };
     }),
+    ...(catz
+      ? { whiskers: list('Whiskers', 3).map(([from, to, colour]) => ({ from, to, colour })) }
+      : {}),
     ballColor256: perBall('256 Ball Color'),
     ballColor16: perBall('16 Ball Color'),
     speckleColor: perBall('Speckle Color', -1),
