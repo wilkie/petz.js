@@ -28,6 +28,34 @@ export interface Line {
   fuzz: number;
 }
 
+/**
+ * How a Catz breed reshapes its creature's frames beyond Dogz's extensions,
+ * as `Linez::ReallyLoadLinezFile` (CATZDLL.DLL seg39:1077) reads it and
+ * `XBallz::ModifyBallzData` (seg36:0000) applies it: see render/extend.ts.
+ * Percentages are of the skeleton's own, 100 leaving it be.
+ */
+export interface CatzShape {
+  /** `[Head Enlargement]`: the head balls' places from the head, and an extra for their sizes. */
+  head: { percent: number; extra: number };
+
+  /** `[Feet Enlargement]`: the toes' and fingers' from the soles and hands, and an extra for sizes. */
+  feet: { percent: number; extra: number };
+
+  /** `[Ear Extension]`: the ears' tips from the head. */
+  ears: number;
+
+  /** `[Move Up]`, `[Move Foward]`, `[Move Sideways]`: a ball moved so far, each in order. */
+  up: [ball: number, by: number][];
+  forward: [ball: number, by: number][];
+  sideways: [ball: number, by: number][];
+
+  /** `[Project Ball]`: a ball moved to a percentage of its distance from another, in order. */
+  project: [from: number, ball: number, percent: number][];
+
+  /** `[Little one]`: the young one's breed file, which the engine averages this with by age. */
+  littleOne: string | null;
+}
+
 /** What a breed file says, named. */
 export interface Breed {
   sections: LnzSections;
@@ -84,6 +112,9 @@ export interface Breed {
   /** 0 no fuzz, up to 3, "boocoo fuzz". */
   fuzz: number[];
   defaultScales: number[];
+
+  /** A Catz breed's further shaping, where the file has any of its sections. */
+  catz?: CatzShape;
 }
 
 function value(token: string): number | string {
@@ -207,6 +238,59 @@ export function parseLnz(text: string, balls = 65): Breed {
     return [a, b];
   };
 
+  /**
+   * A section's lines of numbers, each its first `count`, until a line of
+   * fewer -- the engine stops a list at a blank line, at most 30 to one.
+   */
+  const list = (name: string, count: number) => {
+    const found: number[][] = [];
+
+    for (const line of sections.get(name) ?? []) {
+      const values = line.values.slice(0, count);
+
+      if (
+        values.length < count ||
+        values.some((v) => typeof v !== 'number') ||
+        found.length === 30
+      ) {
+        break;
+      }
+
+      found.push(values as number[]);
+    }
+
+    return found;
+  };
+
+  /** The first and second number of a section's first and second lines, as many as there are. */
+  const firstTwo = (name: string, otherwise: [number, number]) => {
+    const lines = sections.get(name) ?? [];
+    const at = (n: number) =>
+      typeof lines[n]?.values[0] === 'number' ? (lines[n].values[0] as number) : otherwise[n];
+    return { percent: at(0), extra: at(1) };
+  };
+
+  const catzSections = [
+    'Head Enlargement',
+    'Feet Enlargement',
+    'Ear Extension',
+    'Move Up',
+    'Project Ball',
+    'Little one',
+  ];
+  const catz: CatzShape | undefined = catzSections.some((name) => sections.has(name))
+    ? {
+        head: firstTwo('Head Enlargement', [100, 0]),
+        feet: firstTwo('Feet Enlargement', [100, 0]),
+        ears: firstTwo('Ear Extension', [100, 0]).percent,
+        up: list('Move Up', 2) as [number, number][],
+        forward: list('Move Foward', 2) as [number, number][],
+        sideways: list('Move Sideways', 2) as [number, number][],
+        project: list('Project Ball', 3) as [number, number, number][],
+        littleOne: (sections.get('Little one')?.[0]?.values[0] as string | undefined) ?? null,
+      }
+    : undefined;
+
   const eyes = section('Eyes');
   const optional = (name: string) => (sections.has(name) ? (numbers(name)[0] ?? null) : null);
 
@@ -249,6 +333,7 @@ export function parseLnz(text: string, balls = 65): Breed {
     outlineColor: perBall('Outline Color', 0),
     fuzz: perBall('Fuzz', 1),
     defaultScales: numbers('Default Scales'),
+    ...(catz ? { catz } : {}),
   };
 }
 

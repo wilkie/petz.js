@@ -14,6 +14,7 @@ import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
 import { FIDELITY } from './fidelity.ts';
 import { skeletonOf } from './skeleton.ts';
+import { CAT_FEET_SIZED, percent16 } from './extend.ts';
 
 /** The dog's tilt, spin and roll (`BallState` `+0xe`, `+0x10`, `+0x12`), in 256ths of a turn. */
 export interface Angles {
@@ -91,10 +92,28 @@ export function scalesForAge(breed: Breed, age: number): Scales {
  * `SetPuppiness` make it: the skeleton's, with half the breed's
  * `[Ball Size Diffs]`, and half its `[Puppy Balls]` in proportion to how much
  * of a puppy the dog is, from 0 to 100. Halves are C's, rounding toward 0.
+ * A Catz breed's head and feet enlargements size the skeleton's own first,
+ * by their percentage and its extra (`EnlargeHead`, `EnlargeFeet`).
  */
 export function ballSize(breed: Breed, header: AnimationHeader, ball: number, puppiness: number) {
-  const base = header.ballSizes[ball] + Math.trunc(breed.ballSizeDiffs[ball] / 2);
+  const base =
+    enlarged(breed, ball, header.ballSizes[ball]) + Math.trunc(breed.ballSizeDiffs[ball] / 2);
   return base + Math.trunc((Math.trunc(breed.puppyBalls[ball] / 2) * puppiness) / 100);
+}
+
+/** A skeleton's ball size as a Catz breed enlarges it, once, as its frames are first reshaped. */
+function enlarged(breed: Breed, ball: number, size: number) {
+  const shape = breed.catz;
+
+  if (shape && shape.head.percent !== 100 && breed.headBalls.includes(ball)) {
+    return percent16(size, shape.head.percent + shape.head.extra);
+  }
+
+  if (shape && shape.feet.percent !== 100 && CAT_FEET_SIZED.includes(ball)) {
+    return percent16(size, shape.feet.percent + shape.feet.extra);
+  }
+
+  return size;
 }
 
 /** Where a ball is drawn, and how large, in pixels from the dog's origin. */

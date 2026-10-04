@@ -86,6 +86,45 @@ describe('the Catz demo’s files', () => {
     });
   }
 
+  it('shape the Siamese by Catz’s own sections', () => {
+    const header = parseBhd(new Uint8Array(readFileSync(join(PETZ, 'CAT', 'RESOURCE', 'CAT.BHD'))));
+    const text = readFileSync(join(PETZ, 'CAT', 'RESOURCE', 'ASIAMESE.LNZ'), 'latin1');
+    const { catz } = parseLnz(text, header.ballCount);
+
+    expect(catz).toEqual({
+      head: { percent: 93, extra: 0 },
+      feet: { percent: 70, extra: 0 },
+      ears: 100,
+      up: [
+        [2, 4],
+        [4, -5],
+        [5, -5],
+      ],
+      forward: [
+        [37, -2],
+        [4, 10],
+        [5, 10],
+        [40, 2],
+      ],
+      sideways: [
+        [4, 0],
+        [5, 0],
+        [9, 5],
+        [11, -5],
+        [31, -3],
+        [30, 3],
+      ],
+      project: [
+        [43, 44, 120],
+        [44, 45, 120],
+        [45, 46, 120],
+        [46, 47, 120],
+        [47, 48, 120],
+      ],
+      littleOne: 'ksiamese.lnz',
+    });
+  });
+
   it('ships the first 98 of the cat’s 275 animations', () => {
     const header = parseBhd(new Uint8Array(readFileSync(join(PETZ, 'CAT', 'RESOURCE', 'CAT.BHD'))));
     const files = readdirSync(join(PETZ, 'CAT', 'RESOURCE')).filter((file) =>

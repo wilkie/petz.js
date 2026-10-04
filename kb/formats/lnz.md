@@ -64,3 +64,19 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 - [[measured]] A cat's file gives `[Leg Extension]`, `[Body Extension]` and `[Face Extension]` twice, the second all 0; Dogz's give none twice. [[read out]] Dogz's engine finds a section from the top of the file (seg11:15e5, `LoadSpecialBallInfo`), so the first counts: `src/formats/lnz.ts` keeps the first.
 - [[measured]] Its palettes are in `CATZDLL.DLL` as Dogz's are in its engine, ids 10016 and 10256, but under resource type 32515 (`0x7f03`), where Dogz's are 32513.
 - [[measured]] The cloud's `[Ball Size Diffs]` is there but empty. [[read out]] Dogz's engine starts every ball's tables before reading a breed (`LoadSpecialBallInfo`, seg10:146a): sizes 0, puppy sizes 3, speckles −1, outline 0, fuzz 1; the reimplementation takes those for a section a breed leaves empty or out.
+
+### How a cat is shaped
+
+- [[read out]] `Linez::ReallyLoadLinezFile` (CATZDLL.DLL seg39:1077) reads the shaping sections without halving them, as Dogz's engine does. `[Leg Extension]` is two lines, front then hind; `[Head Enlargement]` and `[Feet Enlargement]` are each a percentage, then an extra (default 100 and 0); `[Ear Extension]` is a percentage (default 100). `[Move Up]`, `[Move Foward]` and `[Move Sideways]` are lists of `ball, amount`, and `[Project Ball]` a list of `from, ball, percent`. Each list stops at a blank line, or at 30 entries. A blank value line keeps the default: four of the cats give `[Feet Enlargement]` one line.
+- [[read out]] `XBallz::ModifyBallzData` (seg36:0000) reshapes each animation as it loads, in this order, each only where its value is not the default:
+  1. the body lengthened back from the chest, as in Dogz;
+  2. the legs, rebuilt from the soles up;
+  3. the face, out along the jaw-to-nose line;
+  4. the head balls (`[Head Balls]`) drawn toward the head by the percentage less its extra;
+  5. the ear tips (`earL2`, `earR2`) toward the head;
+  6. the toes and fingers toward their soles and hands;
+  7. each Move Up ball along the line from the belly to the middle of the feet, each Move Foward ball along the nose-to-head line, and each Move Sideways ball along a vector made like a cross product of the two but with every sign a plus (seg36:3e14);
+  8. each Project Ball entry, in order, so the tail's chain moves each ball from the one before it, already moved.
+- [[read out]] The arithmetic is the engine's own: a vector is scaled to a length in 32 bits and truncated; a percentage is a 16-bit product with its high word lost, then divided by 100 toward 0. Ball positions wrap at 16 bits.
+- [[read out]] The first reshape after a breed file is loaded also sizes the head balls by the head percentage plus its extra, and the hands, soles, fingers and toes by the feet's (`EnlargeHead` seg36:2954, `EnlargeFeet` seg36:2d61). `src/render/extend.ts` (`extendCatzFrame`) and `ballSize` in `src/render/project.ts` do both; `test/render/extend_test.ts` checks them.
+- [[read out]] What a cat is drawn by is not one file: `CatSprite::UpdateLinezFileStuff` (seg16:1b05) averages the adult's file with its `[Little one]`'s by a percentage (`Linez::Average`, seg39:2b00), each shaping value `A + (B − A) × pct / 100`. Not yet known: where that percentage comes from, which is probably the cat's age.
