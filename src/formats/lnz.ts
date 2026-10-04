@@ -370,3 +370,103 @@ export function readFactors(sections: LnzSections): { centre: number; spread: nu
     };
   });
 }
+
+/** `a + (b − a) × percent / 100`, in long arithmetic, toward 0, as `Linez::Average` does each. */
+const between = (a: number, b: number, percent: number) =>
+  a + Math.trunc(((b - a) * percent) / 100);
+
+/**
+ * A move list averaged as `Linez::AverageBallMoveList` (CATZDLL.DLL
+ * seg39:3245) does: each file's list made a table by ball, the last of a
+ * ball's entries winning, then every ball either moves, in ball order,
+ * by the average.
+ */
+function averageMoves(a: [number, number][], b: [number, number][], percent: number) {
+  const table = (list: [number, number][]) => {
+    const by = new Array<number>(120).fill(0);
+    list.forEach(([ball, amount]) => (by[ball] = amount));
+    return by;
+  };
+  const [from, to] = [table(a), table(b)];
+
+  return from.flatMap((amount, ball): [number, number][] =>
+    amount || to[ball] ? [[ball, between(amount, to[ball], percent)]] : []
+  );
+}
+
+/**
+ * A projection list averaged as `Linez::AverageBallProjectList`
+ * (seg39:33c1): entry by entry where the two lists are as long, the
+ * percentages averaged; the young one's alone, from 100, where the adult
+ * has none; otherwise the adult's, toward 100.
+ */
+function averageProjections(
+  a: [number, number, number][],
+  b: [number, number, number][],
+  percent: number
+): [number, number, number][] {
+  if (a.length && a.length === b.length) {
+    return a.map(([from, ball, p], n) => [from, ball, between(p, b[n][2], percent)]);
+  }
+
+  if (!a.length && b.length) {
+    return b.map(([from, ball, p]) => [from, ball, between(100, p, percent)]);
+  }
+
+  return a.map(([from, ball, p]) => [from, ball, between(p, 100, percent)]);
+}
+
+/**
+ * A Catz breed as its engine draws it: the adult's file averaged with its
+ * `[Little one]`'s, `percent` of the way to the young one
+ * (`CatSprite::UpdateLinezFileStuff`, seg16:1b05, passes 100 less a value
+ * of the cat's not yet known; `Linez::Average`, seg39:2b00). The colours,
+ * outlines, speckles, eyes, head balls and lines are the adult's; the
+ * extensions, enlargements, moves, projections, fuzz, ball size
+ * differences and the first two scales are averaged. Catz reads only those
+ * two of `[Default Scales]`, pet and ball, and halves the size differences
+ * as it reads them, before they are averaged.
+ */
+export function averageBreed(adult: Breed, young: Breed, percent: number): Breed {
+  const mix = (a: number, b: number) => between(a, b, percent);
+  const shape = adult.catz;
+  const little = young.catz;
+  const [pet, ball] = [0, 1].map((n) => mix(adult.defaultScales[n], young.defaultScales[n]));
+
+  return {
+    ...adult,
+    extensions: {
+      frontLeg: mix(adult.extensions.frontLeg, young.extensions.frontLeg),
+      hindLeg: mix(adult.extensions.hindLeg, young.extensions.hindLeg),
+      body: mix(adult.extensions.body, young.extensions.body),
+      face: mix(adult.extensions.face, young.extensions.face),
+    },
+    fuzz: adult.fuzz.map((fuzz, n) => mix(fuzz, young.fuzz[n])),
+    /* Kept doubled, as `ballSize` halves them; the engine averages the halves. */
+    ballSizeDiffs: adult.ballSizeDiffs.map(
+      (diff, n) => 2 * mix(Math.trunc(diff / 2), Math.trunc(young.ballSizeDiffs[n] / 2))
+    ),
+    /* Every age the same: Catz has no puppy scales. */
+    defaultScales: [pet, ball, pet, ball],
+    ...(shape && little
+      ? {
+          catz: {
+            head: {
+              percent: mix(shape.head.percent, little.head.percent),
+              extra: mix(shape.head.extra, little.head.extra),
+            },
+            feet: {
+              percent: mix(shape.feet.percent, little.feet.percent),
+              extra: mix(shape.feet.extra, little.feet.extra),
+            },
+            ears: mix(shape.ears, little.ears),
+            up: averageMoves(shape.up, little.up, percent),
+            forward: averageMoves(shape.forward, little.forward, percent),
+            sideways: averageMoves(shape.sideways, little.sideways, percent),
+            project: averageProjections(shape.project, little.project, percent),
+            littleOne: shape.littleOne,
+          },
+        }
+      : {}),
+  };
+}

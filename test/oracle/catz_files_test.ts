@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
-import { parseLnz } from '../../src/formats/lnz.ts';
+import { averageBreed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import {
   catzArity,
@@ -123,6 +123,27 @@ describe('the Catz demo’s files', () => {
       ],
       littleOne: 'ksiamese.lnz',
     });
+  });
+
+  it('average Pouncer, the Hunter, with its kitten’s file as Catz does', () => {
+    const header = parseBhd(new Uint8Array(readFileSync(join(PETZ, 'CAT', 'RESOURCE', 'CAT.BHD'))));
+    const lnz = (name: string) =>
+      parseLnz(readFileSync(join(PETZ, 'CAT', 'RESOURCE', name), 'latin1'), header.ballCount);
+    const [adult, kitten] = [lnz('AHUNTER.LNZ'), lnz('KHUNTER.LNZ')];
+    const at = (percent: number) => averageBreed(adult, kitten, percent);
+
+    /* The adult's own at 0, the kitten's at 100: but the colours and lines always the adult's. */
+    expect(at(0).catz?.head).toEqual(adult.catz?.head);
+    expect(at(100).catz?.head).toEqual(kitten.catz?.head);
+    expect(at(100).defaultScales.slice(0, 2)).toEqual(kitten.defaultScales.slice(0, 2));
+    expect(at(100).ballColor256).toEqual(adult.ballColor256);
+    expect(at(100).lines).toEqual(adult.lines);
+
+    /* Move lists come out in ball order, a ball once. */
+    for (const list of ['up', 'forward', 'sideways'] as const) {
+      const balls = at(50).catz![list].map(([ball]) => ball);
+      expect(balls).toEqual([...new Set(balls)].sort((a, b) => a - b));
+    }
   });
 
   it('ships the first 98 of the cat’s 275 animations', () => {

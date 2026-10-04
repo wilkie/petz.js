@@ -79,4 +79,11 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
   8. each Project Ball entry, in order, so the tail's chain moves each ball from the one before it, already moved.
 - [[read out]] The arithmetic is the engine's own: a vector is scaled to a length in 32 bits and truncated; a percentage is a 16-bit product with its high word lost, then divided by 100 toward 0. Ball positions wrap at 16 bits.
 - [[read out]] The first reshape after a breed file is loaded also sizes the head balls by the head percentage plus its extra, and the hands, soles, fingers and toes by the feet's (`EnlargeHead` seg36:2954, `EnlargeFeet` seg36:2d61). `src/render/extend.ts` (`extendCatzFrame`) and `ballSize` in `src/render/project.ts` do both; `test/render/extend_test.ts` checks them.
-- [[read out]] What a cat is drawn by is not one file: `CatSprite::UpdateLinezFileStuff` (seg16:1b05) averages the adult's file with its `[Little one]`'s by a percentage (`Linez::Average`, seg39:2b00), each shaping value `A + (B − A) × pct / 100`. Not yet known: where that percentage comes from, which is probably the cat's age.
+- [[read out]] What a cat is drawn by is not one file. `CatSprite::UpdateLinezFileStuff` (seg16:1b05) averages the adult's file with its `[Little one]`'s by a percentage, 100 less a value read through an object of the cat's at `+0x3360` (`Linez::Average`, seg39:2b00).
+  - **Averaged**, each as `A + (B − A) × pct / 100` in long arithmetic: the extensions, the enlargements, `[Fuzz]`, `[Ball Size Diffs]` (already halved), `[Default Factors]`, and the first two `[Default Scales]` (Catz reads only those two, the pet's and the ball's).
+  - **Move lists:** made tables by ball, so averaged lists come out in ball order, each ball once (`AverageBallMoveList`, seg39:3245).
+  - **Taken from the adult as they are:** the colours, outlines, speckles, eyes, head balls and `[Linez]`.
+  - **The `[Speckle Map]` file:** one or the other's, at random, weighted by the percentage.
+  - `averageBreed` in `src/formats/lnz.ts` does this.
+  - Not yet known: what the value is. [[inferred]] Probably the cat's age, a kitten in the Adoption Kit being 0, so all its kitten file.
+- [[read out]] CATZDLL.DLL names each basket's breed: Sophisto `Asiamese.lnz`, Jester `Aclown.lnz`, Homebody `Apersian.lnz`, Pouncer `Ahunter.lnz`, Scaredy `Ascaredy.lnz`.
