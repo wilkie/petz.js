@@ -26,6 +26,14 @@ import { drawPet } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
 import { IndexedBitmap } from '../render/raster.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
+import { type CatzPositions, catzTimeline } from '../behaviour/catz-timeline.ts';
+import {
+  catzArity,
+  parseScripts,
+  readCatzOpcodes,
+  type Script,
+  SCRIPTS,
+} from '../formats/script.ts';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = element<HTMLParagraphElement>('status');
@@ -35,6 +43,7 @@ const breedSelect = element<HTMLSelectElement>('breed');
 const kittenInput = element<HTMLInputElement>('kitten');
 const kittenValue = element<HTMLOutputElement>('kitten-value');
 const animationSelect = element<HTMLSelectElement>('animation');
+const scriptSelect = element<HTMLSelectElement>('script');
 const frameInput = element<HTMLInputElement>('frame');
 const frameNumber = element<HTMLOutputElement>('frame-number');
 const yawInput = element<HTMLInputElement>('yaw');
@@ -51,6 +60,11 @@ let translate: (colour: number) => number = (colour) => colour;
 const files = new Map<string, { adult: Breed; kitten: Breed }>();
 let order: number[] = [];
 let playing = 0;
+let scripts: Script[] = [];
+let positions: CatzPositions = { count: 0, neutral: 0 };
+
+/** The frames shown, numbered over every animation: an animation's, or a script's played out. */
+let sequence: number[] = [];
 
 /** The breed chosen, averaged toward its kitten's file by the slider. */
 function breed() {
@@ -60,8 +74,7 @@ function breed() {
 
 function draw() {
   const cat = breed();
-  const { start } = header.animations[Number(animationSelect.value)];
-  const at = start + Number(frameInput.value);
+  const at = sequence[Number(frameInput.value)] ?? 0;
   const bitmap = new IndexedBitmap(320, 240);
 
   drawPet(bitmap, cat, header, extendFrames(frames, cat)[at], {
@@ -84,9 +97,27 @@ function draw() {
   context.drawImage(small, 0, 0, canvas.width, canvas.height);
 }
 
+/** The steps a script plays out as, a variant at random each time, its reference frames not shown. */
+function playOut(index: number) {
+  const random = (n: number) => Math.floor(Math.random() * n);
+  return catzTimeline(scripts, positions, index, {
+    flags: (frame) => frames[frame]?.tag ?? 3,
+    random,
+    limit: 600,
+  })
+    .filter((step) => !step.reference)
+    .map((step) => step.frame);
+}
+
 function chooseAnimation() {
-  const { start, end } = header.animations[Number(animationSelect.value)];
-  frameInput.max = String(end - start - 1);
+  if (scriptSelect.value === '') {
+    const { start, end } = header.animations[Number(animationSelect.value)];
+    sequence = Array.from({ length: end - start }, (_, n) => start + n);
+  } else {
+    sequence = playOut(Number(scriptSelect.value));
+  }
+
+  frameInput.max = String(Math.max(0, sequence.length - 1));
   frameInput.value = '0';
   order = [];
   draw();
@@ -158,12 +189,27 @@ async function start(game: GameFiles) {
     breedSelect.add(new Option(name.toLowerCase(), name));
   }
 
+  const engine = parseNe(await game.read('WINDOWS/SYSTEM/CATZDLL.DLL'));
+  const data = await game.read(`${RESOURCE}/CAT.SCP`);
+  scripts = parseScripts(data, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz);
+  const preamble = new DataView(data.buffer, data.byteOffset + data.indexOf(0) + 1);
+  positions = { count: preamble.getUint16(0, true), neutral: preamble.getUint16(2, true) };
+
+  /* Only the scripts the demo's frames will play, as far as a few tries tell. */
+  scripts.forEach((script, index) => {
+    const played = playOut(index);
+
+    if (played.length && played.every((frame) => frame < frames.length)) {
+      scriptSelect.add(new Option(`${index}: ${script.from} to ${script.to}`, String(index)));
+    }
+  });
+
   for (let index = 0; index < shipped; index++) {
     const { start: first, end } = header.animations[index];
     animationSelect.add(new Option(`${index} (${end - first} frames)`, String(index)));
   }
 
-  status.textContent = `${files.size} breeds and ${shipped} animations, from ${game.source}.`;
+  status.textContent = `${files.size} breeds, ${shipped} animations and ${scriptSelect.options.length - 1} of ${scripts.length} scripts, from ${game.source}.`;
   choose.hidden = true;
   chooseAnimation();
 }
@@ -178,7 +224,11 @@ for (const control of [breedSelect, kittenInput, frameInput, yawInput]) {
   });
 }
 
-animationSelect.addEventListener('change', chooseAnimation);
+animationSelect.addEventListener('change', () => {
+  scriptSelect.value = '';
+  chooseAnimation();
+});
+scriptSelect.addEventListener('change', chooseAnimation);
 playButton.addEventListener('click', play);
 
 picker.addEventListener('change', () => {

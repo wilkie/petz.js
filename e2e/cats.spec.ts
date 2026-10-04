@@ -28,7 +28,9 @@ test('draws a cat from the Catz demo’s files, as kitten or grown', async ({ pa
   test.skip(!CATZ, 'needs the Catz demo: scripts/oracle/install-catz.mjs');
   await page.goto('/cats.html');
 
-  await expect(page.locator('#status')).toHaveText(/5 breeds and 98 animations/);
+  await expect(page.locator('#status')).toHaveText(
+    /5 breeds, 98 animations and \d+ of 805 scripts/
+  );
   await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(5000);
 
   await page.selectOption('#breed', 'HUNTER');
@@ -37,4 +39,16 @@ test('draws a cat from the Catz demo’s files, as kitten or grown', async ({ pa
   await page.locator('#frame').fill('5');
   await expect(page.locator('#frame-number')).toHaveText('5');
   await page.screenshot({ path: 'oracle/build/cats-viewer.png' });
+});
+
+test('plays a Catz script out as its frames', async ({ page }) => {
+  test.skip(!CATZ, 'needs the Catz demo: scripts/oracle/install-catz.mjs');
+  await page.goto('/cats.html');
+
+  await expect(page.locator('#status')).toHaveText(/scripts/);
+  /* Script 7 plays frames 430 to 441. */
+  await page.selectOption('#script', '7');
+  await expect(page.locator('#frame-number')).toHaveText('430');
+  await page.locator('#frame').fill('11');
+  await expect(page.locator('#frame-number')).toHaveText('441');
 });

@@ -96,4 +96,12 @@ All [[read out]] from CATZDLL.DLL, `ScriptSprite` in segments 40 and 41:
 - **Layered actions.** `playLayeredAction1 a` plays action a alongside: each tick, every ball of the shown frame is moved by how far the layer's frame has moved it from the layer's first frame.
 - **Tweens.** `GenerateTweenFrame` blends a tick's frame with the one before when drawing; the script's frames are as queued.
 
-Not yet played by the viewer.
+`src/behaviour/catz-timeline.ts` plays an action out as its frames, with:
+
+- the transitions into it;
+- the actions it plays, nested;
+- its loops and sequences;
+- its random operands;
+- the reference frames between actions.
+
+`/cats.html` plays the scripts the demo's frames will play, with the cat held in place: [[measured]] 315 of the cat's 805, the demo shipping the first 98 of its 275 animations. Not yet played: the fudgers, the looks, the layers, and moving the cat by the reference frames.
