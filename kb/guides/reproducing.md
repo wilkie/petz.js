@@ -82,6 +82,21 @@ The first copies Catz's drive with every frame the cat's scripts show made frame
 - **Carrying one out** (`--carry`, the right button held and dragged, as the Adoption Kit's caption says) gets as far as finding the kitten and picking it up: `xinput.py` learns Catz's hand pointer from the screen, since its pixels are the game's and are kept only on the build. But DOSBox's window spans only 200 of Windows' 480 rows, and Catz hides its pointer while it carries a kitten, so a carry far enough to clear the baskets loses the pointer.
 - `variant.mjs --walk <record>`, every action made the walk, leaves the kittens milling inside their baskets.
 
+## Run CATZDLL's own code
+
+```shell
+pnpm harness:build
+pnpm test:harness
+```
+
+The harness runs Catz's engine, `CATZDLL.DLL` from the CD-ROM's install, on [winbox.js](../../../winbox.js), the clean-room Windows 3.1 beside this repository, with no DOSBox, and holds what its functions answer to the reimplementation case by case.
+
+- **Drivers:** each is a small Win16 program in `harness/`. It loads the library, calls a function of it by ordinal on cases of its own, and writes what it answers. They are built with the Open Watcom compiler winbox.js's oracle fetches.
+- **The tests:** `test/harness/` runs each driver as winbox.js runs one of its probes, beside the library and `SOSLIB03.DLL`, and reads the answers back. They are skipped without winbox.js, the drivers or the Catz install.
+- [[measured]] **So far, both agree on every case:**
+  - `Mag` (seg48:1a95), on 875 vectors;
+  - `XBallz::GenerateZDepthColor` (seg47:5d04), on every colour at every shift from -8 to 8, on 256 colours and on 16, against `catzShade`.
+
 ## Play with it
 
 ```shell

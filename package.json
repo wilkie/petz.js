@@ -21,6 +21,8 @@
     "format:check": "prettier --check .",
     "test": "jest",
     "test:watch": "jest --watch",
+    "harness:build": "node scripts/harness/build.mjs",
+    "test:harness": "jest --testPathIgnorePatterns=/node_modules/ test/harness",
     "prepare": "git config core.hooksPath .githooks",
     "kb": "vite build --config scripts/kb/vite.config.ts --logLevel warn && node dist/kb-build/build.js && pagefind --site dist/kb --silent",
     "oracle:fetch": "node scripts/oracle/fetch.mjs",

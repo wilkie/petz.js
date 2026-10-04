@@ -3,6 +3,8 @@ export default {
   testEnvironment: 'node',
   roots: ['<rootDir>/test'],
   testMatch: ['**/*_test.ts'],
+  /* The harness runs CATZDLL.DLL on winbox.js, minutes long: `pnpm test:harness`. */
+  testPathIgnorePatterns: ['/node_modules/', '/test/harness/'],
 
   transform: {
     '^.+\\.tsx?$': [

@@ -149,6 +149,8 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
   1. **Depth shading** (`GenerateZDepthColor`, seg47:5d04). It shifts the colour along its ramp, ten ramps of ten colours from 28 (`InitStaticDraw`, seg44:0ebe), by up to 6, never past the ramp's ends. The shift is the ball's depth from the middle of the chest and butt, × 6 × 2.2, over the depth the frame's balls span (`ZOrder`, seg47:579c). A line takes half its two ends' shifts together.
   2. **Translation into the screen's palette** (`ColorIndexTranslate`, seg44:0000). The colour goes to its RGB in Catz's palette, cut to four bits a channel, and to the screen colour nearest that, by a table of 4096 (`CreateITable`, seg44:1210). Neighbouring shades collapse: the cat's dark ramp shows only three.
 
+  [[measured]] The shading is checked against the engine's own: the harness ([[guide:reproducing]]) runs `GenerateZDepthColor` on winbox.js for every colour at every shift, and `catzShade` answers as it does in every case.
+
   The screen's palette is the system's at 0 to 15 and 246 to 255, with Catz's own between (`XInitScreenPort`, seg44:1556). [[inferred]] One of the system's entries 10 to 15 is a dark grey, about (17, 17, 17). The oracle shows the cat's darkest shades as (16, 16, 16), which nothing else comes near, and assuming that grey halves the difference. Which entry it is, and where the system got it, not yet known; WinG's display timing realizes a palette of its own just before, which may be it.
 
 - **Eyes** (`DrawEyeball`, seg47:6752). Catz draws no iris: its colour is set and overwritten before anything is drawn. Only a pupil is drawn, the first iris's size, 2 in from it each side if it is wider than 7. It travels within the eye's radius less 0.63 of it.
