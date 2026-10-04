@@ -412,12 +412,11 @@
       "right": 570,
       "bottom": 402
     },
-    "seed": false,
     "bristle": [
       0
     ],
     "expect": {
-      "wrong": 959,
+      "wrong": 762,
       "pixels": 4325
     }
   },
@@ -442,12 +441,11 @@
       "right": 300,
       "bottom": 402
     },
-    "seed": false,
     "bristle": [
       0
     ],
     "expect": {
-      "wrong": 1157,
+      "wrong": 1000,
       "pixels": 3961
     }
   }

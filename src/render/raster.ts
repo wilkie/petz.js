@@ -243,9 +243,10 @@ export function fillBall(bitmap: IndexedBitmap, ball: Ball, fuzz: CircleTables =
   for (const { r, y, start, width, spot, speckled, edge } of rows) {
     if (ball.catz && thick !== 0) {
       if (thick > 0) {
-        /* A pixel of the outline, the row one shorter, and the outline over its last (seg44:4e9d). */
-        bitmap.set(start, y, ball.outlineColour);
-        bitmap.span(start + 1, y, width - 1, ball.colour);
+        /* A pixel of the outline before the row, the row one shorter, and
+         * the outline over its last (seg44:5434 to 549b). */
+        bitmap.set(start - 1, y, ball.outlineColour);
+        bitmap.span(start, y, width - 1, ball.colour);
         bitmap.set(start + width - 1, y, ball.outlineColour);
       } else {
         bitmap.span(start, y, width, ball.colour);
@@ -350,7 +351,17 @@ export function fillLid(
     colour,
     cover,
     angle,
-  }: { x: number; y: number; d: number; colour: number; cover: number; angle: number }
+    turn = 6.283,
+  }: {
+    x: number;
+    y: number;
+    d: number;
+    colour: number;
+    cover: number;
+    angle: number;
+    /** A whole turn as the engine has it: Dogz's 6.283 (`ds:1cf2`), Catz's the true 2π (seg44:3cc4). */
+    turn?: number;
+  }
 ) {
   /* The eye's square is `d` across; its circle one less, as every ball's. */
   const rows = d - 1;
@@ -386,7 +397,7 @@ export function fillLid(
   /* The line through the point `cover` in from the edge, turned: where it
    * crosses each row, from the ball's rectangle's left, a slope a row. */
   const offset = Math.trunc(rows / 2) - cover;
-  const theta = (wrapAngle(a + 0x40) * 6.283) / 256;
+  const theta = (wrapAngle(a + 0x40) * turn) / 256;
   const slope = -Math.tan(theta);
   let at =
     (Math.sin(theta) * offset + Math.trunc(-rows / 2)) * slope +

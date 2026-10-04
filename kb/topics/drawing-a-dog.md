@@ -152,12 +152,23 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
   The screen's palette is the system's at 0 to 15 and 246 to 255, with Catz's own between (`XInitScreenPort`, seg44:1556). [[inferred]] One of the system's entries 10 to 15 is a dark grey, about (17, 17, 17). The oracle shows the cat's darkest shades as (16, 16, 16), which nothing else comes near, and assuming that grey halves the difference. Which entry it is, and where the system got it, not yet known; WinG's display timing realizes a palette of its own just before, which may be it.
 
 - **Eyes** (`DrawEyeball`, seg47:6752). Catz draws no iris: its colour is set and overwritten before anything is drawn. Only a pupil is drawn, the first iris's size, 2 in from it each side if it is wider than 7. It travels within the eye's radius less 0.63 of it.
-- **Outlines.** An outline, however thick, is a pixel at either end of every row, with no whole rows (seg44:4e9d).
+- **Outlines.** An outline, however thick, is a pixel before every row and one over its last, with no whole rows (seg44:5434 to 549b).
+- **Eyelids** (`DrawEyeball`, seg47:6ab6). A cat's lids are shut 20 hundredths wherever its states leave them (`ResetEyelids`, seg14:1d10), so Catz draws a lid over the top fifth of each eye. The lid is Dogz's rotated kernel, slanted by the nose's bearing from between the eyes, but with a whole turn the true 2π where Dogz uses 6.283. Its colour is `[256 Eyelid Color]`, translated, not shaded. The pupil is kept below the lid (seg47:6968). A blink shuts both to 100 for two or three frames, every 30 to 130 (`HandleBlinking`, seg23:0825).
+- **Fuzz and speckles.** Catz makes its fuzz tables as Dogz does, with the same 2,048 draws before them, from a seed taken from the clock, the milliseconds over 17 (`srand(GetTime())`, seg34:0559; `InitCircleLookup`, seg44:22ce). So a probe searches the seed as for Dogz.
 - **Speckles.** A ball's speckle is its own unshaded colour, so it shows where the ball is shaded.
 
   `catzShade`, `depthShades` and `drawCatzEye` in `src/render/ballz.ts`, and `catzTranslation` and `catzIdealPalette` in `src/formats/palette.ts`, do this.
 
-- [[measured]] With all this, `pouncer300` differs in 1,079 of the cat's 4,445 pixels, from 4,007. What is left: the eyelids, the fuzz (no seed is searched for Catz yet), and the whiskers' and shades' edges a pixel off.
+- [[measured]] With all this:
+
+  | Probe         | Seed                    | Pixels differing       |
+  | ------------- | ----------------------- | ---------------------- |
+  | `pouncer300`  | 5,911 (next best 780)   | 762 of the cat's 4,325 |
+  | `sophisto900` | 6,945 (next best 1,002) | 1,000 of 3,961         |
+
+  `sophisto900` is Sophisto, the Siamese's kitten, held in frame 900. Drawn other than all their kitten file, both match worse, by hundreds of pixels at 90 hundredths: so the Adoption Kit's kittens are drawn from their kitten files alone.
+
+- **Still to find:** the nose. Catz's nose kernel (`HackSpecular`, seg44:38fc) would draw a grey band, as Dogz's does, but the oracle's kittens' noses are black. Also the whiskers' and shades' edges, a pixel off.
 
 ## Still to find
 

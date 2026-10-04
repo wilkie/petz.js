@@ -85,5 +85,5 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
   - **Taken from the adult as they are:** the colours, outlines, speckles, eyes, head balls and `[Linez]`.
   - **The `[Speckle Map]` file:** one or the other's, at random, weighted by the percentage.
   - `averageBreed` in `src/formats/lnz.ts` does this.
-  - Not yet known: what the value is. [[inferred]] Probably the cat's age, a kitten in the Adoption Kit being 0, so all its kitten file.
+  - Not yet known: what the value is. [[measured]] A kitten in the Adoption Kit is drawn from its kitten file alone: the probes `pouncer300` and `sophisto900` match best at 100, and worse by hundreds of pixels at 90 ([[topic:drawing-a-dog]]).
 - [[read out]] CATZDLL.DLL names each basket's breed: Sophisto `Asiamese.lnz`, Jester `Aclown.lnz`, Homebody `Apersian.lnz`, Pouncer `Ahunter.lnz`, Scaredy `Ascaredy.lnz`.

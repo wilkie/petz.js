@@ -112,6 +112,12 @@ export interface DrawOptions {
   translate?: (colour: number) => number;
 
   /**
+   * How far a Catz cat's eyelids are shut, in hundredths: 20 where its
+   * states leave them (`CatSprite::ResetEyelids`, seg14:1d10), 100 in a blink.
+   */
+  catzLids?: number;
+
+  /**
    * Something drawn with a ball, just after it and before the balls nearer
    * (`Ballz::SetBonusDrawProc`, called by `DisplayBallzFrame`, seg10:4d28):
    * what the dog holds. It is given where that ball's centre is drawn.
@@ -394,6 +400,7 @@ export function drawPet(
     order,
     tongue = true,
     translate = (colour: number) => colour,
+    catzLids = 20,
   }: DrawOptions
 ) {
   const tables = circleTables(seed);
@@ -562,7 +569,11 @@ export function drawPet(
     }
 
     if (eye !== -1 && shades) {
-      drawCatzEye(bitmap, breed, placed, eye, at, eyes, translate, tables);
+      drawCatzEye(bitmap, breed, placed, eye, at, eyes, translate, tables, catzLids);
+
+      if (catzLids > 0) {
+        drawLid(bitmap, breed, placed, eye, at, colours, catzLids, eyesWide, LEVEL_LIDS, translate);
+      }
     } else if (eye !== -1) {
       drawIris(bitmap, breed, placed, ball, breed.irises[eye], at, colours, eyes, iris, tables);
 
@@ -677,7 +688,7 @@ const CATZ_PUPIL_INSET = 0.63;
  * It is put off the eye's centre as the eye's own iris is in the frame, or
  * as the eyes are told to look; brought back to the eye's radius less 0.63
  * of it if farther, and then each way to within a pixel of that; and a
- * pixel left. The eyelid it then draws is not yet.
+ * pixel left, and no higher than the eyelid lets it be seen.
  */
 function drawCatzEye(
   bitmap: IndexedBitmap,
@@ -687,7 +698,8 @@ function drawCatzEye(
   at: (ball: number) => { x: number; y: number },
   eyes: DrawOptions['eyes'],
   translate: (colour: number) => number,
-  tables: CircleTables
+  tables: CircleTables,
+  lids: number
 ) {
   const eyeBall = breed.eyes[eye];
   const irisBall = breed.irises[eye];
@@ -712,12 +724,14 @@ function drawCatzEye(
   const keep = (value: number) => Math.max(1 - travel, Math.min(travel - 1, value));
   const size = placed[breed.irises[0]].diameter;
   const centre = at(eyeBall);
+  /* No higher than the eyelid lets it be seen (seg47:6968). */
+  const low = Math.trunc((2 * lids * travel) / 100) - travel - 1;
 
   fillBall(
     bitmap,
     {
       x: centre.x + keep(dx) - 1,
-      y: centre.y + keep(dy),
+      y: centre.y + Math.max(low, keep(dy)),
       diameter: size > 7 ? size - 4 : size,
       colour: translate(breed.pupilColor ?? 0),
       outlineColour: 0,
@@ -758,7 +772,8 @@ function drawLid(
   colours: 256 | 16,
   lids: number,
   wide: number,
-  eyelids: Eyelids = LEVEL_LIDS
+  eyelids: Eyelids = LEVEL_LIDS,
+  translate?: (colour: number) => number
 ) {
   const [right, left] = breed.eyes.map((ball) => placed[ball]);
   /* The nose, which the eyelids slant by: Dogz's ball 55 (`+0x676` of the placed balls). */
@@ -774,7 +789,10 @@ function drawLid(
   const between = { x: Math.trunc((right.x - left.x) / 2), y: Math.trunc((right.y - left.y) / 2) };
   const nx = Math.trunc(nose.x) - (Math.trunc(left.x) + between.x);
   const ny = Math.trunc(nose.y) - (Math.trunc(left.y) + between.y);
-  const bearing = Math.abs(nx) > 1 || Math.abs(ny) > 1 ? -angle256(nx, ny) : 0;
+  /* Catz turns by the true 2π (seg47:6d00, `ds:1eb6`), Dogz by its own. */
+  const catzBearing = () => -Math.trunc((Math.atan2(nx, ny) * 256) / (2 * Math.PI));
+  const bearing =
+    Math.abs(nx) > 1 || Math.abs(ny) > 1 ? (translate ? catzBearing() : -angle256(nx, ny)) : 0;
 
   /* Each eye's own tilt, `+0x20` added for the left and `+0x22` taken for the right. */
   const tilt = eye === 1 ? eyelids.left.tilt : -eyelids.right.tilt;
@@ -783,12 +801,21 @@ function drawLid(
   const d = Math.round(ball.diameter + 2 * wide);
   const centre = at(breed.eyes[eye]);
 
+  const colour = (colours === 256 ? breed.eyelidColor256 : breed.eyelidColor16) ?? 4;
+  const cover = Math.trunc((d * (100 - open)) / 100);
+
+  /* Catz draws no lid that covers nothing (`XFillCircleEx`, seg44:5671). */
+  if (translate && cover < 1) {
+    return;
+  }
+
   fillLid(bitmap, {
     x: centre.x,
     y: centre.y,
     d,
-    colour: (colours === 256 ? breed.eyelidColor256 : breed.eyelidColor16) ?? 4,
-    cover: Math.trunc((d * (100 - open)) / 100),
+    colour: translate ? translate(colour) : colour,
+    cover,
     angle,
+    ...(translate ? { turn: 2 * Math.PI } : {}),
   });
 }
