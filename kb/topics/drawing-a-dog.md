@@ -176,7 +176,8 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 
   The oracle's kittens' noses match it, a thin grey band over black.
 
-- **Still to find:** the whiskers. The oracle's are longer at both ends than ours, so their start balls, the jowls, and their end balls are placed farther apart there. Turning the sideways moves the other way only makes it worse. The edges of the depth shades are also a pixel off here and there.
+- [[measured]] **Whiskers** land a row below their ball's centre on the oracle's bottom-up bitmap. That is two rows lower than `XDrawWhiskerLine`'s own arithmetic (seg44:6f06, the port's bottom less the point, as for lines) would put them, yet so `pouncer300`'s whiskers match to the pixel, every one of 109. Why, not yet known.
+- **Still to find:** the edges of the depth shades, here and there. Catz works a ball's shade out again only when its depth has moved by more than 10 (`ZOrder`). A held cat that has turned to face the viewer may keep shades from how it was turned before; which is the session's own.
 
 ## Still to find
 

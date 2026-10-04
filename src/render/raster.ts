@@ -658,7 +658,10 @@ export function drawLine(
  * is never steeper than a diagonal, and stops short of the end's row. The
  * first `radius / 2` columns, under the ball, are not drawn, nor the end's.
  * Nothing at all where either end is within 3 pixels of the bitmap's edge.
- * On a bottom-up bitmap it starts a row higher, as a line does. `twitch`,
+ * [[measured]] It starts a row below its ball's centre on a bottom-up
+ * bitmap: two rows lower than lines and `XDrawWhiskerLine`'s own rows
+ * (seg44:6f06, the port's bottom less the point) would put it, which the
+ * oracle's whiskers show to the pixel. Why, not yet known. `twitch`,
  * where the engine twitches it -- the last 6 of every 36 whiskers drawn --
  * moves its end's row by -2 to 2.
  */
@@ -685,7 +688,7 @@ export function drawWhisker(
   const k = ey === sy ? 1000 : Math.abs(Math.trunc(dx / (ey - sy)));
   const across = Math.sign(dx);
   const down = ey < sy ? -1 : 1;
-  const top = FIDELITY.bottomUp ? sy - 1 : sy;
+  const top = FIDELITY.bottomUp ? sy + 1 : sy + 2;
 
   for (let i = 0; i < Math.abs(dx); i++) {
     if (i >= skip) {
