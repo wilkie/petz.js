@@ -19,9 +19,9 @@ export interface GameFiles {
   list(): string[];
 }
 
-/** The oracle's installation, through the dev server. */
-export async function oracleFiles(): Promise<GameFiles | null> {
-  const response = await fetch('/oracle/index.json').catch(() => null);
+/** The oracle's installation, through the dev server: Dogz's at `/oracle`, Catz's at `/oracle-catz`. */
+export async function oracleFiles(at = '/oracle'): Promise<GameFiles | null> {
+  const response = await fetch(`${at}/index.json`).catch(() => null);
 
   if (!response?.ok || !response.headers.get('content-type')?.includes('json')) {
     return null;
@@ -40,7 +40,7 @@ export async function oracleFiles(): Promise<GameFiles | null> {
         throw new Error(`no ${path} on the oracle's drive`);
       }
 
-      const file = await fetch(`/oracle/${actual}`);
+      const file = await fetch(`${at}/${actual}`);
       return new Uint8Array(await file.arrayBuffer());
     },
   };

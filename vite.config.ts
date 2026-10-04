@@ -3,20 +3,33 @@ import { join, relative, resolve } from 'node:path';
 
 import { defineConfig, type Plugin } from 'vite';
 
-/** The oracle's drive: see oracle/README.md. */
-const DRIVE = resolve('oracle/build/drive-c');
-
-/** What of it the viewer reads: Dogz's directory, and its engine in Windows'. */
-const SERVED = [/^DOGZ\.DOG\//i, /^WINDOWS\/DOGZDLL\.DLL$/i];
+/**
+ * The oracle's drives (see oracle/README.md), where the dev server serves
+ * them, and what of each the viewers read: a game's directory, and its
+ * engine in Windows'.
+ */
+const DRIVES = [
+  {
+    at: '/oracle',
+    drive: resolve('oracle/build/drive-c'),
+    served: [/^DOGZ\.DOG\//i, /^WINDOWS\/DOGZDLL\.DLL$/i],
+  },
+  {
+    at: '/oracle-catz',
+    drive: resolve('oracle/build/catz-drive-c'),
+    served: [/^CATZ\.DOG\//i, /^WINDOWS\/SYSTEM\/CATZDLL\.DLL$/i],
+  },
+];
 
 /**
- * Serves the oracle's Dogz under `/oracle/` to the dev server only, so the
- * viewer can read the game's files without anyone choosing them: Dogz's
- * directory and DOGZDLL.DLL, by their paths on the drive, and nothing else of
- * it. Nothing of it is ever part of a build: `pnpm build` makes pages that
- * ask for the files. `/oracle/index.json` lists them.
+ * Serves the oracle's Dogz under `/oracle/`, and its Catz under
+ * `/oracle-catz/`, to the dev server only, so the viewers can read the
+ * games' files without anyone choosing them: each game's directory and
+ * engine, by their paths on the drive, and nothing else of it. Nothing of
+ * them is ever part of a build: `pnpm build` makes pages that ask for the
+ * files. `index.json` under each lists them.
  */
-function oracle(): Plugin {
+function oracle({ at, drive: DRIVE, served: SERVED }: (typeof DRIVES)[number]): Plugin {
   const walk = (at: string): string[] =>
     readdirSync(at).flatMap((name) => {
       const path = join(at, name);
@@ -24,10 +37,10 @@ function oracle(): Plugin {
     });
 
   return {
-    name: 'oracle',
+    name: `oracle${at.replace('/oracle', '')}`,
     apply: 'serve',
     configureServer(server) {
-      server.middlewares.use('/oracle', (request, response, next) => {
+      server.middlewares.use(at, (request, response, next) => {
         if (!existsSync(DRIVE)) {
           return next();
         }
@@ -57,13 +70,13 @@ function oracle(): Plugin {
 
 /* The repository's root is the dev server's: `pnpm dev`, then /viewer.html. */
 export default defineConfig({
-  plugins: [oracle()],
+  plugins: DRIVES.map(oracle),
   build: {
     outDir: 'dist/app',
     emptyOutDir: true,
     sourcemap: true,
     target: 'es2022',
-    rollupOptions: { input: { viewer: 'viewer.html' } },
+    rollupOptions: { input: { viewer: 'viewer.html', cats: 'cats.html' } },
   },
   server: { port: 5791 },
 });
