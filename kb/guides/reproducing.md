@@ -42,6 +42,17 @@ node scripts/oracle/fetch.mjs --pin              # new hashes into the manifest
 node scripts/oracle/fingerprint.mjs              # a new installation.json
 ```
 
+## Catz, beside it
+
+```shell
+node scripts/oracle/install-windows.mjs --drive catz-drive-c
+node scripts/oracle/install-catz.mjs
+```
+
+`fetch.mjs` also fetches the Catz demo's installer (PF.Magic, 1996) from archive.org and pins it in `oracle/manifest.json`. Catz has its own drive, `oracle/build/catz-drive-c/`, with its own Windows, so Dogz's is untouched: the first installs Windows into it, the second runs the demo's Setup there, its answers Dogz's but the program group, named plainly ("Catz"), as Setup refuses the apostrophe of its own default. Setup puts Catz in `C:\CATZ.DOG` — its pets' files under `PTZFILES\` (`CAT`, `DOG`, `MOUSE`, `BOTTLE`, `CLOUD`, each a `RESOURCE` of `.LNZ`, `.BHD`, `.BDT` and `.SCP` files, as Dogz's) — and its engine, `CATZDLL.DLL`, with WinG in the system directory.
+
+[[measured]] Catz runs on DOSBox's `normal` CPU core (`withWindows`' `core`): on the dynamic one, its second run stops DOSBox outright, "CacheBlock overrun". The demo allows two visits of 15 minutes; its first run writes its state to `KITTENZ.INI`, a section of WIN.INI and three files of Windows' own (`CATZ.INI`, `PFFOO.VAL`, `SYSTEM\CATNEURN.DLL`). Each variant is a fresh copy of the installation, so each run is one of the demo's own visits.
+
 ## Play with it
 
 ```shell

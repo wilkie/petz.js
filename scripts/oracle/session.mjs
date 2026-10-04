@@ -30,13 +30,13 @@ const DISPLAY = ':94';
  * captured, DOSBox computes Windows' pointer motion from where the host's
  * pointer is in its window, which is what lets a script put it anywhere.
  */
-function configuration(drive, command) {
+function configuration(drive, command, core) {
   return [
     '[dosbox]',
     `machine=${MACHINE}`,
     'memsize=16',
     '[cpu]',
-    'core=auto',
+    `core=${core}`,
     'cycles=max',
     '[sdl]',
     'autolock=false',
@@ -63,10 +63,18 @@ function configuration(drive, command) {
  * @param {string} name - What the session is, for its screens' names.
  * @param {string} program - A DOS path to run, or '' for Windows alone.
  * @param {(session: Session) => Promise<void>} steps
+ * Options: `limit`, `drive`, and `core`: DOSBox's CPU core, `auto` but for
+ * Catz, whose second run stops DOSBox's dynamic core outright ("CacheBlock
+ * overrun"), so it runs on `normal`.
  */
-export async function withWindows(name, program, steps, { limit = 60, drive = DRIVE } = {}) {
+export async function withWindows(
+  name,
+  program,
+  steps,
+  { limit = 60, drive = DRIVE, core = 'auto' } = {}
+) {
   const config = join(BUILD, `${name}.conf`);
-  await writeFile(config, configuration(drive, `win /s ${program}`.trim()));
+  await writeFile(config, configuration(drive, `win /s ${program}`.trim(), core));
   await mkdir(SCREENS, { recursive: true });
 
   /* `-extension GLX` turns GLX off: with it on, DOSBox draws nothing at all

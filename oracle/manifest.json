@@ -56,6 +56,13 @@
       }
     ]
   },
+  "catz": {
+    "description": "Catz, Your Computer Petz (PF.Magic, 1996), the downloadable demo's installer",
+    "item": "https://archive.org/details/swizzle_demu_CATZ",
+    "url": "https://archive.org/download/swizzle_demu_CATZ/catzinst.zip",
+    "sha256": "aeb3488d5db502694adce7c7cb6c92c30f2dd1581c3505346aaff0c0198578f8",
+    "bytes": 2573617
+  },
   "install": {
     "firstName": "Dogz",
     "lastName": "Oracle"

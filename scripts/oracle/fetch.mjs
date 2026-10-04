@@ -15,6 +15,8 @@
  *   wants 256 colours; every 256-colour driver on the retail disks is for a
  *   card DOSBox does not emulate, and this one drives the ET4000 it does.
  * - The two Dogz floppies, from archive.org's copy of the adoption kit.
+ * - The Catz demo's installer, a ZIP, from archive.org; Catz has its own
+ *   drive (`install-windows.mjs --drive catz-drive-c`, `install-catz.mjs`).
  *
  * Everything lands in oracle/.cache/ and none of it is committed: this is
  * thirty-year-old software still under its owners' copyright, and a fetch the
@@ -53,6 +55,10 @@ export const DOGZ = join(CACHE, 'dogz');
 
 /** Every disk of the Dogz kit, unpacked into one directory; see install-dogz.mjs. */
 export const DOGZ_STAGE = join(DOGZ, 'stage');
+export const CATZ = join(CACHE, 'catz');
+
+/** The Catz demo's installer, unpacked; see install-catz.mjs. */
+export const CATZ_STAGE = join(CATZ, 'stage');
 
 const SITE = 'https://winworldpc.com';
 
@@ -211,6 +217,23 @@ async function fetchDogz(manifest, pin) {
   log(`  ${files.length} files from ${dogz.disks.length} disks`);
 }
 
+async function fetchCatz(manifest, pin) {
+  const { catz } = manifest;
+  const archive = join(CATZ, 'catzinst.zip');
+
+  log('Catz: the demo');
+  const data = await fetchPinned(catz.url, archive, pin ? null : catz.sha256);
+
+  if (pin) {
+    Object.assign(catz, { sha256: sha256(data), bytes: data.length });
+  }
+
+  await rm(CATZ_STAGE, { recursive: true, force: true });
+  await extract(archive, CATZ_STAGE);
+  const files = await readdir(CATZ_STAGE);
+  log(`  ${files.length} files`);
+}
+
 async function main() {
   const pin = process.argv.includes('--pin');
   const manifest = await readManifest();
@@ -218,6 +241,7 @@ async function main() {
   await fetchWindows(manifest, pin);
   await fetchDisplay(manifest, pin);
   await fetchDogz(manifest, pin);
+  await fetchCatz(manifest, pin);
 
   if (pin) {
     await writeManifest(manifest);

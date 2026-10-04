@@ -23,6 +23,7 @@
  *
  *   node scripts/oracle/install-windows.mjs
  *   node scripts/oracle/install-windows.mjs --force    # reinstall
+ *   node scripts/oracle/install-windows.mjs --drive catz-drive-c   # another pet's own drive
  *
  * Needs `mtools` and `dosbox`.
  */
@@ -32,6 +33,10 @@ import { join } from 'node:path';
 
 import { DISPLAY, WINDOWS_FLOPPIES } from './fetch.mjs';
 import { BUILD, CACHE, DRIVE, exists, log, run, snapshot, unpackFloppy, walk } from './lib.mjs';
+
+/** The drive to install into: Dogz's by default, or another under oracle/build/ (`--drive`). */
+const at = process.argv.indexOf('--drive');
+const TARGET = at === -1 ? DRIVE : join(BUILD, process.argv[at + 1]);
 
 const STAGE = join(CACHE, 'windows', 'setup-disk');
 
@@ -213,7 +218,7 @@ async function install() {
       '[sdl]',
       'autolock=false',
       '[autoexec]',
-      `mount c ${DRIVE}`,
+      `mount c ${TARGET}`,
       `mount a ${STAGE} -t floppy`,
       'a:',
       'setup /h:a:\\ORACLE.SHH',
@@ -235,7 +240,7 @@ async function install() {
  * files on the drive.
  */
 async function verify() {
-  const files = await walk(DRIVE);
+  const files = await walk(TARGET);
   const upper = new Set(files.map((file) => file.toUpperCase()));
   const missing = REQUIRED.filter((path) => !upper.has(path));
 
@@ -256,8 +261,8 @@ async function verify() {
 async function main() {
   const force = process.argv.includes('--force');
 
-  if (!force && (await exists(join(DRIVE, REQUIRED[0])))) {
-    log(`Windows is installed in ${DRIVE}; --force reinstalls it, and Dogz with it.`);
+  if (!force && (await exists(join(TARGET, REQUIRED[0])))) {
+    log(`Windows is installed in ${TARGET}; --force reinstalls it, and the pet with it.`);
     return;
   }
 
@@ -265,16 +270,21 @@ async function main() {
   await stageDisks();
   await addDriver();
 
-  await rm(DRIVE, { recursive: true, force: true });
-  await mkdir(DRIVE, { recursive: true });
+  await rm(TARGET, { recursive: true, force: true });
+  await mkdir(TARGET, { recursive: true });
 
   log('Running Windows Setup...');
   await install();
 
   const count = await verify();
-  await snapshot('windows');
-  log(`  ${count} files in ${DRIVE}`);
-  log('\nNext: node scripts/oracle/install-dogz.mjs');
+  log(`  ${count} files in ${TARGET}`);
+
+  if (TARGET === DRIVE) {
+    await snapshot('windows');
+    log('\nNext: node scripts/oracle/install-dogz.mjs');
+  } else {
+    log('\nNext: node scripts/oracle/install-catz.mjs');
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
