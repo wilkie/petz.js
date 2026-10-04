@@ -54,3 +54,8 @@ All little-endian.
 
 - [[read out]] `ScriptSprite::LoadSoundList` (seg7:02f1) reads the breed's `[Sound List]` ([[format:lnz]]): an adult's list, a puppy's, and how mature, in hundredths, the dog must be for the adult's. A list is a file in `SOUNDS`, a WAV's name a line, numbered from 0, up to 81, each in 25 bytes. `PlaySound` plays one with Windows' `sndPlaySound`.
 - [[measured]] Every breed's two lists have 81 names, every one a file in `SOUNDS` — the voices in a folder of the breed's, `mas\PANT2.WAV` — and every sound a script plays, 0 to 79, is in them.
+
+## In Catz
+
+- [[measured]] The Catz demo's scripts, `CAT.SCP` and the rest, are laid out otherwise. After the title (`(c) 1996 PF. Magic, Inc.  Lets not talk about me.`) come three words, 123, 66 and 0, not yet known; then the count of records, 805 for the cat; then 16 bytes a record: a word from 1 to 5, the positions from and to, a word 67 or 68, a word 0, a flag 0 or 1, and where the script starts in the body; then the body's length in words, 18,537, which reaches the end of the file. [[inferred]] So where Dogz keeps a script's variants together under one record, Catz gives each its own, the first word its number.
+- [[read out]] Catz's engine, `CATZDLL.DLL`, has no table of its opcodes' names as Dogz's has; its `ScriptSprite` has actions, layered actions and tween frames (`PushLayeredAction`, `GenerateTweenFrame`, from its exports). Its opcodes and their operands are not yet known.

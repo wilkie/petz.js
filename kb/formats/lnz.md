@@ -54,3 +54,10 @@ A breed is a skeleton every breed shares — the same 65 balls in the same anima
 - [[read out]] `Default Factors` line 11 is "age": `PetModule::SetBallScaleFromAge` asks for factor 10, counting from 0.
 - [[read out]] `LoadSpecialBallInfo` reads `[Leg Extension]`, `[Body Extension]` and `[Face Extension]` into `Ballz` +0x1641 to +0x1647, each halved, rounding toward 0, and `[Skeleton Type]` into +0x38 (seg10:1595 to 1a14). `ModifyBallzData` reshapes the frames by them ([[topic:drawing-a-dog]]).
 - Not yet known: the other behaviour factors.
+
+## In Catz
+
+- [[measured]] The Catz demo ([[guide:reproducing]], Catz beside it) keeps a breed file for each of its creatures, in `PTZFILES\<creature>\RESOURCE\`: five adult cats and five kittens (`APERSIAN.LNZ`, `KPERSIAN.LNZ`, Clown, Hunter, Scaredy and Siamese), a dog, a mouse, two bottles and a cloud. The cat's are 67 balls a section, the dog's 65, the mouse's 16, the bottle's 5, the cloud's 12.
+- [[measured]] Its lines are numbers with a comma and tabs between, where Dogz has tabs only before a line's comment: `src/formats/lnz.ts` reads a line as its run of numbers, commas between, and the rest as its comment, which reads both.
+- [[measured]] A cat's file has sections Dogz's do not: `[Default Glue Ball]`, `[Glue Ball]`, `[Head Enlargement]`, `[Feet Enlargement]`, `[Ear Extension]`, `[Move Up]`, `[Move Foward]` (so spelt), `[Move Sideways]`, `[Project Ball]`, `[Whiskers]`, `[Default Linez Thickness]`, `[Body Area]`, `[Speckle Map]`, `[Sounds]` and `[Little one]`; and its `[Linez]` lines have eight numbers, `start, end, fuzz, -1, -1, -1, 95, 95`. Not yet known what the five after the fuzz are; [[inferred]] the last two, 95 or 100, the line's thickness at each end, in hundredths.
+- [[measured]] The cloud's `[Ball Size Diffs]` is there but empty. [[read out]] Dogz's engine starts every ball's tables before reading a breed (`LoadSpecialBallInfo`, seg10:146a): sizes 0, puppy sizes 3, speckles −1, outline 0, fuzz 1; the reimplementation takes those for a section a breed leaves empty or out.

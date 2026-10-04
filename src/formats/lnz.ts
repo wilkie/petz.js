@@ -114,6 +114,19 @@ export function parseLnzSections(text: string): LnzSections {
       throw new Error(`a line before any section: ${line}`);
     }
 
+    /* A run of numbers, a comma between each and any space around it — Dogz
+     * puts tabs only before a line's comment, Catz between its numbers too —
+     * and the comment after; otherwise, up to the first tab, as written. */
+    const run = /^\s*-?\d+(?:\s*,\s*-?\d+)*/.exec(line);
+
+    if (run) {
+      current.push({
+        values: run[0].split(',').map((token) => value(token.trim())),
+        comment: line.slice(run[0].length).replace(/^\s*,?/, '').trim(),
+      });
+      continue;
+    }
+
     const tab = line.indexOf('\t');
     const before = tab === -1 ? line : line.slice(0, tab);
     const comment = tab === -1 ? '' : line.slice(tab).trim();
@@ -156,8 +169,16 @@ export function parseLnz(text: string, balls = 65): Breed {
       return first;
     });
 
-  /** A section with one line for each ball, in ball order. */
-  const perBall = (name: string) => {
+  /**
+   * A section with one line for each ball, in ball order; or, where a breed
+   * has none of it, what the engine starts each ball at before reading the
+   * file (`LoadSpecialBallInfo`, seg10:146a on): a Catz cloud has no sizes.
+   */
+  const perBall = (name: string, otherwise?: number) => {
+    if (otherwise !== undefined && !sections.get(name)?.length) {
+      return Array.from({ length: balls }, () => otherwise);
+    }
+
     const list = numbers(name);
 
     if (list.length !== balls) {
@@ -212,12 +233,12 @@ export function parseLnz(text: string, balls = 65): Breed {
     }),
     ballColor256: perBall('256 Ball Color'),
     ballColor16: perBall('16 Ball Color'),
-    speckleColor: perBall('Speckle Color'),
-    ballSizeDiffs: perBall('Ball Size Diffs'),
-    puppyBalls: perBall('Puppy Balls'),
-    outlineType: perBall('Outline Type'),
-    outlineColor: perBall('Outline Color'),
-    fuzz: perBall('Fuzz'),
+    speckleColor: perBall('Speckle Color', -1),
+    ballSizeDiffs: perBall('Ball Size Diffs', 0),
+    puppyBalls: perBall('Puppy Balls', 3),
+    outlineType: perBall('Outline Type', 0),
+    outlineColor: perBall('Outline Color', 0),
+    fuzz: perBall('Fuzz', 1),
     defaultScales: numbers('Default Scales'),
   };
 }

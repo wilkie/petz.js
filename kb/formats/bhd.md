@@ -27,3 +27,7 @@ One file, `ALL_PTZ.BHD`, describes the animations every breed shares: their fram
 - [[measured]] The ball sizes are diameters: each [[format:bdt]] frame's box is its balls' centres widened by half these sizes, rounded down, exactly. They come in a left half and a right half the same, 24 balls each (`Lankle` to `Lwrist`, `Rankle` to `Rwrist`), then 17 balls of the body from the belly (51) to the tongue.
 - [[measured]] The six bounds are the least and greatest of all 3,852 frames' boxes, exactly.
 - [[measured]] Between the ball sizes and the animation count, and between the animation table and the frame table, the header holds bytes that look like whatever was in memory when it was written: no structure in them has been found. One run, at `0x110` to `0x18e`, is small numbers (0, 4, 6, 9, 15) and may be one a ball. Not yet known.
+
+## In Catz
+
+- [[measured]] Each of the Catz demo's creatures has its own skeleton and animations, `<creature>.BHD` and `<creature><n>.BDT`, laid out as Dogz's and read by the same code (`test/oracle/catz_files_test.ts`): the cat 67 balls and 275 animations, 9,246 frames — of which the demo ships the first 98 animations' files — the dog 65 balls and 2, the mouse 16 and 4, the bottle (`BOTTL`) 5 and 2, the cloud 12 and 2.
