@@ -3,22 +3,41 @@ import { join } from 'node:path';
 
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { parseLnz } from '../../src/formats/lnz.ts';
+import { parseNe } from '../../src/formats/ne.ts';
+import {
+  catzArity,
+  parseScripts,
+  readCatzOpcodes,
+  SCRIPTS,
+  writeScripts,
+} from '../../src/formats/script.ts';
 import { describeWithOracle } from './with-oracle.ts';
 
 const PETZ = 'oracle/build/catz-drive-c/CATZ.DOG/PTZFILES';
+const ENGINE = 'oracle/build/catz-drive-c/WINDOWS/SYSTEM/CATZDLL.DLL';
 const describe = describeWithOracle(PETZ);
 
 /** Each of the Catz demo's creatures: its folder, its files' stem, and its skeleton's balls. */
 const CREATURES = [
-  { folder: 'CAT', stem: 'CAT', balls: 67 },
-  { folder: 'DOG', stem: 'DOG', balls: 65 },
-  { folder: 'MOUSE', stem: 'MOUSE', balls: 16 },
-  { folder: 'BOTTLE', stem: 'BOTTL', balls: 5 },
-  { folder: 'CLOUD', stem: 'CLOUD', balls: 12 },
+  { folder: 'CAT', stem: 'CAT', balls: 67, scripts: 805, positions: 123 },
+  { folder: 'DOG', stem: 'DOG', balls: 65, scripts: 9, positions: 5 },
+  { folder: 'MOUSE', stem: 'MOUSE', balls: 16, scripts: 36, positions: 11 },
+  { folder: 'BOTTLE', stem: 'BOTTL', balls: 5, scripts: 1, positions: 2 },
+  { folder: 'CLOUD', stem: 'CLOUD', balls: 12, scripts: 3, positions: 2 },
 ];
 
 describe('the Catz demo’s files', () => {
-  for (const { folder, stem, balls } of CREATURES) {
+  const opcodes = readCatzOpcodes(parseNe(new Uint8Array(readFileSync(ENGINE))));
+
+  it('name 64 opcodes in CATZDLL.DLL, from startPos to endPos', () => {
+    expect(opcodes.size).toBe(64);
+    expect(opcodes.get(30000)?.name).toBe('startPos');
+    expect(opcodes.get(30028)).toEqual({ name: 'rand2', count: 2, operands: '##' });
+    expect(opcodes.get(30031)).toEqual({ name: 'sequence2', count: 2, operands: 'ss' });
+    expect(opcodes.get(30063)?.name).toBe('endPos');
+  });
+
+  for (const { folder, stem, balls, scripts, positions } of CREATURES) {
     const resource = join(PETZ, folder, 'RESOURCE');
     const read = (name: string) => new Uint8Array(readFileSync(join(resource, name)));
 
@@ -34,6 +53,26 @@ describe('the Catz demo’s files', () => {
           expect(frames.every((frame) => frame.balls.length === balls)).toBe(true);
         }
       });
+    });
+
+    it(`reads the ${folder.toLowerCase()}’s ${scripts} scripts, between ${positions} positions, and writes them back byte for byte`, () => {
+      const data = read(`${stem}.SCP`);
+      const parsed = parseScripts(data, catzArity(opcodes), SCRIPTS.catz);
+      const actions = parsed.flatMap(({ variants }) =>
+        variants
+          .flat()
+          .flatMap((element) =>
+            'op' in element && opcodes.get(element.op)?.operands[0] === 'a'
+              ? [element.operands[0]]
+              : []
+          )
+      );
+
+      expect(parsed).toHaveLength(scripts);
+      expect(new DataView(data.buffer).getUint16(data.indexOf(0) + 1, true)).toBe(positions);
+      expect(parsed.every(({ from, to }) => from < positions && to < positions)).toBe(true);
+      expect(actions.every((action) => typeof action === 'number' && action < scripts)).toBe(true);
+      expect(writeScripts(data, parsed, SCRIPTS.catz)).toEqual(data);
     });
 
     it(`reads the ${folder.toLowerCase()}’s breed files, their lines laid out with tabs too`, () => {
