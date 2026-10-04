@@ -347,6 +347,12 @@ export function loadScene(
  * animations the demo ships (the first 98, numbered from the first), and
  * CATZDLL.DLL's palette, on 256 colours.
  */
+/** What every frame's scene of a cat shares, read once for each drive's reader and cat. */
+const catShared = new WeakMap<
+  object,
+  Map<string, Omit<Scene, 'frame' | 'age' | 'bristle'> & { frames: Frame[] }>
+>();
+
 function loadCatScene(
   read: (path: string) => Uint8Array,
   frame: number,
@@ -354,6 +360,18 @@ function loadCatScene(
   bristle: number,
   cat: CatChoice
 ): Scene {
+  const forDrive = catShared.get(read) ?? new Map();
+  catShared.set(read, forDrive);
+  const key = `${cat.breed}/${cat.percent}`;
+  const shared = forDrive.get(key) ?? readCat(read, cat);
+  forDrive.set(key, shared);
+  const { frames, ...rest } = shared;
+
+  return { ...rest, frame: frames[frame], age, bristle };
+}
+
+/** A cat's files read: its frames, shaped by its breed, and the palette and colours to draw it in. */
+function readCat(read: (path: string) => Uint8Array, cat: CatChoice) {
   const text = (path: string) => new TextDecoder('latin1').decode(read(path));
   const resource = 'CATZ.DOG/PTZFILES/CAT/RESOURCE';
   const header = parseBhd(read(`${resource}/CAT.BHD`));
@@ -399,11 +417,9 @@ function loadCatScene(
   return {
     breed,
     header,
-    frame: extendFrames(frames, breed)[frame],
+    frames: extendFrames(frames, breed),
     colours,
-    age,
-    bristle,
-    depth: 256,
+    depth: 256 as const,
     bottomUp: bottomUpFromWinIni(text('WINDOWS/WIN.INI')),
     translate,
     possible,
@@ -661,12 +677,14 @@ export function align(
   scene: Scene,
   dog: Dog,
   yaws: number[],
-  seed = 1
+  seed = 1,
+  { settle = true }: { settle?: boolean } = {}
 ): Alignment & { order: number[] } {
   let best: (Alignment & { order: number[] }) | null = null;
 
   for (const yaw of yaws) {
-    const order = settledOrder(scene, yaw);
+    /* Unsettled, a search's first pass: the balls sorted from scratch, one drawing. */
+    const order = settle ? settledOrder(scene, yaw) : [];
     const drawing = draw(scene, yaw, [...order], seed);
     let [left, top, right, bottom] = [WIDTH, HEIGHT, -1, -1];
 

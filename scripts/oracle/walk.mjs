@@ -73,7 +73,8 @@ async function main() {
   const record = Number(option('--record', 0));
   const count = Number(option('--count', 30));
   const adopted = args.includes('--adopted');
-  const name = `catwalk${adopted ? 'adopted' : ''}${record}`;
+  const lure = args.includes('--lure');
+  const name = lure ? 'catwalklure' : `catwalk${adopted ? 'adopted' : ''}${record}`;
   const drive = join(VARIANTS, name);
   const reuse = args.includes('--reuse');
 
@@ -82,8 +83,7 @@ async function main() {
     await makeVariant(name, [
       '--game',
       'catz',
-      '--stride',
-      String(record),
+      ...(lure ? [] : ['--stride', String(record)]),
       ...(adopted ? ['--from', 'catz-adopted'] : []),
     ]);
   }
@@ -92,7 +92,17 @@ async function main() {
   const kept = join(OUT, `${name}.json`);
 
   if (adopted) {
-    return walkAdopted({ name, drive, record, count, reuse, shots, kept });
+    const listed = option('--records', String(record));
+    const records = listed === 'walks' ? 'walks' : listed.split(',').map(Number);
+    return walkAdopted({
+      name,
+      drive,
+      records,
+      count,
+      reuse,
+      shots,
+      lure: args.includes('--lure'),
+    });
   }
 
   const background = join(OUT, 'pouncer300-catless.png');
@@ -135,11 +145,19 @@ async function main() {
     .map((file) => join(shots, file));
   log(`The kitten carried out: the ${breed}'s.`);
 
-  await analyse({ drive, record, cat, pictures, background: backgroundRgb, region: REGION });
+  await analyse({
+    drive,
+    records: [record],
+    cat,
+    pictures,
+    background: backgroundRgb,
+    region: REGION,
+  });
 }
 
 /** Each picture matched against the walk's frames, and the stride at each turn found. */
-async function analyse({ drive, record, cat, pictures, background, region }) {
+async function analyse({ drive, records: asked, cat, pictures, background, region }) {
+  let records = asked;
   const read = (path) => new Uint8Array(readFileSync(join(drive, path)));
   const engine = parseNe(read('WINDOWS/SYSTEM/CATZDLL.DLL'));
   const scripts = parseScripts(
@@ -147,18 +165,57 @@ async function analyse({ drive, record, cat, pictures, background, region }) {
     catzArity(readCatzOpcodes(engine)),
     SCRIPTS.catz
   );
-  const positions = { count: 0, neutral: scripts[record].from };
-  const cycle = catzTimeline(scripts, positions, record, {
-    flags: () => 3,
-    random: () => 0,
-  })
-    .filter((step) => !step.reference)
-    .map((step) => step.frame);
-  const scenes = cycle.map((frame) => loadScene(read, frame, 100, 0, cat));
-  const rows = [];
-  let yaws = Array.from({ length: 256 }, (_, n) => n - 128);
+  /*
+   * `walks`: every record that is a cycle carrying the cat on -- from a
+   * position to the same one, its last frame its first pose moved on, the
+   * balls about the chest nearly as they were and the chest more than 30
+   * units on.
+   */
+  const frameOf = (frame) => loadScene(read, frame, 100, 0, cat).frame;
+  const cycleOf = (record) =>
+    catzTimeline(scripts, { count: 0, neutral: scripts[record].from }, record, {
+      flags: () => 3,
+      random: () => 0,
+    })
+      .filter((step) => !step.reference)
+      .map((step) => step.frame);
 
-  log(`Record ${record}: ${cycle.length} frames, ${cycle[0]} to ${cycle.at(-1)}.`);
+  if (records === 'walks') {
+    records = scripts.flatMap((script, record) => {
+      const cycle = script.from === script.to ? cycleOf(record) : [];
+      const [a, b] = [cycle[0], cycle.at(-1)].map((frame) => frame !== undefined && frameOf(frame));
+
+      if (cycle.length < 6 || !a || !b) {
+        return [];
+      }
+
+      const about = (frame, n) => ['x', 'y', 'z'].map((k) => frame.balls[n][k] - frame.balls[6][k]);
+      let shape = 0;
+
+      for (let n = 0; n < a.balls.length; n++) {
+        about(a, n).forEach((value, k) => (shape += Math.abs(value - about(b, n)[k])));
+      }
+
+      const travel = Math.hypot(...['x', 'y', 'z'].map((k) => b.balls[6][k] - a.balls[6][k]));
+      return shape / a.balls.length < 3 && travel > 30 ? [record] : [];
+    });
+  }
+
+  /* Every frame of each record's cycle, with the record it is of. */
+  const candidates = records.flatMap((record) =>
+    catzTimeline(scripts, { count: 0, neutral: scripts[record].from }, record, {
+      flags: () => 3,
+      random: () => 0,
+    })
+      .filter((step) => !step.reference)
+      .map((step, at, all) => ({ frame: step.frame, record, at, of: all.length }))
+  );
+  const scenes = candidates.map(({ frame }) => loadScene(read, frame, 100, 0, cat));
+  const rows = [];
+  /* The first picture's turn searched every 8th of 256, then near the last found. */
+  let yaws = Array.from({ length: 32 }, (_, n) => n * 8 - 128);
+
+  log(`Records ${records.join(', ')}: ${candidates.length} frames.`);
 
   for (const path of pictures) {
     const dog = findCat(readPicture(path), background, region, scenes[0].possible);
@@ -170,13 +227,23 @@ async function analyse({ drive, record, cat, pictures, background, region }) {
 
     let best = null;
 
-    cycle.forEach((frame, at) => {
-      const placed = align(scenes[at], dog, yaws);
+    /* A quick pass over every candidate, unsettled; then the best few settled. */
+    const quick = candidates
+      .map((candidate, index) => ({
+        index,
+        candidate,
+        wrong: align(scenes[index], dog, yaws, 1, { settle: false }).score.wrong,
+      }))
+      .sort((a, b) => a.wrong - b.wrong)
+      .slice(0, 4);
+
+    for (const { index, candidate } of quick) {
+      const placed = align(scenes[index], dog, yaws);
 
       if (!best || placed.score.wrong < best.score.wrong) {
-        best = { ...placed, frame, at };
+        best = { ...placed, ...candidate };
       }
-    });
+    }
 
     /* The cat turns slowly if at all: after the first, near the last turn found. */
     yaws = Array.from({ length: 17 }, (_, n) => best.yaw - 8 + n);
@@ -184,10 +251,12 @@ async function analyse({ drive, record, cat, pictures, background, region }) {
   }
 
   const scene = scenes[0];
-  const [first, last] = [cycle[0], cycle.at(-1)].map((frame) =>
-    loadScene(read, frame, 100, 0, cat)
-  );
   const glue = Number(scene.breed.sections.get('Default Glue Ball')?.[0]?.values[0] ?? 6);
+  /* Each record's stride: its glue ball's travel from its cycle's first frame to its last. */
+  const ends = (record) => {
+    const frames = candidates.filter((each) => each.record === record).map((each) => each.frame);
+    return [frames[0], frames.at(-1)].map((frame) => loadScene(read, frame, 100, 0, cat));
+  };
 
   for (const row of rows) {
     if (!row.found) {
@@ -196,9 +265,10 @@ async function analyse({ drive, record, cat, pictures, background, region }) {
     }
 
     const at = (s) => ballAt(s.breed, s.header, s.frame, glue, { age: 100, yaw: row.yaw });
-    const [a, b] = [at(first), at(last)];
+    const [a, b] = ends(row.record).map(at);
     log(
-      `  ${row.path.split('/').pop()}: frame ${row.frame} (${row.at + 1} of ${cycle.length}), ` +
+      `  ${row.path.split('/').pop()}: record ${row.record}, frame ${row.frame} ` +
+        `(${row.at + 1} of ${row.of}), ` +
         `yaw ${row.yaw}, at ${row.dx},${row.dy}, ${row.score.wrong} of ${row.pixels} differ; ` +
         `stride here ${b.x - a.x},${b.y - a.y}`
     );
@@ -277,6 +347,35 @@ async function carryAndShoot(name, drive, count, background, possible, carry) {
   return breed;
 }
 
+/**
+ * The supply shelf's food dish, and where it is put down: across the floor,
+ * near the shelf's own height, as DOSBox's window spans only 200 of
+ * Windows' rows and a carried dish hides the pointer, so a long climb loses it.
+ */
+const FOOD_DISH = [75, 412];
+const FOOD_DROP = [560, 380];
+
+/**
+ * Where a dark cat -- Pouncer, black -- is on the playpen's open floor, by
+ * its darkest pixels there, (16, 16, 16) and (32, 32, 32), or null if too
+ * few show: the wallpaper's embossing goes as dark as (48, 48, 48).
+ */
+function darkOnFloor(rgb) {
+  let [count, x, y] = [0, 0, 0];
+
+  for (let py = PLAYPEN.top; py <= PLAYPEN.bottom; py++) {
+    for (let px = 230; px <= PLAYPEN.right; px++) {
+      const at = 3 * (py * 640 + px);
+
+      if (rgb[at] <= 0x20 && rgb[at] === rgb[at + 1] && rgb[at] === rgb[at + 2]) {
+        [count, x, y] = [count + 1, x + px, y + py];
+      }
+    }
+  }
+
+  return count >= 300 ? { x: Math.round(x / count), y: Math.round(y / count) } : null;
+}
+
 /** The playpen of an adopted cat, right of the supply shelf's panel and under the title bar. */
 const PLAYPEN = { left: 205, top: 45, right: 630, bottom: 470 };
 
@@ -286,7 +385,7 @@ const PLAYPEN = { left: 205, top: 45, right: 630, bottom: 470 };
  * playpen's tiled wallpaper is told from the cat by each pixel's commonest
  * colour over the burst, the cat moving on.
  */
-async function walkAdopted({ name, drive, record, count, reuse, shots }) {
+async function walkAdopted({ name, drive, records, count, reuse, shots, lure }) {
   if (!reuse) {
     for (const file of (await readdir(shots)).filter((file) => file.startsWith(`${name}-`))) {
       await rm(join(shots, file));
@@ -297,6 +396,27 @@ async function walkAdopted({ name, drive, record, count, reuse, shots }) {
       'C:\\CATZ.DOG\\CATZ.EXE',
       async (session) => {
         await session.pause(30);
+
+        /* With --lure, once the cat is out on the open floor, the food dish
+         * carried across to the far side of it, which it walks to. */
+        if (lure) {
+          await session.learnPointer();
+          let seen = null;
+
+          for (let tries = 0; tries < 40 && !seen; tries++) {
+            seen = darkOnFloor(readPicture(await session.screen('seat')));
+
+            if (!seen) {
+              await session.pause(2);
+            }
+          }
+
+          const across = seen && seen.x > 420 ? 240 : 600;
+          log(
+            `  the cat is ${seen ? `out at ${seen.x},${seen.y}` : 'not out'}; the dish to ${across}`
+          );
+          await session.drag(FOOD_DISH, [across, FOOD_DROP[1]], 1);
+        }
 
         for (let shot = 0; shot < count; shot++) {
           await session.screen(`walk-${String(shot).padStart(2, '0')}`);
@@ -333,7 +453,7 @@ async function walkAdopted({ name, drive, record, count, reuse, shots }) {
   log(`The adopted kitten's walk: ${pictures.length} pictures.`);
   await analyse({
     drive,
-    record,
+    records,
     cat: { breed: 'hunter', percent: 100 },
     pictures,
     background,
