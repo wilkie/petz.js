@@ -9,17 +9,26 @@ installers and dialogs that no program of Windows' own can answer.
     xinput.py :94 'type:Dogz oracle' Tab
     xinput.py :94 click:320,240
     xinput.py :94 point:320,240
+    xinput.py :94 point:220,290 down:3 point:400,200 up:3
+    xinput.py :94 learn:oracle/build/pointer.json
 
 Each argument is a key, or keys held together joined by `+`, by X keysym
 name; `type:` followed by text to type a character at a time; `point:`
 followed by x,y to put Windows' pointer there; or `click:` to put it there
-and press the left button. Keys first put the pointer inside DOSBox's
+and press the left button; `down:` and `up:` followed by a button's number,
+1 the left and 3 the right, to press it or let it go. `learn:` followed by a
+path keeps the pointer drawn at the screen's middle there as a template, and
+`XINPUT_POINTER` names one to find the pointer by where the arrow is not;
+`wait:` followed by milliseconds, a pause.
+Keys first put the pointer inside DOSBox's
 window, so that they go to it.
 
 From winbox.js's xkeys.py, with typing and the pointer added.
 """
 
 import ctypes
+import json
+import os
 import subprocess
 import sys
 import time
@@ -169,6 +178,82 @@ def find_arrow(raw):
     return None
 
 
+# A pointer of a game's own -- Catz's hand -- learnt from the screen where
+# Windows leaves the pointer, its middle, before anything moves it (`learn:`),
+# and kept on the oracle's build, never in the repository: it is the game's.
+POINTER = os.environ.get('XINPUT_POINTER')
+
+
+def learn_pointer(raw, path):
+    """
+    Keeps the pointer drawn at the screen's middle as a template: the white
+    of it joined to the middle, and the black edging that white, each pixel
+    by where it is from its hot spot, the middle.
+    """
+    def pixel(x, y):
+        at = (y * WIDTH + x) * 3
+        return raw[at], raw[at + 1], raw[at + 2]
+
+    middle = (WIDTH // 2, HEIGHT // 2)
+    near = [(x, y) for r in range(6) for y in range(middle[1] - r, middle[1] + r + 1)
+            for x in range(middle[0] - r, middle[0] + r + 1) if pixel(x, y) == (255, 255, 255)]
+
+    if not near:
+        # The pointer is the game's own, the same every run: one learnt before serves.
+        if os.path.exists(path):
+            return
+
+        sys.exit('learn: no pointer at the middle of the screen')
+
+    white, stack = {near[0]}, [near[0]]
+
+    while stack:
+        x, y = stack.pop()
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                n = (x + dx, y + dy)
+                if (n not in white and abs(n[0] - middle[0]) < 40 and abs(n[1] - middle[1]) < 40
+                        and pixel(*n) == (255, 255, 255)):
+                    white.add(n)
+                    stack.append(n)
+
+    black = {(x + dx, y + dy) for x, y in white for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+             if (x + dx, y + dy) not in white and pixel(x + dx, y + dy) == (0, 0, 0)}
+    template = [[x - middle[0], y - middle[1], 255] for x, y in sorted(white)] + \
+        [[x - middle[0], y - middle[1], 0] for x, y in sorted(black)]
+
+    with open(path, 'w') as file:
+        json.dump(template, file)
+
+
+def find_learnt(raw):
+    """Where a learnt pointer's hot spot is on the screen, or None."""
+    if not POINTER or not os.path.exists(POINTER):
+        return None
+
+    with open(POINTER) as file:
+        template = [(dx, dy, (v, v, v)) for dx, dy, v in json.load(file)]
+
+    def pixel(x, y):
+        at = (y * WIDTH + x) * 3
+        return raw[at], raw[at + 1], raw[at + 2]
+
+    first, second = template[0], template[len(template) // 2]
+
+    for y in range(HEIGHT):
+        for x in range(WIDTH):
+            if not all(0 <= x + dx < WIDTH and 0 <= y + dy < HEIGHT and pixel(x + dx, y + dy) == c
+                       for dx, dy, c in (first, second)):
+                continue
+
+            # By an edge it is drawn clipped: compare what is drawn.
+            if all(pixel(x + dx, y + dy) == colour for dx, dy, colour in template
+                   if 0 <= x + dx < WIDTH and 0 <= y + dy < HEIGHT):
+                return x, y
+
+    return None
+
+
 def ratchet(display, host_x, host_y, columns, rows, scale):
     """
     Moves Windows' pointer about `columns` and `rows` and leaves the host's
@@ -205,6 +290,12 @@ def ratchet(display, host_x, host_y, columns, rows, scale):
     return True
 
 
+# Where the last pointing left the pointer, the host's, and the scales: so a
+# drag goes on by reckoning where the pointer is no longer drawn (Catz hides
+# its hand while it carries a kitten).
+LAST = None
+
+
 def point(display, name, x, y):
     """
     Puts Windows' pointer at x,y of the screen it draws.
@@ -226,14 +317,20 @@ def point(display, name, x, y):
         hx, hy = WIDTH // 2, HEIGHT // 2
         move(display, hx, hy)
 
+    global LAST
     scale = [SCALE_X, SCALE_Y]
 
     # The last walk, to measure the scales by: where the host's pointer and
-    # Windows' were before it.
+    # Windows' were before it; to begin with, where the last pointing left them.
     walked = None
 
+    if LAST:
+        (last_host, last_found, last_scale) = LAST
+        walked, scale = (last_host, last_found), list(last_scale)
+
     for _ in range(24):
-        found = find_arrow(screen(name))
+        raw = screen(name)
+        found = find_arrow(raw) or find_learnt(raw)
 
         reckoned = False
 
@@ -277,7 +374,12 @@ def point(display, name, x, y):
             print(f'host {hx},{hy} pointer {found} off by {dx},{dy} scale {scale}', file=sys.stderr)
 
         if abs(dx) <= 1 and abs(dy) <= 1 or (reckoned and abs(dx) <= 3 and abs(dy) <= 3):
+            LAST = ((hx, hy), found, tuple(scale))
             return
+
+        if reckoned:
+            # Reckoned from here: the walk that follows is measured from here.
+            walked = ((hx, hy), found)
 
         target_x = hx + round(dx / scale[0])
         target_y = hy + round(dy / scale[1])
@@ -320,6 +422,11 @@ def press(display):
     x11.XFlush(display)
 
 
+def button(display, number, down):
+    xtst.XTestFakeButtonEvent(display, number, 1 if down else 0, 0)
+    x11.XFlush(display)
+
+
 def main():
     name = sys.argv[1]
     display = x11.XOpenDisplay(name.encode())
@@ -330,7 +437,15 @@ def main():
     inside = False
 
     for argument in sys.argv[2:]:
-        if argument.startswith(('point:', 'click:')):
+        if argument.startswith('wait:'):
+            time.sleep(int(argument[5:]) / 1000)
+        elif argument.startswith('learn:'):
+            learn_pointer(screen(name), argument[6:])
+        elif argument.startswith(('down:', 'up:')):
+            kind, number = argument.split(':')
+            button(display, int(number), kind == 'down')
+            inside = True
+        elif argument.startswith(('point:', 'click:')):
             x, y = (int(part) for part in argument[6:].split(','))
             point(display, name, x, y)
 

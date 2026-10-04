@@ -37,7 +37,13 @@
  *                 refuses a larger one as "Data Corruption". And --hide:
  *                 every script one frame for ever, as Dogz's --hold, so
  *                 that no kitten comes out at all -- the playpen as it is
- *                 without one, for a probe to tell a cat from.
+ *                 without one, for a probe to tell a cat from. And --walk
+ *                 <record>: every action made that record's, a walk or a
+ *                 run, which the engine then plays again and again. And
+ *                 --stride <record>: every script kept, but every sequence
+ *                 it shows the record's, and every lone frame that
+ *                 sequence's first, so the kitten comes out and walks
+ *                 wherever the engine has it go.
  * --set <section>=<value>  Every line of a section of the adopted breed's
  *                 file given the value, as `--set "Body Extension=100"`,
  *                 or one ball's line, as `--set "256 Ball Color[45]=80"`;
@@ -262,8 +268,10 @@ async function makeCatzVariant(name, option, args) {
 
   const hold = option('--hold');
   const hide = args.includes('--hide');
+  const walk = option('--walk');
+  const stride = option('--stride');
 
-  if (hold !== null || hide) {
+  if (hold !== null || hide || walk !== null || stride !== null) {
     const frame = Number(hold ?? 0);
     const engine = parseNe(
       new Uint8Array(await readFile(join(drive, 'WINDOWS', 'SYSTEM', 'CATZDLL.DLL')))
@@ -283,7 +291,42 @@ async function makeCatzVariant(name, option, args) {
       { op: 30063, operands: [] },
     ];
 
+    /* Walking: every action the cat's, so whatever the engine plays it plays that. */
+    const walking = walk === null ? null : scripts[Number(walk)]?.variants;
+
+    if (walk !== null && !walking) {
+      throw new Error(`no record ${walk} in CAT.SCP`);
+    }
+
+    /* Striding: every sequence shown the record's first one, every lone frame its first. */
+    const cycle =
+      stride === null
+        ? null
+        : scripts[Number(stride)]?.variants[0].find((element) => element.op === SEQUENCE);
+
+    if (stride !== null && !cycle) {
+      throw new Error(`record ${stride} shows no sequence`);
+    }
+
     for (const script of scripts) {
+      if (walking) {
+        script.variants = walking;
+        continue;
+      }
+
+      if (cycle) {
+        script.variants = script.variants.map((variant) =>
+          variant.map((element) =>
+            'frame' in element
+              ? { frame: cycle.operands[0] }
+              : element.op === SEQUENCE
+                ? { op: SEQUENCE, operands: [...cycle.operands] }
+                : element
+          )
+        );
+        continue;
+      }
+
       script.variants = script.variants.map((variant) =>
         hide
           ? still
@@ -299,12 +342,24 @@ async function makeCatzVariant(name, option, args) {
 
     const written = writeScripts(original, scripts, SCRIPTS.catz);
 
-    if (!hide && written.length !== original.length) {
+    if ((hold !== null || stride !== null) && written.length !== original.length) {
       throw new Error('the held scripts are not the size of the original');
     }
 
+    if (written.length > original.length) {
+      throw new Error('the scripts are larger than the original, which Catz refuses');
+    }
+
     await writeFile(path, written);
-    log(hide ? '  no kitten coming out' : `  every cat's frame ${frame}`);
+    log(
+      hide
+        ? '  no kitten coming out'
+        : walking
+          ? `  every action record ${walk}'s`
+          : cycle
+            ? `  every sequence record ${stride}'s, ${cycle.operands.join(' to ')}`
+            : `  every cat's frame ${frame}`
+    );
   }
 
   log(`The variant is in ${drive}.`);

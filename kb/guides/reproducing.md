@@ -60,6 +60,15 @@ node scripts/oracle/shoot.mjs cathold300 --count 2
 
 The first copies Catz's drive with every frame the cat's scripts show made frame 300; the second runs Catz on it — past the welcome, on with Use a Visit — and keeps pictures of the playpen. [[measured]] Catz's first run on a drive times the display with WinG, for about two minutes, as Dogz's does. Rewriting every script to show one frame for ever, as Dogz's `--hold` does, leaves no kitten in sight: the scripts' cues and actions are what bring one out. So Catz's `--hold` keeps every opcode and changes only the frames, and keeps `CAT.SCP` its size: [[measured]] Catz refuses a larger one, "Data Corruption". Held so, Pouncer comes out of the fourth basket and stays, facing the viewer, on every run so far.
 
+`scripts/oracle/walk.mjs` is a start on a walking probe: whether a cat travels on the oracle as `/cats.html` places it. It is not yet a measurement.
+
+- **What it does:** `variant.mjs --stride <record>` keeps every script but shows the record's walk wherever a script shows a sequence. The kitten still comes out, and walks wherever the engine has it go. The probe then takes a burst of pictures (about 0.27 seconds apart) and matches each against the walk's frames.
+- [[measured]] **Why it doesn't measure yet:**
+  - The Adoption Kit keeps its kittens at their baskets, mostly hidden behind them and the caption, and too little of one shows to line a drawing up with.
+  - Which kitten comes out varies from run to run.
+- **Carrying one out** (`--carry`, the right button held and dragged, as the Adoption Kit's caption says) gets as far as finding the kitten and picking it up: `xinput.py` learns Catz's hand pointer from the screen, since its pixels are the game's and are kept only on the build. But DOSBox's window spans only 200 of Windows' 480 rows, and Catz hides its pointer while it carries a kitten, so a carry far enough to clear the baskets loses the pointer.
+- `variant.mjs --walk <record>`, every action made the walk, leaves the kittens milling inside their baskets.
+
 ## Play with it
 
 ```shell

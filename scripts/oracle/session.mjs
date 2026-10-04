@@ -20,6 +20,9 @@ import { join } from 'node:path';
 import { MACHINE } from './install-windows.mjs';
 import { BUILD, DRIVE, ROOT, SCREENS, log, pause, run } from './lib.mjs';
 
+/** Where a game's own pointer, learnt (`learnPointer`), is kept: the build, never the repository. */
+const POINTER = join(BUILD, 'pointer.json');
+
 /** The virtual display. One session at a time uses it. */
 const DISPLAY = ':94';
 
@@ -124,6 +127,28 @@ export async function withWindows(
     /** A left click at a point of Windows' 640x480 screen. */
     click: (x, y) => input([`click:${x},${y}`]),
 
+    /**
+     * A drag from one point to another with a mouse button held, 1 the left
+     * and 3 the right: pressed at the first and held a moment -- Catz picks a
+     * kitten up only so -- moved, held, and let go at the second.
+     */
+    drag: (from, to, button = 1) =>
+      input([
+        `point:${from[0]},${from[1]}`,
+        `down:${button}`,
+        'wait:800',
+        `point:${to[0]},${to[1]}`,
+        'wait:800',
+        `up:${button}`,
+      ]),
+
+    /**
+     * Learns the pointer as a game draws it -- Catz's hand -- from where
+     * Windows leaves it, the screen's middle, so that `click` and `drag`
+     * find it as they find the arrow. Before anything moves it.
+     */
+    learnPointer: () => input([`learn:${POINTER}`]),
+
     pause,
 
     /** Whether Windows has ended. */
@@ -131,7 +156,9 @@ export async function withWindows(
   });
 
   const input = (args) =>
-    run('python3', [join(ROOT, 'scripts', 'oracle', 'xinput.py'), DISPLAY, ...args]);
+    run('python3', [join(ROOT, 'scripts', 'oracle', 'xinput.py'), DISPLAY, ...args], {
+      env: { ...process.env, XINPUT_POINTER: POINTER },
+    });
 
   try {
     await steps(session());
