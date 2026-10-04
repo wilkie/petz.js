@@ -98,6 +98,14 @@ export interface Ball {
 
   /** Up to 7. */
   fuzz: number;
+
+  /**
+   * Drawn by Catz's kernels (`XFillCircleEx`, CATZDLL.DLL seg44:5671): an
+   * outline, however thick, a pixel either end of every row, and no whole
+   * rows; and with none, speckled only if it has a speckle colour and is 7
+   * or wider.
+   */
+  catz?: boolean;
 }
 
 /** The largest diameter `InitCircleLookup` makes tables for. */
@@ -233,6 +241,23 @@ export function fillBall(bitmap: IndexedBitmap, ball: Ball, fuzz: CircleTables =
   const thick = ball.outline;
 
   for (const { r, y, start, width, spot, speckled, edge } of rows) {
+    if (ball.catz && thick !== 0) {
+      if (thick > 0) {
+        /* A pixel of the outline, the row one shorter, and the outline over its last (seg44:4e9d). */
+        bitmap.set(start, y, ball.outlineColour);
+        bitmap.span(start + 1, y, width - 1, ball.colour);
+        bitmap.set(start + width - 1, y, ball.outlineColour);
+      } else {
+        bitmap.span(start, y, width, ball.colour);
+      }
+
+      if (speckled && ball.speckleColour >= 0 && (thick > 0 || d >= 7)) {
+        bitmap.set(start + spot, y, ball.speckleColour);
+      }
+
+      continue;
+    }
+
     if (thick > 0) {
       /* Whole rows of the outline at top and bottom, its ends between. */
       if (r <= thick || r >= d - thick) {

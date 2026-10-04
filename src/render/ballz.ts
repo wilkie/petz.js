@@ -105,6 +105,13 @@ export interface DrawOptions {
   eyesWide?: number;
 
   /**
+   * Catz's `ColorIndexTranslate` on 256 colours (`catzTranslation`): every
+   * colour a ball or line is drawn in goes through it, after a Catz breed's
+   * depth shading. Without it, colours are as they are.
+   */
+  translate?: (colour: number) => number;
+
+  /**
    * Something drawn with a ball, just after it and before the balls nearer
    * (`Ballz::SetBonusDrawProc`, called by `DisplayBallzFrame`, seg10:4d28):
    * what the dog holds. It is given where that ball's centre is drawn.
@@ -132,6 +139,57 @@ export interface DrawOptions {
  * display; on the 16-colour one, a ramp is a colour.
  */
 const RAMPS = { 256: { first: 16, length: 6 }, 16: { first: 0, length: 1 } } as const;
+
+/** Catz's colour ramps on 256 colours: ten of ten from 28 (`XDrawPort::InitStaticDraw`, seg44:0ebe). */
+const CATZ_RAMPS = { first: 28, length: 10 };
+
+/**
+ * A colour shifted `by` along its ramp, kept within it, as
+ * `GenerateZDepthColor` (CATZDLL.DLL seg47:5d04) does; a colour below the
+ * ramps as it is.
+ */
+export function catzShade(colour: number, by: number) {
+  const { first, length } = CATZ_RAMPS;
+
+  if (colour < first) {
+    return colour;
+  }
+
+  const ramp = first + Math.trunc((colour - first) / length) * length;
+  return Math.max(ramp, Math.min(ramp + length - 1, colour + by));
+}
+
+/**
+ * How far each ball's colour is shaded by its depth, as `XBallz::ZOrder`
+ * works it out (seg47:579c on): its depth from the middle of the chest and
+ * the butt, × 6 in 16 bits, × 2.2, over the depth the frame's balls span --
+ * the farthest back of a ball less the nearest front, those omitted left
+ * out -- toward 0, and kept within 6 either way. Farther is darker. The
+ * engine works it out again only when a ball's depth has moved by more
+ * than 10, so a still cat's are as here.
+ */
+export function depthShades(breed: Breed, placed: Placed[]) {
+  const { chest, butt } = skeletonOf(breed);
+  const omitted = new Set(breed.omissions);
+  const middle =
+    chest >= 0 && butt >= 0 ? Math.trunc((placed[chest].depth + placed[butt].depth) / 2) : 0;
+  let [near, far] = [Infinity, -Infinity];
+
+  placed.forEach(({ depth, diameter }, ball) => {
+    if (!omitted.has(ball)) {
+      const radius = Math.trunc(diameter / 2);
+      [near, far] = [Math.min(near, depth - radius), Math.max(far, depth + radius)];
+    }
+  });
+
+  const span = far - near;
+
+  return placed.map(({ depth }) => {
+    const sixfold = (((depth - middle) * 6) << 16) >> 16;
+    const shift = span > 0 ? Math.trunc((sixfold * 2.2) / span) : 0;
+    return Math.max(-6, Math.min(6, shift));
+  });
+}
 
 /** How much nearer a ball must be than the one before it to be drawn after it (`ZOrder`'s tolerance, seg10:4dee). */
 const Z_TOLERANCE = 4;
@@ -335,6 +393,7 @@ export function drawPet(
     bristle = 0,
     order,
     tongue = true,
+    translate = (colour: number) => colour,
   }: DrawOptions
 ) {
   const tables = circleTables(seed);
@@ -353,6 +412,24 @@ export function drawPet(
   );
   const numbers = colours === 256 ? breed.ballColor256 : breed.ballColor16;
   const ramps = RAMPS[colours];
+  const shades = breed.catz && colours === 256 ? depthShades(breed, placed) : null;
+  const shade = (colour: number, by: number) => (shades ? catzShade(colour, by) : colour);
+
+  /* Catz's speckle is the ball's own colour, unshaded, for a ball given
+   * speckles in its ramps (`Linez::GenerateSpeckleColors`, seg39:2815, with
+   * `[Speckle Map]` as it is unless a breed says); so it shows where the
+   * ball is shaded. */
+  const speckled = (ball: number) => {
+    const file = breed.speckleColor[ball];
+
+    if (shades) {
+      const own = numbers[ball];
+      const speckle = file >= 0 && own > CATZ_RAMPS.first && own <= 128 ? own : file;
+      return speckle < 0 ? speckle : translate(speckle);
+    }
+
+    return colours === 256 ? speckleColour(numbers[ball], file, ramps.first, ramps.length) : file;
+  };
   const at = (ball: number) => ({ x: originX + placed[ball].x, y: originY + placed[ball].y });
 
   const tongueOut = tongue;
@@ -387,7 +464,12 @@ export function drawPet(
       const width = (ball: number, thickness: number) =>
         Math.max(1, Math.trunc((Math.trunc(placed[ball].diameter / 2) * thickness) / 100));
       const own = line.colour ?? -1;
-      const colour = own === -1 ? numbers[mark.from] : own < -1 ? numbers[mark.to] : own;
+      const chosen = own === -1 ? numbers[mark.from] : own < -1 ? numbers[mark.to] : own;
+      /* Shaded by its ends' depths together, halved toward 0 (seg47:724e). */
+      const colour = shade(
+        chosen,
+        shades ? Math.trunc((shades[mark.from] + shades[mark.to]) / 2) : 0
+      );
       const left = line.leftColour ?? -1;
 
       drawLine(
@@ -396,8 +478,8 @@ export function drawPet(
         at(mark.to),
         width(mark.from, start),
         width(mark.to, end),
-        colour,
-        { edges: left >= 0 ? left : colour }
+        translate(colour),
+        { edges: translate(left >= 0 ? left : colour) }
       );
       continue;
     }
@@ -453,15 +535,14 @@ export function drawPet(
         {
           ...at(ball),
           diameter: placed[ball].diameter + widened,
-          colour: numbers[ball],
-          outlineColour: breed.outlineColor[ball],
+          /* Catz shades a ball by its depth (seg47:63da), and translates it. */
+          colour: translate(shade(numbers[ball], shades?.[ball] ?? 0)),
+          outlineColour: translate(breed.outlineColor[ball]),
           /* Made from the ball's colour only on more than 4 bits a pixel
            * (GenerateSpeckleColors, seg10:21da); on 16 colours the breed's
            * own number is the speckles' colour. */
-          speckleColour:
-            colours === 256
-              ? speckleColour(numbers[ball], breed.speckleColor[ball], ramps.first, ramps.length)
-              : breed.speckleColor[ball],
+          speckleColour: speckled(ball),
+          catz: !!shades,
           outline: breed.outlineType[ball],
           fuzz: breed.fuzz[ball] + bristle,
         },
@@ -480,7 +561,9 @@ export function drawPet(
       bonus.draw(at(ball));
     }
 
-    if (eye !== -1) {
+    if (eye !== -1 && shades) {
+      drawCatzEye(bitmap, breed, placed, eye, at, eyes, translate, tables);
+    } else if (eye !== -1) {
       drawIris(bitmap, breed, placed, ball, breed.irises[eye], at, colours, eyes, iris, tables);
 
       if (lids > 0) {
@@ -581,6 +664,69 @@ function drawIris(
   if (size > 7) {
     disc(size - 4, pupilColour);
   }
+}
+
+/** The share of the eye's radius a Catz pupil may not travel: `ds:1e82` of CATZDLL.DLL. */
+const CATZ_PUPIL_INSET = 0.63;
+
+/**
+ * A Catz eye's pupil, as `XBallz::DrawEyeball` (CATZDLL.DLL seg47:6752)
+ * draws it over the eye: no iris -- its colour is set and overwritten
+ * before anything is drawn (seg47:69e7) -- but a pupil the first iris's
+ * size, 2 in from it each side if it is wider than 7, in the pupil colour.
+ * It is put off the eye's centre as the eye's own iris is in the frame, or
+ * as the eyes are told to look; brought back to the eye's radius less 0.63
+ * of it if farther, and then each way to within a pixel of that; and a
+ * pixel left. The eyelid it then draws is not yet.
+ */
+function drawCatzEye(
+  bitmap: IndexedBitmap,
+  breed: Breed,
+  placed: Placed[],
+  eye: number,
+  at: (ball: number) => { x: number; y: number },
+  eyes: DrawOptions['eyes'],
+  translate: (colour: number) => number,
+  tables: CircleTables
+) {
+  const eyeBall = breed.eyes[eye];
+  const irisBall = breed.irises[eye];
+  const radius = Math.trunc(placed[eyeBall].diameter / 2);
+  const travel = radius - Math.trunc(radius * CATZ_PUPIL_INSET);
+  const mode = eyes?.mode ?? 0;
+  let dx = placed[irisBall].x - placed[eyeBall].x;
+  let dy = placed[irisBall].y - placed[eyeBall].y;
+
+  if (mode === 1) {
+    [dx, dy] = [dx + eyes!.x, dy + eyes!.y];
+  } else if (mode === 2) {
+    [dx, dy] = [0, 0];
+  }
+
+  const length = Math.trunc(Math.sqrt(dx * dx + dy * dy));
+
+  if (travel < length) {
+    [dx, dy] = [Math.trunc((travel * dx) / length), Math.trunc((travel * dy) / length)];
+  }
+
+  const keep = (value: number) => Math.max(1 - travel, Math.min(travel - 1, value));
+  const size = placed[breed.irises[0]].diameter;
+  const centre = at(eyeBall);
+
+  fillBall(
+    bitmap,
+    {
+      x: centre.x + keep(dx) - 1,
+      y: centre.y + keep(dy),
+      diameter: size > 7 ? size - 4 : size,
+      colour: translate(breed.pupilColor ?? 0),
+      outlineColour: 0,
+      speckleColour: -1,
+      outline: -1,
+      fuzz: 0,
+    },
+    tables
+  );
 }
 
 /**

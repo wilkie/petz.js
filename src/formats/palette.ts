@@ -149,3 +149,103 @@ export function screenPalette16(
 ): Colour[] {
   return driverColours ? VGA_SHOWN.map((colour) => [...colour] as Colour) : [...palette];
 }
+
+/** Windows' twenty static colours as it reports them: the first ten, then the last. */
+const STATIC_FIRST: Colour[] = [
+  [0, 0, 0],
+  [128, 0, 0],
+  [0, 128, 0],
+  [128, 128, 0],
+  [0, 0, 128],
+  [128, 0, 128],
+  [0, 128, 128],
+  [192, 192, 192],
+  [192, 220, 192],
+  [166, 202, 240],
+];
+const STATIC_LAST: Colour[] = [
+  [255, 251, 240],
+  [160, 160, 164],
+  [128, 128, 128],
+  [255, 0, 0],
+  [0, 255, 0],
+  [255, 255, 0],
+  [0, 0, 255],
+  [255, 0, 255],
+  [0, 255, 255],
+  [255, 255, 255],
+];
+
+/**
+ * Catz's palette with its shine ramps put in, as `XInitScreenPort`
+ * (CATZDLL.DLL seg44:1556) copies them back into it: what
+ * `ColorIndexTranslate` looks a colour up in.
+ */
+function catzColours(palette: readonly Colour[]): Colour[] {
+  const ramps = screenPalette(palette, { driverColours: false });
+  return palette.map((colour, n) => (n >= SHINE && n < SHINE + 24 ? ramps[n] : colour));
+}
+
+/**
+ * The palette on the screen while Catz runs, on 256 colours: the system's
+ * own at 0 to 15 and 246 to 255 -- Windows' statics, and for 10 to 15,
+ * which no static fills, a dark grey and black -- and Catz's palette, with its shine
+ * ramps, between (`XInitScreenPort`, seg44:1556). `driverColours` shows the
+ * dark statics as the oracle's driver does, as for Dogz.
+ */
+export function catzIdealPalette(
+  palette: readonly Colour[],
+  { driverColours = true }: { driverColours?: boolean } = {}
+): Colour[] {
+  const own = catzColours(palette);
+  return own.map((colour, n): Colour => {
+    if (n < 10) {
+      return driverColours && n >= 1 && n <= DRIVER_DARK.length
+        ? DRIVER_DARK[n - 1]
+        : STATIC_FIRST[n];
+    }
+
+    if (n < 16) {
+      /* [[inferred]] One of them a dark grey, about (17, 17, 17): the oracle
+       * shows the cat's darkest shades as (16, 16, 16), which nothing else
+       * here comes near. Which entry, and what the rest are, not yet known. */
+      return n === 10 ? [17, 17, 17] : [0, 0, 0];
+    }
+
+    return n >= 246 ? STATIC_LAST[n - 246] : colour;
+  });
+}
+
+/**
+ * Catz's `ColorIndexTranslate` (seg44:0000) on 256 colours: a colour
+ * number to its colour in Catz's palette, its channels cut to four bits,
+ * and through a table of 4096 (`CreateITable`, seg44:1210) to the screen's
+ * colour nearest it -- each channel's four bits × 17, the nearest by the
+ * sum of squares, the first of equals. Neighbouring shades of a ramp may
+ * come out the same.
+ */
+export function catzTranslation(palette: readonly Colour[]): (colour: number) => number {
+  const screen = catzIdealPalette(palette, { driverColours: false });
+  const own = catzColours(palette);
+  const table = new Uint8Array(4096);
+
+  for (let u = 0; u < 4096; u++) {
+    const [r, g, b] = [(u & 15) * 17, ((u >> 4) & 15) * 17, ((u >> 8) & 15) * 17];
+    let [best, distance] = [0, Infinity];
+
+    screen.forEach(([sr, sg, sb], n) => {
+      const d = (sr - r) ** 2 + (sg - g) ** 2 + (sb - b) ** 2;
+
+      if (d < distance) {
+        [best, distance] = [n, d];
+      }
+    });
+
+    table[u] = best;
+  }
+
+  return (colour) => {
+    const [r, g, b] = own[colour & 255];
+    return table[((b & 0xf0) << 4) | (g & 0xf0) | ((r & 0xf0) >> 4)];
+  };
+}

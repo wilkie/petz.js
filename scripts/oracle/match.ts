@@ -15,6 +15,8 @@ import {
 import { averageBreed, type Breed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import {
+  catzIdealPalette,
+  catzTranslation,
   CATZ_PALETTE_TYPE,
   PALETTE_16,
   PALETTE_256,
@@ -263,6 +265,9 @@ export interface Scene {
 
   /** The display's colours: 16 with Windows' own VGA driver, else 256. */
   depth: 256 | 16;
+
+  /** Catz's translation of colours into the screen's (`catzTranslation`). */
+  translate?: (colour: number) => number;
 }
 
 /**
@@ -368,9 +373,8 @@ function loadCatScene(
   const young = parseLnz(text(`${resource}/${little.toUpperCase()}`), header.ballCount);
   const breed = averageBreed(adult, young, cat.percent);
   const engine = parseNe(read('WINDOWS/SYSTEM/CATZDLL.DLL'));
-  const palette = screenPalette(readPalette(engine, PALETTE_256, 256, CATZ_PALETTE_TYPE), {
-    driverColours: FIDELITY.driverColours,
-  });
+  const own = readPalette(engine, PALETTE_256, 256, CATZ_PALETTE_TYPE);
+  const palette = catzIdealPalette(own, { driverColours: FIDELITY.driverColours });
 
   return {
     breed,
@@ -381,6 +385,7 @@ function loadCatScene(
     bristle,
     depth: 256,
     bottomUp: bottomUpFromWinIni(text('WINDOWS/WIN.INI')),
+    translate: catzTranslation(own),
   };
 }
 
@@ -538,6 +543,7 @@ export function draw(
     seed,
     bristle: scene.bristle,
     lids,
+    translate: scene.translate,
   });
   const { pixels } = bitmap;
   let count = 0;

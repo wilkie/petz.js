@@ -349,3 +349,27 @@ describe('a line', () => {
     expect(rows(bitmap, 10, 11)[0]).toMatch(/^\.*0[3]+0\.*$/);
   });
 });
+
+describe('a Catz ball with an outline', () => {
+  it('has a pixel of it at either end of every row, however thick, and no whole rows', () => {
+    const bitmap = new IndexedBitmap(12, 12);
+    fillBall(
+      bitmap,
+      {
+        x: 6,
+        y: 6,
+        diameter: 8,
+        colour: 7,
+        outlineColour: 1,
+        speckleColour: -1,
+        outline: 2,
+        fuzz: 0,
+        catz: true,
+      },
+      circleTables(1)
+    );
+    const rows = picture(bitmap).filter((row) => row.replace(/\./g, ''));
+
+    expect(rows.every((row) => /^\.*17*1\.*$/.test(row))).toBe(true);
+  });
+});

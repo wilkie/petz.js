@@ -145,7 +145,19 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 [[measured]] The probe `pouncer300` (`scripts/oracle/probes.json`) holds Pouncer, the Hunter's kitten, in frame 300 and tells it from the playpen without it (`variant.mjs --hide`); its basket is masked where it may hide the cat.
 
 - **What matches:** drawn from the kitten's file alone (`averageBreed` at 100), the outline lines up at yaw 0, and the whiskers fall where the oracle's do.
-- **What does not:** nearly every colour. The oracle's cat is shaded by depth along its colours' ramps (`GenerateZDepthColor`, seg47:5d04), and shows colours its own palette does not have, as #101010. Catz turns each colour index to its RGB and back through an inverse table into the palette on the screen (`ColorIndexTranslate`, seg44:0000). Neither is drawn yet.
+- **What did not, at first:** nearly every colour. On 256 colours Catz colours a ball, and then each line, in two steps (all [[read out]]):
+  1. **Depth shading** (`GenerateZDepthColor`, seg47:5d04). It shifts the colour along its ramp, ten ramps of ten colours from 28 (`InitStaticDraw`, seg44:0ebe), by up to 6, never past the ramp's ends. The shift is the ball's depth from the middle of the chest and butt, × 6 × 2.2, over the depth the frame's balls span (`ZOrder`, seg47:579c). A line takes half its two ends' shifts together.
+  2. **Translation into the screen's palette** (`ColorIndexTranslate`, seg44:0000). The colour goes to its RGB in Catz's palette, cut to four bits a channel, and to the screen colour nearest that, by a table of 4096 (`CreateITable`, seg44:1210). Neighbouring shades collapse: the cat's dark ramp shows only three.
+
+  The screen's palette is the system's at 0 to 15 and 246 to 255, with Catz's own between (`XInitScreenPort`, seg44:1556). [[inferred]] One of the system's entries 10 to 15 is a dark grey, about (17, 17, 17). The oracle shows the cat's darkest shades as (16, 16, 16), which nothing else comes near, and assuming that grey halves the difference. Which entry it is, and where the system got it, not yet known; WinG's display timing realizes a palette of its own just before, which may be it.
+
+- **Eyes** (`DrawEyeball`, seg47:6752). Catz draws no iris: its colour is set and overwritten before anything is drawn. Only a pupil is drawn, the first iris's size, 2 in from it each side if it is wider than 7. It travels within the eye's radius less 0.63 of it.
+- **Outlines.** An outline, however thick, is a pixel at either end of every row, with no whole rows (seg44:4e9d).
+- **Speckles.** A ball's speckle is its own unshaded colour, so it shows where the ball is shaded.
+
+  `catzShade`, `depthShades` and `drawCatzEye` in `src/render/ballz.ts`, and `catzTranslation` and `catzIdealPalette` in `src/formats/palette.ts`, do this.
+
+- [[measured]] With all this, `pouncer300` differs in 1,079 of the cat's 4,445 pixels, from 4,007. What is left: the eyelids, the fuzz (no seed is searched for Catz yet), and the whiskers' and shades' edges a pixel off.
 
 ## Still to find
 
