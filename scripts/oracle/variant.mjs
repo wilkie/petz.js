@@ -29,7 +29,8 @@
  *                 nothing looked at), so whatever the dog plays first it
  *                 stays in. With --turn <n>, turned n 256ths first (`0x8ae5`).
  * --game catz    A variant of the Catz demo's drive (install-catz.mjs) in place
- *                 of Dogz's; of the rest, only --hold, which for Catz keeps
+ *                 of Dogz's, or with --from <variant> of that variant's
+ *                 (catz-adopted, a cat adopted, adopt-catz.mjs); of the rest, only --hold, which for Catz keeps
  *                 every script's opcodes -- its cues, loops and actions,
  *                 without which no kitten comes out -- and makes every frame
  *                 it shows the one held, `sequence2 a b` becoming
@@ -258,13 +259,21 @@ export async function makeVariant(name, args) {
 
 /** A variant of the Catz demo's drive: see `--game catz`. */
 async function makeCatzVariant(name, option, args) {
-  if (!(await exists(join(CATZ_DRIVE, 'CATZ.DOG', 'CATZ.EXE')))) {
-    throw new Error('Catz is not installed; run scripts/oracle/install-catz.mjs first');
+  /* From another variant -- `catz-adopted`, a cat adopted (adopt-catz.mjs) -- or the demo's drive. */
+  const from = option('--from');
+  const source = from ? join(VARIANTS, from) : CATZ_DRIVE;
+
+  if (!(await exists(join(source, 'CATZ.DOG', 'CATZ.EXE')))) {
+    throw new Error(
+      from
+        ? `no variant ${from} with Catz on it`
+        : 'Catz is not installed; run scripts/oracle/install-catz.mjs first'
+    );
   }
 
   const drive = join(VARIANTS, name);
   await rm(drive, { recursive: true, force: true });
-  await cp(CATZ_DRIVE, drive, { recursive: true });
+  await cp(source, drive, { recursive: true });
 
   const hold = option('--hold');
   const hide = args.includes('--hide');

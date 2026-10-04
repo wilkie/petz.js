@@ -72,16 +72,29 @@ async function main() {
   };
   const record = Number(option('--record', 0));
   const count = Number(option('--count', 30));
-  const name = `catwalk${record}`;
+  const adopted = args.includes('--adopted');
+  const name = `catwalk${adopted ? 'adopted' : ''}${record}`;
   const drive = join(VARIANTS, name);
   const reuse = args.includes('--reuse');
 
   /* Kept from run to run unless asked afresh: its first run has WinG time the display. */
   if (args.includes('--fresh') || !(await exists(drive))) {
-    await makeVariant(name, ['--game', 'catz', '--stride', String(record)]);
+    await makeVariant(name, [
+      '--game',
+      'catz',
+      '--stride',
+      String(record),
+      ...(adopted ? ['--from', 'catz-adopted'] : []),
+    ]);
   }
 
   const shots = join(BUILD, 'screens');
+  const kept = join(OUT, `${name}.json`);
+
+  if (adopted) {
+    return walkAdopted({ name, drive, record, count, reuse, shots, kept });
+  }
+
   const background = join(OUT, 'pouncer300-catless.png');
 
   if (!(await exists(background))) {
@@ -89,7 +102,6 @@ async function main() {
   }
 
   const backgroundRgb = readPicture(background);
-  const kept = join(OUT, `${name}.json`);
 
   if (!reuse) {
     for (const file of (await readdir(shots)).filter((file) => file.startsWith(`${name}-`))) {
@@ -123,6 +135,11 @@ async function main() {
     .map((file) => join(shots, file));
   log(`The kitten carried out: the ${breed}'s.`);
 
+  await analyse({ drive, record, cat, pictures, background: backgroundRgb, region: REGION });
+}
+
+/** Each picture matched against the walk's frames, and the stride at each turn found. */
+async function analyse({ drive, record, cat, pictures, background, region }) {
   const read = (path) => new Uint8Array(readFileSync(join(drive, path)));
   const engine = parseNe(read('WINDOWS/SYSTEM/CATZDLL.DLL'));
   const scripts = parseScripts(
@@ -144,7 +161,7 @@ async function main() {
   log(`Record ${record}: ${cycle.length} frames, ${cycle[0]} to ${cycle.at(-1)}.`);
 
   for (const path of pictures) {
-    const dog = findCat(readPicture(path), backgroundRgb, REGION, scenes[0].possible);
+    const dog = findCat(readPicture(path), background, region, scenes[0].possible);
 
     if (!dog || dog.count < 300) {
       rows.push({ path, found: false });
@@ -258,6 +275,70 @@ async function carryAndShoot(name, drive, count, background, possible, carry) {
   );
 
   return breed;
+}
+
+/** The playpen of an adopted cat, right of the supply shelf's panel and under the title bar. */
+const PLAYPEN = { left: 205, top: 45, right: 630, bottom: 470 };
+
+/**
+ * The walk of an adopted kitten (`--adopted`): Pouncer, the Hunter's, in
+ * its own playpen, the whole screen, where it goes where it likes. The
+ * playpen's tiled wallpaper is told from the cat by each pixel's commonest
+ * colour over the burst, the cat moving on.
+ */
+async function walkAdopted({ name, drive, record, count, reuse, shots }) {
+  if (!reuse) {
+    for (const file of (await readdir(shots)).filter((file) => file.startsWith(`${name}-`))) {
+      await rm(join(shots, file));
+    }
+
+    await withWindows(
+      name,
+      'C:\\CATZ.DOG\\CATZ.EXE',
+      async (session) => {
+        await session.pause(30);
+
+        for (let shot = 0; shot < count; shot++) {
+          await session.screen(`walk-${String(shot).padStart(2, '0')}`);
+        }
+      },
+      { drive, core: 'normal', ends: false }
+    );
+  }
+
+  const pictures = (await readdir(shots))
+    .filter((file) => file.startsWith(`${name}-`) && file.includes('walk'))
+    .sort()
+    .map((file) => join(shots, file));
+  const images = pictures.map(readPicture);
+  const background = new Uint8Array(images[0].length);
+
+  for (let at = 0; at < background.length; at += 3) {
+    const counts = new Map();
+    let best = [0, -1];
+
+    for (const image of images) {
+      const key = (image[at] << 16) | (image[at + 1] << 8) | image[at + 2];
+      const seen = (counts.get(key) ?? 0) + 1;
+      counts.set(key, seen);
+
+      if (seen > best[1]) {
+        best = [key, seen];
+      }
+    }
+
+    background.set([(best[0] >> 16) & 255, (best[0] >> 8) & 255, best[0] & 255], at);
+  }
+
+  log(`The adopted kitten's walk: ${pictures.length} pictures.`);
+  await analyse({
+    drive,
+    record,
+    cat: { breed: 'hunter', percent: 100 },
+    pictures,
+    background,
+    region: PLAYPEN,
+  });
 }
 
 main().catch((error) => {
