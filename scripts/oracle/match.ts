@@ -24,7 +24,7 @@ import {
   screenPalette,
   screenPalette16,
 } from '../../src/formats/palette.ts';
-import { drawPet } from '../../src/render/ballz.ts';
+import { catzShade, drawPet } from '../../src/render/ballz.ts';
 import { extendFrames } from '../../src/render/extend.ts';
 import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
 import { IndexedBitmap } from '../../src/render/raster.ts';
@@ -268,6 +268,9 @@ export interface Scene {
 
   /** Catz's translation of colours into the screen's (`catzTranslation`). */
   translate?: (colour: number) => number;
+
+  /** Every colour a Catz cat could be drawn in, as the screen shows it, packed. */
+  possible?: Set<number>;
 }
 
 /**
@@ -375,37 +378,62 @@ function loadCatScene(
   const engine = parseNe(read('WINDOWS/SYSTEM/CATZDLL.DLL'));
   const own = readPalette(engine, PALETTE_256, 256, CATZ_PALETTE_TYPE);
   const palette = catzIdealPalette(own, { driverColours: FIDELITY.driverColours });
+  const colours = Int32Array.from(palette, ([r, g, b]) => pack(shown(r), shown(g), shown(b)));
+  const translate = catzTranslation(own);
+  const screen = (n: number) => colours[n];
+  const numbers = [
+    ...breed.ballColor256,
+    ...breed.lines.flatMap((line) => [line.colour ?? -1, line.leftColour ?? -1]),
+  ].filter((n) => n >= 0);
+  const possible = new Set([
+    ...numbers.flatMap((n) =>
+      Array.from({ length: 13 }, (_, s) => screen(translate(catzShade(n, s - 6))))
+    ),
+    ...[...breed.outlineColor, breed.pupilColor ?? 0]
+      .filter((n) => n >= 0)
+      .map((n) => screen(translate(n))),
+    ...(breed.whiskers ?? []).map(({ colour }) => screen(colour)),
+    screen(translate(0)),
+  ]);
 
   return {
     breed,
     header,
     frame: extendFrames(frames, breed)[frame],
-    colours: Int32Array.from(palette, ([r, g, b]) => pack(shown(r), shown(g), shown(b))),
+    colours,
     age,
     bristle,
     depth: 256,
     bottomUp: bottomUpFromWinIni(text('WINDOWS/WIN.INI')),
-    translate: catzTranslation(own),
+    translate,
+    possible,
   };
 }
 
 /**
  * Finds a cat: within `region`, the pixels of `rgb` that differ from
- * `background` -- a picture of the same playpen without it -- and are not a
- * basket's yellows and browns, joined into patches and the largest kept. A
- * basket with its kitten out is drawn brighter than without, so it differs
- * too, and is told by its colour. Where the background is not the floor and
+ * `background` -- a picture of the same playpen without it -- and are not
+ * bright yellow, and, given `possible`, are in a colour the cat could be,
+ * joined into patches and the largest kept. A basket with
+ * its kitten out has its rim and handle drawn a brighter yellow than
+ * without, so they differ too, and are told by that. Where the background is not the floor and
  * the picture shows no cat -- a basket's front, a label -- nothing can be
  * said, as the cat may be behind it, and it is masked.
  */
-export function findCat(rgb: Rgb, background: Rgb, region: Box): Dog | null {
+export function findCat(
+  rgb: Rgb,
+  background: Rgb,
+  region: Box,
+  possible?: Set<number>
+): Dog | null {
   const at = (image: Rgb, index: number) =>
     pack(image[3 * index], image[3 * index + 1], image[3 * index + 2]);
   const inRegion = (x: number, y: number) =>
     x >= region.left && x <= region.right && y >= region.top && y <= region.bottom;
+  /* The kitten's basket's rim and handle, redrawn brighter while it is out. */
   const wicker = (index: number) => {
     const [r, g, b] = [rgb[3 * index], rgb[3 * index + 1], rgb[3 * index + 2]];
-    return r > b + 40 && g > b + 40;
+    return r >= 200 && g >= 180 && b <= 64;
   };
   const counts = new Map<number, number>();
 
@@ -423,7 +451,10 @@ export function findCat(rgb: Rgb, background: Rgb, region: Box): Dog | null {
   for (let y = region.top; y <= region.bottom; y++) {
     for (let x = region.left; x <= region.right; x++) {
       const index = y * WIDTH + x;
-      const cat = at(rgb, index) !== at(background, index) && !wicker(index);
+      const cat =
+        at(rgb, index) !== at(background, index) &&
+        !wicker(index) &&
+        (!possible || possible.has(at(rgb, index)));
       changed[index] = cat ? 1 : 0;
       masked[index] = !cat && at(background, index) !== floor ? 1 : 0;
     }

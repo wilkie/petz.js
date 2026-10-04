@@ -417,8 +417,38 @@
       0
     ],
     "expect": {
-      "wrong": 1079,
-      "pixels": 4445
+      "wrong": 959,
+      "pixels": 4325
+    }
+  },
+  {
+    "name": "sophisto900",
+    "about": "Catz: Sophisto, the Siamese's kitten, held in frame 900 in its basket",
+    "variant": [
+      "--game",
+      "catz",
+      "--hold",
+      "900"
+    ],
+    "frame": 900,
+    "age": 100,
+    "cat": {
+      "breed": "siamese",
+      "percent": 100
+    },
+    "region": {
+      "left": 175,
+      "top": 180,
+      "right": 300,
+      "bottom": 402
+    },
+    "seed": false,
+    "bristle": [
+      0
+    ],
+    "expect": {
+      "wrong": 1157,
+      "pixels": 3961
     }
   }
 ]

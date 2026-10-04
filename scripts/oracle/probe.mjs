@@ -85,10 +85,11 @@ async function searchSeeds(work) {
  * A picture with the dog in it, shooting again (up to three times) when
  * WinG is busy, or the playpen cuts the dog off on both sides of a way.
  */
-async function picture(probe, reuse) {
+async function picture(probe, reuse, possible) {
   const kept = join(OUT, `${probe.name}-oracle.png`);
   const background = probe.cat ? await catless(probe, reuse) : null;
-  const find = (rgb) => (background ? findCat(rgb, background, probe.region) : findDog(rgb));
+  const find = (rgb) =>
+    background ? findCat(rgb, background, probe.region, possible) : findDog(rgb);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const path =
@@ -138,9 +139,11 @@ async function run(probe, { reuse, without }) {
     await makeVariant(probe.name, probe.variant);
   }
 
-  const { dog } = await picture(probe, reuse);
   const age = probe.age ?? 10;
   const read = (path) => new Uint8Array(readFileSync(join(drive, path)));
+  /* A cat is told from its basket partly by the colours it could be. */
+  const possible = probe.cat ? loadScene(read, probe.frame, age, 0, probe.cat).possible : null;
+  const { dog } = await picture(probe, reuse, possible);
   /* The dog's turn is the session's too, near enough the probe's: searched 8 either way, or all round. */
   const yaws =
     probe.yaw === undefined
