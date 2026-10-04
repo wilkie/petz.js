@@ -22,7 +22,7 @@ import {
   PALETTE_256,
   readPalette,
 } from '../formats/palette.ts';
-import { drawPet } from '../render/ballz.ts';
+import { ballAt, drawPet } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
 import { IndexedBitmap } from '../render/raster.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
@@ -44,6 +44,7 @@ const kittenInput = element<HTMLInputElement>('kitten');
 const kittenValue = element<HTMLOutputElement>('kitten-value');
 const animationSelect = element<HTMLSelectElement>('animation');
 const scriptSelect = element<HTMLSelectElement>('script');
+const timesInput = element<HTMLInputElement>('times');
 const frameInput = element<HTMLInputElement>('frame');
 const frameNumber = element<HTMLOutputElement>('frame-number');
 const yawInput = element<HTMLInputElement>('yaw');
@@ -63,8 +64,11 @@ let playing = 0;
 let scripts: Script[] = [];
 let positions: CatzPositions = { count: 0, neutral: 0 };
 
-/** The frames shown, numbered over every animation: an animation's, or a script's played out. */
-let sequence: number[] = [];
+/**
+ * The frames shown, numbered over every animation -- an animation's, or a
+ * script's played out -- and how far the cat has moved by each.
+ */
+let sequence: { frame: number; x: number; y: number }[] = [];
 
 /** The breed chosen, averaged toward its kitten's file by the slider. */
 function breed() {
@@ -74,13 +78,20 @@ function breed() {
 
 function draw() {
   const cat = breed();
-  const at = sequence[Number(frameInput.value)] ?? 0;
+  const step = sequence[Number(frameInput.value)] ?? { frame: 0, x: 0, y: 0 };
+  const at = step.frame;
+  const shaped = extendFrames(frames, cat)[at];
+  /* The cat kept on the canvas, wrapping round it where it walks off, by
+   * where its glue ball is: the frames of a walk move on themselves. */
+  const wrap = (value: number, size: number) => ((value % size) + size) % size;
+  const glue = Number(cat.sections.get('Default Glue Ball')?.[0]?.values[0] ?? 6);
+  const g = ballAt(cat, header, shaped, glue, { age: 100, yaw: Number(yawInput.value) });
   const bitmap = new IndexedBitmap(320, 240);
 
-  drawPet(bitmap, cat, header, extendFrames(frames, cat)[at], {
+  drawPet(bitmap, cat, header, shaped, {
     colours: 256,
-    originX: 160,
-    originY: 150,
+    originX: wrap(160 + step.x + g.x, 320) - g.x,
+    originY: wrap(150 + step.y + g.y, 240) - g.y,
     age: 100,
     yaw: Number(yawInput.value),
     order,
@@ -98,23 +109,63 @@ function draw() {
 }
 
 /** The steps a script plays out as, a variant at random each time, its reference frames not shown. */
-function playOut(index: number) {
+function playOut(index: number, times = 1) {
   const random = (n: number) => Math.floor(Math.random() * n);
   return catzTimeline(scripts, positions, index, {
     flags: (frame) => frames[frame]?.tag ?? 3,
     random,
     limit: 600,
-  })
-    .filter((step) => !step.reference)
-    .map((step) => step.frame);
+    times,
+  });
+}
+
+/**
+ * A script's frames placed as `PopScript` places them (CATZDLL.DLL
+ * seg41:114d): frame after frame as their own coordinates say, but at each
+ * reference frame -- after every action -- the cat moved so that its glue
+ * ball, the breed's `[Default Glue Ball]`, is where it was in the frame
+ * before; and so each turn of a loop that ends `endLoopAlign0`, a walk's.
+ * Not yet: the turn `CheckAlignment` adds where the frames' axes
+ * differ by more than 6.
+ */
+function placed(index: number) {
+  const cat = breed();
+  const glue = Number(cat.sections.get('Default Glue Ball')?.[0]?.values[0] ?? 6);
+  const shaped = extendFrames(frames, cat);
+  const options = { age: 100, yaw: Number(yawInput.value) };
+  const steps: { frame: number; x: number; y: number }[] = [];
+  let offset = { x: 0, y: 0 };
+  let last: number | null = null;
+
+  for (const step of playOut(index, Math.max(1, Number(timesInput.value) || 1))) {
+    if (!shaped[step.frame]) {
+      continue;
+    }
+
+    if ((step.reference || step.glue) && last !== null) {
+      const before = ballAt(cat, header, shaped[last], glue, options);
+      const now = ballAt(cat, header, shaped[step.frame], glue, options);
+      offset = { x: offset.x + before.x - now.x, y: offset.y + before.y - now.y };
+    }
+
+    if (step.reference) {
+      last = step.frame;
+      continue;
+    }
+
+    steps.push({ frame: step.frame, ...offset });
+    last = step.frame;
+  }
+
+  return steps;
 }
 
 function chooseAnimation() {
   if (scriptSelect.value === '') {
     const { start, end } = header.animations[Number(animationSelect.value)];
-    sequence = Array.from({ length: end - start }, (_, n) => start + n);
+    sequence = Array.from({ length: end - start }, (_, n) => ({ frame: start + n, x: 0, y: 0 }));
   } else {
-    sequence = playOut(Number(scriptSelect.value));
+    sequence = placed(Number(scriptSelect.value));
   }
 
   frameInput.max = String(Math.max(0, sequence.length - 1));
@@ -197,9 +248,9 @@ async function start(game: GameFiles) {
 
   /* Only the scripts the demo's frames will play, as far as a few tries tell. */
   scripts.forEach((script, index) => {
-    const played = playOut(index);
+    const played = playOut(index).filter((step) => !step.reference);
 
-    if (played.length && played.every((frame) => frame < frames.length)) {
+    if (played.length && played.every(({ frame }) => frame < frames.length)) {
       scriptSelect.add(new Option(`${index}: ${script.from} to ${script.to}`, String(index)));
     }
   });
@@ -229,6 +280,11 @@ animationSelect.addEventListener('change', () => {
   chooseAnimation();
 });
 scriptSelect.addEventListener('change', chooseAnimation);
+timesInput.addEventListener('change', () => {
+  if (scriptSelect.value !== '') {
+    chooseAnimation();
+  }
+});
 playButton.addEventListener('click', play);
 
 picker.addEventListener('change', () => {

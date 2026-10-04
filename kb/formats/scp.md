@@ -104,4 +104,8 @@ All [[read out]] from CATZDLL.DLL, `ScriptSprite` in segments 40 and 41:
 - its random operands;
 - the reference frames between actions.
 
-`/cats.html` plays the scripts the demo's frames will play, with the cat held in place: [[measured]] 315 of the cat's 805, the demo shipping the first 98 of its 275 animations. Not yet played: the fudgers, the looks, the layers, and moving the cat by the reference frames.
+`/cats.html` plays the scripts the demo's frames will play: [[measured]] 315 of the cat's 805, the demo shipping the first 98 of its 275 animations. It places them as `PopScript` does. Frame follows frame as its own coordinates say. At each reference frame, and at each turn after the first of a loop ending `endLoopAlign0`, the cat is moved so that its `[Default Glue Ball]` is where it was. The viewer can play an action again and again, as the engine plays a walk for as long as the cat goes on, each time a variant at random, aligned to the last.
+
+- [[measured]] So played, the cat's walks and crawls carry it on, the way it faces. Played once, no action moves the cat: each action's first frame is its last's.
+- [[inferred]] So a cat's travel is the engine's repeating an action, as a dog's is.
+- Not yet played: the turn `CheckAlignment` adds where frames' axes differ, the fudgers, the looks and the layers.

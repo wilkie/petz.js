@@ -38,6 +38,13 @@ export interface CatzStep {
   /** Not shown, but the frame the next is placed by (`alignScripts0`, seg41:114d). */
   reference?: boolean;
 
+  /**
+   * Shown, but placed so the default glue ball is where it was in the frame
+   * before: the first frame of each turn after the first of a loop ending
+   * `endLoopAlign0` (seg41:03a2), which is how a walk goes on.
+   */
+  glue?: boolean;
+
   /** Sounds played as it is shown, one of each soundPlay's at random. */
   sounds?: number[];
 
@@ -66,6 +73,13 @@ export interface CatzTimelineOptions {
 
   /** Where the cat is to begin with; the neutral position without. */
   from?: number;
+
+  /**
+   * How many times the action is played, one after another, as the engine
+   * plays a walk or a run again for as long as the cat goes on: each time
+   * a variant at random, aligned to the last.
+   */
+  times?: number;
 }
 
 /**
@@ -127,11 +141,12 @@ export function catzTimeline(
   scripts: Script[],
   positions: CatzPositions,
   index: number,
-  { flags, random, limit = 2000, from }: CatzTimelineOptions
+  { flags, random, limit = 2000, from, times = 1 }: CatzTimelineOptions
 ): CatzStep[] {
   const steps: CatzStep[] = [];
   let end = from ?? positions.neutral;
   let pending: Omit<CatzStep, 'frame' | 'action'> = {};
+  let glue = false;
   let reference = false;
 
   const value = (operand: Operand) =>
@@ -140,9 +155,16 @@ export function catzTimeline(
       : operand.random[0] + random(Math.max(1, operand.random[1] - operand.random[0] + 1));
 
   const show = (frame: number, action: number) => {
-    steps.push({ frame, action, ...pending, ...(reference ? { reference: true } : {}) });
+    steps.push({
+      frame,
+      action,
+      ...pending,
+      ...(reference ? { reference: true } : {}),
+      ...(glue && !reference ? { glue: true } : {}),
+    });
     pending = {};
     reference = false;
+    glue = false;
   };
 
   /** Plays an action: the transitions to where it starts, then a variant of it. */
@@ -175,7 +197,8 @@ export function catzTimeline(
   const run = (elements: Element[], action: number, depth: number) => {
     let at = 0;
 
-    const block = (): void => {
+    /* What ended a block: an `endLoop0`, an `endLoopAlign0`, or the variant's end. */
+    const block = (): number | null => {
       while (at < elements.length && steps.length < limit) {
         const element = elements[at++];
 
@@ -249,13 +272,16 @@ export function catzTimeline(
 
             for (let n = 0; (times === 999 || n < times) && steps.length < limit; n++) {
               at = body;
-              block();
+
+              if (block() === CATZ_OP.endLoopAlign && (times === 999 || n + 1 < times)) {
+                glue = true;
+              }
             }
             break;
           }
           case CATZ_OP.endLoop:
           case CATZ_OP.endLoopAlign:
-            return;
+            return op;
           case CATZ_OP.playAction: {
             const times = value(b);
 
@@ -272,11 +298,16 @@ export function catzTimeline(
             break;
         }
       }
+
+      return null;
     };
 
     block();
   };
 
-  play(index, 0);
+  for (let n = 0; n < times && steps.length < limit; n++) {
+    play(index, 0);
+  }
+
   return steps;
 }

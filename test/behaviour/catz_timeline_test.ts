@@ -85,4 +85,35 @@ describe('a Catz action played out', () => {
 
     expect(frames(catzTimeline(scripts, POSITIONS, 0, options))).toEqual(['30']);
   });
+
+  it('glues each turn of a loop ending endLoopAlign but the first', () => {
+    const scripts = [
+      script(1, 1, [
+        variant(op(CATZ_OP.startLoop, 3), { frame: 4 }, { frame: 5 }, op(CATZ_OP.endLoopAlign)),
+      ]),
+    ];
+    const steps = catzTimeline(scripts, POSITIONS, 0, options);
+
+    expect(steps.map(({ frame, glue }) => `${frame}${glue ? 'g' : ''}`)).toEqual([
+      '4',
+      '5',
+      '4g',
+      '5',
+      '4g',
+      '5',
+    ]);
+  });
+
+  it('plays an action again and again, aligned each time, as a walk goes on', () => {
+    const scripts = [script(1, 1, [variant({ frame: 3 }, { frame: 4 })])];
+
+    expect(frames(catzTimeline(scripts, POSITIONS, 0, { ...options, times: 3 }))).toEqual([
+      '3',
+      '4',
+      '3r',
+      '4',
+      '3r',
+      '4',
+    ]);
+  });
 });
