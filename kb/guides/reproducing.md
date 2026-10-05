@@ -99,6 +99,8 @@ The harness runs Catz's engine, `CATZDLL.DLL` from the CD-ROM's install, on [win
   - `Linez::LoadLinezFile` and `Linez::Average` (seg39:085c, seg39:2b00), on the Hunter's adult and kitten files and their averages at 0, 40 and 100: in every field `parseLnz` and `averageBreed` read. That was once the averages' Move Up list was made to be lost as the engine loses it ([[format:lnz]]).
   - `XDrawPort::ColorIndexTranslate` (seg44:0000), for every colour, against `catzTranslation` given the system palette it ran against. The translation hangs on that palette's entries 0 to 15 and 246 to 255, which winbox.js fills otherwise than the oracle's Windows.
   - `XDrawPort::XDrawLine` (seg44:704e), on 100 lines of random ends, widths and colours, every pixel, against `drawLine`. That was once the right edge was made the line's own colour where the line gives no right colour.
+  - `XDrawPort::XDrawWhiskerLine` (seg44:6d3d) on 60 whiskers, and `XDrawPort::XFillCircleEx` (seg44:5671) on 120 balls of every kernel, fuzz and speckle, every pixel, against `drawWhisker` and `fillBall`. That was once Catz's plain kernel was walked as it walks its own.
+  - The drawing drivers draw every case twice, on a bottom-up port and on a top-down one, by `theirTopDown` (seg56:0858), as WinG's timing may make either.
 - **Drawing set-up:** the drawing drivers set the engine up as Catz does (`InitGlobalPetzData`, seg34:014e): its parameters, a seed for its random numbers, the screen port, and a 640-square port with circle tables as its mix buffer. They run on winbox.js's 256-colour Super VGA.
 
 ## Play with it

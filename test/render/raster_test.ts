@@ -270,9 +270,9 @@ describe('a Catz whisker', () => {
       }
     }
 
-    /* Bottom-up, from the row below the ball's centre; 10 across over 2 down, k 5. */
+    /* Bottom-up, from the row above the ball's centre; 10 across over 2 down, k 5. */
     expect(drawn).toEqual(
-      ['7,6', '8,6', '9,6', '10,6', '11,7', '12,7', '13,7', '14,7'].sort((a, b) => {
+      ['7,4', '8,4', '9,4', '10,4', '11,5', '12,5', '13,5', '14,5'].sort((a, b) => {
         const [ax, ay] = a.split(',').map(Number);
         const [bx, by] = b.split(',').map(Number);
         return ay - by || ax - bx;

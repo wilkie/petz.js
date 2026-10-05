@@ -155,6 +155,13 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 
 - **Eyes** (`DrawEyeball`, seg47:6752). Catz draws no iris: its colour is set and overwritten before anything is drawn. Only a pupil is drawn, the first iris's size, 2 in from it each side if it is wider than 7. It travels within the eye's radius less 0.63 of it.
 - **Outlines.** An outline, however thick, is a pixel before every row and one over its last, with no whole rows (seg44:5434 to 549b).
+- **Plain balls** (`XFillNormalCircle`, seg44:4619) are walked otherwise than the emboss and outline kernels:
+  - every one of the diameter's D table rows is walked, the last of no width;
+  - on a bottom-up bitmap the ball lands a row lower, and only rows past half way are speckled, each by the spot of the table's row before its own, as the spot pointer starts half way and moves on after each;
+  - on a top-down one, the rows before half way less one are speckled, each by its own.
+
+  [[measured]] The harness holds `fillBall` to `XFillCircleEx` on 120 random balls of every kernel, fuzz and speckle, both ways up, every pixel.
+
 - **Eyelids** (`DrawEyeball`, seg47:6ab6). A cat's lids are shut 20 hundredths wherever its states leave them (`ResetEyelids`, seg14:1d10), so Catz draws a lid over the top fifth of each eye. The lid is Dogz's rotated kernel, slanted by the nose's bearing from between the eyes, but with a whole turn the true 2π where Dogz uses 6.283. Its colour is `[256 Eyelid Color]`, translated, not shaded. The pupil is kept below the lid (seg47:6968). A blink shuts both to 100 for two or three frames, every 30 to 130 (`HandleBlinking`, seg23:0825).
 - **Fuzz and speckles.** Catz makes its fuzz tables as Dogz does, with the same 2,048 draws before them, from a seed taken from the clock, the milliseconds over 17 (`srand(GetTime())`, seg34:0559; `InitCircleLookup`, seg44:22ce). So a probe searches the seed as for Dogz.
 - **Speckles.** A ball's speckle is its own unshaded colour, so it shows where the ball is shaded.
@@ -178,7 +185,8 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 
   The oracle's kittens' noses match it, a thin grey band over black.
 
-- [[measured]] **Whiskers** land a row below their ball's centre on the oracle's bottom-up bitmap. That is two rows lower than `XDrawWhiskerLine`'s own arithmetic (seg44:6f06, the port's bottom less the point, as for lines) would put them, yet so `pouncer300`'s whiskers match to the pixel, every one of 109. Why, not yet known.
+- [[measured]] **Catz drew top-down on the oracle.** The WinG timing of the runs the Catz probes were shot in ends `1F`: top-down, where Dogz's on the same machine was bottom-up. Drawn top-down, `pouncer300` differs in 151 pixels, and its fuzz seed is found unmistakably (the next best differs in 417), and `sophisto900` in 837.
+  - **What had been wrong:** the probes had read the orientation from drives with no timing, and so drew bottom-up. That once looked like whiskers sitting two rows below where `XDrawWhiskerLine`'s own arithmetic puts them. They do not. The harness holds whiskers, lines and balls to the engine both ways up.
 - **Still to find:** the edges of the depth shades, here and there. Catz works a ball's shade out again only when its depth has moved by more than 10 (`ZOrder`). A held cat that has turned to face the viewer may keep shades from how it was turned before; which is the session's own.
 
 ## Still to find

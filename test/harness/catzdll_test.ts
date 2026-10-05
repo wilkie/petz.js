@@ -10,7 +10,7 @@
  * CD-ROM installed (install-catz.mjs --cd); skipped otherwise.
  */
 
-import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { averageBreed, type Breed, parseLnz } from '../../src/formats/lnz.ts';
@@ -23,7 +23,14 @@ import {
   readPalette,
 } from '../../src/formats/palette.ts';
 import { catzShade } from '../../src/render/ballz.ts';
-import { drawLine, IndexedBitmap } from '../../src/render/raster.ts';
+import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
+import {
+  circleTables,
+  drawLine,
+  drawWhisker,
+  fillBall,
+  IndexedBitmap,
+} from '../../src/render/raster.ts';
 
 const ROOT = process.cwd();
 const WINBOX = join(ROOT, '..', 'winbox.js', 'test', 'win16', 'run-probe.ts');
@@ -70,7 +77,81 @@ async function run(
   expect(result.failure ?? null).toBeNull();
   const file = await result.fileSystem.open([output]);
   const text = new TextDecoder().decode(new Uint8Array(await file.read(0, file.info.size)));
+
+  /* Kept beside the drivers, to look at where a case differs. */
+  writeFileSync(join(HARNESS, output), text);
   return text.trim().split(/\r?\n/);
+}
+
+/** The system palette a drawing driver ran against, by its `system` lines. */
+function systemOf(lines: string[]) {
+  const system: Colour[] = [];
+
+  for (const line of lines) {
+    const [kind, n, ...rgb] = line.split(' ');
+
+    if (kind === 'system') {
+      system[Number(n)] = rgb.map(Number) as Colour;
+    }
+  }
+
+  return system;
+}
+
+/**
+ * Each case a drawing driver drew, by its line (`kind values...`), and the
+ * pixels it drew, by the patch after it: how many differ from what `draw`
+ * draws on a fresh 640-square port, a case a line, those that differ at all.
+ */
+function compareCases(
+  lines: string[],
+  kind: string,
+  draw: (bitmap: IndexedBitmap, values: number[]) => void
+) {
+  const wrong: string[] = [];
+  const bottomUp = FIDELITY.bottomUp;
+  let count = 0;
+  let down = 0;
+
+  for (let n = 0; n < lines.length; n++) {
+    /* Each pass's port, bottom-up or top-down (`down 0`, `down 1`). */
+    if (lines[n].startsWith('down ')) {
+      down = Number(lines[n].split(' ')[1]);
+    }
+
+    if (!lines[n].startsWith(`${kind} `)) {
+      continue;
+    }
+
+    const values = lines[n].split(' ').slice(1).map(Number);
+    const [top, left, width, height] = lines[n + 1].split(' ').slice(1).map(Number);
+    const bitmap = new IndexedBitmap(640, 640);
+    let differ = 0;
+
+    setFidelity({ bottomUp: down === 0 });
+    draw(bitmap, values);
+    setFidelity({ bottomUp });
+    lines.slice(n + 2, n + 2 + height).forEach((row, r) => {
+      for (let x = 0; x < width; x++) {
+        const pixel = bitmap.get(left + x, top + r);
+        const ours = pixel === IndexedBitmap.TRANSPARENT ? 0xfe : pixel;
+
+        if (parseInt(row.slice(2 * x, 2 * x + 2), 16) !== ours) {
+          differ++;
+        }
+      }
+    });
+
+    if (differ) {
+      wrong.push(
+        `${kind} ${count}${down ? ' top-down' : ''}: ${values.join(' ')}: ${differ} pixels`
+      );
+    }
+
+    count++;
+  }
+
+  return { count, wrong };
 }
 
 describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => {
@@ -206,49 +287,55 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
 
     expect(translated).toEqual(theirs);
 
-    /* Each line, on a 640-square bottom-up port, in the engine's own colours. */
-    const wrong: string[] = [];
-    let at = 0;
-
-    for (let n = 0; n < lines.length; n++) {
-      const line = /^line (.*)$/.exec(lines[n]);
-
-      if (!line) {
-        continue;
-      }
-
-      const [x1, y1, x2, y2, wS, wE, colour, edge] = line[1].split(' ').map(Number);
-      const [top, left, width, height] = lines[n + 1].split(' ').slice(1).map(Number);
-      const rows = lines.slice(n + 2, n + 2 + height);
-      const bitmap = new IndexedBitmap(640, 640);
-
-      /* The driver gives no right colour: the right edge is the line's own. */
+    /* Each line, on a 640-square port either way up, in the engine's own colours;
+     * the driver gives no right colour, so the right edge is the line's own. */
+    const drawn = compareCases(lines, 'line', (bitmap, [x1, y1, x2, y2, wS, wE, colour, edge]) =>
       drawLine(bitmap, { x: x1, y: y1 }, { x: x2, y: y2 }, wS, wE, theirs[colour], {
         left: theirs[edge >= 0 ? edge : colour],
         right: theirs[colour],
-      });
+      })
+    );
 
-      let differ = 0;
+    expect(drawn.count).toBe(200);
+    expect(drawn.wrong).toEqual([]);
+  }, 600000);
 
-      rows.forEach((row, r) => {
-        for (let x = 0; x < width; x++) {
-          const pixel = bitmap.get(left + x, top + r);
-          const ours = pixel === IndexedBitmap.TRANSPARENT ? 0xfe : pixel;
+  it('draws whiskers and balls as XDrawWhiskerLine and XFillCircleEx do', async () => {
+    const lines = await run('CATZBALL', 'CATZBALL.OUT', [], { display: 'vga256' });
+    const engine = parseNe(new Uint8Array(readFileSync(join(SYSTEM, 'CATZDLL.DLL'))));
+    const translate = catzTranslation(
+      readPalette(engine, PALETTE_256, 256, CATZ_PALETTE_TYPE),
+      systemOf(lines)
+    );
+    /* The circle tables as the engine made them, from the driver's seed, 1234. */
+    const tables = circleTables(1234);
 
-          if (parseInt(row.slice(2 * x, 2 * x + 2), 16) !== ours) {
-            differ++;
-          }
-        }
-      });
+    /* A whisker in its own colour, untranslated; its counter at 0, untwitched. */
+    const whiskers = compareCases(lines, 'whisker', (bitmap, [x1, y1, x2, y2, colour, radius]) =>
+      drawWhisker(bitmap, { x: x1, y: y1 }, { x: x2, y: y2 }, colour, radius)
+    );
+    const balls = compareCases(
+      lines,
+      'ball',
+      (bitmap, [x, y, diameter, colour, outline, speckle, mode, fuzz]) =>
+        fillBall(
+          bitmap,
+          {
+            x,
+            y,
+            diameter,
+            colour: translate(colour),
+            outlineColour: translate(outline),
+            speckleColour: speckle < 0 ? -1 : translate(speckle),
+            outline: mode,
+            fuzz,
+            catz: true,
+          },
+          tables
+        )
+    );
 
-      if (differ) {
-        wrong.push(`line ${at}: ${line[1]}: ${differ} pixels`);
-      }
-
-      at++;
-    }
-
-    expect(at).toBe(100);
-    expect(wrong).toEqual([]);
+    expect([whiskers.count, balls.count]).toEqual([120, 240]);
+    expect([...whiskers.wrong, ...balls.wrong]).toEqual([]);
   }, 600000);
 });

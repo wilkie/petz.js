@@ -233,9 +233,59 @@ function circleRows(
   return { rows, d };
 }
 
+/**
+ * A plain ball (mode -1) as Catz's `XFillNormalCircle` (CATZDLL.DLL
+ * seg44:4619) draws it, as the harness holds it to: every one of the
+ * diameter's D table rows, the last of no width. On a bottom-up bitmap a row
+ * lower than the other kernels, and speckled only past half way, each row by
+ * the spot of the table's row before its own, as its spot pointer starts
+ * half way and moves on after each; on a top-down one, speckled in the rows
+ * before half way less one, each by its own. Speckled at all only with a
+ * colour for them and seven or more across.
+ */
+function fillCatzPlain(bitmap: IndexedBitmap, ball: Ball, level: number, fuzz: CircleTables) {
+  const radius = Math.floor(Math.round(ball.diameter) / 2);
+  const d = 2 * radius - 1;
+
+  if (d < 1 || d > LARGEST) {
+    return;
+  }
+
+  const x = Math.round(ball.x);
+  const top = Math.round(ball.y) - radius;
+  const base = (d * (d - 1)) / 2;
+  const carry = FIDELITY.carriedFuzz ? fuzz.carry[level][d] : 0;
+  const speckles = ball.speckleColour >= 0 && d >= 7;
+
+  for (let i = 0; i < d; i++) {
+    /* The table's rows from its first: up from the bottom on a bottom-up
+     * bitmap, down from the top on a top-down one. */
+    const r = FIDELITY.bottomUp ? d - 1 - i : i + 1;
+    const width = rowWidth(d, r);
+    const y = FIDELITY.bottomUp ? top + r + 1 : top + i;
+    const start = x - Math.floor(width / 2) + fuzz.fuzz[level][base + i] - carry;
+
+    bitmap.span(start, y, width, ball.colour);
+
+    /* Bottom-up, its rows past half way, each by the spot before its own;
+     * top-down, those before half way less one, each by its own. */
+    if (speckles && FIDELITY.bottomUp && i > Math.trunc(d / 2)) {
+      bitmap.set(start + fuzz.speckle[base + i - 1], y, ball.speckleColour);
+    } else if (speckles && !FIDELITY.bottomUp && i < radius - 1) {
+      bitmap.set(start + fuzz.speckle[base + i], y, ball.speckleColour);
+    }
+  }
+}
+
 /** Draws a ball as `XFillPartialCircleKernel` does in modes -1, 0 and above (seg8:3db8 on). */
 export function fillBall(bitmap: IndexedBitmap, ball: Ball, fuzz: CircleTables = circleTables()) {
   const level = Math.max(0, Math.min(7, ball.fuzz));
+
+  if (ball.catz && ball.outline < 0) {
+    fillCatzPlain(bitmap, ball, level, fuzz);
+    return;
+  }
+
   const { rows, d } = circleRows(ball, level, fuzz);
   const speckle = ball.speckleColour >= 0 ? ball.speckleColour : ball.colour;
   const thick = ball.outline;
@@ -658,10 +708,9 @@ export function drawLine(
  * is never steeper than a diagonal, and stops short of the end's row. The
  * first `radius / 2` columns, under the ball, are not drawn, nor the end's.
  * Nothing at all where either end is within 3 pixels of the bitmap's edge.
- * [[measured]] It starts a row below its ball's centre on a bottom-up
- * bitmap: two rows lower than lines and `XDrawWhiskerLine`'s own rows
- * (seg44:6f06, the port's bottom less the point) would put it, which the
- * oracle's whiskers show to the pixel. Why, not yet known. `twitch`,
+ * On a bottom-up bitmap it starts a row higher, as a line does (seg44:6f06,
+ * the port's bottom less the point); the harness holds it to
+ * `XDrawWhiskerLine` either way up. `twitch`,
  * where the engine twitches it -- the last 6 of every 36 whiskers drawn --
  * moves its end's row by -2 to 2.
  */
@@ -688,7 +737,7 @@ export function drawWhisker(
   const k = ey === sy ? 1000 : Math.abs(Math.trunc(dx / (ey - sy)));
   const across = Math.sign(dx);
   const down = ey < sy ? -1 : 1;
-  const top = FIDELITY.bottomUp ? sy + 1 : sy + 2;
+  const top = FIDELITY.bottomUp ? sy - 1 : sy;
 
   for (let i = 0; i < Math.abs(dx); i++) {
     if (i >= skip) {

@@ -416,7 +416,7 @@
       0
     ],
     "expect": {
-      "wrong": 517,
+      "wrong": 151,
       "pixels": 4325
     }
   },
@@ -445,7 +445,7 @@
       0
     ],
     "expect": {
-      "wrong": 931,
+      "wrong": 837,
       "pixels": 3961
     }
   }
