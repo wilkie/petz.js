@@ -246,7 +246,8 @@ export function parseLnz(text: string, balls = 65): Breed {
       throw new Error(`[${name}] has ${list.length} lines, not one for each of ${balls} balls`);
     }
 
-    return list;
+    const limits = catz && CATZ_LIMITS[name];
+    return limits ? list.map((n) => Math.max(limits[0], Math.min(limits[1], n))) : list;
   };
 
   const pair = (line: LnzLine | undefined, name: string): [number, number] => {
@@ -379,6 +380,22 @@ export function parseLnz(text: string, balls = 65): Breed {
     ...(catz ? { catz } : {}),
   };
 }
+
+/**
+ * What Catz keeps each of a breed's lists of a value a ball within, as it
+ * reads them (`Linez::ReallyLoadLinezFile`, CATZDLL seg39:1077, passing
+ * them to `LoadBallList`, seg39:295a): a breed's size differences above 128,
+ * as some of the clown's variants give, count as 128.
+ */
+const CATZ_LIMITS: Record<string, [number, number]> = {
+  'Outline Type': [-5, 10],
+  'Outline Color': [0, 256],
+  Fuzz: [0, 8],
+  '16 Ball Color': [0, 256],
+  '256 Ball Color': [0, 256],
+  'Ball Size Diffs': [-128, 128],
+  'Speckle Color': [-1, 256],
+};
 
 /** The factors of a dog's nature, in the order of `[Default Factors]` and of the engine's. */
 export const FACTORS = [

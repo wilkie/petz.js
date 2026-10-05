@@ -174,7 +174,8 @@ export function project(
   puppiness = 0,
   head?: Head,
   { tilt = 0, spin = 0, roll = 0 }: Partial<Angles> = {},
-  blend?: Blend
+  blend?: Blend,
+  { pitch: base = -7 }: { pitch?: number } = {}
 ): Placed[] {
   /* Blended, a ball is moved the scale's share of the way from the reference frame (seg10:3b0c to 3c4e). */
   const at = (index: number) => {
@@ -194,7 +195,8 @@ export function project(
   const sine = (angle: number) => gameSine(angle, exact);
   const cosine = (angle: number) => gameCosine(angle, exact);
   const turn = wrap(yaw - spin);
-  const pitch = -7 - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
+  /* No pitch at all from a base of 0 (Catz's XBallz `+0x720`, seg47:419c). */
+  const pitch = base && base - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
   const [cy, sy, cp, sp] = [cosine(turn), sine(turn), cosine(pitch), sine(pitch)];
   const heads = head ? new Set(breed.headBalls) : null;
   const pivotBall = skeletonOf(breed).neck;
@@ -281,9 +283,14 @@ export function project(
 
     /* Radius `size × ball scale >> 9`, the size changed by the frame's extra
      * for the ball, if any: the diameter is twice that. Dogz keeps it from
-     * below 0; Catz does not, so a ball sized below 0 is -1 across. */
+     * below 0; Catz does not, so a ball sized below 0 is -1 across, and
+     * works a changed ball's out in 16 bits (CATZDLL seg47:419c). */
     const size = ballSize(breed, header, index, puppiness) + (resized.get(index) ?? 0);
-    const radius = Math.floor(((breed.catz ? size : Math.max(0, size)) * scales.ball) / 512);
+    const radius = !breed.catz
+      ? Math.floor((Math.max(0, size) * scales.ball) / 512)
+      : resized.has(index)
+        ? (((size * scales.ball) << 16) >> 16) >> 9
+        : Math.floor((size * scales.ball) / 512);
 
     return { x, y: pitchedY, depth, diameter: 2 * radius };
   });

@@ -24,7 +24,7 @@ import {
   readPalette,
 } from '../../src/formats/palette.ts';
 import { catzShade, depthShades, drawOrder, drawPet } from '../../src/render/ballz.ts';
-import { extendFrames } from '../../src/render/extend.ts';
+import { extendCatzFrame, extendFrames } from '../../src/render/extend.ts';
 import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
 import { project, scalesForAge } from '../../src/render/project.ts';
 import {
@@ -470,5 +470,70 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(cases).toHaveLength(26);
     expect(drawn.count).toBe(26);
     expect([...wrong, ...drawn.wrong]).toEqual([]);
+  }, 1800000);
+
+  it('reshapes the cat’s frames for every breed as ModifyBallzData does', async () => {
+    const files = readdirSync(RESOURCE).filter((name) =>
+      /^(CAT\d*\.(BHD|BDT)|.*\.LNZ)$/.test(name)
+    );
+    const lines = await run('CATZSHAP', 'CATZSHAP.OUT', files, { frames: 400000 });
+    const read = (name: string) => new Uint8Array(readFileSync(join(RESOURCE, name)));
+    const text = (name: string) => readFileSync(join(RESOURCE, name), 'latin1');
+    const header = parseBhd(read('CAT.BHD'));
+    const frames: Frame[] = [];
+
+    for (let n = 0; files.includes(`CAT${n}.BDT`); n++) {
+      frames.push(...parseAnimation(header, n, read(`CAT${n}.BDT`)));
+    }
+
+    /* Each frame as the engine held it, against the frame reshaped for the breed. */
+    const wrong: string[] = [];
+    let breed: Breed | null = null;
+    let name = '';
+    let count = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+
+      if (kind === 'breed') {
+        const [adult, young, percent] = rest;
+        breed = averageBreed(parseLnz(text(adult), 67), parseLnz(text(young), 67), Number(percent));
+        name = `${adult} ${young} ${percent}`;
+      } else if (kind === 'frame' && breed) {
+        const [n, ...values] = rest.map(Number);
+        /* Unturned and unpitched, at a pet scale of 256 and a ball scale of
+         * 512: the frame as it is held, each ball's radius its size. */
+        const placed = project(
+          breed,
+          header,
+          extendCatzFrame(frames[n], breed),
+          {
+            pet: 256,
+            ball: 512,
+          },
+          0,
+          100,
+          undefined,
+          {},
+          undefined,
+          { pitch: 0 }
+        );
+        const ours = placed.flatMap(({ x, y, depth, diameter }) => [x, y, depth, diameter / 2]);
+        const differ = ours.flatMap((value, at) =>
+          value === values[at]
+            ? []
+            : [`ball ${Math.trunc(at / 4)} ${'xyzr'[at % 4]} ${values[at]}/${value}`]
+        );
+
+        if (differ.length) {
+          wrong.push(`${name} frame ${n}: ${differ.slice(0, 4).join(', ')} (${differ.length})`);
+        }
+
+        count++;
+      }
+    }
+
+    expect(count).toBe(14 * 3 * 35);
+    expect(wrong).toEqual([]);
   }, 1800000);
 });

@@ -131,7 +131,8 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 - **Placing the balls** (`XBallz::GetCartesianCoordinates`, seg47:419c) is Dogz's but for its angles and its π:
   - a cat is turned first, by its rotation (`BallState` `+0x10`), then rolled (`+0x14`) and tilted (`+0x12`), and pitched last by the same `-7 - |64 - |turn|| / 10`; Dogz rolls, spins and tilts before it turns;
   - its tables of sines are made with the true π, `ds:1ea6` (seg48:1410), so a quarter turn's sine is 256, not Dogz's 255;
-  - a ball's radius, `size × ball scale >> 9`, is not kept from going below 0: a ball sized below nothing is -1 across, and drawn as nothing.
+  - a ball's radius, `size × ball scale >> 9`, is not kept from going below 0: a ball sized below nothing is -1 across, and drawn as nothing. A ball a frame's extra changes is worked out again in 16 bits, so a size times the scale past 32,767 wraps; no cat's real scale comes near it;
+  - the pitch's −7 is the XBallz's own (`+0x720`), and 0 there leaves the cat unpitched (`project`'s `pitch`).
 
   [[measured]] The harness holds `project` to `GetCartesianCoordinates` on 13 cases of frames turned, tilted and rolled: every ball's place, depth and radius.
 
