@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { averageBreed, parseLnz } from '../../src/formats/lnz.ts';
+import { CATZ_STATE_NAMES, readCatzStateNames } from '../../src/formats/engine.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import {
   catzArity,
@@ -28,6 +29,27 @@ const CREATURES = [
 
 describe('the Catz demo’s files', () => {
   const opcodes = readCatzOpcodes(parseNe(new Uint8Array(readFileSync(ENGINE))));
+
+  it('name the cat’s 82 states and 24 global states, and the mouse’s, in CATZDLL.DLL', () => {
+    const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
+    const cat = readCatzStateNames(engine, CATZ_STATE_NAMES.cat);
+    const global = readCatzStateNames(engine, CATZ_STATE_NAMES.catGlobal);
+
+    expect(cat).toHaveLength(82);
+    expect(cat.slice(0, 3)).toEqual([
+      'eKatState_NOTASTATE',
+      'eKatState_preStalking',
+      'eKatState_stalking',
+    ]);
+    expect(global).toHaveLength(24);
+    expect(global[8]).toBe('eKatGS_moment');
+    expect(readCatzStateNames(engine, CATZ_STATE_NAMES.mouseGlobal)).toEqual([
+      'eMouseGS_NOTASTATE',
+      'eMouseGS_inMouseHole',
+      'eMouseGS_explore',
+      'eMouseGS_flee',
+    ]);
+  });
 
   it('name 64 opcodes in CATZDLL.DLL, from startPos to endPos', () => {
     expect(opcodes.size).toBe(64);
@@ -122,6 +144,20 @@ describe('the Catz demo’s files', () => {
         [47, 48, 120],
       ],
       littleOne: 'ksiamese.lnz',
+      /* Its brains' centres, spreads and rates. */
+      factors: [
+        [20, 10, 10],
+        [10, 5, 10],
+        [90, 10, 10],
+        [90, 10, 10],
+        [25, 20, 100],
+        [90, 10, 10],
+        [50, 40, 10],
+        [20, 10, 10],
+        [0, 0, 10],
+        [0, 0, 30],
+        [0, 0, 10],
+      ],
     });
   });
 

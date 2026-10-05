@@ -305,3 +305,29 @@ export function readPicture(engine: NeModule, id: number) {
 
   return parseDib(resource.data);
 }
+
+/** Catz's state names, by resource id: the cat's states and global states, the mouse's. */
+export const CATZ_STATE_NAMES = {
+  cat: 1000,
+  mouse: 2000,
+  catGlobal: 3000,
+  mouseGlobal: 4000,
+} as const;
+
+/**
+ * Catz's states, by number: `eKatState_NOTASTATE`, `eKatState_preStalking`,
+ * ... -- the names of one of CATZDLL.DLL's resources of type 32516, each
+ * ended by a 0, some padded at the front with `=` or `+`
+ * (`StateMachine::LoadStateNames`, seg42:1969).
+ */
+export function readCatzStateNames(engine: NeModule, id: number): string[] {
+  const resource = engine.resources().find((each) => each.type === 32516 && each.id === id);
+
+  if (!resource) {
+    return [];
+  }
+
+  const names = new TextDecoder('latin1').decode(resource.data).split('\0');
+  const end = names.findIndex((name) => !name);
+  return names.slice(0, end < 0 ? names.length : end).map((name) => name.replace(/^[=+]+/, ''));
+}

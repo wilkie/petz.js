@@ -72,6 +72,14 @@ export interface CatzShape {
 
   /** `[Little one]`: the young one's breed file, which the engine averages this with by age. */
   littleOne: string | null;
+
+  /**
+   * `[Default Factors]`, as Catz reads them: a line for each of the cat's
+   * brains, its centre, how far either side of it a cat's may be, and how
+   * often it moves back toward it (`%d, %d, %d` into Linez `+0x1de8` on,
+   * seg39:12c2; `CatSprite::InitBrain`, seg16:1c30).
+   */
+  factors: [centre: number, spread: number, rate: number][];
 }
 
 /** What a breed file says, named. */
@@ -313,6 +321,7 @@ export function parseLnz(text: string, balls = 65): Breed {
         sideways: list('Move Sideways', 2) as [number, number][],
         project: list('Project Ball', 3) as [number, number, number][],
         littleOne: (sections.get('Little one')?.[0]?.values[0] as string | undefined) ?? null,
+        factors: catzFactors(sections.get('Default Factors') ?? []),
       }
     : undefined;
 
@@ -400,6 +409,15 @@ const CATZ_LIMITS: Record<string, [number, number]> = {
   'Ball Size Diffs': [-128, 128],
   'Speckle Color': [-1, 256],
 };
+
+/** Catz's `[Default Factors]` lines, up to the first that does not start with a number. */
+function catzFactors(lines: LnzLine[]): [number, number, number][] {
+  const end = lines.findIndex(({ values }) => typeof values[0] !== 'number');
+  return lines.slice(0, end < 0 ? lines.length : end).map(({ values }) => {
+    const [centre, spread, rate] = values.map((value) => (typeof value === 'number' ? value : 0));
+    return [centre, spread ?? 0, rate ?? 0];
+  });
+}
 
 /** The factors of a dog's nature, in the order of `[Default Factors]` and of the engine's. */
 export const FACTORS = [
@@ -539,6 +557,10 @@ export function averageBreed(
             sideways: averageMoves(shape.sideways, little.sideways, percent),
             project: averageProjections(shape.project, little.project, percent),
             littleOne: shape.littleOne,
+            /* Every number of every line (seg39:2b00). */
+            factors: shape.factors.map((line, n) =>
+              line.map((value, k) => mix(value, little.factors[n]?.[k] ?? value))
+            ) as [number, number, number][],
           },
         }
       : {}),

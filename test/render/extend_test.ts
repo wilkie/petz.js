@@ -27,6 +27,7 @@ const shape = (changes: Partial<CatzShape> = {}): CatzShape => ({
   sideways: [],
   project: [],
   littleOne: null,
+  factors: [],
   ...changes,
 });
 

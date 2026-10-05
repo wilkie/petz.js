@@ -14,6 +14,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync
 import { join } from 'node:path';
 
 import { type Frame, parseAnimation, parseBhd } from '../../src/formats/animation.ts';
+import { type CatzBrain, initCatzBrains, updateCatzBrain } from '../../src/behaviour/catz-brain.ts';
 import {
   type CatzBlink,
   type CatzFudger,
@@ -807,4 +808,64 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(played).toHaveLength(cases.length);
     expect(wrong).toEqual([]);
   }, 2700000);
+
+  it('makes a cat’s 12 brains about its breed’s factors as XBrain and InitBrain do', async () => {
+    const files = readdirSync(RESOURCE).filter((name) => /^[AK]\w+\.LNZ$/.test(name));
+    const lines = await run('CATZBRAN', 'CATZBRAN.OUT', files);
+    const text = (name: string) => readFileSync(join(RESOURCE, name), 'latin1');
+    const wrong: string[] = [];
+    let brains: CatzBrain[] = [];
+    let name = '';
+    let count = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'breed') {
+        /* The breed averaged as the driver has it, its brains made with C's
+         * `rand` from where the engine's was. */
+        const [adult, young, percent, seed] = rest;
+        const breed = averageBreed(
+          parseLnz(text(adult), 67),
+          parseLnz(text(young), 67),
+          Number(percent)
+        );
+        let state = BigInt(seed);
+        const random = (n: number) => {
+          state = (state * 22695477n + 1n) & 0xffffffffn;
+          return Number((state >> 16n) & 0x7fffn) % n;
+        };
+        brains = initCatzBrains(breed.catz!.factors, random);
+        name = `${adult} ${young} ${percent}`;
+        count++;
+      } else if (kind === 'brain') {
+        const [n, value, centre, rate, type] = values;
+        const ours = brains[n];
+
+        if (
+          [ours.value, ours.centre, ours.rate, ours.kind].join() !==
+          [value, centre, rate, type].join()
+        ) {
+          wrong.push(
+            `${name} brain ${n}: ${value} ${centre} ${rate} ${type} / ${ours.value} ${ours.centre} ${ours.rate} ${ours.kind}`
+          );
+        }
+      } else if (kind === 'update') {
+        /* Its value 0 and due at once: a step toward its centre, if it centres. */
+        const [n, value, previous] = values;
+        const brain = { ...brains[n], value: 0, due: 0 };
+        updateCatzBrain(brain, 1);
+
+        if ([brain.value, brain.previous].join() !== [value, previous].join()) {
+          wrong.push(
+            `${name} update ${n}: ${value} ${previous} / ${brain.value} ${brain.previous}`
+          );
+        }
+      }
+    }
+
+    expect(count).toBe(5);
+    expect(wrong).toEqual([]);
+  }, 600000);
 });
