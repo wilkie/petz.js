@@ -15,8 +15,10 @@
  *   (`ResetParams`, 952), and `fudger i value previous rising before state
  *   target drift velocity` for each, all of it `ResetParams` leaves as it
  *   was (`Fudger` `+0xc8`, `+0xc4`, `+0xcc`, `+0xce`, `+0xe2`, `+0xc0`,
- *   `+0xda`, and the double at `+0xb8` in hex); `pushed planned actual`
- *   after the push, then
+ *   `+0xda`, and the double at `+0xb8` in hex); `blink wait shut kept`, the
+ *   cat's blinking as it starts (`CatSprite` `+0x3584` to `+0x3588`, which
+ *   the sprite has room for), `CatSprite::HandleBlinking` (578) called
+ *   before every `PopScript`; `pushed planned actual` after the push, then
  * * `tick frame rotation planned remaining actual` a tick: the frame shown
  *   (`BallState` `+0x1a`, at sprite `+0x692`), the cat's rotation
  *   (`+0x688`), the position it will be in once what is pushed has played
@@ -114,6 +116,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     RESET reset;
     PUSH push;
     POP pop;
+    POP blink;
     REMAINING remaining;
     HFILE cases;
     int n, t;
@@ -154,6 +157,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     push = (PUSH)ordinal(956);
     pop = (POP)ordinal(992);
     remaining = (REMAINING)ordinal(968);
+    blink = (POP)ordinal(578);
 
     {
         static char text[1200];
@@ -222,10 +226,19 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         push(sprite, action, variant);
         keep("pushed %d %d\r\n", *(int __far *)(sprite + 0x14fe), *(int __far *)(sprite + 0x1500));
 
-        /* Played until all that is left is the action's end, shown again. */
+        /* Its blinking from where the action's number says, the eyes open. */
+        *(int __far *)(sprite + 0x3584) = action % 50;
+        *(int __far *)(sprite + 0x3586) = 0;
+        *(int __far *)(sprite + 0x3588) = 0;
+        keep("blink %d %d %d\r\n", *(int __far *)(sprite + 0x3584),
+             *(int __far *)(sprite + 0x3586), *(int __far *)(sprite + 0x3588));
+
+        /* Played until all that is left is the action's end, shown again;
+         * each tick blinking first, as `CatSprite::Update` does. */
         for (t = 0; t < TICKS; t++) {
             int left;
 
+            blink(sprite, params);
             pop(sprite, params);
             left = remaining(sprite);
             keep("tick %d %d %d %d %d", *(int __far *)(sprite + 0x692),

@@ -14,7 +14,11 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync
 import { join } from 'node:path';
 
 import { type Frame, parseAnimation, parseBhd } from '../../src/formats/animation.ts';
-import { type CatzFudger, makeCatzFudgers } from '../../src/behaviour/catz-fudger.ts';
+import {
+  type CatzBlink,
+  type CatzFudger,
+  makeCatzFudgers,
+} from '../../src/behaviour/catz-fudger.ts';
 import { catzFrameAngle, catzTimeline } from '../../src/behaviour/catz-timeline.ts';
 import { averageBreed, type Breed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
@@ -587,7 +591,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(wrong).toEqual([]);
   }, 1800000);
 
-  it('plays every action as ScriptSprite does, tick by tick: its frames, turns and fudgers', async () => {
+  it('plays every action as ScriptSprite does, tick by tick: its frames, turns, fudgers and blinks', async () => {
     const files = readdirSync(RESOURCE).filter((name) =>
       /^(CAT\d*\.(BHD|BDT)|CAT\.SCP|[AK]HUNTER\.LNZ)$/.test(name)
     );
@@ -685,6 +689,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       values: number[];
       ticks: number[][];
       fudgers: CatzFudger[];
+      blink?: CatzBlink;
     }[] = [];
 
     for (const line of lines) {
@@ -711,6 +716,9 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
           drift,
           velocity: bits.getFloat64(0),
         });
+      } else if (kind === 'blink') {
+        const [wait, shut, kept] = values;
+        last.blink = { wait, shut: shut !== 0, kept };
       } else if (kind === 'tick') {
         last.ticks.push(values);
       }
@@ -723,7 +731,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
 
     let earlier: number | undefined;
 
-    for (const { values, ticks, fudgers } of played) {
+    for (const { values, ticks, fudgers, blink } of played) {
       const [action, variant, from, index, seed] = values;
       let [at, state] = [index, BigInt(seed)];
       const random = (n: number, source: 'table' | 'rand') => {
@@ -744,6 +752,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
         angle: (frame) => catzFrameAngle(shaped[frame], neck, butt),
         fudgers,
         shown: earlier,
+        blink,
       });
       earlier = ticks.at(-1)?.[0];
 

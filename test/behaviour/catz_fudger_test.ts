@@ -1,8 +1,10 @@
 import {
   aimCatzFudger,
+  blinkCatz,
   driftCatzFudger,
   makeCatzFudgers,
   requestedCatzFudgers,
+  resetCatzEyelids,
   resumeCatzFudger,
   suspendCatzFudger,
   updateCatzFudger,
@@ -63,5 +65,26 @@ describe('a Catz cat’s fudgers', () => {
 
   it('wrap angles keeping both ends, -128 and 128', () => {
     expect([128, -128, 129, -129, 384].map(wrapCatzAngle)).toEqual([128, -128, -127, 127, 128]);
+  });
+
+  it('blink a cat’s eyelids shut before its script each tick, the fudgers easing them back', () => {
+    const fudgers = makeCatzFudgers();
+    resetCatzEyelids(fudgers);
+    [fudgers[6].value, fudgers[7].value] = [20, 20];
+    const blink = { wait: 0, shut: false, kept: 0 };
+    const left: number[] = [];
+
+    const fields = fudgers.map(({ value }) => value);
+
+    for (let tick = 0; tick < 5; tick++) {
+      blinkCatz(blink, fields, () => 0);
+      left.push((fields[7] = updateCatzFudger(fudgers[7], fields[7])));
+      fields[6] = updateCatzFudger(fudgers[6], fields[6]);
+    }
+
+    /* Shut to 100 and eased back by the fudgers the same tick, and on for
+     * the 2 ticks it waits; then put back as it was, for 30. */
+    expect(left).toEqual([83, 51, 39, 20, 20]);
+    expect(blink).toEqual({ wait: 29, shut: false, kept: 20 });
   });
 });

@@ -165,6 +165,7 @@ function playOut(index: number, times = 1) {
     times,
     angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
     fudgers,
+    blink: { wait: random(100) + 30, shut: false, kept: 20 },
   });
 }
 

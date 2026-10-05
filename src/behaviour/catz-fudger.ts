@@ -500,3 +500,37 @@ export function resetCatzEyelids(fudgers: CatzFudger[]) {
   aimCatzFudger(fudgers[9], 0);
   aimCatzFudger(fudgers[8], 0);
 }
+
+/** A cat's blinking (`CatSprite` `+0x3584` to `+0x3588`): ticks to wait, whether shut, and the lid's height kept. */
+export interface CatzBlink {
+  wait: number;
+  shut: boolean;
+  kept: number;
+}
+
+/**
+ * A tick's blinking, before its script (`CatSprite::HandleBlinking`,
+ * seg23:0825, the first thing `CatSprite::Update` does): when the wait is
+ * out, both eyelids shut, to 100, for 2 or 3 ticks, or put back as the left
+ * was, for 30 to 129; each by C's `rand`. It sets the numbers the eyelids'
+ * fudgers drive (`BallState` `+0x2a`, `+0x2c`, here by the fudgers'
+ * numbers, 6 and 7), not the fudgers, which ease the lids from there as the
+ * tick's script plays.
+ */
+export function blinkCatz(blink: CatzBlink, fields: number[], random: (n: number) => number) {
+  if (blink.wait >= 1) {
+    blink.wait--;
+    return;
+  }
+
+  if (!blink.shut) {
+    blink.kept = fields[7];
+    [fields[6], fields[7]] = [100, 100];
+    blink.wait = random(2) + 2;
+  } else {
+    [fields[6], fields[7]] = [blink.kept, blink.kept];
+    blink.wait = random(100) + 30;
+  }
+
+  blink.shut = !blink.shut;
+}

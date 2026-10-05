@@ -13,6 +13,8 @@ import { type Element, type Operand, type Script } from '../formats/script.ts';
 import { CATZ_TURN } from '../render/raster.ts';
 import {
   aimCatzFudger,
+  blinkCatz,
+  type CatzBlink,
   alignCatzFudger,
   type CatzFudger,
   defaultCatzFudgerRate,
@@ -161,6 +163,9 @@ export interface CatzTimelineOptions {
    */
   fudgers?: CatzFudger[];
 
+  /** A cat's blinking, done at the start of every tick, with `fudgers`; none without. */
+  blink?: CatzBlink;
+
   /**
    * How many times the action is played, one after another, as the engine
    * plays a walk or a run again for as long as the cat goes on: each time
@@ -287,6 +292,7 @@ export function catzTimeline(
     angle,
     fudgers,
     shown: earlier,
+    blink,
   }: CatzTimelineOptions
 ): CatzStep[] {
   const steps: CatzStep[] = [];
@@ -311,18 +317,35 @@ export function catzTimeline(
    */
   const layer: Element[] = [];
 
+  /* The numbers the fudgers drive (`BallState` `+0x10` on, by the fudgers'
+   * numbers), apart from the fudgers' own: a blink or a turn sets them, and
+   * each tick each fudger is updated from its own and sets it. */
+  const fields = (fudgers ?? []).map(({ value }) => value);
+
   /* A turn a reference frame makes, applied to the rotation as the tick ends. */
   let turned = 0;
 
   /** The tick done: each fudger updated from the number it drives, the rotation turned first (seg41:154a on). */
+  /** What a cat does before its script each tick: blink. */
+  const startTick = () => {
+    if (blink && fudgers) {
+      blinkCatz(blink, fields, (n) => random(n, 'rand'));
+    }
+  };
+
   const tick = (step: CatzStep) => {
     if (fudgers) {
-      step.fudged = fudgers.map((fudger, n) =>
-        updateCatzFudger(fudger, n === 0 ? wrapCatzAngle(fudger.value + turned) : fudger.value)
+      step.fudged = fudgers.map(
+        (fudger, n) =>
+          (fields[n] = updateCatzFudger(
+            fudger,
+            n === 0 ? wrapCatzAngle(fields[0] + turned) : fields[n]
+          ))
       );
     }
 
     turned = 0;
+    startTick();
   };
 
   /** A script's setting of the fudgers it names, as `PopScript` does it (seg41:0052). */
@@ -683,7 +706,7 @@ export function catzTimeline(
         case CATZ_OP.lookAtUser:
           /* The head turned against the cat's own rotation, so to face out, and level (seg41:0052). */
           if (fudgers) {
-            aimCatzFudger(fudgers[3], -wrapCatzAngle(fudgers[0].value + turned));
+            aimCatzFudger(fudgers[3], -wrapCatzAngle(fields[0] + turned));
             aimCatzFudger(fudgers[4], 0);
           }
           break;
@@ -701,6 +724,8 @@ export function catzTimeline(
       }
     }
   };
+
+  startTick();
 
   for (let n = 0; n < times && steps.length < limit; n++) {
     playPushed(push(index, 0, n === 0 ? variant : undefined), 0);
