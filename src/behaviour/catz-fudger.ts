@@ -484,3 +484,19 @@ export function requestedCatzFudgers(type: number): number[] {
 
   return type === 14 ? [6, 7] : type === 15 ? [8, 9] : type === 16 ? [...Array(14).keys()] : [];
 }
+
+/**
+ * A cat's eyelids put back as a cat's states leave them (`CatSprite::
+ * ResetEyelids`, seg14:1d10): each reset, then both heights aimed at 20,
+ * shut a fifth, and both tilts at 0.
+ */
+export function resetCatzEyelids(fudgers: CatzFudger[]) {
+  for (const n of [6, 7, 8, 9]) {
+    resetCatzFudger(fudgers[n]);
+  }
+
+  aimCatzFudger(fudgers[7], 20);
+  aimCatzFudger(fudgers[6], 20);
+  aimCatzFudger(fudgers[9], 0);
+  aimCatzFudger(fudgers[8], 0);
+}

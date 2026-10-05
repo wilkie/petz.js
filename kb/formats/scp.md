@@ -113,4 +113,4 @@ All [[read out]] from CATZDLL.DLL, `ScriptSprite` in segments 40 and 41:
 
 - [[measured]] So played, the cat's walks and crawls carry it on, the way it faces. Played once, no action moves the cat: each action's first frame is its last's.
 - [[inferred]] So a cat's travel is the engine's repeating an action, as a dog's is.
-- Not yet played: the head turned to look at a point or another sprite, and the layers' frames. `src/behaviour/catz-fudger.ts` plays the fudgers; nothing draws a cat by them yet.
+- Not yet played: the head turned to look at a point or another sprite, and the layers' frames. `src/behaviour/catz-fudger.ts` plays the fudgers, and `/cats.html` draws a played script by them: the cat turned, rolled and tilted, its head turned, its eyelids shut and tilted, its eyes looking, from a cat as its states leave it — still, its lids a fifth shut (`CatSprite::ResetEyelids`, seg14:1d10, aims both at 20 where the sprite's own default is 30).

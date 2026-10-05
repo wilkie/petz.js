@@ -54,3 +54,30 @@ test('plays a Catz script out as its frames', async ({ page }) => {
   await page.locator('#frame').fill('11');
   await expect(page.locator('#frame-number')).toHaveText('441');
 });
+
+test('plays a Catz script with the cat’s head, eyelids and turns as its fudgers move them', async ({
+  page,
+}) => {
+  test.skip(!CATZ, 'needs the Catz demo: scripts/oracle/install-catz.mjs');
+  await page.goto('/cats.html');
+
+  await expect(page.locator('#status')).toHaveText(/scripts/, { timeout: 30_000 });
+  /* Script 222 turns the head to look about, and shuts and tilts the eyelids. */
+  test.skip((await page.locator('#script option[value="222"]').count()) === 0, 'needs the CD-ROM');
+  await page.selectOption('#script', '222');
+  const shots: string[] = [];
+
+  for (const frame of [0, 30, 60, 90, 120]) {
+    await page.locator('#frame').fill(String(frame));
+    await expect.poll(() => page.evaluate(drawnPixels)).toBeGreaterThan(1000);
+    shots.push(
+      await page
+        .locator('canvas')
+        .screenshot({ path: `oracle/build/cats-222-${frame}.png` })
+        .then((b) => b.toString('base64'))
+    );
+  }
+
+  /* Each a different pose. */
+  expect(new Set(shots).size).toBe(shots.length);
+});

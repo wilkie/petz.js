@@ -26,8 +26,10 @@ import { ballAt, drawPet } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
 import { FIDELITY } from '../render/fidelity.ts';
 import { IndexedBitmap } from '../render/raster.ts';
+import { skeletonOf } from '../render/skeleton.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
-import { type CatzPositions, catzTimeline } from '../behaviour/catz-timeline.ts';
+import { makeCatzFudgers, resetCatzEyelids, wrapCatzAngle } from '../behaviour/catz-fudger.ts';
+import { catzFrameAngle, type CatzPositions, catzTimeline } from '../behaviour/catz-timeline.ts';
 import {
   catzArity,
   parseScripts,
@@ -69,14 +71,25 @@ let positions: CatzPositions = { count: 0, neutral: 0 };
  * The frames shown, numbered over every animation -- an animation's, or a
  * script's played out -- and how far the cat has moved by each.
  */
-let sequence: { frame: number; x: number; y: number }[] = [];
+let sequence: { frame: number; x: number; y: number; pose?: number[] }[] = [];
 
-/** The breed chosen, averaged toward its kitten's file by the slider. */
+/** The breed chosen, averaged toward its kitten's file by the slider: made once for each choice, so its reshaped frames are kept. */
+let chosen: { key: string; breed: Breed } | null = null;
+
 function breed() {
-  const { adult, kitten } = files.get(breedSelect.value)!;
-  return averageBreed(adult, kitten, Number(kittenInput.value), {
-    loseUp: FIDELITY.averageLosesUp,
-  });
+  const key = `${breedSelect.value}/${kittenInput.value}`;
+
+  if (chosen?.key !== key) {
+    const { adult, kitten } = files.get(breedSelect.value)!;
+    chosen = {
+      key,
+      breed: averageBreed(adult, kitten, Number(kittenInput.value), {
+        loseUp: FIDELITY.averageLosesUp,
+      }),
+    };
+  }
+
+  return chosen.breed;
 }
 
 function draw() {
@@ -88,7 +101,8 @@ function draw() {
    * where its glue ball is: the frames of a walk move on themselves. */
   const wrap = (value: number, size: number) => ((value % size) + size) % size;
   const glue = Number(cat.sections.get('Default Glue Ball')?.[0]?.values[0] ?? 6);
-  const g = ballAt(cat, header, shaped, glue, { age: 100, yaw: Number(yawInput.value) });
+  const posed = poseOf(step.pose);
+  const g = ballAt(cat, header, shaped, glue, { age: 100, yaw: posed.yaw });
   const bitmap = new IndexedBitmap(320, 240);
 
   drawPet(bitmap, cat, header, shaped, {
@@ -96,9 +110,9 @@ function draw() {
     originX: wrap(160 + step.x + g.x, 320) - g.x,
     originY: wrap(150 + step.y + g.y, 240) - g.y,
     age: 100,
-    yaw: Number(yawInput.value),
     order,
     translate,
+    ...posed,
   });
 
   frameNumber.textContent = String(at);
@@ -111,14 +125,46 @@ function draw() {
   context.drawImage(small, 0, 0, canvas.width, canvas.height);
 }
 
-/** The steps a script plays out as, a variant at random each time, its reference frames not shown. */
+/**
+ * How the cat is drawn by its 14 fudgers' values (`BallState`): turned,
+ * rolled and tilted, its head turned, each eyelid shut and tilted, its eyes
+ * looking; without them, turned by the yaw slider, its lids at rest.
+ */
+function poseOf(pose?: number[]) {
+  if (!pose) {
+    return { yaw: Number(yawInput.value) };
+  }
+
+  const [yaw, roll, tilt, rotation, up, cock, right, left, rightTilt, leftTilt, x, y] = pose;
+  return {
+    yaw,
+    angles: { tilt, roll, spin: 0 },
+    catzHead: { rotation, tilt: up, cock },
+    catzLids: { right, left },
+    eyelids: { right: { height: 100, tilt: rightTilt }, left: { height: 100, tilt: leftTilt } },
+    eyes: { mode: 1 as const, x, y },
+  };
+}
+
+/** The steps a script plays out as, a variant at random each time, the cat's fudgers played along. */
 function playOut(index: number, times = 1) {
   const random = (n: number) => Math.floor(Math.random() * n);
+  const cat = breed();
+  const shaped = extendFrames(frames, cat);
+  const { neck, butt } = skeletonOf(cat);
+  /* A cat as its states leave it: still, its lids a fifth shut, turned as the slider says. */
+  const fudgers = makeCatzFudgers();
+  resetCatzEyelids(fudgers);
+  fudgers[0].value = Number(yawInput.value);
+  [fudgers[6].value, fudgers[7].value] = [20, 20];
+
   return catzTimeline(scripts, positions, index, {
     flags: (frame) => frames[frame]?.tag ?? 3,
     random,
     limit: 600,
     times,
+    angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
+    fudgers,
   });
 }
 
@@ -128,17 +174,17 @@ function playOut(index: number, times = 1) {
  * reference frame -- after every action -- the cat moved so that its glue
  * ball, the breed's `[Default Glue Ball]`, is where it was in the frame
  * before; and so each turn of a loop that ends `endLoopAlign0`, a walk's.
- * Not yet: the turn `CheckAlignment` adds where the frames' axes
- * differ by more than 6.
+ * The cat is turned as its fudgers say, a reference frame turning it
+ * first by how it lies against the frame before (`CheckAlignment`).
  */
 function placed(index: number) {
   const cat = breed();
   const glue = Number(cat.sections.get('Default Glue Ball')?.[0]?.values[0] ?? 6);
   const shaped = extendFrames(frames, cat);
-  const options = { age: 100, yaw: Number(yawInput.value) };
-  const steps: { frame: number; x: number; y: number }[] = [];
+  const steps: { frame: number; x: number; y: number; pose?: number[] }[] = [];
   let offset = { x: 0, y: 0 };
   let last: number | null = null;
+  let yaw = Number(yawInput.value);
 
   for (const step of playOut(index, Math.max(1, Number(timesInput.value) || 1))) {
     if (!shaped[step.frame]) {
@@ -146,17 +192,22 @@ function placed(index: number) {
     }
 
     if ((step.reference || step.glue) && last !== null) {
-      const before = ballAt(cat, header, shaped[last], glue, options);
-      const now = ballAt(cat, header, shaped[step.frame], glue, options);
+      /* The glue ball where it was, the cat as it was turned and as it is now. */
+      const before = ballAt(cat, header, shaped[last], glue, { age: 100, yaw });
+      const turned = wrapCatzAngle(yaw + (step.turn ?? 0));
+      const now = ballAt(cat, header, shaped[step.frame], glue, { age: 100, yaw: turned });
       offset = { x: offset.x + before.x - now.x, y: offset.y + before.y - now.y };
+      yaw = turned;
     }
+
+    yaw = step.fudged?.[0] ?? yaw;
 
     if (step.reference) {
       last = step.frame;
       continue;
     }
 
-    steps.push({ frame: step.frame, ...offset });
+    steps.push({ frame: step.frame, ...offset, pose: step.fudged });
     last = step.frame;
   }
 

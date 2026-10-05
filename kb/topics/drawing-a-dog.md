@@ -134,7 +134,9 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
   - a ball's radius, `size × ball scale >> 9`, is not kept from going below 0: a ball sized below nothing is -1 across, and drawn as nothing. A ball a frame's extra changes is worked out again in 16 bits, so a size times the scale past 32,767 wraps; no cat's real scale comes near it;
   - the pitch's −7 is the XBallz's own (`+0x720`), and 0 there leaves the cat unpitched (`project`'s `pitch`).
 
-  [[measured]] The harness holds `project` to `GetCartesianCoordinates` on 13 cases of frames turned, tilted and rolled: every ball's place, depth and radius.
+  - the head is turned before all of it, in the frame's own units, about the neck (key ball 2): cocked in the screen's plane by `+0x20`, tilted by `+0x1e`, turned by `+0x1c`, only the `[Head Balls]` (the first loop of seg47:419c). Dogz turns it after scaling.
+
+  [[measured]] The harness holds `project` to `GetCartesianCoordinates` on 22 cases of frames turned, tilted and rolled, their heads turned: every ball's place, depth and radius.
 
 - **Lines.** A line's end is its ball's radius × the line's own thickness / 100, at least 1 (`XBallz::PrepareDrawLine`, seg47:7008), where Dogz uses 256/300 of the radius and skips a line with an end of 0.
   - **Colour:** the line's own, or the start ball's (-1) or the end ball's (less than -1).
@@ -170,6 +172,7 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 
   [[measured]] The harness holds `fillBall` to `XFillCircleEx` on 120 random balls of every kernel, fuzz and speckle, both ways up, every pixel.
 
+- **Each eye its own** (`DrawEyeball`, seg47:6752). The eye the cat's lines name at `+0xd89`, the left, takes its lid's height from `BallState` `+0x2c`, how far it may open from `+0x26` and its tilt from `+0x22`; the right `+0x2a`, `+0x28` and less `+0x24`. Where the eyes look is `+0x32`'s mode, 1 adding `+0x2e` and `+0x30` to where the frame has the pupil. [[measured]] The harness holds `drawPet` to it, both ways round: with the eyes the other way, the cases with the lids apart differ by 30 to 375 pixels.
 - **Eyelids** (`DrawEyeball`, seg47:6ab6). A cat's lids are shut 20 hundredths wherever its states leave them (`ResetEyelids`, seg14:1d10), so Catz draws a lid over the top fifth of each eye. The lid is Dogz's rotated kernel, slanted by the nose's bearing from between the eyes, but with a whole turn 6.28318530717959 (`ds:1a1c` and `ds:1eb6`; `CATZ_TURN`) where Dogz uses 6.283. On a bottom-up bitmap the kernel walks the rows from the bottom and turns the lid's angle to a half turn less itself (`XFillRotatedCircle`, seg44:3cc4), which draws it the same way up, its rows a row lower than mirrored. [[measured]] The harness holds `fillLid` to the kernel on 240 random lids, both ways up: all to the pixel but 3, each a single pixel where the edge falls within 10⁻¹⁵ of a pixel's, which the x87's own sines and tangents decide. With JavaScript's 2π the bearing came out a step off, and a lid's edge a pixel. Its colour is `[256 Eyelid Color]`, translated, not shaded. The pupil is kept below the lid (seg47:6968). A blink shuts both to 100 for two or three frames, every 30 to 130 (`HandleBlinking`, seg23:0825).
 - **Fuzz and speckles.** Catz makes its fuzz tables as Dogz does, with the same 2,048 draws before them, from a seed taken from the clock, the milliseconds over 17 (`srand(GetTime())`, seg34:0559; `InitCircleLookup`, seg44:22ce). So a probe searches the seed as for Dogz.
 - **Speckles.** A ball's speckle is its own unshaded colour, so it shows where the ball is shaded.
@@ -195,7 +198,7 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 
 - [[measured]] **Catz drew top-down on the oracle.** The WinG timing of the runs the Catz probes were shot in ends `1F`: top-down, where Dogz's on the same machine was bottom-up. Drawn top-down, `pouncer300` differs in 151 pixels, and its fuzz seed is found unmistakably (the next best differs in 417), and `sophisto900` in 835 (837 before the whole-frame harness's corrections).
   - **What had been wrong:** the probes had read the orientation from drives with no timing, and so drew bottom-up. That once looked like whiskers sitting two rows below where `XDrawWhiskerLine`'s own arithmetic puts them. They do not. The harness holds whiskers, lines and balls to the engine both ways up.
-- [[measured]] **A whole frame**, as `XBallz::DisplayBallzFrame` (seg47:5e0b) draws it into the mix port, is held to `drawPet` by the harness: the Hunter's kitten in 13 frames, turned, tilted, rolled and its lids shut 0 to 50 hundredths, both ways up, 4,300 to 7,600 pixels each: every ball's place, the draw order `ZOrder` leaves (seg47:579c), the depth shades and every pixel agree.
+- [[measured]] **A whole frame**, as `XBallz::DisplayBallzFrame` (seg47:5e0b) draws it into the mix port, is held to `drawPet` by the harness: the Hunter's kitten in 22 frames, turned, tilted, rolled, its head turned, each eyelid shut, tilted and opened its own way and its eyes looking off, both ways up, 4,300 to 7,600 pixels each: every ball's place, the draw order `ZOrder` leaves (seg47:579c), the depth shades and every pixel agree.
 - **Still to find:** the edges of the depth shades, here and there. Catz works a ball's shade out again only when its depth has moved by more than 10 (`ZOrder`). A held cat that has turned to face the viewer may keep shades from how it was turned before; which is the session's own.
 
 ## Still to find

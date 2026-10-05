@@ -444,11 +444,43 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       }
     }
 
-    const placedOf = ([frame, rotation, tilt, roll]: number[]) =>
-      project(breed, header, shaped[frame], scalesForAge(breed, 0), rotation, 100, undefined, {
-        tilt,
-        roll,
-      });
+    /* A case's numbers: the frame, its angles, the eyelids' heights, the
+     * head's turn, the eyelids' tilts and opening, and where the eyes look. */
+    const caseOf = (values: number[]) => {
+      const [frame, rotation, tilt, roll, lidA, lidC] = values;
+      const [headRotation, headTilt, cock, tilt22, tilt24, open26, open28, eyeX, eyeY] =
+        values.slice(6);
+      /* The eye the engine names at `+0xd89` of its lines, the left, takes
+       * `+0x2c`'s height, `+0x26`'s opening and `+0x22`'s tilt; the right
+       * `+0x2a`, `+0x28` and `+0x24` (`DrawEyeball`, seg47:6752). */
+      return {
+        frame,
+        rotation,
+        angles: { tilt, roll, spin: 0 },
+        catzHead: { rotation: headRotation, tilt: headTilt, cock },
+        catzLids: { right: lidA, left: lidC },
+        eyelids: {
+          right: { height: open28, tilt: tilt24 },
+          left: { height: open26, tilt: tilt22 },
+        },
+        eyes: { mode: 1 as const, x: eyeX, y: eyeY },
+      };
+    };
+    const placedOf = (values: number[]) => {
+      const { frame, rotation, angles, catzHead } = caseOf(values);
+      return project(
+        breed,
+        header,
+        shaped[frame],
+        scalesForAge(breed, 0),
+        rotation,
+        100,
+        undefined,
+        angles,
+        undefined,
+        { catzHead }
+      );
+    };
     const wrong: string[] = [];
 
     for (const { values, balls, order, shades } of cases) {
@@ -473,21 +505,20 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     let next = 0;
     const drawn = compareCases(lines, 'origin', (bitmap, [x, y]) => {
       const { values, bounds } = cases[next++ % cases.length];
-      const [frame, rotation, tilt, roll, lids] = values;
+      const { frame, rotation, ...rest } = caseOf(values);
       drawPet(bitmap, breed, header, shaped[frame], {
         colours: 256,
         originX: x - bounds[0],
         originY: y - bounds[1],
         yaw: rotation,
-        angles: { tilt, roll, spin: 0 },
         seed: 1234,
         translate,
-        catzLids: lids,
+        ...rest,
       });
     });
 
-    expect(cases).toHaveLength(26);
-    expect(drawn.count).toBe(26);
+    expect(cases).toHaveLength(44);
+    expect(drawn.count).toBe(44);
     expect([...wrong, ...drawn.wrong]).toEqual([]);
   }, 1800000);
 

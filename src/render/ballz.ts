@@ -17,6 +17,7 @@ import {
   type Angles,
   angle256,
   type Blend,
+  type CatzHead,
   type Eyelids,
   type Head,
   type Placed,
@@ -114,9 +115,14 @@ export interface DrawOptions {
 
   /**
    * How far a Catz cat's eyelids are shut, in hundredths: 20 where its
-   * states leave them (`CatSprite::ResetEyelids`, seg14:1d10), 100 in a blink.
+   * states leave them (`CatSprite::ResetEyelids`, seg14:1d10), 100 in a
+   * blink; or each its own (`BallState` `+0x2a`, `+0x2c`). How far each may
+   * open and its tilt are `eyelids`'.
    */
-  catzLids?: number;
+  catzLids?: number | { right: number; left: number };
+
+  /** A Catz cat's head turned about its neck. */
+  catzHead?: CatzHead;
 
   /**
    * Something drawn with a ball, just after it and before the balls nearer
@@ -402,6 +408,7 @@ export function drawPet(
     tongue = true,
     translate = (colour: number) => colour,
     catzLids = 20,
+    catzHead,
   }: DrawOptions
 ) {
   const tables = circleTables(seed);
@@ -416,7 +423,8 @@ export function drawPet(
     100 - age,
     head,
     angles,
-    blend
+    blend,
+    { catzHead }
   );
   const numbers = colours === 256 ? breed.ballColor256 : breed.ballColor16;
   const ramps = RAMPS[colours];
@@ -578,10 +586,12 @@ export function drawPet(
     }
 
     if (eye !== -1 && shades) {
-      drawCatzEye(bitmap, breed, placed, eye, at, eyes, translate, tables, catzLids);
+      const shut =
+        typeof catzLids === 'number' ? catzLids : eye === 1 ? catzLids.left : catzLids.right;
+      drawCatzEye(bitmap, breed, placed, eye, at, eyes, translate, tables, shut);
 
-      if (catzLids > 0) {
-        drawLid(bitmap, breed, placed, eye, at, colours, catzLids, eyesWide, LEVEL_LIDS, translate);
+      if (shut > 0) {
+        drawLid(bitmap, breed, placed, eye, at, colours, shut, eyesWide, eyelids, translate);
       }
     } else if (eye !== -1) {
       drawIris(bitmap, breed, placed, ball, breed.irises[eye], at, colours, eyes, iris, tables);

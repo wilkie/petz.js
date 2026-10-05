@@ -29,6 +29,13 @@ export interface Blend {
   reference: Frame;
 }
 
+/** A Catz cat's head turned about its neck (`BallState` `+0x1c`, `+0x1e`, `+0x20`), in 256ths of a turn. */
+export interface CatzHead {
+  rotation: number;
+  tilt: number;
+  cock: number;
+}
+
 /** Each eyelid's height, the share of the eye it may leave open, in hundredths, and its tilt. */
 export interface Eyelids {
   left: { height: number; tilt: number };
@@ -175,7 +182,7 @@ export function project(
   head?: Head,
   { tilt = 0, spin = 0, roll = 0 }: Partial<Angles> = {},
   blend?: Blend,
-  { pitch: base = -7 }: { pitch?: number } = {}
+  { pitch: base = -7, catzHead }: { pitch?: number; catzHead?: CatzHead } = {}
 ): Placed[] {
   /* Blended, a ball is moved the scale's share of the way from the reference frame (seg10:3b0c to 3c4e). */
   const at = (index: number) => {
@@ -210,8 +217,32 @@ export function project(
 
   const resized = new Map(frame.extras.map(({ ball, value }) => [ball, value]));
 
-  return frame.balls.map((_, index) => {
+  /* A cat's head turned about its neck, in the frame's own units, before
+   * anything else: cocked, tilted, then turned (CATZDLL seg47:419c, the
+   * first loop). */
+  const catzNeck = catzHead && pivotBall >= 0 ? at(pivotBall) : null;
+  const catzHeads = catzHead ? new Set(breed.headBalls) : null;
+  const turnedHead = (index: number) => {
     const ball = at(index);
+
+    if (!catzHead || !catzNeck || !catzHeads?.has(index)) {
+      return ball;
+    }
+
+    const { rotation, tilt: up, cock } = catzHead;
+    const [dx, dy, dz] = [ball.x - catzNeck.x, ball.y - catzNeck.y, ball.z - catzNeck.z];
+    const a = shift(cosine(cock) * dy - sine(cock) * dx);
+    const b = shift(sine(cock) * dy + cosine(cock) * dx);
+    const e = shift(cosine(up) * dz - sine(up) * a);
+    return {
+      x: shift(sine(rotation) * e + cosine(rotation) * b) + catzNeck.x,
+      y: shift(sine(up) * dz + cosine(up) * a) + catzNeck.y,
+      z: shift(cosine(rotation) * e - sine(rotation) * b) + catzNeck.z,
+    };
+  };
+
+  return frame.balls.map((_, index) => {
+    const ball = turnedHead(index);
     let x = shift(ball.x * scales.pet);
     let y = shift(ball.y * scales.pet);
     let z = shift(ball.z * scales.pet);
