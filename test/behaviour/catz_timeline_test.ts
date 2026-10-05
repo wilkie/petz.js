@@ -169,4 +169,20 @@ describe('a Catz action played out', () => {
 
     expect(frames(catzTimeline(scripts, POSITIONS, 0, { ...options, from: 1 }))).toEqual(['3']);
   });
+
+  it('plays a layered action a frame a tick alongside, from its first frame, until it runs out', () => {
+    const scripts = [
+      script(1, 1, [
+        variant(op(CATZ_OP.playLayeredAction, 1), { frame: 3 }, { frame: 4 }, { frame: 5 }),
+      ]),
+      script(6, 6, [variant(op(CATZ_OP.sequence, 20, 21))]),
+    ];
+    const steps = catzTimeline(scripts, POSITIONS, 0, options);
+
+    expect(steps.map(({ layer }) => layer)).toEqual([
+      { first: 20, frame: 20 },
+      { first: 20, frame: 21 },
+      undefined,
+    ]);
+  });
 });

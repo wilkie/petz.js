@@ -111,6 +111,13 @@ export interface CatzStep {
    */
   fudged?: number[];
 
+  /**
+   * A layered action's frame played over this one, and its first frame
+   * (`BallState` `+0x4c`, `+0x4a`): drawn moved by how far it has moved
+   * from that (`layeredCatzFrame`).
+   */
+  layer?: { first: number; frame: number };
+
   /** Sounds played as it is shown, one of each soundPlay's at random. */
   sounds?: number[];
 
@@ -313,7 +320,7 @@ export function catzTimeline(
   /**
    * The layered action's frames and opcodes still to come, a frame a tick
    * (`+0x1466`). Only its sounds are played, which draw as any other; the
-   * rest is passed over without its operands (seg41:1500 on).
+   * rest is passed over without its operands (seg41:143e on).
    */
   const layer: Element[] = [];
 
@@ -334,6 +341,8 @@ export function catzTimeline(
   };
 
   const tick = (step: CatzStep) => {
+    layerTick(step);
+
     if (fudgers) {
       step.fudged = fudgers.map(
         (fudger, n) =>
@@ -421,17 +430,39 @@ export function catzTimeline(
     pending = {};
     reference = false;
     glue = false;
+  };
 
-    /* A tick, so the layer's next frame, and its sounds before it. A
-     * reference frame takes no tick of its own. */
-    while (shown && layer.length) {
+  /**
+   * The layer's first frame as it was pushed (`+0x146a`), -1 for none; and
+   * a tick's turn of it: its next frame, and its sounds before it, played
+   * as the tick ends, before the fudgers (seg41:143e on). Where it runs out
+   * before a frame, it is done.
+   */
+  let layerFirst = -1;
+
+  const layerTick = (step: CatzStep) => {
+    if (layerFirst < 0) {
+      return;
+    }
+
+    while (layer.length) {
       const next = layer.shift()!;
 
       if ('frame' in next) {
+        step.layer = { first: layerFirst, frame: next.frame };
         break;
       }
 
       sound(next);
+    }
+
+    if (pending.sounds) {
+      step.sounds = [...(step.sounds ?? []), ...pending.sounds];
+      pending = {};
+    }
+
+    if (!step.layer) {
+      layerFirst = -1;
     }
   };
 
@@ -681,13 +712,15 @@ export function catzTimeline(
         }
         case CATZ_OP.playLayeredAction: {
           /* Its variant and sequences drawn as it is pushed (`PushLayeredAction`,
-           * seg40:561f), and queued after any layer still playing. Its frames
-           * are not drawn yet. */
+           * seg40:561f), and queued after any layer still playing. */
           const layered = scripts[value(a)];
 
           if (layered) {
             const which = random(layered.variants.length, 'table');
             layer.push(...frames(expand(layered.variants[which])));
+            /* Its first frame is the first of all still queued (seg40:561f). */
+            const first = layer.find((element) => 'frame' in element);
+            layerFirst = first && 'frame' in first ? first.frame : 0;
           }
           break;
         }

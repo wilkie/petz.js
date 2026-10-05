@@ -394,6 +394,34 @@ function between(a: Point, b: Point): Point {
   };
 }
 
+/**
+ * A Catz frame with a layered action's played over it (`XBallz::
+ * GenerateDiffFrame`, CATZDLL seg47:3f63): every ball moved by how far the
+ * layer's frame now has it from where its first frame had it, but those the
+ * breed says not to (`[Dont Layer Ballz]`); its extras its own. The frames
+ * are as reshaped for the breed. The same frame where the layer is on its
+ * first, as the engine only does this where the two differ.
+ */
+export function layeredCatzFrame(frame: Frame, first: Frame, now: Frame, breed: Breed): Frame {
+  if (first === now) {
+    return frame;
+  }
+
+  const kept = new Set(breed.dontLayer ?? []);
+  return {
+    ...frame,
+    balls: frame.balls.map((ball, n) =>
+      kept.has(n) || !first.balls[n] || !now.balls[n]
+        ? ball
+        : {
+            x: i16(ball.x + now.balls[n].x - first.balls[n].x),
+            y: i16(ball.y + now.balls[n].y - first.balls[n].y),
+            z: i16(ball.z + now.balls[n].z - first.balls[n].z),
+          }
+    ),
+  };
+}
+
 const reshaped = new WeakMap<Breed, WeakMap<readonly Frame[], Frame[]>>();
 
 /** Every frame, numbered over every animation, reshaped for a breed: once each. */

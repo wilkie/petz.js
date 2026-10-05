@@ -1,6 +1,11 @@
 import { type AnimationHeader, type Frame } from '../../src/formats/animation.ts';
 import { type Breed, type CatzShape } from '../../src/formats/lnz.ts';
-import { extendCatzFrame, extendFrames, percent16 } from '../../src/render/extend.ts';
+import {
+  extendCatzFrame,
+  extendFrames,
+  layeredCatzFrame,
+  percent16,
+} from '../../src/render/extend.ts';
 import { ballSize } from '../../src/render/project.ts';
 
 /** A cat's 67 balls, all at the origin but those given. */
@@ -121,5 +126,27 @@ describe('a cat’s ball sizes', () => {
     expect(ballSize(breed, header, 14, 0)).toBe(96);
     expect(ballSize(breed, header, 41, 0)).toBe(70);
     expect(ballSize(breed, header, 3, 0)).toBe(100);
+  });
+});
+
+describe('a layered action played over a cat’s frame', () => {
+  it('moves each ball by how far the layer’s frame has it from its first frame', () => {
+    const shown = frame({ 3: [10, 20, 30] });
+    const first = frame({ 3: [1, 1, 1], 5: [4, 4, 4] });
+    const now = frame({ 3: [3, 0, 1], 5: [4, 6, 4] });
+    const result = layeredCatzFrame(shown, first, now, cat(shape()));
+
+    expect(at(result, 3)).toEqual([12, 19, 30]);
+    expect(at(result, 5)).toEqual([0, 2, 0]);
+  });
+
+  it('leaves the balls the breed says not to, and the frame itself on the layer’s first frame', () => {
+    const shown = frame({ 3: [10, 20, 30] });
+    const first = frame({});
+    const now = frame({ 3: [5, 5, 5] });
+    const kept = { ...cat(shape()), dontLayer: [3] } as Breed;
+
+    expect(at(layeredCatzFrame(shown, first, now, kept), 3)).toEqual([10, 20, 30]);
+    expect(layeredCatzFrame(shown, first, first, cat(shape()))).toBe(shown);
   });
 });

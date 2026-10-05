@@ -24,7 +24,8 @@
  *   (`+0x688`), the position it will be in once what is pushed has played
  *   (`+0x14fe`), how much is left on the stack (`GetStackRemaining`, 968)
  *   and the position it is in (`+0x1500`); then each of its 14 fudgers'
- *   values (`+0x1516` on, 0x120 bytes apart, `+200` in each).
+ *   values (`+0x1516` on, 0x120 bytes apart, `+200` in each); then a
+ *   layered action's first frame and frame now (`+0x6c2`, `+0x6c4`).
  */
 #include "catzdraw.h"
 
@@ -200,6 +201,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         /* And its fudgers stopped, as a cat's are between states (`ResetParams`, 952). */
         ((PLAIN_SPRITE)ordinal(952))(sprite);
+
+        /* And no layered action left playing (`ResetLayeredAction`, 957), its frame none. */
+        ((PLAIN_SPRITE)ordinal(957))(sprite);
+        *(int __far *)(sprite + 0x6c4) = -1;
         *(int __far *)(sprite + 0x14fe) = from;
         *(int __far *)(sprite + 0x1500) = from;
         keep("case %d %d %d %d %lu\r\n", action, variant, from, *(int __far *)(sprite + 0x146c),
@@ -250,7 +255,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 keep(" %ld", *(long __far *)(sprite + 0x1516 + 0x120 * n + 200));
             }
 
-            keep("\r\n");
+            /* And a layered action's first frame and frame now (`BallState` `+0x4a`, `+0x4c`). */
+            keep(" %d %d\r\n", *(int __far *)(sprite + 0x6c2), *(int __far *)(sprite + 0x6c4));
 
             if (left <= 1) {
                 break;

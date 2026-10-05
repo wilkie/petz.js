@@ -15,6 +15,7 @@ import { type Breed } from '../formats/lnz.ts';
 import { FIDELITY } from './fidelity.ts';
 import { skeletonOf } from './skeleton.ts';
 import { CAT_FEET_SIZED, percent16 } from './extend.ts';
+import { CATZ_TURN } from './raster.ts';
 
 /** The dog's tilt, spin and roll (`BallState` `+0xe`, `+0x10`, `+0x12`), in 256ths of a turn. */
 export interface Angles {
@@ -28,6 +29,20 @@ export interface Blend {
   scale: number;
   reference: Frame;
 }
+
+/** How a Catz frame lies for its pitch: the angle of its neck-to-butt line, `atan2(dx, dz)`, rounded toward 0; 0 for none. */
+function catzLying(frame: Frame, { neck, butt }: { neck: number; butt: number }) {
+  const [from, to] = [frame.balls[neck], frame.balls[butt]];
+
+  if (neck === butt || !from || !to) {
+    return 0;
+  }
+
+  const [dx, dz] = [i16(to.x - from.x), i16(to.z - from.z)];
+  return dx || dz ? Math.trunc((Math.atan2(dx, dz) * 256) / CATZ_TURN) : 0;
+}
+
+const i16 = (n: number) => (n << 16) >> 16;
 
 /** A Catz cat's head turned about its neck (`BallState` `+0x1c`, `+0x1e`, `+0x20`), in 256ths of a turn. */
 export interface CatzHead {
@@ -202,8 +217,12 @@ export function project(
   const sine = (angle: number) => gameSine(angle, exact);
   const cosine = (angle: number) => gameCosine(angle, exact);
   const turn = wrap(yaw - spin);
-  /* No pitch at all from a base of 0 (Catz's XBallz `+0x720`, seg47:419c). */
-  const pitch = base && base - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
+  /* No pitch at all from a base of 0 (Catz's XBallz `+0x720`, seg47:419c).
+   * A cat's is by its rotation and how the frame lies too: the angle of its
+   * neck-to-butt line, across over depth (seg47:4936 on). */
+  const lying = breed.catz ? catzLying(frame, skeletonOf(breed)) : 0;
+  const leaning = breed.catz ? wrap(turn + lying) : turn;
+  const pitch = base && base - Math.trunc(Math.abs(-Math.abs(leaning) + 64) / 10);
   const [cy, sy, cp, sp] = [cosine(turn), sine(turn), cosine(pitch), sine(pitch)];
   const heads = head ? new Set(breed.headBalls) : null;
   const pivotBall = skeletonOf(breed).neck;

@@ -129,7 +129,8 @@ flowchart LR
 Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these differences, all [[read out]]:
 
 - **Placing the balls** (`XBallz::GetCartesianCoordinates`, seg47:419c) is Dogz's but for its angles and its π:
-  - a cat is turned first, by its rotation (`BallState` `+0x10`), then rolled (`+0x14`) and tilted (`+0x12`), and pitched last by the same `-7 - |64 - |turn|| / 10`; Dogz rolls, spins and tilts before it turns;
+  - a cat is turned first, by its rotation (`BallState` `+0x10`), then rolled (`+0x14`) and tilted (`+0x12`), and pitched last by `-7 - |64 - |e|| / 10`, where e is its rotation and how the frame lies, the angle of its neck-to-butt line, `atan2(dx, dz)`, wrapped (seg47:4936 on) — 0 for a cat lying along z, as most frames do; Dogz pitches by the turn alone, and rolls, spins and tilts before it turns;
+  - a layered action's frame played over it first: every ball moved by how far the layer's frame now has it from the layer's first frame, where the two differ, but for the balls `[Dont Layer Ballz]` names — no cat's file names any (`XBallz::GenerateDiffFrame`, seg47:3f63; `layeredCatzFrame` in `src/render/extend.ts`); the frame lies as the layered frame does;
   - its tables of sines are made with the true π, `ds:1ea6` (seg48:1410), so a quarter turn's sine is 256, not Dogz's 255;
   - a ball's radius, `size × ball scale >> 9`, is not kept from going below 0: a ball sized below nothing is -1 across, and drawn as nothing. A ball a frame's extra changes is worked out again in 16 bits, so a size times the scale past 32,767 wraps; no cat's real scale comes near it;
   - the pitch's −7 is the XBallz's own (`+0x720`), and 0 there leaves the cat unpitched (`project`'s `pitch`).
@@ -198,7 +199,7 @@ Catz's engine, `CATZDLL.DLL`, draws a cat as Dogz's draws a dog, with these diff
 
 - [[measured]] **Catz drew top-down on the oracle.** The WinG timing of the runs the Catz probes were shot in ends `1F`: top-down, where Dogz's on the same machine was bottom-up. Drawn top-down, `pouncer300` differs in 151 pixels, and its fuzz seed is found unmistakably (the next best differs in 417), and `sophisto900` in 835 (837 before the whole-frame harness's corrections).
   - **What had been wrong:** the probes had read the orientation from drives with no timing, and so drew bottom-up. That once looked like whiskers sitting two rows below where `XDrawWhiskerLine`'s own arithmetic puts them. They do not. The harness holds whiskers, lines and balls to the engine both ways up.
-- [[measured]] **A whole frame**, as `XBallz::DisplayBallzFrame` (seg47:5e0b) draws it into the mix port, is held to `drawPet` by the harness: the Hunter's kitten in 22 frames, turned, tilted, rolled, its head turned, each eyelid shut, tilted and opened its own way and its eyes looking off, both ways up, 4,300 to 7,600 pixels each: every ball's place, the draw order `ZOrder` leaves (seg47:579c), the depth shades and every pixel agree.
+- [[measured]] **A whole frame**, as `XBallz::DisplayBallzFrame` (seg47:5e0b) draws it into the mix port, is held to `drawPet` by the harness: the Hunter's kitten in 25 frames, turned, tilted, rolled, its head turned, each eyelid shut, tilted and opened its own way, its eyes looking off, and three with a layered action's frame played over, both ways up, 4,300 to 7,600 pixels each: every ball's place, the draw order `ZOrder` leaves (seg47:579c), the depth shades and every pixel agree.
 - **Still to find:** the edges of the depth shades, here and there. Catz works a ball's shade out again only when its depth has moved by more than 10 (`ZOrder`). A held cat that has turned to face the viewer may keep shades from how it was turned before; which is the session's own.
 
 ## Still to find

@@ -112,6 +112,9 @@ export interface Breed {
   tongueBalls: number[];
   headBalls: number[];
   omissions: number[];
+
+  /** Catz: balls a layered action does not move (`[Dont Layer Ballz]`, read into Linez `+0x1389`); no cat's file has any. */
+  dontLayer?: number[];
   lines: Line[];
 
   /** A colour number for each ball, for the 256-colour display and for the 16-colour one. */
@@ -340,6 +343,7 @@ export function parseLnz(text: string, balls = 65): Breed {
     tongueBalls: sections.has('Tongue Balls') ? numbers('Tongue Balls') : [],
     headBalls: numbers('Head Balls'),
     omissions: sections.has('Omissions') ? numbers('Omissions') : [],
+    ...(sections.has('Dont Layer Ballz') ? { dontLayer: numbers('Dont Layer Ballz') } : {}),
     lines: section('Linez').map((line) => {
       const [from, to, fuzz, ...more] = line.values;
 

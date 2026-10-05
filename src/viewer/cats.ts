@@ -23,7 +23,7 @@ import {
   readPalette,
 } from '../formats/palette.ts';
 import { ballAt, drawPet } from '../render/ballz.ts';
-import { extendFrames } from '../render/extend.ts';
+import { extendFrames, layeredCatzFrame } from '../render/extend.ts';
 import { FIDELITY } from '../render/fidelity.ts';
 import { IndexedBitmap } from '../render/raster.ts';
 import { skeletonOf } from '../render/skeleton.ts';
@@ -71,7 +71,13 @@ let positions: CatzPositions = { count: 0, neutral: 0 };
  * The frames shown, numbered over every animation -- an animation's, or a
  * script's played out -- and how far the cat has moved by each.
  */
-let sequence: { frame: number; x: number; y: number; pose?: number[] }[] = [];
+let sequence: {
+  frame: number;
+  x: number;
+  y: number;
+  pose?: number[];
+  layer?: { first: number; frame: number };
+}[] = [];
 
 /** The breed chosen, averaged toward its kitten's file by the slider: made once for each choice, so its reshaped frames are kept. */
 let chosen: { key: string; breed: Breed } | null = null;
@@ -96,7 +102,12 @@ function draw() {
   const cat = breed();
   const step = sequence[Number(frameInput.value)] ?? { frame: 0, x: 0, y: 0 };
   const at = step.frame;
-  const shaped = extendFrames(frames, cat)[at];
+  const all = extendFrames(frames, cat);
+  /* A layered action's frame played over it, where one is. */
+  const shaped =
+    step.layer && all[step.layer.first] && all[step.layer.frame]
+      ? layeredCatzFrame(all[at], all[step.layer.first], all[step.layer.frame], cat)
+      : all[at];
   /* The cat kept on the canvas, wrapping round it where it walks off, by
    * where its glue ball is: the frames of a walk move on themselves. */
   const wrap = (value: number, size: number) => ((value % size) + size) % size;
@@ -182,7 +193,7 @@ function placed(index: number) {
   const cat = breed();
   const glue = Number(cat.sections.get('Default Glue Ball')?.[0]?.values[0] ?? 6);
   const shaped = extendFrames(frames, cat);
-  const steps: { frame: number; x: number; y: number; pose?: number[] }[] = [];
+  const steps: typeof sequence = [];
   let offset = { x: 0, y: 0 };
   let last: number | null = null;
   let yaw = Number(yawInput.value);
@@ -208,7 +219,7 @@ function placed(index: number) {
       continue;
     }
 
-    steps.push({ frame: step.frame, ...offset, pose: step.fudged });
+    steps.push({ frame: step.frame, ...offset, pose: step.fudged, layer: step.layer });
     last = step.frame;
   }
 

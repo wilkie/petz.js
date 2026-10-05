@@ -31,7 +31,7 @@ import {
   readPalette,
 } from '../../src/formats/palette.ts';
 import { catzShade, depthShades, drawOrder, drawPet } from '../../src/render/ballz.ts';
-import { extendCatzFrame, extendFrames } from '../../src/render/extend.ts';
+import { extendCatzFrame, extendFrames, layeredCatzFrame } from '../../src/render/extend.ts';
 import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
 import { project, scalesForAge } from '../../src/render/project.ts';
 import { skeletonOf } from '../../src/render/skeleton.ts';
@@ -454,11 +454,17 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       const [frame, rotation, tilt, roll, lidA, lidC] = values;
       const [headRotation, headTilt, cock, tilt22, tilt24, open26, open28, eyeX, eyeY] =
         values.slice(6);
+      const [first, now] = values.slice(15);
+      /* A layered action played over it, where its first frame and its frame now are given. */
+      const shown =
+        first >= 0 && now >= 0
+          ? layeredCatzFrame(shaped[frame], shaped[first], shaped[now], breed)
+          : shaped[frame];
       /* The eye the engine names at `+0xd89` of its lines, the left, takes
        * `+0x2c`'s height, `+0x26`'s opening and `+0x22`'s tilt; the right
        * `+0x2a`, `+0x28` and `+0x24` (`DrawEyeball`, seg47:6752). */
       return {
-        frame,
+        shown,
         rotation,
         angles: { tilt, roll, spin: 0 },
         catzHead: { rotation: headRotation, tilt: headTilt, cock },
@@ -471,11 +477,11 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       };
     };
     const placedOf = (values: number[]) => {
-      const { frame, rotation, angles, catzHead } = caseOf(values);
+      const { shown, rotation, angles, catzHead } = caseOf(values);
       return project(
         breed,
         header,
-        shaped[frame],
+        shown,
         scalesForAge(breed, 0),
         rotation,
         100,
@@ -509,8 +515,8 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     let next = 0;
     const drawn = compareCases(lines, 'origin', (bitmap, [x, y]) => {
       const { values, bounds } = cases[next++ % cases.length];
-      const { frame, rotation, ...rest } = caseOf(values);
-      drawPet(bitmap, breed, header, shaped[frame], {
+      const { shown, rotation, ...rest } = caseOf(values);
+      drawPet(bitmap, breed, header, shown, {
         colours: 256,
         originX: x - bounds[0],
         originY: y - bounds[1],
@@ -521,8 +527,8 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       });
     });
 
-    expect(cases).toHaveLength(44);
-    expect(drawn.count).toBe(44);
+    expect(cases).toHaveLength(50);
+    expect(drawn.count).toBe(50);
     expect([...wrong, ...drawn.wrong]).toEqual([]);
   }, 1800000);
 
@@ -591,7 +597,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(wrong).toEqual([]);
   }, 1800000);
 
-  it('plays every action as ScriptSprite does, tick by tick: its frames, turns, fudgers and blinks', async () => {
+  it('plays every action as ScriptSprite does, tick by tick: its frames, turns, fudgers, blinks and layers', async () => {
     const files = readdirSync(RESOURCE).filter((name) =>
       /^(CAT\d*\.(BHD|BDT)|CAT\.SCP|[AK]HUNTER\.LNZ)$/.test(name)
     );
@@ -785,6 +791,16 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
 
       if (off >= 0) {
         wrong.push(`action ${action} variant ${variant} from ${from}: fudgers at tick ${off}`);
+      }
+
+      /* And each tick's layered frame and its first, -1 for none (the tick's last two). */
+      const layered = ticked.findIndex(
+        ({ layer }, tick) =>
+          (layer?.first ?? -1) !== shown[tick][19] || (layer?.frame ?? -1) !== shown[tick][20]
+      );
+
+      if (layered >= 0) {
+        wrong.push(`action ${action} variant ${variant} from ${from}: layer at tick ${layered}`);
       }
     }
 
