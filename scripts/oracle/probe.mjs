@@ -31,6 +31,7 @@ import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
 import { BUILD, exists, log } from './lib.mjs';
 import {
   align,
+  bottomUpFromWinIni,
   differences,
   draw,
   findCat,
@@ -100,11 +101,18 @@ async function picture(probe, reuse, possible) {
     const dog = find(rgb);
 
     if (dog && !(dog.cut.left && dog.cut.right) && !(dog.cut.top && dog.cut.bottom)) {
+      /* The way up WinG made the screen's bitmap when the picture was taken,
+       * kept beside it: a drive made again later may not say. */
+      const sidecar = kept.replace(/\.png$/, '.json');
+
       if (path !== kept) {
+        const winIni = await readFile(join(VARIANTS, probe.name, 'WINDOWS', 'WIN.INI'), 'latin1');
         await writeFile(kept, await readFile(path));
+        await writeFile(sidecar, JSON.stringify({ bottomUp: bottomUpFromWinIni(winIni) }));
       }
 
-      return { rgb, dog };
+      const taken = (await exists(sidecar)) ? JSON.parse(await readFile(sidecar, 'utf8')) : {};
+      return { rgb, dog, bottomUp: taken.bottomUp };
     }
 
     log(`  ${dog ? 'the dog is cut off both ways' : 'no playpen on the screen'}; again`);
@@ -143,7 +151,7 @@ async function run(probe, { reuse, without }) {
   const read = (path) => new Uint8Array(readFileSync(join(drive, path)));
   /* A cat is told from its basket partly by the colours it could be. */
   const possible = probe.cat ? loadScene(read, probe.frame, age, 0, probe.cat).possible : null;
-  const { dog } = await picture(probe, reuse, possible);
+  const { dog, bottomUp } = await picture(probe, reuse, possible);
   /* The dog's turn is the session's too, near enough the probe's: searched 8 either way, or all round. */
   const yaws =
     probe.yaw === undefined
@@ -154,8 +162,12 @@ async function run(probe, { reuse, without }) {
   /* The fur's bristling is the session's, as the seed is: each level tried, with its own seed. */
   for (const bristle of probe.bristle ?? [0, 1, 2, 3]) {
     const loaded = loadScene(read, probe.frame, age, bristle, probe.cat);
-    /* The bitmap's way up is WinG's, unless the probe is drawn without it. */
-    const scene = without.bottomUp === false ? { ...loaded, bottomUp: false } : loaded;
+    /* The bitmap's way up is WinG's when the picture was taken, unless the
+     * probe is drawn without it. */
+    const scene = {
+      ...loaded,
+      bottomUp: without.bottomUp === false ? false : (bottomUp ?? loaded.bottomUp),
+    };
     const placed = align(scene, dog, yaws);
     let seed = 1;
     let seeds = null;
@@ -173,6 +185,7 @@ async function run(probe, { reuse, without }) {
         order: placed.order,
         dog,
         cat: probe.cat,
+        bottomUp: scene.bottomUp,
       });
       seed = seeds[0].seed;
     }

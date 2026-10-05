@@ -10,15 +10,18 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { setFidelity } from '../../src/render/fidelity.ts';
 import { draw, loadScene, score } from './match.ts';
 
-const { drive, frame, age, bristle, yaw, dx, dy, order, dog, from, to, fidelity, cat } = workerData;
+const { drive, frame, age, bristle, yaw, dx, dy, order, dog, from, to, fidelity, cat, bottomUp } =
+  workerData;
 setFidelity(fidelity);
-const scene = loadScene(
+const loaded = loadScene(
   (path) => new Uint8Array(readFileSync(join(drive, path))),
   frame,
   age,
   bristle,
   cat
 );
+/* The picture's way up, as the probe found it. */
+const scene = { ...loaded, bottomUp };
 const best = [];
 
 for (let seed = from; seed < to; seed++) {
