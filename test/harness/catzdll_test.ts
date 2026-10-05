@@ -10,9 +10,10 @@
  * CD-ROM installed (install-catz.mjs --cd); skipped otherwise.
  */
 
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { type Frame, parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { averageBreed, type Breed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import {
@@ -22,13 +23,17 @@ import {
   PALETTE_256,
   readPalette,
 } from '../../src/formats/palette.ts';
-import { catzShade } from '../../src/render/ballz.ts';
+import { catzShade, depthShades, drawOrder, drawPet } from '../../src/render/ballz.ts';
+import { extendFrames } from '../../src/render/extend.ts';
 import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
+import { project, scalesForAge } from '../../src/render/project.ts';
 import {
+  CATZ_TURN,
   circleTables,
   drawLine,
   drawWhisker,
   fillBall,
+  fillLid,
   IndexedBitmap,
 } from '../../src/render/raster.ts';
 
@@ -54,7 +59,7 @@ async function run(
   program: string,
   output: string,
   files: string[] = [],
-  { display = 'vga' }: { display?: string } = {}
+  { display = 'vga', frames = 40000 }: { display?: string; frames?: number } = {}
 ) {
   const stage = join(HARNESS, `stage-${program}`);
   mkdirSync(stage, { recursive: true });
@@ -69,7 +74,7 @@ async function run(
   }
 
   const { runProbe } = await import(WINBOX);
-  const result = await runProbe(program.toLowerCase(), 40000, false, false, 120, {
+  const result = await runProbe(program.toLowerCase(), frames, false, false, 120, {
     display,
     program: { directory: stage, file: `${program}.EXE`, folder: program },
   });
@@ -300,7 +305,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(drawn.wrong).toEqual([]);
   }, 600000);
 
-  it('draws whiskers and balls as XDrawWhiskerLine and XFillCircleEx do', async () => {
+  it('draws whiskers, balls and eyelids as XDrawWhiskerLine and XFillCircleEx do', async () => {
     const lines = await run('CATZBALL', 'CATZBALL.OUT', [], { display: 'vga256' });
     const engine = parseNe(new Uint8Array(readFileSync(join(SYSTEM, 'CATZDLL.DLL'))));
     const translate = catzTranslation(
@@ -335,7 +340,135 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
         )
     );
 
-    expect([whiskers.count, balls.count]).toEqual([120, 240]);
+    /* An eyelid, its rows walked from the bottom on a bottom-up port; none
+     * that covers nothing, as `drawLid` draws none. */
+    const lids = compareCases(lines, 'lid', (bitmap, [x, y, d, colour, cover, angle]) => {
+      if (cover >= 1) {
+        fillLid(bitmap, {
+          x,
+          y,
+          d,
+          colour: translate(colour),
+          cover,
+          angle,
+          turn: CATZ_TURN,
+          flip: FIDELITY.bottomUp,
+        });
+      }
+    });
+
+    /* Where a lid's edge falls within a hair of a pixel's edge -- the
+     * engine's sines and tangents are the x87's, to 64 bits -- a pixel may
+     * go the other way: 3 of these 240, each a single pixel. */
+    const ties = lids.wrong.filter((line) => line.endsWith(': 1 pixels'));
+
+    expect([whiskers.count, balls.count, lids.count]).toEqual([120, 240, 240]);
     expect([...whiskers.wrong, ...balls.wrong]).toEqual([]);
+    expect(lids.wrong.filter((line) => !ties.includes(line))).toEqual([]);
+    expect(ties.length).toBeLessThanOrEqual(3);
   }, 600000);
+
+  it('places, orders, shades and draws whole frames of a cat as XBallz does', async () => {
+    const files = readdirSync(RESOURCE).filter((name) =>
+      /^(CAT\d*\.(BHD|BDT)|[AK]HUNTER\.LNZ)$/.test(name)
+    );
+    const lines = await run('CATZFRAM', 'CATZFRAM.OUT', files, {
+      display: 'vga256',
+      frames: 200000,
+    });
+    const read = (name: string) => new Uint8Array(readFileSync(join(RESOURCE, name)));
+    const text = (name: string) => readFileSync(join(RESOURCE, name), 'latin1');
+    const header = parseBhd(read('CAT.BHD'));
+    const frames: Frame[] = [];
+
+    for (let n = 0; files.includes(`CAT${n}.BDT`); n++) {
+      frames.push(...parseAnimation(header, n, read(`CAT${n}.BDT`)));
+    }
+
+    /* The kitten, averaged all the way from the adult, as the driver has it. */
+    const breed = averageBreed(
+      parseLnz(text('AHUNTER.LNZ'), 67),
+      parseLnz(text('KHUNTER.LNZ'), 67),
+      100
+    );
+    const shaped = extendFrames(frames, breed);
+    const engine = parseNe(new Uint8Array(readFileSync(join(SYSTEM, 'CATZDLL.DLL'))));
+    const translate = catzTranslation(
+      readPalette(engine, PALETTE_256, 256, CATZ_PALETTE_TYPE),
+      systemOf(lines)
+    );
+
+    /* Each case as the driver gave it, and what the engine made of it. */
+    const cases: {
+      values: number[];
+      bounds: number[];
+      balls: number[][];
+      order?: number[];
+      shades?: number[];
+    }[] = [];
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+      const last = cases[cases.length - 1];
+
+      if (kind === 'case') {
+        cases.push({ values, bounds: [], balls: [] });
+      } else if (kind === 'bounds') {
+        last.bounds = values;
+      } else if (kind === 'ball') {
+        last.balls.push(values.slice(1));
+      } else if (kind === 'order') {
+        last.order = values;
+      } else if (kind === 'shades') {
+        last.shades = values;
+      }
+    }
+
+    const placedOf = ([frame, rotation, tilt, roll]: number[]) =>
+      project(breed, header, shaped[frame], scalesForAge(breed, 0), rotation, 100, undefined, {
+        tilt,
+        roll,
+      });
+    const wrong: string[] = [];
+
+    for (const { values, balls, order, shades } of cases) {
+      const placed = placedOf(values);
+      const ours = placed.map(({ x, y, depth, diameter }) => [x, y, depth, diameter / 2]);
+
+      if (JSON.stringify(ours) !== JSON.stringify(balls)) {
+        wrong.push(`case ${values.join(' ')}: placed`);
+      }
+
+      if (order?.join(' ') !== drawOrder(breed, placed).join(' ')) {
+        wrong.push(`case ${values.join(' ')}: order`);
+      }
+
+      if (shades?.join(' ') !== depthShades(breed, placed).join(' ')) {
+        wrong.push(`case ${values.join(' ')}: shades`);
+      }
+    }
+
+    /* Each frame drawn with the pet's origin where the engine puts it: the
+     * square's corner less its bounds' (`origin x y`, the patch after). */
+    let next = 0;
+    const drawn = compareCases(lines, 'origin', (bitmap, [x, y]) => {
+      const { values, bounds } = cases[next++ % cases.length];
+      const [frame, rotation, tilt, roll, lids] = values;
+      drawPet(bitmap, breed, header, shaped[frame], {
+        colours: 256,
+        originX: x - bounds[0],
+        originY: y - bounds[1],
+        yaw: rotation,
+        angles: { tilt, roll, spin: 0 },
+        seed: 1234,
+        translate,
+        catzLids: lids,
+      });
+    });
+
+    expect(cases).toHaveLength(26);
+    expect(drawn.count).toBe(26);
+    expect([...wrong, ...drawn.wrong]).toEqual([]);
+  }, 1800000);
 });

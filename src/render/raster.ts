@@ -418,6 +418,13 @@ export function wrapAngle(angle: number) {
  * edge, is turned by the angle, and each row filled from the line to its
  * end on the one side or the other, by the angle's sign.
  */
+/**
+ * A whole turn as Catz has it, for its eyelids' slant and the bearing it is
+ * worked out from (CATZDLL `ds:1a1c`, `ds:1eb6`): 2π to 14 places, a hair
+ * short of JavaScript's.
+ */
+export const CATZ_TURN = 6.28318530717959;
+
 export function fillLid(
   bitmap: IndexedBitmap,
   {
@@ -428,6 +435,7 @@ export function fillLid(
     cover,
     angle,
     turn = 6.283,
+    flip = false,
   }: {
     x: number;
     y: number;
@@ -435,8 +443,15 @@ export function fillLid(
     colour: number;
     cover: number;
     angle: number;
-    /** A whole turn as the engine has it: Dogz's 6.283 (`ds:1cf2`), Catz's the true 2π (seg44:3cc4). */
+    /** A whole turn as the engine has it: Dogz's 6.283 (`ds:1cf2`), Catz's `CATZ_TURN` (seg44:3cc4). */
     turn?: number;
+
+    /**
+     * Catz on a bottom-up bitmap: its rows walked from the bottom, so the
+     * lid drawn upside down, its angle a half turn less itself
+     * (`XFillRotatedCircle`, CATZDLL seg44:3cc4).
+     */
+    flip?: boolean;
   }
 ) {
   /* The eye's square is `d` across; its circle one less, as every ball's. */
@@ -444,10 +459,14 @@ export function fillLid(
   const top = Math.round(y) - Math.floor(d / 2);
   const rectLeft = Math.round(x) - Math.floor(d / 2);
   const across = d;
-  const a = wrapAngle(angle);
+  const a = wrapAngle(flip ? 0x80 - angle : angle);
   const row = (r: number) => {
     const width = rowWidth(rows, r);
-    return { width, start: Math.round(x) - Math.floor(width / 2), y: top + r - 1 };
+    return {
+      width,
+      start: Math.round(x) - Math.floor(width / 2),
+      y: flip ? top + rows - r : top + r - 1,
+    };
   };
 
   if (a > -3 && a < 3) {

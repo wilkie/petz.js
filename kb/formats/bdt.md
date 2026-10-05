@@ -70,6 +70,12 @@ All little-endian. With the skeleton's 65 balls, a frame is 405 bytes and two mo
 - [[read out]] Each changes its ball's size for that frame: `GetCartesianCoordinates` (seg10:367a) sizes the ball afresh from the breed's size plus the signed byte, its radius that times the ball scale `>> 9` as any other's. A size of nothing or less draws nothing. So the tongue is put away: frame 35, the dog standing, takes 10 and 11 from the tongue's two balls, whose skeleton sizes are 10 and 11. Ball 45 grows by 14 in 174 frames from 900 on.
 - [[measured]] The oracle's big dog, held in frame 35, shows no tongue; the reimplementation drew one, red under the chin, before it read these.
 
+## In Catz
+
+- [[measured]] Catz's frames are laid out as Dogz's but for the extras: a word for how many, then each a word for the ball and a signed word for the change, 4 bytes, where Dogz has bytes. Read this way every frame of every Catz creature ends where the next starts (the cat's 8,972 in the CD's files, the dog's, mouse's and cloud's); read Dogz's way, none does. [[format:bhd]]'s version word tells them apart: 10 in Dogz's, 11 in every Catz creature's. `parseFrame` reads them by it.
+- [[read out]] `XBallz::GetCartesianCoordinates` (CATZDLL seg47:419c) walks them so: the count at the frame's `14 + 6 × balls`, then (ball, change) word pairs; it sizes the ball afresh, (size + change) × ball scale `>> 9`.
+- [[measured]] Read Dogz's way, a cat's frames had wrong extras: frame 441's, which grow balls 55 and 56 by 13 and 16, came out as ball 0 grown by 13 and then by 16. The harness ([[guide:reproducing]]) caught it.
+
 ## What is not yet known
 
 Which animation is which, beyond what the scripts that play it are named for ([[format:scp]]); and how fast frames are shown.

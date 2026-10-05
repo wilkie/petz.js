@@ -8,7 +8,10 @@
  *   `XDrawPort::XFillCircleEx` (seg44:5671, ordinal 1058) on a block as
  *   `DisplayBallzFrame` fills one (seg47:5e39 on): the ball's square, its
  *   colour and outline's, its speckles', its kernel by the mode -- -1
- *   plain, 0 emboss, more an outline -- its rows and its fuzz.
+ *   plain, 0 emboss, more an outline -- its rows and its fuzz;
+ * * `lid x y diameter colour cover angle`: the same in mode -2, as
+ *   `DrawEyeball` draws an eyelid (`XFillRotatedCircle`, seg44:3cc4): the
+ *   ball's square, covered `cover` rows in, its edge turned by `angle`.
  */
 #include "catzdraw.h"
 
@@ -81,6 +84,33 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         circle(mix, block);
         say("ball %d %d %d %d %d %d %d %d\r\n", x, y, 2 * r, colour, outline, speckle, mode, fuzz);
         patch(x - r - 10, y - r - 10, 2 * r + 21, 2 * r + 21, 0);
+    }
+
+    for (n = 0; n < 120; n++) {
+        int x = 80 + next(480), y = 80 + next(480);
+        int d = 4 + next(40);
+        int colour = 28 + next(100);
+        int cover = next(d + 2);
+        int angle = next(5) == 0 ? next(7) - 3 + 128 * next(2) : next(256) - 128;
+        int i;
+
+        for (i = 0; i < 0x34; i++) {
+            block[i] = 0;
+        }
+
+        ((int __far *)block)[0] = x - d / 2, ((int __far *)block)[1] = y - d / 2;
+        ((int __far *)block)[2] = x - d / 2 + d, ((int __far *)block)[3] = y - d / 2 + d;
+        block[8] = (unsigned char)colour;
+        *(int __far *)(block + 0xa) = -1;
+        *(int __far *)(block + 0xc) = -2;
+        *(int __far *)(block + 0xe) = cover;
+        *(int __far *)(block + 0x12) = angle;
+        *(int __far *)(block + 0x2c) = -1;
+
+        patch(x - d / 2 - 4, y - d / 2 - 4, d + 9, d + 9, 1);
+        circle(mix, block);
+        say("lid %d %d %d %d %d %d\r\n", x, y, d, colour, cover, angle);
+        patch(x - d / 2 - 4, y - d / 2 - 4, d + 9, d + 9, 0);
     }
     }
 

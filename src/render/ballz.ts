@@ -24,6 +24,7 @@ import {
   scalesForAge,
 } from './project.ts';
 import {
+  CATZ_TURN,
   drawLine,
   drawWhisker,
   fillBall,
@@ -746,6 +747,7 @@ function drawCatzEye(
       speckleColour: -1,
       outline: -1,
       fuzz: 0,
+      catz: true,
     },
     tables
   );
@@ -797,8 +799,8 @@ function drawLid(
   const between = { x: Math.trunc((right.x - left.x) / 2), y: Math.trunc((right.y - left.y) / 2) };
   const nx = Math.trunc(nose.x) - (Math.trunc(left.x) + between.x);
   const ny = Math.trunc(nose.y) - (Math.trunc(left.y) + between.y);
-  /* Catz turns by the true 2π (seg47:6d00, `ds:1eb6`), Dogz by its own. */
-  const catzBearing = () => -Math.trunc((Math.atan2(nx, ny) * 256) / (2 * Math.PI));
+  /* Catz turns by its own 2π (seg47:6d00, `ds:1eb6`), Dogz by its own. */
+  const catzBearing = () => -Math.trunc((Math.atan2(nx, ny) * 256) / CATZ_TURN);
   const bearing =
     Math.abs(nx) > 1 || Math.abs(ny) > 1 ? (translate ? catzBearing() : -angle256(nx, ny)) : 0;
 
@@ -824,6 +826,6 @@ function drawLid(
     colour: translate ? translate(colour) : colour,
     cover,
     angle,
-    ...(translate ? { turn: 2 * Math.PI } : {}),
+    ...(translate ? { turn: CATZ_TURN, flip: FIDELITY.bottomUp } : {}),
   });
 }

@@ -47,16 +47,24 @@ export function angle256(y: number, x: number) {
  * nearer the middle. Its 2π, for turning a direction into an angle, is 6.283
  * (`ds:1d60`). The true ones when `FIDELITY.shortPi` is off.
  */
-const pi = () => (FIDELITY.shortPi ? 3.1415 : Math.PI);
+const pi = (exact = false) => (FIDELITY.shortPi && !exact ? 3.1415 : Math.PI);
 
-/** The game's sine and cosine of an angle in 256ths of a turn, times 256, rounded toward 0 (`ds:3b62`, `3b5e`). */
-export function sine(angle: number) {
-  return Math.trunc(Math.sin((angle * pi() * 2) / 256) * 256);
+/**
+ * The game's sine and cosine of an angle in 256ths of a turn, times 256,
+ * rounded toward 0 (`ds:3b62`, `3b5e`). Catz makes its tables with the true
+ * π (CATZDLL `ds:1ea6`, seg48:1410): `exact`.
+ */
+export function sine(angle: number, exact = false) {
+  return Math.trunc(Math.sin((angle * pi(exact) * 2) / 256) * 256);
 }
 
-function cosine(angle: number) {
-  return Math.trunc(Math.cos((angle * pi() * 2) / 256) * 256);
+function cosine(angle: number, exact = false) {
+  return Math.trunc(Math.cos((angle * pi(exact) * 2) / 256) * 256);
 }
+
+/** The same, by names `project` keeps when it takes them by the game. */
+const gameSine = sine;
+const gameCosine = cosine;
 
 /** An angle into -128 to 128. */
 function wrap(angle: number) {
@@ -182,6 +190,9 @@ export function project(
     return { x: toward('x'), y: toward('y'), z: toward('z') };
   };
 
+  const exact = Boolean(breed.catz);
+  const sine = (angle: number) => gameSine(angle, exact);
+  const cosine = (angle: number) => gameCosine(angle, exact);
   const turn = wrap(yaw - spin);
   const pitch = -7 - Math.trunc(Math.abs(-Math.abs(turn) + 64) / 10);
   const [cy, sy, cp, sp] = [cosine(turn), sine(turn), cosine(pitch), sine(pitch)];
@@ -222,30 +233,58 @@ export function project(
       z = shift(cw * e - sw * b) + head.offset.z + pivot.z;
     }
 
+    const rolled = () => {
+      if (roll) {
+        [x, y] = [
+          shift(sine(roll) * y + cosine(roll) * x),
+          shift(cosine(roll) * y - sine(roll) * x),
+        ];
+      }
+    };
+    const tilted = () => {
+      if (tilt) {
+        [y, z] = [
+          shift(sine(tilt) * z + cosine(tilt) * y),
+          shift(cosine(tilt) * z - sine(tilt) * y),
+        ];
+      }
+    };
+    const turned = () => {
+      [x, z] = [shift(sy * z + cy * x), shift(cy * z - sy * x)];
+    };
+
     /* The dog's own angles: its roll in the screen's plane, its spin about
-     * the upright axis, its tilt about the across one (seg10:3e19, 3e91 and 3f09). */
-    if (roll) {
-      [x, y] = [shift(sine(roll) * y + cosine(roll) * x), shift(cosine(roll) * y - sine(roll) * x)];
+     * the upright axis, its tilt about the across one (seg10:3e19, 3e91 and
+     * 3f09); then turned by the yaw. A cat is turned first, by its rotation,
+     * then rolled and tilted (CATZDLL seg47:419c). */
+    if (breed.catz) {
+      turned();
+      rolled();
+      tilted();
+    } else {
+      rolled();
+
+      if (spin) {
+        [x, z] = [
+          shift(sine(spin) * z + cosine(spin) * x),
+          shift(cosine(spin) * z - sine(spin) * x),
+        ];
+      }
+
+      tilted();
+      turned();
     }
 
-    if (spin) {
-      [x, z] = [shift(sine(spin) * z + cosine(spin) * x), shift(cosine(spin) * z - sine(spin) * x)];
-    }
+    // Then about the across one, by the pitch.
+    const depth = shift(cp * z - sp * y);
+    const pitchedY = shift(sp * z + cp * y);
 
-    if (tilt) {
-      [y, z] = [shift(sine(tilt) * z + cosine(tilt) * y), shift(cosine(tilt) * z - sine(tilt) * y)];
-    }
-
-    // About the upright axis, then about the across one.
-    const turnedZ = shift(cy * z - sy * x);
-    const turnedX = shift(sy * z + cy * x);
-    const depth = shift(cp * turnedZ - sp * y);
-    const tiltedY = shift(sp * turnedZ + cp * y);
-
-    /* Radius `size × ball scale >> 9`, the size changed by the frame's extra for the ball, if any: the diameter is twice that. */
+    /* Radius `size × ball scale >> 9`, the size changed by the frame's extra
+     * for the ball, if any: the diameter is twice that. Dogz keeps it from
+     * below 0; Catz does not, so a ball sized below 0 is -1 across. */
     const size = ballSize(breed, header, index, puppiness) + (resized.get(index) ?? 0);
-    const radius = Math.floor((Math.max(0, size) * scales.ball) / 512);
+    const radius = Math.floor(((breed.catz ? size : Math.max(0, size)) * scales.ball) / 512);
 
-    return { x: turnedX, y: tiltedY, depth, diameter: 2 * radius };
+    return { x, y: pitchedY, depth, diameter: 2 * radius };
   });
 }

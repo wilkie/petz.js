@@ -90,6 +90,19 @@ describe('a BDT frame', () => {
     expect(parsed.length).toBe(data.length);
   });
 
+  it('is read, in Catz, with its count and pairs in words', () => {
+    const balls = frame([[1, -2, 3]]);
+    const extras = new Uint8Array(new Int16Array([2, 55, 13, 56, -300]).buffer);
+    const data = new Uint8Array([...balls.subarray(0, balls.length - 1), ...extras]);
+    const parsed = parseFrame(data, 0, 1, true);
+
+    expect(parsed.extras).toEqual([
+      { ball: 55, value: 13 },
+      { ball: 56, value: -300 },
+    ]);
+    expect(parsed.length).toBe(data.length);
+  });
+
   it('refuses a frame that runs past its file', () => {
     const data = frame([[0, 0, 0]], [[0, 1]]);
     expect(() => parseFrame(data.subarray(0, data.length - 1), 0, 1)).toThrow(/past the end/);

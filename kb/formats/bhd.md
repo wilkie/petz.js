@@ -13,7 +13,7 @@ One file, `ALL_PTZ.BHD`, describes the animations every breed shares: their fram
 | Offset  | Size         | What                                                                                     |
 | ------- | ------------ | ---------------------------------------------------------------------------------------- |
 | `0x00`  | word         | The header's length, 750: where the frame table starts                                   |
-| `0x02`  | 2 words      | 14 and 10; not yet known                                                                 |
+| `0x02`  | 2 words      | 14, not yet known; and 10, a version (11 in Catz)                                        |
 | `0x06`  | word         | The number of balls in the skeleton, 65                                                  |
 | `0x08`  | word         | The number of frames in all the animations, 3,852                                        |
 | `0x0a`  | 6 words      | The bounds of every frame together: the least x, y, z, then the greatest                 |
@@ -30,4 +30,4 @@ One file, `ALL_PTZ.BHD`, describes the animations every breed shares: their fram
 
 ## In Catz
 
-- [[measured]] Each of the Catz demo's creatures has its own skeleton and animations, `<creature>.BHD` and `<creature><n>.BDT`, laid out as Dogz's and read by the same code (`test/oracle/catz_files_test.ts`): the cat 67 balls and 275 animations, 9,246 frames — of which the demo ships the first 98 animations' files — the dog 65 balls and 2, the mouse 16 and 4, the bottle (`BOTTL`) 5 and 2, the cloud 12 and 2.
+- [[measured]] Each of the Catz demo's creatures has its own skeleton and animations, `<creature>.BHD` and `<creature><n>.BDT`, laid out as Dogz's and read by the same code (`test/oracle/catz_files_test.ts`), but for the version word, 11, and the frames' extras, which are words ([[format:bdt]]): the cat 67 balls and 275 animations, 9,246 frames — of which the demo ships the first 98 animations' files — the dog 65 balls and 2, the mouse 16 and 4, the bottle (`BOTTL`) 5 and 2, the cloud 12 and 2.

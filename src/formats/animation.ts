@@ -19,6 +19,12 @@ export interface AnimationHeader {
   unknown: [number, number];
 
   /**
+   * The second of them, 10 for Dogz and 11 for every Catz creature, as a
+   * version: from 11 a frame's extras are words, not bytes.
+   */
+  version: number;
+
+  /**
    * Six words after the frame count: the least x, y, z of every frame's
    * bounds, then the greatest -- all the frames' bounds together.
    */
@@ -53,7 +59,7 @@ export interface Frame {
   tag: number;
   balls: BallPosition[];
 
-  /** A few balls a frame sizes otherwise, each by a signed byte added to its size (`GetCartesianCoordinates`). */
+  /** A few balls a frame sizes otherwise, each by a change added to its size (`GetCartesianCoordinates`). */
   extras: { ball: number; value: number }[];
 
   /** The frame's length in its file. */
@@ -98,6 +104,7 @@ export function parseBhd(data: Uint8Array): AnimationHeader {
     ballCount,
     frameCount,
     unknown: [word(2), word(4)],
+    version: word(4),
     bounds: [word(10), word(12), word(14), word(16), word(18), word(20)],
     ballSizes,
     animations,
@@ -110,12 +117,23 @@ export function parseBhd(data: Uint8Array): AnimationHeader {
 /** The fixed part of a frame: twelve bytes of bounds, a word, and then the balls. */
 const FRAME_BALLS = 14;
 
-/** Reads the frame at `offset` of a `.BDT` file. */
-export function parseFrame(data: Uint8Array, offset: number, ballCount: number): Frame {
+/**
+ * Reads the frame at `offset` of a `.BDT` file. Its extras are a count and
+ * then each ball and the change to its size: bytes in Dogz's files, words in
+ * Catz's (`wide`; `XBallz::GetCartesianCoordinates`, CATZDLL seg47:419c).
+ */
+export function parseFrame(
+  data: Uint8Array,
+  offset: number,
+  ballCount: number,
+  wide = false
+): Frame {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const word = (at: number) => view.getInt16(offset + at, true);
-  const count = data[offset + FRAME_BALLS + 6 * ballCount];
-  const length = FRAME_BALLS + 6 * ballCount + 1 + 2 * count;
+  const unit = wide ? 2 : 1;
+  const extras = offset + FRAME_BALLS + 6 * ballCount;
+  const count = wide ? view.getInt16(extras, true) : data[extras];
+  const length = FRAME_BALLS + 6 * ballCount + unit + 2 * unit * count;
 
   if (offset + length > data.byteLength) {
     throw new Error(`the frame at ${offset} runs past the end of its file`);
@@ -130,8 +148,10 @@ export function parseFrame(data: Uint8Array, offset: number, ballCount: number):
       z: word(FRAME_BALLS + 6 * ball + 4),
     })),
     extras: Array.from({ length: count }, (_, index) => {
-      const at = offset + FRAME_BALLS + 6 * ballCount + 1 + 2 * index;
-      return { ball: data[at], value: view.getInt8(at + 1) };
+      const at = extras + unit + 2 * unit * index;
+      return wide
+        ? { ball: view.getInt16(at, true), value: view.getInt16(at + 2, true) }
+        : { ball: data[at], value: view.getInt8(at + 1) };
     }),
     length,
   };
@@ -143,5 +163,5 @@ export function parseAnimation(header: AnimationHeader, index: number, data: Uin
 
   return header.frameOffsets
     .slice(start, end)
-    .map((offset) => parseFrame(data, offset, header.ballCount));
+    .map((offset) => parseFrame(data, offset, header.ballCount, header.version >= 11));
 }
