@@ -8,7 +8,24 @@
  * are its, tick for tick (test/harness/catzdll_test.ts).
  */
 
+import { type Frame } from '../formats/animation.ts';
 import { type Element, type Operand, type Script } from '../formats/script.ts';
+import { CATZ_TURN } from '../render/raster.ts';
+import {
+  aimCatzFudger,
+  alignCatzFudger,
+  type CatzFudger,
+  defaultCatzFudgerRate,
+  driftCatzFudger,
+  rateCatzFudger,
+  requestedCatzFudgers,
+  resetCatzFudger,
+  resumeCatzFudger,
+  stopCatzFudger,
+  suspendCatzFudger,
+  updateCatzFudger,
+  wrapCatzAngle,
+} from './catz-fudger.ts';
 
 /** Catz's opcodes this file plays, by their names in CATZDLL.DLL's table. */
 export const CATZ_OP = {
@@ -16,16 +33,27 @@ export const CATZ_OP = {
   actionDone: 30001,
   actionStart: 30002,
   alignScripts: 30003,
+  alignFudgeBallToPtSetup: 30007,
   cueCode: 30008,
+  disableFudgeAim: 30010,
+  enableFudgeAim: 30012,
   lookAtRandomPt: 30021,
+  lookAtUser: 30023,
+  lookFoward: 30024,
   endLoop: 30014,
   endLoopAlign: 30015,
   playAction: 30025,
   playLayeredAction: 30026,
   rand: 30028,
+  resetFudger: 30029,
+  resumeFudging: 30030,
   sequence: 30031,
   sequenceToEnd: 30032,
   sequenceToStart: 30033,
+  setFudgeAimDefaults: 30034,
+  setFudgerDrift: 30035,
+  setFudgerRate: 30036,
+  setFudgerTarget: 30037,
   soundPlay1: 30044,
   soundEmptyQueue: 30041,
   soundPlay5: 30048,
@@ -33,6 +61,8 @@ export const CATZ_OP = {
   soundQueue5: 30053,
   soundStop: 30057,
   startLoop: 30058,
+  stopFudging: 30059,
+  suspendFudging: 30060,
   endPos: 30063,
 } as const;
 
@@ -63,6 +93,21 @@ export interface CatzStep {
    * `endLoopAlign0` (seg41:03a2), which is how a walk goes on.
    */
   glue?: boolean;
+
+  /**
+   * On a reference frame: how far the cat is turned, in 256ths of a turn, as
+   * it is placed by it (`XBallz::CheckAlignment`, seg47:29c9; `PopScript`
+   * adds it to the rotation where it is more than 6 either way).
+   */
+  turn?: number;
+
+  /**
+   * The cat's 14 fudgers' values once the tick is done, as `PopScript`
+   * leaves them (seg41:154a on): its rotation, roll and tilt, its head's
+   * rotation, tilt and cock, its eyelids' heights and tilts, where its eyes
+   * look; with `fudgers` given.
+   */
+  fudged?: number[];
 
   /** Sounds played as it is shown, one of each soundPlay's at random. */
   sounds?: number[];
@@ -102,6 +147,19 @@ export interface CatzTimelineOptions {
 
   /** Which variant of the action to play, as `PushStoredAction` may be told; one at random without. */
   variant?: number;
+
+  /** Which way a frame lies, as `catzFrameAngle` has it, to turn the cat by at each reference frame; none without. */
+  angle?: (frame: number) => number | null;
+
+  /** The frame shown before, which a reference frame first of all is measured against; none without. */
+  shown?: number;
+
+  /**
+   * The cat's fudgers as they stand (`makeCatzFudgers`), to play the
+   * scripts' settings on and update a tick at a time; changed as they play.
+   * Without, they are not played.
+   */
+  fudgers?: CatzFudger[];
 
   /**
    * How many times the action is played, one after another, as the engine
@@ -192,12 +250,44 @@ export function catzTransitions(scripts: Script[], from: number, to: number): nu
   return [];
 }
 
+/**
+ * Which way a frame lies, as `XBallz::CheckAlignment` (seg47:29c9) measures
+ * it to turn the cat by: the angle, in 256ths of a turn rounded toward 0, of
+ * the line from the neck to the butt across the ground (x and z); none where
+ * that line is shorter than 50 (`ds:1e6e`).
+ */
+export function catzFrameAngle(frame: Frame, neck: number, butt: number): number | null {
+  const [from, to] = [frame.balls[neck], frame.balls[butt]];
+
+  if (!from || !to) {
+    return null;
+  }
+
+  const [dx, dz] = [to.x - from.x, to.z - from.z];
+
+  if ((!dx && !dz) || Math.sqrt(dx * dx + dz * dz) < 50) {
+    return null;
+  }
+
+  return Math.trunc((Math.atan2(dz, dx) * 256) / CATZ_TURN);
+}
+
 /** The steps action `index` plays out as, a variant at random, with the transitions into it. */
 export function catzTimeline(
   scripts: Script[],
   positions: CatzPositions,
   index: number,
-  { flags, random, limit = 2000, from, times = 1, variant }: CatzTimelineOptions
+  {
+    flags,
+    random,
+    limit = 2000,
+    from,
+    times = 1,
+    variant,
+    angle,
+    fudgers,
+    shown: earlier,
+  }: CatzTimelineOptions
 ): CatzStep[] {
   const steps: CatzStep[] = [];
   /* Where the cat will be once what is pushed has played (`+0x14fe`), and
@@ -221,15 +311,90 @@ export function catzTimeline(
    */
   const layer: Element[] = [];
 
+  /* A turn a reference frame makes, applied to the rotation as the tick ends. */
+  let turned = 0;
+
+  /** The tick done: each fudger updated from the number it drives, the rotation turned first (seg41:154a on). */
+  const tick = (step: CatzStep) => {
+    if (fudgers) {
+      step.fudged = fudgers.map((fudger, n) =>
+        updateCatzFudger(fudger, n === 0 ? wrapCatzAngle(fudger.value + turned) : fudger.value)
+      );
+    }
+
+    turned = 0;
+  };
+
+  /** A script's setting of the fudgers it names, as `PopScript` does it (seg41:0052). */
+  const fudge = (op: number, operands: number[]) => {
+    const [type, a, b, c, d] = operands;
+
+    for (const n of fudgers ? requestedCatzFudgers(type) : []) {
+      const fudger = fudgers![n];
+
+      switch (op) {
+        case CATZ_OP.setFudgerTarget:
+          aimCatzFudger(fudger, a);
+          break;
+        case CATZ_OP.setFudgerDrift:
+          driftCatzFudger(fudger, a);
+          break;
+        case CATZ_OP.setFudgerRate:
+          rateCatzFudger(fudger, a);
+          break;
+        case CATZ_OP.setFudgeAimDefaults:
+          defaultCatzFudgerRate(fudger, a, b, c, d);
+          break;
+        case CATZ_OP.resetFudger:
+          resetCatzFudger(fudger);
+          break;
+        case CATZ_OP.stopFudging:
+          stopCatzFudger(fudger);
+          break;
+        case CATZ_OP.suspendFudging:
+          suspendCatzFudger(fudger);
+          break;
+        case CATZ_OP.resumeFudging:
+          resumeCatzFudger(fudger);
+          break;
+        case CATZ_OP.disableFudgeAim:
+          fudger.aimingOff = true;
+          break;
+        case CATZ_OP.enableFudgeAim:
+          fudger.aimingOff = false;
+          break;
+        case CATZ_OP.alignFudgeBallToPtSetup:
+          alignCatzFudger(fudger, a);
+          break;
+      }
+    }
+  };
+
   const show = (frame: number, action: number) => {
     const shown = !reference;
-    steps.push({
+    /* A reference frame turns the cat by how its axis lies from the frame
+     * before's, where that is more than 6 either way. */
+    const before = steps.at(-1)?.frame ?? earlier;
+    const [was, is] = [
+      before === undefined ? null : (angle?.(before) ?? null),
+      angle?.(frame) ?? null,
+    ];
+    const turn = reference && was !== null && is !== null ? is - was : 0;
+    const step: CatzStep = {
       frame,
       action,
       ...pending,
       ...(reference ? { reference: true } : {}),
       ...(glue && !reference ? { glue: true } : {}),
-    });
+      ...(turn > 6 || turn < -6 ? { turn } : {}),
+    };
+    steps.push(step);
+    turned += step.turn ?? 0;
+
+    if (shown) {
+      tick(step);
+    }
+
     pending = {};
     reference = false;
     glue = false;
@@ -509,21 +674,43 @@ export function catzTimeline(
         case CATZ_OP.alignScripts:
           reference = true;
           break;
+        case CATZ_OP.lookFoward:
+          /* Head and eyes straight ahead (`SetHeadTarget` with no point, seg40:5a47). */
+          for (const n of fudgers ? [3, 4, 10, 11] : []) {
+            aimCatzFudger(fudgers![n], 0);
+          }
+          break;
+        case CATZ_OP.lookAtUser:
+          /* The head turned against the cat's own rotation, so to face out, and level (seg41:0052). */
+          if (fudgers) {
+            aimCatzFudger(fudgers[3], -wrapCatzAngle(fudgers[0].value + turned));
+            aimCatzFudger(fudgers[4], 0);
+          }
+          break;
         case CATZ_OP.lookAtRandomPt:
           /* A point on the stage, across then down (`PopScript`, seg41:0052). */
           random(1, 'rand');
           random(1, 'rand');
           break;
-        default:
-          /* Not played, but its operands popped all the same, a random
-           * one drawn as any other (`Stack::Pop`, seg42:1097). */
-          operands.forEach((operand) => value(operand));
+        default: {
+          /* Popped, a random operand drawn as any other (`Stack::Pop`,
+           * seg42:1097); the fudgers' set, the rest not played. */
+          const values = operands.map((operand) => value(operand));
+          fudge(op, values);
+        }
       }
     }
   };
 
   for (let n = 0; n < times && steps.length < limit; n++) {
     playPushed(push(index, 0, n === 0 ? variant : undefined), 0);
+  }
+
+  /* Ended on a reference frame, with nothing after it, the tick ends on it. */
+  const last = steps.at(-1);
+
+  if (last?.reference) {
+    tick(last);
   }
 
   return steps;

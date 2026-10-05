@@ -79,23 +79,23 @@ All [[read out]] from CATZDLL.DLL, `ScriptSprite` in segments 40 and 41:
 - **Expanded as queued** (`PushScript`, seg40:5ece): `sequence2 a b` (inclusive, counting down where b < a), `sequenceToEnd1` and `sequenceToStart1`. Their `rand2`s are drawn once, from the table, `lo + table % (hi − lo + 1)`. Everything else is queued as it is, and its `rand2`s are drawn with C's `rand` each time they are popped, the same way (`Stack::Pop`, seg42:1097) — whatever the opcode, played or not.
 - **Two positions.** Where the cat will be once all that is pushed has played (`+0x14fe`), which pushing moves on, and where it is (`+0x1500`), which `actionStart1` and `actionDone0` set to the action's from and to as they are reached (seg41:0052).
 - **One frame a tick** (`PopScript`, seg41:0052): opcodes run until a frame. What follows a script's last frame runs the next tick, as in Dogz.
-  - `alignScripts0` makes the next frame a reference, not shown. The frame after it is placed by it: the default glue ball is kept where it was, and the cat is turned by any difference over six 256ths in an axis of the frames. Each action's first frame is the last one's last.
+  - `alignScripts0` makes the next frame a reference, not shown. The frame after it is placed by it: the default glue ball is kept where it was, and the cat is turned by how the reference frame lies against the frame shown before it, where that is more than 6 256ths either way (`XBallz::CheckAlignment`, seg47:29c9). How a frame lies is the angle of the line from the neck to the butt (the key balls at `+0xd93` and `+0xda3`) across the ground, x and z, in 256ths of a turn rounded toward 0; none where that line is shorter than 50 (`ds:1e6e`). Each action's first frame is the last one's last.
   - `playAction2 a n` plays action a n times as a subroutine, on a stack of its own (at most six deep; `PushStackList`, seg40:393c): all n pushed at once, each with its transitions and a variant at random, from where the cat is, not where it will be; and where it will be put back when they are done (`PopStackList`, 38d7). n = 0 plays nothing.
   - `startLoop1 n` … `endLoop0` repeats n times, 999 for ever, on one list of open loops for the whole sprite, ten deep. n = 0 skips to the first `endLoop0` or `endLoopAlign0`, whatever its nesting, so a loop within leaves its outer end unmatched; an end with no loop open does nothing.
   - `cueCode1 c` raises cue c for that tick only.
   - `soundPlay1`–`5` play one of their sounds at random, by `rand`, and draw another `rand` for its loudness (`HandleSoundVerb`, seg41:1ca3; `XApt::XPlayStereoSound`, seg2:0c79); `soundQueue1`–`5` choose one so, and no more.
   - `lookAtRandomPt0` draws a point on the stage with two `rand`s, across and down.
   - A reference frame takes no tick of its own: the tick goes on to the frame after it. With nothing after it, the tick ends on it, and it is shown.
-- **Fudgers.** `setFudgerTarget2 f t`, `setFudgerRate2`, `setFudgerDrift2` and `resetFudger1` steer the cat's 14 fudgers:
-  - 0 rotation, 1 roll, 2 tilt;
-  - 3 head rotation, 4 head tilt, 5 head cock;
-  - 6 and 7 the eyelids' heights, 8 and 9 their tilts;
-  - 10 and 11 where the eyes look;
-  - 12 and 13 the cat moved across and up.
+- **Fudgers.** Each tick, once the tick's frame is reached, each of the cat's 14 `Fudger`s (segment 38) is updated from the `BallState` number it drives and sets it (seg41:154a on):
+  - 0 rotation (`+0x10`), 1 roll (`+0x14`), 2 tilt (`+0x12`);
+  - 3 head rotation, 4 head tilt, 5 head cock (`+0x1c` to `+0x20`);
+  - 6 and 7 the right and left eyelids' heights (`+0x2a`, `+0x2c`), 8 and 9 their tilts (`+0x24`, `+0x22`);
+  - 10 and 11 where the eyes look (`+0x2e`, `+0x30`);
+  - 12 and 13, the cat moved across and up, made by no one: the constructor makes "XTrans" and "YTrans" over fudger 9 again.
 
-  14 means both eyelid heights, 15 both tilts, 16 all.
+  A fudger is off, passing the number through; aiming at a target under its own speed, with a step, a top speed, damping and braking; drifting by a step a tick; aligning, spreading a change over some ticks; decaying an offset; swinging; or suspended. Each is a number, or an angle wrapped to −128..128. It is kept within limits (roll and tilt ±70, head ±80, ±75, ±70), and where it has turned back by less than 2 it is held. `ResetParams` (seg40:312b) aims each at its default target — the eyelids 30, the rest 0, the rotation none — leaving its speed and value as they were. The scripts set them: `setFudgerTarget2 f t` aims, `setFudgerDrift2` drifts, `setFudgerRate2` and `setFudgeAimDefaults5` set speeds, `resetFudger1`, `stopFudging1`, `suspendFudging1`, `resumeFudging1`, `disableFudgeAim1` and `enableFudgeAim1`, each on fudger f, or for 14 both eyelids' heights, 15 both tilts, 16 all (`UpdateRequestedFudgerList`, seg40:6141). No fudger draws a random number.
 
-- **Looking.** `lookAtUser0`, `lookFoward0`, `lookAtRandomPt0` and `lookAtSprite1 o` aim the head and eyes.
+- **Looking.** `lookAtUser0`, `lookFoward0`, `lookAtRandomPt0` and `lookAtSprite1 o` aim the head and eyes, by its fudgers. `lookFoward0` aims the head's rotation and tilt and the eyes at 0 (`SetHeadTarget` with no point, seg40:5a47); `lookAtUser0` aims the head's rotation at the cat's own less, so it faces out, and its tilt at 0. A point to look at — `lookAtLocation2`, `lookAtRandomPt0` — is aimed at from where the cat is drawn.
 - **Layered actions.** `playLayeredAction1 a` plays action a alongside: each tick, every ball of the shown frame is moved by how far the layer's frame has moved it from the layer's first frame. Pushed (`PushLayeredAction`, seg40:561f), it draws its variant and its sequences from the table, and queues after any layer still playing. Each tick takes its next frame, and plays the sounds before it, drawing as any sound does; its other opcodes are passed over (seg41:1500 on).
 - **Tweens.** `GenerateTweenFrame` blends a tick's frame with the one before when drawing; the script's frames are as queued.
 
@@ -107,10 +107,10 @@ All [[read out]] from CATZDLL.DLL, `ScriptSprite` in segments 40 and 41:
 - its random operands, each from where the engine draws it, given a source of each (`random(n, 'table' | 'rand')`);
 - the reference frames between actions.
 
-[[measured]] The harness ([[guide:reproducing]]) holds it to the engine: a bare `ScriptSprite` made in CATZDLL on winbox.js plays every action but the 44 that may look at another sprite, 761, each a variant and from a position, tick by tick, and `catzTimeline`, given the engine's table and C's `rand` from its seed, shows the same frame every tick. Getting there took the two positions, the nested actions pushed all at once from where the cat is, the one list of loops, the layer's sounds, every opcode's random operands drawn, played or not, and the order the transitions are searched in.
+[[measured]] The harness ([[guide:reproducing]]) holds it to the engine: a bare `ScriptSprite` made in CATZDLL on winbox.js plays every action but the 44 that may look at another sprite, 761, each a variant and from a position, tick by tick, and `catzTimeline`, given the engine's table and C's `rand` from its seed, shows the same frame every tick, turns the cat as the engine does, and leaves every fudger as it does, every tick — but for the head's and eyes' in the 9 cases that may look at a point. Getting there took the two positions, the nested actions pushed all at once from where the cat is, the one list of loops, the layer's sounds, every opcode's random operands drawn, played or not, and the order the transitions are searched in.
 
 `/cats.html` plays the scripts the demo's frames will play: [[measured]] 315 of the cat's 805, the demo shipping the first 98 of its 275 animations. It places them as `PopScript` does. Frame follows frame as its own coordinates say. At each reference frame, and at each turn after the first of a loop ending `endLoopAlign0`, the cat is moved so that its `[Default Glue Ball]` is where it was. The viewer can play an action again and again, as the engine plays a walk for as long as the cat goes on, each time a variant at random, aligned to the last.
 
 - [[measured]] So played, the cat's walks and crawls carry it on, the way it faces. Played once, no action moves the cat: each action's first frame is its last's.
 - [[inferred]] So a cat's travel is the engine's repeating an action, as a dog's is.
-- Not yet played: the turn `CheckAlignment` adds where frames' axes differ, the fudgers, the looks and the layers' frames.
+- Not yet played: the head turned to look at a point or another sprite, and the layers' frames. `src/behaviour/catz-fudger.ts` plays the fudgers; nothing draws a cat by them yet.

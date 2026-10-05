@@ -14,7 +14,8 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync
 import { join } from 'node:path';
 
 import { type Frame, parseAnimation, parseBhd } from '../../src/formats/animation.ts';
-import { catzTimeline } from '../../src/behaviour/catz-timeline.ts';
+import { type CatzFudger, makeCatzFudgers } from '../../src/behaviour/catz-fudger.ts';
+import { catzFrameAngle, catzTimeline } from '../../src/behaviour/catz-timeline.ts';
 import { averageBreed, type Breed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import { catzArity, parseScripts, readCatzOpcodes, SCRIPTS } from '../../src/formats/script.ts';
@@ -29,6 +30,7 @@ import { catzShade, depthShades, drawOrder, drawPet } from '../../src/render/bal
 import { extendCatzFrame, extendFrames } from '../../src/render/extend.ts';
 import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
 import { project, scalesForAge } from '../../src/render/project.ts';
+import { skeletonOf } from '../../src/render/skeleton.ts';
 import {
   CATZ_TURN,
   circleTables,
@@ -554,7 +556,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(wrong).toEqual([]);
   }, 1800000);
 
-  it('plays every action as ScriptSprite does, tick by tick', async () => {
+  it('plays every action as ScriptSprite does, tick by tick: its frames, turns and fudgers', async () => {
     const files = readdirSync(RESOURCE).filter((name) =>
       /^(CAT\d*\.(BHD|BDT)|CAT\.SCP|[AK]HUNTER\.LNZ)$/.test(name)
     );
@@ -572,6 +574,16 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       frames.push(...parseAnimation(header, n, read(`CAT${n}.BDT`)));
     }
 
+    /* The kitten the driver makes, to measure how its frames lie by. */
+    const text = (name: string) => readFileSync(join(RESOURCE, name), 'latin1');
+    const breed = averageBreed(
+      parseLnz(text('AHUNTER.LNZ'), 67),
+      parseLnz(text('KHUNTER.LNZ'), 67),
+      100
+    );
+    const shaped = extendFrames(frames, breed);
+    const { neck, butt } = skeletonOf(breed);
+
     /* Not an action that may look at another sprite, which a bare sprite has
      * none of (`lookAtSprite1`): 44 of the 805. */
     const looks = (action: number, seen = new Set<number>()): boolean => {
@@ -587,6 +599,30 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
           return (
             name === 'lookAtSprite1' ||
             (name === 'playAction2' && typeof nested === 'number' && looks(nested, seen))
+          );
+        })
+      );
+    };
+
+    /* Nor, for the head's and eyes' fudgers, one that may look at a point:
+     * where the head turns to depends on where the cat is drawn, which a
+     * bare sprite has nowhere (`SetHeadTarget`, seg40:5a47). */
+    const points = (action: number, seen = new Set<number>()): boolean => {
+      if (seen.has(action) || !scripts[action]) {
+        return false;
+      }
+
+      seen.add(action);
+      return scripts[action].variants.some((variant) =>
+        variant.some((element) => {
+          const name = 'op' in element ? opcodes.get(element.op)?.name : undefined;
+          const [nested] = 'op' in element ? element.operands : [];
+          return (
+            name === 'lookAtLocation2' ||
+            name === 'lookAtRandomPt0' ||
+            (/^play(Layered)?Action/.test(name ?? '') &&
+              typeof nested === 'number' &&
+              points(nested, seen))
           );
         })
       );
@@ -614,18 +650,38 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     });
 
     let table: number[] = [];
-    const played: { values: number[]; ticks: number[][] }[] = [];
+    const played: {
+      values: number[];
+      ticks: number[][];
+      fudgers: CatzFudger[];
+    }[] = [];
 
     for (const line of lines) {
       const [kind, ...rest] = line.split(' ');
       const values = rest.map(Number);
+      const last = played[played.length - 1];
 
       if (kind === 'table') {
         table = values;
       } else if (kind === 'case') {
-        played.push({ values, ticks: [] });
+        played.push({ values, ticks: [], fudgers: makeCatzFudgers() });
+      } else if (kind === 'fudger') {
+        /* As the case found it: what `ResetParams` left of the last. */
+        const [n, value, previous, rising, before, state, target, drift] = values;
+        const bits = new DataView(new ArrayBuffer(8));
+        bits.setBigUint64(0, BigInt(`0x${rest[8]}`));
+        Object.assign(last.fudgers[n], {
+          value,
+          previous,
+          rising: rising === 1,
+          risingBefore: before === 1,
+          state,
+          target,
+          drift,
+          velocity: bits.getFloat64(0),
+        });
       } else if (kind === 'tick') {
-        played[played.length - 1].ticks.push(values);
+        last.ticks.push(values);
       }
     }
 
@@ -634,7 +690,9 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
      * them (`seed × 22695477 + 1`, the high word's low 15 bits). */
     const wrong: string[] = [];
 
-    for (const { values, ticks } of played) {
+    let earlier: number | undefined;
+
+    for (const { values, ticks, fudgers } of played) {
       const [action, variant, from, index, seed] = values;
       let [at, state] = [index, BigInt(seed)];
       const random = (n: number, source: 'table' | 'rand') => {
@@ -652,7 +710,11 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
         from,
         variant,
         limit: 400,
+        angle: (frame) => catzFrameAngle(shaped[frame], neck, butt),
+        fudgers,
+        shown: earlier,
       });
+      earlier = ticks.at(-1)?.[0];
 
       /* The last tick, when it shows nothing new, is only the action's end
        * run. A reference frame takes no tick of its own, but for the last,
@@ -663,14 +725,26 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
           ? ticks.slice(0, -1)
           : ticks;
       const theirs = shown.map(([frame]) => frame);
-      const ours = steps
+      const ticked = steps
         .filter(({ reference }, n) => !reference || n === steps.length - 1)
-        .map(({ frame }) => frame)
         .slice(0, theirs.length);
+      const ours = ticked.map(({ frame }) => frame);
 
       if (ours.join() !== theirs.join()) {
         const first = theirs.findIndex((frame, n) => frame !== ours[n]);
         wrong.push(`action ${action} variant ${variant} from ${from}: tick ${first}`);
+      }
+
+      /* Each tick's rotation and fudgers (the tick's fields from the sixth). */
+      const compared = (n: number) => !points(action) || ![3, 4, 10, 11].includes(n);
+      const off = ticked.findIndex(
+        ({ fudged }, tick) =>
+          fudged?.some((value, n) => compared(n) && value !== shown[tick][5 + n]) ||
+          fudged?.[0] !== shown[tick][1]
+      );
+
+      if (off >= 0) {
+        wrong.push(`action ${action} variant ${variant} from ${from}: fudgers at tick ${off}`);
       }
     }
 

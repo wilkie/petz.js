@@ -10,12 +10,19 @@
  * until nothing is left of it:
  *
  * * `case action variant from index seed`: where `ScriptRand` is in its
- *   table (`+0x146c`) and the C library's `rand` seed (`ds:28ba`), then
+ *   table (`+0x146c`) and the C library's `rand` seed (`ds:28ba`);
+ * * `start` and each fudger's value as the case begins, its fudgers stopped
+ *   (`ResetParams`, 952), and `fudger i value previous rising before state
+ *   target drift velocity` for each, all of it `ResetParams` leaves as it
+ *   was (`Fudger` `+0xc8`, `+0xc4`, `+0xcc`, `+0xce`, `+0xe2`, `+0xc0`,
+ *   `+0xda`, and the double at `+0xb8` in hex); `pushed planned actual`
+ *   after the push, then
  * * `tick frame rotation planned remaining actual` a tick: the frame shown
  *   (`BallState` `+0x1a`, at sprite `+0x692`), the cat's rotation
  *   (`+0x688`), the position it will be in once what is pushed has played
  *   (`+0x14fe`), how much is left on the stack (`GetStackRemaining`, 968)
- *   and the position it is in (`+0x1500`).
+ *   and the position it is in (`+0x1500`); then each of its 14 fudgers'
+ *   values (`+0x1516` on, 0x120 bytes apart, `+200` in each).
  */
 #include "catzdraw.h"
 
@@ -33,9 +40,11 @@ typedef void(__cdecl __far *PUSH)(void __far *sprite, int action, int variant);
 typedef void(__cdecl __far *POP)(void __far *sprite, void __far *params);
 typedef int(__cdecl __far *REMAINING)(void __far *sprite);
 typedef void(__cdecl __far *PLAIN)(void);
+typedef void(__cdecl __far *PLAIN_SPRITE)(void __far *sprite);
 
 #define DIRECTORY "C:\\CORPUS\\CATZSCPT\\"
 #define TICKS 200
+#define FUDGERS 14
 
 /* What a case writes, kept until it is done: one write a case, not a tick. */
 static char kept[8192];
@@ -184,10 +193,32 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         }
 
         *(int __far *)(sprite + 0x1502) = -1;
+
+        /* And its fudgers stopped, as a cat's are between states (`ResetParams`, 952). */
+        ((PLAIN_SPRITE)ordinal(952))(sprite);
         *(int __far *)(sprite + 0x14fe) = from;
         *(int __far *)(sprite + 0x1500) = from;
         keep("case %d %d %d %d %lu\r\n", action, variant, from, *(int __far *)(sprite + 0x146c),
              *(unsigned long __far *)MK_FP(dgroup, 0x28ba));
+        keep("start");
+
+        for (n = 0; n < FUDGERS; n++) {
+            keep(" %ld", *(long __far *)(sprite + 0x1516 + 0x120 * n + 200));
+        }
+
+        keep("\r\n");
+
+        /* All of each that `ResetParams` leaves as it was, to go on from. */
+        for (n = 0; n < FUDGERS; n++) {
+            unsigned char __far *fudger = sprite + 0x1516 + 0x120 * n;
+
+            keep("fudger %d %ld %ld %d %d %d %ld %ld %08lx%08lx\r\n", n,
+                 *(long __far *)(fudger + 0xc8), *(long __far *)(fudger + 0xc4),
+                 *(int __far *)(fudger + 0xcc), *(int __far *)(fudger + 0xce),
+                 *(int __far *)(fudger + 0xe2), *(long __far *)(fudger + 0xc0),
+                 *(long __far *)(fudger + 0xda), *(unsigned long __far *)(fudger + 0xbc),
+                 *(unsigned long __far *)(fudger + 0xb8));
+        }
         push(sprite, action, variant);
         keep("pushed %d %d\r\n", *(int __far *)(sprite + 0x14fe), *(int __far *)(sprite + 0x1500));
 
@@ -197,9 +228,16 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
             pop(sprite, params);
             left = remaining(sprite);
-            keep("tick %d %d %d %d %d\r\n", *(int __far *)(sprite + 0x692),
+            keep("tick %d %d %d %d %d", *(int __far *)(sprite + 0x692),
                  *(int __far *)(sprite + 0x688), *(int __far *)(sprite + 0x14fe), left,
                  *(int __far *)(sprite + 0x1500));
+
+            /* And each fudger's value (`Fudger` `+200`, as `GetCurVal` reads it). */
+            for (n = 0; n < FUDGERS; n++) {
+                keep(" %ld", *(long __far *)(sprite + 0x1516 + 0x120 * n + 200));
+            }
+
+            keep("\r\n");
 
             if (left <= 1) {
                 break;
