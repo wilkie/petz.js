@@ -14,8 +14,10 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync
 import { join } from 'node:path';
 
 import { type Frame, parseAnimation, parseBhd } from '../../src/formats/animation.ts';
+import { catzTimeline } from '../../src/behaviour/catz-timeline.ts';
 import { averageBreed, type Breed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
+import { catzArity, parseScripts, readCatzOpcodes, SCRIPTS } from '../../src/formats/script.ts';
 import {
   CATZ_PALETTE_TYPE,
   type Colour,
@@ -59,7 +61,18 @@ async function run(
   program: string,
   output: string,
   files: string[] = [],
-  { display = 'vga', frames = 40000 }: { display?: string; frames?: number } = {}
+  {
+    display = 'vga',
+    frames = 40000,
+    seconds = 120,
+    written = {},
+  }: {
+    display?: string;
+    frames?: number;
+    seconds?: number;
+    /** Files made for the run, by name: written beside the driver. */
+    written?: Record<string, string>;
+  } = {}
 ) {
   const stage = join(HARNESS, `stage-${program}`);
   mkdirSync(stage, { recursive: true });
@@ -73,8 +86,12 @@ async function run(
     cpSync(join(RESOURCE, file), join(stage, file));
   }
 
+  for (const [name, text] of Object.entries(written)) {
+    writeFileSync(join(stage, name), text);
+  }
+
   const { runProbe } = await import(WINBOX);
-  const result = await runProbe(program.toLowerCase(), frames, false, false, 120, {
+  const result = await runProbe(program.toLowerCase(), frames, false, false, seconds, {
     display,
     program: { directory: stage, file: `${program}.EXE`, folder: program },
   });
@@ -536,4 +553,128 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(count).toBe(14 * 3 * 35);
     expect(wrong).toEqual([]);
   }, 1800000);
+
+  it('plays every action as ScriptSprite does, tick by tick', async () => {
+    const files = readdirSync(RESOURCE).filter((name) =>
+      /^(CAT\d*\.(BHD|BDT)|CAT\.SCP|[AK]HUNTER\.LNZ)$/.test(name)
+    );
+    const read = (name: string) => new Uint8Array(readFileSync(join(RESOURCE, name)));
+    const engine = parseNe(new Uint8Array(readFileSync(join(SYSTEM, 'CATZDLL.DLL'))));
+    const opcodes = readCatzOpcodes(engine);
+    const data = read('CAT.SCP');
+    const scripts = parseScripts(data, catzArity(opcodes), SCRIPTS.catz);
+    const preamble = new DataView(data.buffer, data.byteOffset + data.indexOf(0) + 1);
+    const positions = { count: preamble.getUint16(0, true), neutral: preamble.getUint16(2, true) };
+    const header = parseBhd(read('CAT.BHD'));
+    const frames: Frame[] = [];
+
+    for (let n = 0; files.includes(`CAT${n}.BDT`); n++) {
+      frames.push(...parseAnimation(header, n, read(`CAT${n}.BDT`)));
+    }
+
+    /* Not an action that may look at another sprite, which a bare sprite has
+     * none of (`lookAtSprite1`): 44 of the 805. */
+    const looks = (action: number, seen = new Set<number>()): boolean => {
+      if (seen.has(action) || !scripts[action]) {
+        return false;
+      }
+
+      seen.add(action);
+      return scripts[action].variants.some((variant) =>
+        variant.some((element) => {
+          const name = 'op' in element ? opcodes.get(element.op)?.name : undefined;
+          const [nested] = 'op' in element ? element.operands : [];
+          return (
+            name === 'lookAtSprite1' ||
+            (name === 'playAction2' && typeof nested === 'number' && looks(nested, seen))
+          );
+        })
+      );
+    };
+
+    /* Every other action, its variants in turn, from the neutral position
+     * one time in three and from the end of some other action otherwise. */
+    const ends = [...new Set(scripts.map(({ to }) => to).filter(Boolean))];
+    const cases = scripts.flatMap((script, action) =>
+      looks(action)
+        ? []
+        : [
+            [
+              action,
+              action % script.variants.length,
+              action % 3 ? ends[(action * 37) % ends.length] : positions.neutral,
+            ],
+          ]
+    );
+    const lines = await run('CATZSCPT', 'CATZSCPT.OUT', files, {
+      display: 'vga256',
+      frames: 1e9,
+      seconds: 2400,
+      written: { 'CASES.TXT': cases.map((line) => line.join(' ')).join('\r\n') + '\r\n' },
+    });
+
+    let table: number[] = [];
+    const played: { values: number[]; ticks: number[][] }[] = [];
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'table') {
+        table = values;
+      } else if (kind === 'case') {
+        played.push({ values, ticks: [] });
+      } else if (kind === 'tick') {
+        played[played.length - 1].ticks.push(values);
+      }
+    }
+
+    /* Each played with the engine's own random numbers: its table where it
+     * had got to, and C's `rand` from its seed, as Borland's runtime makes
+     * them (`seed × 22695477 + 1`, the high word's low 15 bits). */
+    const wrong: string[] = [];
+
+    for (const { values, ticks } of played) {
+      const [action, variant, from, index, seed] = values;
+      let [at, state] = [index, BigInt(seed)];
+      const random = (n: number, source: 'table' | 'rand') => {
+        if (source === 'table') {
+          at = at > 149 ? 0 : at;
+          return table[at++] % n;
+        }
+
+        state = (state * 22695477n + 1n) & 0xffffffffn;
+        return Number((state >> 16n) & 0x7fffn) % n;
+      };
+      const steps = catzTimeline(scripts, positions, action, {
+        flags: (frame) => frames[frame]?.tag ?? 3,
+        random,
+        from,
+        variant,
+        limit: 400,
+      });
+
+      /* The last tick, when it shows nothing new, is only the action's end
+       * run. A reference frame takes no tick of its own, but for the last,
+       * which nothing follows: the tick ends on it. */
+      const last = ticks.at(-1);
+      const shown =
+        last && last[3] <= 1 && (ticks.length === 1 || last[0] === ticks.at(-2)![0])
+          ? ticks.slice(0, -1)
+          : ticks;
+      const theirs = shown.map(([frame]) => frame);
+      const ours = steps
+        .filter(({ reference }, n) => !reference || n === steps.length - 1)
+        .map(({ frame }) => frame)
+        .slice(0, theirs.length);
+
+      if (ours.join() !== theirs.join()) {
+        const first = theirs.findIndex((frame, n) => frame !== ours[n]);
+        wrong.push(`action ${action} variant ${variant} from ${from}: tick ${first}`);
+      }
+    }
+
+    expect(played).toHaveLength(cases.length);
+    expect(wrong).toEqual([]);
+  }, 2700000);
 });

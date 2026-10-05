@@ -1,5 +1,5 @@
 import { CATZ_OP, catzTimeline, catzTransitions } from '../../src/behaviour/catz-timeline.ts';
-import { type Element, type Script } from '../../src/formats/script.ts';
+import { type Element, type Operand, type Script } from '../../src/formats/script.ts';
 
 const op = (code: number, ...operands: number[]): Element => ({ op: code, operands });
 const variant = (...elements: Element[]): Element[] => [
@@ -115,5 +115,58 @@ describe('a Catz action played out', () => {
       '3r',
       '4',
     ]);
+  });
+
+  it('ends no loop at an end with none open, as a loop skipped with one inside leaves', () => {
+    const scripts = [
+      script(1, 1, [
+        variant(
+          op(CATZ_OP.startLoop, 0),
+          op(CATZ_OP.startLoop, 2),
+          { frame: 4 },
+          op(CATZ_OP.endLoop),
+          op(CATZ_OP.endLoop),
+          { frame: 5 }
+        ),
+      ]),
+    ];
+
+    expect(frames(catzTimeline(scripts, POSITIONS, 0, options))).toEqual(['5']);
+  });
+
+  it('draws a variant and a sequence’s operands from the table, the rest from rand', () => {
+    const rand = (lo: number, hi: number): Operand => ({ random: [lo, hi] });
+    const scripts = [
+      script(1, 1, [
+        [op(CATZ_OP.startPos), { frame: 1 }],
+        [
+          op(CATZ_OP.startPos),
+          { op: CATZ_OP.sequence, operands: [rand(10, 19), 20] },
+          { op: CATZ_OP.startLoop, operands: [rand(1, 3)] },
+          { frame: 7 },
+          op(CATZ_OP.endLoop),
+        ],
+      ]),
+    ];
+    const drawn: string[] = [];
+    const random = (n: number, from: 'table' | 'rand') => {
+      drawn.push(`${from} ${n}`);
+      return from === 'table' ? 1 : 2;
+    };
+    const steps = catzTimeline(scripts, POSITIONS, 0, { flags: () => 0, random });
+
+    expect(drawn).toEqual(['table 2', 'table 10', 'rand 3']);
+    expect(frames(steps)).toEqual([...'11 12 13 14 15 16 17 18 19 20'.split(' '), '7', '7', '7']);
+  });
+
+  it('pushes a nested action from where the cat is, not where it is going', () => {
+    const scripts = [
+      script(1, 2, [variant(op(CATZ_OP.playAction, 1, 1))]),
+      script(1, 1, [variant({ frame: 3 })]),
+      /* From 2 to 1: a transition the nested action would take from where the first ends. */
+      script(2, 1, [variant({ frame: 8 })], 1),
+    ];
+
+    expect(frames(catzTimeline(scripts, POSITIONS, 0, { ...options, from: 1 }))).toEqual(['3']);
   });
 });

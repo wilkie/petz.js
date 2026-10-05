@@ -42,8 +42,11 @@ static void say(LPCSTR format, ...)
     _lwrite(output, text, length);
 }
 
+/* Closes the output and says it is done, as winbox.js's probes do: by
+ * asking Windows to end the session, which ends the run there and then. */
 static void end(void)
 {
     _lclose(output);
     FreeLibrary(catz);
+    ExitWindows(0, 0);
 }
