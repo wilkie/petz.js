@@ -180,6 +180,25 @@ export interface Head {
 export const HEAD_PIVOT = 54;
 
 /**
+ * A Catz frame's rectangle, as `GetCartesianCoordinates` keeps it in the
+ * pet's state (`+0x36` to `+0x3c`; CATZDLL seg47:419c): the extent of every
+ * ball the breed does not omit, each to its radius, and 4 more each way.
+ * `PopScript` moves the pet's rectangle by it from frame to frame.
+ */
+export function catzFrameBounds(breed: Breed, placed: Placed[]) {
+  const omitted = new Set(breed.omissions);
+  const counted = placed.filter((_, ball) => !omitted.has(ball));
+  const radius = (ball: Placed) => ball.diameter / 2;
+
+  return {
+    left: Math.min(...counted.map((ball) => ball.x - radius(ball))) - 4,
+    top: Math.min(...counted.map((ball) => ball.y - radius(ball))) - 4,
+    right: Math.max(...counted.map((ball) => ball.x + radius(ball))) + 4,
+    bottom: Math.max(...counted.map((ball) => ball.y + radius(ball))) + 4,
+  };
+}
+
+/**
  * Places each ball of a frame: scaled by the pet scale; the head turned,
  * if it is; rolled, spun and tilted by the dog's angles; turned by `yaw`
  * less the spin about the upright axis, then tilted by the pitch the game

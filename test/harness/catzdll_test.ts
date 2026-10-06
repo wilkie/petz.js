@@ -34,7 +34,7 @@ import {
 import { catzShade, depthShades, drawOrder, drawPet } from '../../src/render/ballz.ts';
 import { extendCatzFrame, extendFrames, layeredCatzFrame } from '../../src/render/extend.ts';
 import { FIDELITY, setFidelity } from '../../src/render/fidelity.ts';
-import { project, scalesForAge } from '../../src/render/project.ts';
+import { catzFrameBounds, project, scalesForAge } from '../../src/render/project.ts';
 import { skeletonOf } from '../../src/render/skeleton.ts';
 import {
   CATZ_TURN,
@@ -392,7 +392,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(ties.length).toBeLessThanOrEqual(3);
   }, 600000);
 
-  it('places, orders, shades and draws whole frames of a cat as XBallz does', async () => {
+  it('places, bounds, orders, shades and draws whole frames of a cat as XBallz does', async () => {
     const files = readdirSync(RESOURCE).filter((name) =>
       /^(CAT\d*\.(BHD|BDT)|[AK]HUNTER\.LNZ)$/.test(name)
     );
@@ -494,12 +494,18 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     };
     const wrong: string[] = [];
 
-    for (const { values, balls, order, shades } of cases) {
+    for (const { values, bounds, balls, order, shades } of cases) {
       const placed = placedOf(values);
       const ours = placed.map(({ x, y, depth, diameter }) => [x, y, depth, diameter / 2]);
 
       if (JSON.stringify(ours) !== JSON.stringify(balls)) {
         wrong.push(`case ${values.join(' ')}: placed`);
+      }
+
+      const { left, top, right, bottom } = catzFrameBounds(breed, placed);
+
+      if ([left, top, right, bottom].join(' ') !== bounds.slice(0, 4).join(' ')) {
+        wrong.push(`case ${values.join(' ')}: bounds`);
       }
 
       if (order?.join(' ') !== drawOrder(breed, placed).join(' ')) {
