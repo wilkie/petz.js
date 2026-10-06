@@ -77,9 +77,14 @@ async function main() {
     throw new Error('decompile.mjs <module> <segment:offset | name>...');
   }
 
-  /* Dogz's drive, then Catz's, where CATZDLL.DLL is. */
-  const catz = join(BUILD, 'catz-drive-c');
-  const file = find(DRIVE, module) ?? ((await exists(catz)) ? find(catz, module) : undefined);
+  /* Dogz's drive, then Catz's, where CATZDLL.DLL is: its CD-ROM install
+   * before its demo's, as the CD's CATZ.WAD is its own. */
+  const catz = [join(BUILD, 'catz-retail-drive-c'), join(BUILD, 'catz-drive-c')];
+  let file = find(DRIVE, module);
+
+  for (const drive of catz) {
+    file ??= (await exists(drive)) ? find(drive, module) : undefined;
+  }
 
   if (!file) {
     throw new Error(`no ${module} on the oracle's drive`);

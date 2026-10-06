@@ -27,8 +27,10 @@ import { type NeModule, parseNe, type Target } from '../../src/formats/ne.ts';
 
 const DRIVE = join(process.cwd(), 'oracle', 'build', 'drive-c');
 
-/** Catz's drive, searched after Dogz's: CATZDLL.DLL is only there. */
-const CATZ_DRIVE = join(process.cwd(), 'oracle', 'build', 'catz-drive-c');
+/** Catz's drives, searched after Dogz's -- its CD-ROM install before its demo, whose CATZ.WAD differs. */
+const CATZ_DRIVES = ['catz-retail-drive-c', 'catz-drive-c'].map((name) =>
+  join(process.cwd(), 'oracle', 'build', name)
+);
 
 /** Every file on the drive, by its name in upper case. */
 function index(at: string, found = new Map<string, string>()) {
@@ -47,8 +49,10 @@ function index(at: string, found = new Map<string, string>()) {
 
 const FILES = index(DRIVE);
 
-if (existsSync(CATZ_DRIVE)) {
-  index(CATZ_DRIVE, FILES);
+for (const drive of CATZ_DRIVES) {
+  if (existsSync(drive)) {
+    index(drive, FILES);
+  }
 }
 
 /** The file a module name is in: KERNEL is KRNL386.EXE; the rest, NAME.DLL, .EXE or .DRV. */
