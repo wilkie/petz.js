@@ -8,9 +8,13 @@ import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
 import { layeredCatzFrame } from '../render/extend.ts';
 import { wrapCatzAngle } from './catz-fudger.ts';
+import { CATZ_TURN } from '../render/raster.ts';
+import { skeletonOf } from '../render/skeleton.ts';
 import {
   type CatzHead,
   catzFrameBounds,
+  cosine,
+  sine,
   type Placed,
   project,
   type Scales,
@@ -140,6 +144,19 @@ export class CatzPlacer {
   /** A pose's own rectangle (`BallState` `+0x36` to `+0x3c`). */
   bounds(pose: CatzPose): CatzRect {
     return this.get(pose).bounds;
+  }
+
+  /**
+   * A ball where it is on the stage, the cat in `rect`: its place from the
+   * cat's origin, and the origin where the rectangle puts the pose's own
+   * (`GetBallOffset`, seg47:2c57).
+   */
+  ballOnStage(rect: CatzRect, pose: CatzPose, ball: number) {
+    const { placed, bounds } = this.get(pose);
+    return {
+      x: placed[ball].x + rect.left - bounds.left,
+      y: placed[ball].y + rect.top - bounds.top,
+    };
   }
 
   /**
@@ -279,6 +296,64 @@ export function placeCatzTick(
     : placer.moveFrameRect(rect, pose, before);
 
   return { rect: area ? keepCatzTouching(rect, area) : rect, before: pose, current: pose };
+}
+
+/** A point on the stage. */
+export interface CatzPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Which way to turn the cat to face a point (`SetTargetLocation`,
+ * seg40:596d): the angle from the point to its nose -- the lines' key ball
+ * 7 (`+0xd9d`) -- `atan2` of the two in 256ths of a turn by the true 2π,
+ * rounded toward 0, and a quarter turn more; none where the nose is on the
+ * point.
+ */
+export function catzAimAt(placer: CatzPlacer, rect: CatzRect, pose: CatzPose, point: CatzPoint) {
+  const nose = placer.ballOnStage(rect, pose, skeletonOf(placer.breed).nose);
+  const [dx, dy] = [nose.x - point.x, nose.y - point.y];
+
+  if (!dx && !dy) {
+    return undefined;
+  }
+
+  return wrapCatzAngle(Math.trunc((Math.atan2(dy, dx) * 256) / CATZ_TURN) + 64);
+}
+
+/** How big the box a target is looked for in is, and how far ahead of the head it is: the size's diagonal over `share` (`+0x250e`, `+0x2510`, `+0x2512`). */
+export interface CatzFocus {
+  width: number;
+  height: number;
+  share: number;
+}
+
+/**
+ * The box a target is looked for in (`MakeFocusRectBall`, seg40:3850;
+ * `MakeFocusRect`, seg40:36f5): about the head -- the lines' key ball 0
+ * (`+0xd8f`) -- moved toward the way the cat faces by its diagonal over
+ * `share`, by the cat's rotation and tilt, by the engine's tables.
+ */
+export function catzFocusRect(
+  placer: CatzPlacer,
+  rect: CatzRect,
+  pose: CatzPose,
+  { width, height, share }: CatzFocus
+): CatzRect {
+  const head = placer.ballOnStage(rect, pose, skeletonOf(placer.breed).head);
+  const [tilt, turn] = [wrapCatzAngle(pose.tilt), wrapCatzAngle(pose.rotation)];
+  const ahead = Math.trunc(Math.trunc(Math.sqrt(width * width + height * height)) / share);
+  const x = head.x - Math.trunc((cosine(tilt, true) * ahead * sine(turn, true)) / 0x10000);
+  const y = head.y - Math.trunc((sine(tilt, true) * ahead) / 0x100);
+  const [w, h] = [Math.trunc(width / 2), Math.trunc(height / 2)];
+
+  return { left: x - w, top: y - h, right: x + w, bottom: y + h };
+}
+
+/** Whether a point is inside a rectangle, its edges not (`XPointInXRect`, seg48:1272). */
+export function catzInside(rect: CatzRect, { x, y }: CatzPoint) {
+  return rect.left < x && x < rect.right && rect.top < y && y < rect.bottom;
 }
 
 /** The ball a cat is glued by where a script says none: its lines' `[Default Glue Ball]` (`XBallz` `+0x236`). */

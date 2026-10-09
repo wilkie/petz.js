@@ -23,6 +23,9 @@ import {
 import {
   type CatzPlaced,
   type CatzPose,
+  catzAimAt,
+  catzFocusRect,
+  catzInside,
   CatzPlacer,
   placeCatzTick,
 } from '../../src/behaviour/catz-stage.ts';
@@ -56,6 +59,9 @@ const ROOT = process.cwd();
 const WINBOX = join(ROOT, '..', 'winbox.js', 'test', 'win16', 'run-probe.ts');
 const HARNESS = join(ROOT, 'oracle', 'build', 'harness');
 const SYSTEM = join(ROOT, 'oracle', 'build', 'catz-retail-drive-c', 'WINDOWS', 'SYSTEM');
+/** A case with no target to walk to. */
+const NO_TARGET = [-1, -1, -1, -1, -1];
+
 const RESOURCE = join(
   ROOT,
   'oracle',
@@ -702,9 +708,31 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
               action,
               action % script.variants.length,
               action % 3 ? ends[(action * 37) % ends.length] : positions.neutral,
+              ...NO_TARGET,
             ],
           ]
     );
+
+    /* And a walk to a target (`targetSprite4`): the walk's cycle and the
+     * start of a walk, each to points all round the cat, at (270, 190) to
+     * begin with, and close by; in a box of two sizes. */
+    for (const walk of [183, 4]) {
+      for (const [x, y] of [
+        ...Array.from({ length: 8 }, (_, n) => [
+          Math.round(320 + 160 * Math.cos((n * Math.PI) / 4)),
+          Math.round(240 + 160 * Math.sin((n * Math.PI) / 4)),
+        ]),
+        [330, 240],
+        [300, 215],
+      ]) {
+        for (const [width, height, share] of [
+          [60, 40, 3],
+          [120, 80, 4],
+        ]) {
+          cases.push([walk, 0, scripts[walk].from, x, y, width, height, share]);
+        }
+      }
+    }
     const lines = await run('CATZSCPT', 'CATZSCPT.OUT', files, {
       display: 'vga256',
       frames: 1e9,
@@ -713,7 +741,9 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     });
 
     let table: number[] = [];
+    let target: number[] | undefined;
     const played: {
+      target?: number[];
       values: number[];
       ticks: number[][];
       fudgers: CatzFudger[];
@@ -730,7 +760,8 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       if (kind === 'table') {
         table = values;
       } else if (kind === 'case') {
-        played.push({ values, ticks: [], fudgers: makeCatzFudgers() });
+        played.push({ values, ticks: [], fudgers: makeCatzFudgers(), target });
+        target = undefined;
       } else if (kind === 'fudger') {
         /* As the case found it: what `ResetParams` left of the last. */
         const [n, value, previous, rising, before, state, target, drift] = values;
@@ -749,6 +780,9 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       } else if (kind === 'blink') {
         const [wait, shut, kept] = values;
         last.blink = { wait, shut: shut !== 0, kept };
+      } else if (kind === 'target') {
+        /* Written before its case's line. */
+        target = values;
       } else if (kind === 'place') {
         last.place = values;
       } else if (kind === 'eyes') {
@@ -787,8 +821,13 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     });
     let placedCount = 0;
 
-    for (const { values, ticks, fudgers, blink, place, eyes } of played) {
+    let targeted = 0;
+
+    for (const { values, ticks, fudgers, blink, place, eyes, target } of played) {
       const [action, variant, from, index, seed] = values;
+      /* Whether the target was in the box ahead, each tick, as aimed. */
+      const aimed: boolean[] = [];
+      const aims: number[] = [];
       let [at, state] = [index, BigInt(seed)];
       const random = (n: number, source: 'table' | 'rand') => {
         if (source === 'table') {
@@ -809,6 +848,34 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
         fudgers,
         shown: earlier,
         blink,
+        aim: target
+          ? (step, rotation, fields) => {
+              /* Where the engine has the cat as it aims: in the rectangle the
+               * tick before left, its new frame turned as it was, its layered
+               * action not yet moved on (tick fields 21 to 24, 19 and 20). */
+              const before = aimed.length ? ticks[aimed.length - 1] : undefined;
+              const [left, top, right, bottom] = before?.slice(21, 25) ?? place!.slice(0, 4);
+              const pose: CatzPose = {
+                frame: step.frame,
+                rotation,
+                tilt: fields[2],
+                roll: fields[1],
+                head: { rotation: fields[3], tilt: fields[4], cock: fields[5] },
+                layer: before ? { first: before[19], frame: before[20] } : undefined,
+              };
+              const rect = { left, top, right, bottom };
+              /* The point as `GetTargetPt` answers it, x in the low word (the line's last). */
+              const point = { x: (target[5] << 16) >> 16, y: target[5] >> 16 };
+              const [width, height, share] = target.slice(2, 5);
+
+              aimed.push(
+                catzInside(catzFocusRect(placer, rect, pose, { width, height, share }), point)
+              );
+              const angle = catzAimAt(placer, rect, pose, point);
+              aims.push(angle ?? NaN);
+              return angle;
+            }
+          : undefined,
       });
       earlier = ticks.at(-1)?.[0];
 
@@ -840,7 +907,9 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       );
 
       if (off >= 0) {
-        wrong.push(`action ${action} variant ${variant} from ${from}: fudgers at tick ${off}`);
+        wrong.push(
+          `action ${action} variant ${variant} from ${from}: fudgers at tick ${off}${target ? `, ours ${ticked[off].fudged?.slice(0, 3)} theirs ${shown[off].slice(5, 8)} rotation ${shown[off][1]}, aims ${aims} targets ${shown.map((tick) => tick[40])} start ${place?.slice(0, 6)} to ${target}` : ''}`
+        );
       }
 
       /* And each tick's layered frame and its first, -1 for none (the tick's last two). */
@@ -851,6 +920,19 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
 
       if (layered >= 0) {
         wrong.push(`action ${action} variant ${variant} from ${from}: layer at tick ${layered}`);
+      }
+
+      /* And, walking to a target, whether it is there (`PopScript`'s 2, the tick's field 39). */
+      if (target) {
+        const there = shown.findIndex((tick, n) => ((tick[39] & 2) !== 0) !== aimed[n]);
+
+        if (there >= 0) {
+          wrong.push(
+            `action ${action} to ${target.join(' ')}: there at tick ${there}, ours ${aimed.map(Number).join('')} theirs ${shown.map((tick) => tick[39]).join(',')}`
+          );
+        }
+
+        targeted++;
       }
 
       /* And where each tick puts it: a reference frame placed as it is
@@ -930,6 +1012,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
 
     expect(played).toHaveLength(cases.length);
     expect(placedCount).toBeGreaterThan(0);
+    expect(targeted).toBe(40);
     expect(wrong).toEqual([]);
   }, 2700000);
 

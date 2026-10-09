@@ -80,7 +80,7 @@ export function sine(angle: number, exact = false) {
   return Math.trunc(Math.sin((angle * pi(exact) * 2) / 256) * 256);
 }
 
-function cosine(angle: number, exact = false) {
+export function cosine(angle: number, exact = false) {
   return Math.trunc(Math.cos((angle * pi(exact) * 2) / 256) * 256);
 }
 

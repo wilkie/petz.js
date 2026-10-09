@@ -179,6 +179,16 @@ export interface CatzTimelineOptions {
    * a variant at random, aligned to the last.
    */
   times?: number;
+
+  /**
+   * A target the cat walks to (`targetSprite4`, seg41:0e8d): each shown
+   * tick, once its frame is popped and before its layered action and
+   * fudgers move on, where the rotation is to be aimed (`SetTargetLocation`,
+   * seg41:1302 on), given the step and the cat's angles then -- its rotation
+   * turned by any reference frame, and the fudgers' other fields as they
+   * stand; none to leave it. With `fudgers`.
+   */
+  aim?: (step: CatzStep, rotation: number, fields: number[]) => number | undefined;
 }
 
 /**
@@ -300,6 +310,7 @@ export function catzTimeline(
     fudgers,
     shown: earlier,
     blink,
+    aim,
   }: CatzTimelineOptions
 ): CatzStep[] {
   const steps: CatzStep[] = [];
@@ -341,6 +352,12 @@ export function catzTimeline(
   };
 
   const tick = (step: CatzStep) => {
+    const aimed = fudgers ? aim?.(step, wrapCatzAngle(fields[0] + turned), fields) : undefined;
+
+    if (aimed !== undefined) {
+      aimCatzFudger(fudgers![0], aimed);
+    }
+
     layerTick(step);
 
     if (fudgers) {

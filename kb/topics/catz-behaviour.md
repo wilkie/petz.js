@@ -49,10 +49,18 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 - [[measured]] A frame's own rectangle is the extent of every ball the breed does not omit (`[Omissions]`), each to its radius, and 4 more each way, as `GetCartesianCoordinates` (seg47:419c) keeps it in the cat's state (`+0x36` to `+0x3c`). Each ball counts at its own size and, where the frame's extras size it otherwise, at that size too, so a frame that shrinks balls keeps the rectangle they had. `catzFrameBounds` (`src/render/project.ts`) makes the engine's own for every frame the harness draws ([[guide:reproducing]]).
 - [[measured]] `placeCatzTick` (`src/behaviour/catz-stage.ts`) puts the cat where the engine does at every tick of the 761 actions the script player is held to, given the state the engine leaves it in each tick: walks, turns, actions one after another, the cat kept on a 640 by 480 stage.
 
+## Walking to a target
+
+- [[read out]] No script plays `targetSprite4`; the states push it themselves. Walking, `DoCatPerformLocomote` (seg25:07c6) pushes it (through slot `0xa4`) with a sprite to walk to -- a kin of the cat's, by its type, its target point the point chosen to walk to -- and a box to look for it in: the cat's width and height (`+0x33c4`, `+0x33c6`) and 3, or twice them and 4. `PopScript` keeps them (seg41:0e8d): the sprite at `+0x1504`, the box at `+0x250e` to `+0x2512`.
+- [[read out]] Then every tick, once its frame is popped and before its layered action and fudgers move on (seg41:12b6 on), the cat is steered and looked about:
+  - `SetTargetLocation` (seg40:596d) aims the rotation's fudger (`SetAimTarget`) at the angle from the target point to the cat's nose -- the lines' key ball 7 (`+0xd9d`) -- `atan2` in 256ths of a turn by the true 2π, rounded toward 0, and a quarter turn more; not at all where the nose is on the point. The fudger turns the cat there at its own speed, where the script has aiming on (`enableFudgeAim1 0`, as the walks do).
+  - `MakeFocusRectBall` (seg40:3850) makes a box the width and height given about the cat's head -- key ball 0 (`+0xd8f`) -- moved toward where it faces by its diagonal over the third number (`MakeFocusRect`, seg40:36f5): by the sine of its rotation sideways, by its tilt up and down. Where the target point is inside it, edges not counted (`XPointInXRect`), `PopScript` answers 2, and the state knows the cat is there.
+- [[measured]] `catzAimAt`, `catzFocusRect` and `catzInside` (`src/behaviour/catz-stage.ts`), with `catzTimeline`'s `aim`, turn the cat and find it there as the engine does at every tick of 40 walks to points all round it and close by, in boxes of two sizes. The cat was never tilted in them, so how the box moves with the tilt is read, not measured.
+
 ## In the Adoption Kit
 
 - [[measured]] CATZ.EXE runs on winbox.js to its playpen, and the cat can be read there a frame at a time: its `CatSprite` is found by its class's table (seg16:499a), and each frame drawn its states, action, frame, rectangle, fudgers and brains are kept. A kitten of the Adoption Kit starts in `initKit` (0x48), then sits in its basket (`inBaskets`, 0x49), peeks out of it and back (`peekFromBasket`, `endPeekFromBasket`, 0x4a and 0x4b) six times or so, then climbs out (`exitBasket`, 0x4c), walks (`locomote` and `performLocomote`, 22 and 23) and stalks (2). Walking, its rotation fudger turns it 5 a tick.
 
 ## Not yet
 
-The state handlers themselves, the moment's choice, the reflexes, and how a cat walks to a point (the `targetSprite4` opcode, which the script player does not yet play).
+The state handlers themselves -- among them how `locomote` and `performLocomote` choose the point and the walk, run or turn to get there -- the moment's choice, and the reflexes.
