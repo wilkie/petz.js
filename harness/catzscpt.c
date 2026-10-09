@@ -25,7 +25,13 @@
  *   (`+0x14fe`), how much is left on the stack (`GetStackRemaining`, 968)
  *   and the position it is in (`+0x1500`); then each of its 14 fudgers'
  *   values (`+0x1516` on, 0x120 bytes apart, `+200` in each); then a
- *   layered action's first frame and frame now (`+0x6c2`, `+0x6c4`).
+ *   layered action's first frame and frame now (`+0x6c2`, `+0x6c4`); then
+ *   where it is put, its rectangle (`+0x124` to `+0x12a`), and its tilt,
+ *   roll and head's rotation, tilt and cock (`+0x68a`, `+0x68c`, `+0x694`
+ *   to `+0x698`), and its eyelids and eyes (`+0x69a` to `+0x6aa`);
+ * * before its first tick, `place`: its rectangle, and the state it was
+ *   last placed in (`+0x246`), its frame, rotation, tilt, roll, head,
+ *   layered frames and scale; and `eyes`, that state's eyelids and eyes.
  */
 #include "catzdraw.h"
 
@@ -238,6 +244,28 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         keep("blink %d %d %d\r\n", *(int __far *)(sprite + 0x3584),
              *(int __far *)(sprite + 0x3586), *(int __far *)(sprite + 0x3588));
 
+        /* Where it is: its rectangle (`+0x124`), and the state it was last
+         * placed in, which the first tick moves it from (`+0x246`): its
+         * frame, rotation, tilt, roll, head, layered frames and scale. */
+        keep("place %d %d %d %d %d %d %d %d %d %d %d %d %d %ld\r\n", *(int __far *)(sprite + 0x124),
+             *(int __far *)(sprite + 0x126), *(int __far *)(sprite + 0x128),
+             *(int __far *)(sprite + 0x12a), *(int __far *)(sprite + 0x260),
+             *(int __far *)(sprite + 0x256), *(int __far *)(sprite + 0x258),
+             *(int __far *)(sprite + 0x25a), *(int __far *)(sprite + 0x262),
+             *(int __far *)(sprite + 0x264), *(int __far *)(sprite + 0x266),
+             *(int __far *)(sprite + 0x290), *(int __far *)(sprite + 0x292),
+             *(long __far *)(sprite + 0x25c));
+
+        /* And its eyelids and eyes there (`+0x22` to `+0x32` of the state),
+         * part of what the engine tells one state from another by. */
+        keep("eyes");
+
+        for (n = 0; n < 9; n++) {
+            keep(" %d", *(int __far *)(sprite + 0x268 + 2 * n));
+        }
+
+        keep("\r\n");
+
         /* Played until all that is left is the action's end, shown again;
          * each tick blinking first, as `CatSprite::Update` does. */
         for (t = 0; t < TICKS; t++) {
@@ -256,7 +284,22 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             }
 
             /* And a layered action's first frame and frame now (`BallState` `+0x4a`, `+0x4c`). */
-            keep(" %d %d\r\n", *(int __far *)(sprite + 0x6c2), *(int __far *)(sprite + 0x6c4));
+            keep(" %d %d", *(int __far *)(sprite + 0x6c2), *(int __far *)(sprite + 0x6c4));
+
+            /* And where it is put: its rectangle, and the tilt, roll and
+             * head it is drawn with (`+0x68a`, `+0x68c`, `+0x694` on). */
+            keep(" %d %d %d %d %d %d %d %d %d", *(int __far *)(sprite + 0x124),
+                 *(int __far *)(sprite + 0x126), *(int __far *)(sprite + 0x128),
+                 *(int __far *)(sprite + 0x12a), *(int __far *)(sprite + 0x68a),
+                 *(int __far *)(sprite + 0x68c), *(int __far *)(sprite + 0x694),
+                 *(int __far *)(sprite + 0x696), *(int __far *)(sprite + 0x698));
+
+            /* And its eyelids and eyes (`+0x69a` to `+0x6aa`). */
+            for (n = 0; n < 9; n++) {
+                keep(" %d", *(int __far *)(sprite + 0x69a + 2 * n));
+            }
+
+            keep("\r\n");
 
             if (left <= 1) {
                 break;

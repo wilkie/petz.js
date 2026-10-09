@@ -5,6 +5,7 @@ summary: How a Catz cat decides what to do — a tick of reflexes and two state 
 source:
   [
     src/behaviour/catz-brain.ts,
+    src/behaviour/catz-stage.ts,
     src/render/project.ts,
     src/formats/engine.ts,
     harness/catzbran.c,
@@ -40,10 +41,13 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 ## Where the cat is
 
-- [[read out]] A cat is where its rectangle is: the sprite's own (`+0x124` to `+0x12a`), which is drawn by. Each tick, as `PopScript` (seg41:0052) shows the next frame, it moves the rectangle from the frame before to the new one, by one of the cat's `XBallz` methods:
-  - `MoveFrameRect` (seg47:1e64): the frame before worked out again with the new one's angles (its rotation, tilt and roll, `+0x10` to `+0x14` of the state), and the rectangle moved by how far the frame's own rectangle's top left moved from that one to the new one, and sized as the new one. So a frame carries the cat as its own coordinates do, and a turn turns it about where it stands.
-  - `MoveFrameRectBall` (seg47:212d): so that a ball stays where it was on the stage. A frame after `0x7540` keeps the lines' glue ball (`XBallz` `+0x236`), after `0x7541 n` the ball `GetGlueBall` names; and the frame after a reference frame keeps the glue ball, once the reference has been placed as above and the turn to align with it taken (more than 6 either way).
-- [[measured]] A frame's own rectangle is the extent of every ball the breed does not omit (`[Omissions]`), each to its radius, and 4 more each way, as `GetCartesianCoordinates` (seg47:419c) keeps it in the cat's state (`+0x36` to `+0x3c`). `catzFrameBounds` (`src/render/project.ts`) makes the engine's own for every frame the harness draws ([[guide:reproducing]]).
+- [[read out]] A cat is where its rectangle is: the sprite's own (`+0x124` to `+0x12a`), which it is drawn by. `PopScript` (seg41:0052) moves it by two of the cat's `XBallz` methods, each from the state the cat was last placed in (a copy at `+0x246`) to the state it is in (`+0x678`), and neither moving it at all where the two are the same:
+  - `MoveFrameRect` (seg47:1e64): the state before worked out again with the new one's angles (its rotation, tilt and roll, `+0x10` to `+0x14`), and the rectangle moved by how far its frame's own rectangle's top left moved from that to the new one's, and sized as the new one. So a frame carries the cat as its own coordinates do, and a turn turns it about where it stands.
+  - `MoveFrameRectBall` (seg47:212d): so that a ball stays where it was on the stage, the rectangle sized as the new frame's.
+- [[read out]] A reference frame is placed as it is popped, before the frame it is the reference for: made from the cat's state as it is, turned to align with the frame before where that is more than 6 either way (`CheckAlignment`), glued by the lines' glue ball (`XBallz` `+0x236`, the `[Default Glue Ball]`), and taken as the state the cat was last placed in (seg41:114d to 1257). The last frame of a script, where it is a reference, is placed so and shown.
+- [[read out]] Then each tick, once the fudgers have moved the cat's angles, the rectangle is moved from that state to the tick's: by the glue ball where the tick is glued (`endLoopAlign0`, `0x7540`, or `0x7541 n` for the ball `GetGlueBall` names), and otherwise by `MoveFrameRect`; and it is kept touching the stage, its right edge no further left than the stage's left, its bottom no higher than its top, its left no further right than its right and its top no lower than its bottom (`PetParams` `+0xac` to `+0xb2`; seg41:1784 to 1922). Not yet reimplemented: a shift by two fudgers' values (12 and 13, seg41:1817 to 1856) before that, nor the five states `GetCartesianCoordinates` remembers, each by all of its state but its layered action.
+- [[measured]] A frame's own rectangle is the extent of every ball the breed does not omit (`[Omissions]`), each to its radius, and 4 more each way, as `GetCartesianCoordinates` (seg47:419c) keeps it in the cat's state (`+0x36` to `+0x3c`). Each ball counts at its own size and, where the frame's extras size it otherwise, at that size too, so a frame that shrinks balls keeps the rectangle they had. `catzFrameBounds` (`src/render/project.ts`) makes the engine's own for every frame the harness draws ([[guide:reproducing]]).
+- [[measured]] `placeCatzTick` (`src/behaviour/catz-stage.ts`) puts the cat where the engine does at every tick of the 761 actions the script player is held to, given the state the engine leaves it in each tick: walks, turns, actions one after another, the cat kept on a 640 by 480 stage.
 
 ## In the Adoption Kit
 
@@ -51,4 +55,4 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 ## Not yet
 
-The state handlers themselves, the moment's choice, the reflexes, and how a cat walks to a point (the `targetSprite4` opcode, which the script player does not yet play). Where a frame after a reference frame is put is read but not yet reimplemented.
+The state handlers themselves, the moment's choice, the reflexes, and how a cat walks to a point (the `targetSprite4` opcode, which the script player does not yet play).

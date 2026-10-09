@@ -183,18 +183,22 @@ export const HEAD_PIVOT = 54;
  * A Catz frame's rectangle, as `GetCartesianCoordinates` keeps it in the
  * pet's state (`+0x36` to `+0x3c`; CATZDLL seg47:419c): the extent of every
  * ball the breed does not omit, each to its radius, and 4 more each way.
- * `PopScript` moves the pet's rectangle by it from frame to frame.
+ * Each ball counts at its own size (`unsized`, the frame placed without its
+ * extras) and, where the frame's extras size it otherwise, at that too, so
+ * a frame that shrinks balls keeps the rectangle they had. `PopScript`
+ * moves the pet's rectangle by it from frame to frame.
  */
-export function catzFrameBounds(breed: Breed, placed: Placed[]) {
+export function catzFrameBounds(breed: Breed, placed: Placed[], unsized = placed) {
   const omitted = new Set(breed.omissions);
-  const counted = placed.filter((_, ball) => !omitted.has(ball));
-  const radius = (ball: Placed) => ball.diameter / 2;
+  const spans = [...unsized, ...placed]
+    .filter((_, n) => !omitted.has(n % placed.length))
+    .map(({ x, y, diameter }) => ({ x, y, radius: diameter / 2 }));
 
   return {
-    left: Math.min(...counted.map((ball) => ball.x - radius(ball))) - 4,
-    top: Math.min(...counted.map((ball) => ball.y - radius(ball))) - 4,
-    right: Math.max(...counted.map((ball) => ball.x + radius(ball))) + 4,
-    bottom: Math.max(...counted.map((ball) => ball.y + radius(ball))) + 4,
+    left: Math.min(...spans.map((ball) => ball.x - ball.radius)) - 4,
+    top: Math.min(...spans.map((ball) => ball.y - ball.radius)) - 4,
+    right: Math.max(...spans.map((ball) => ball.x + ball.radius)) + 4,
+    bottom: Math.max(...spans.map((ball) => ball.y + ball.radius)) + 4,
   };
 }
 

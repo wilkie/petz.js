@@ -28,8 +28,19 @@ import { FIDELITY } from '../render/fidelity.ts';
 import { IndexedBitmap } from '../render/raster.ts';
 import { skeletonOf } from '../render/skeleton.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
-import { makeCatzFudgers, resetCatzEyelids, wrapCatzAngle } from '../behaviour/catz-fudger.ts';
-import { catzFrameAngle, type CatzPositions, catzTimeline } from '../behaviour/catz-timeline.ts';
+import { makeCatzFudgers, resetCatzEyelids } from '../behaviour/catz-fudger.ts';
+import {
+  type CatzPlaced,
+  type CatzPose,
+  CatzPlacer,
+  placeCatzTick,
+} from '../behaviour/catz-stage.ts';
+import {
+  catzFrameAngle,
+  type CatzPositions,
+  type CatzStep,
+  catzTimeline,
+} from '../behaviour/catz-timeline.ts';
 import {
   catzArity,
   parseScripts,
@@ -182,45 +193,49 @@ function playOut(index: number, times = 1) {
 
 /**
  * A script's frames placed as `PopScript` places them (CATZDLL.DLL
- * seg41:114d): frame after frame as their own coordinates say, but at each
- * reference frame -- after every action -- the cat moved so that its glue
- * ball, the breed's `[Default Glue Ball]`, is where it was in the frame
- * before; and so each turn of a loop that ends `endLoopAlign0`, a walk's.
- * The cat is turned as its fudgers say, a reference frame turning it
- * first by how it lies against the frame before (`CheckAlignment`).
+ * seg41:0052; `placeCatzTick`): frame after frame moved by their own
+ * rectangles, a reference frame -- after every action -- glued by the
+ * breed's `[Default Glue Ball]` and turned to align, and each turn of a
+ * loop that ends `endLoopAlign0`, a walk's, glued too. The cat's origin is
+ * where its rectangle puts it.
  */
 function placed(index: number) {
   const cat = breed();
-  const glue = Number(cat.sections.get('Default Glue Ball')?.[0]?.values[0] ?? 6);
   const shaped = extendFrames(frames, cat);
+  const placer = new CatzPlacer(cat, header, shaped, { age: 100 });
   const steps: typeof sequence = [];
-  let offset = { x: 0, y: 0 };
-  let last: number | null = null;
-  let yaw = Number(yawInput.value);
+  const poseAt = ({ frame, fudged, layer }: CatzStep): CatzPose => {
+    const [rotation = Number(yawInput.value), roll = 0, tilt = 0, turn = 0, up = 0, cock = 0] =
+      fudged ?? [];
+    return { frame, rotation, tilt, roll, head: { rotation: turn, tilt: up, cock }, layer };
+  };
+  let at: CatzPlaced | null = null;
+  let held: { frame: number; turn?: number } | undefined;
 
   for (const step of playOut(index, Math.max(1, Number(timesInput.value) || 1))) {
     if (!shaped[step.frame]) {
       continue;
     }
 
-    if ((step.reference || step.glue) && last !== null) {
-      /* The glue ball where it was, the cat as it was turned and as it is now. */
-      const before = ballAt(cat, header, shaped[last], glue, { age: 100, yaw });
-      const turned = wrapCatzAngle(yaw + (step.turn ?? 0));
-      const now = ballAt(cat, header, shaped[step.frame], glue, { age: 100, yaw: turned });
-      offset = { x: offset.x + before.x - now.x, y: offset.y + before.y - now.y };
-      yaw = turned;
-    }
-
-    yaw = step.fudged?.[0] ?? yaw;
-
     if (step.reference) {
-      last = step.frame;
+      held = step;
       continue;
     }
 
-    steps.push({ frame: step.frame, ...offset, pose: step.fudged, layer: step.layer });
-    last = step.frame;
+    const pose = poseAt(step);
+    const { left, top } = placer.bounds(pose);
+    at = at
+      ? placeCatzTick(placer, at, pose, { reference: held, glued: !!step.glue })
+      : { rect: placer.bounds(pose), before: pose, current: pose };
+    held = undefined;
+
+    steps.push({
+      frame: step.frame,
+      x: at.rect.left - left,
+      y: at.rect.top - top,
+      pose: step.fudged,
+      layer: step.layer,
+    });
   }
 
   return steps;

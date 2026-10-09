@@ -20,7 +20,13 @@ import {
   type CatzFudger,
   makeCatzFudgers,
 } from '../../src/behaviour/catz-fudger.ts';
-import { catzFrameAngle, catzTimeline } from '../../src/behaviour/catz-timeline.ts';
+import {
+  type CatzPlaced,
+  type CatzPose,
+  CatzPlacer,
+  placeCatzTick,
+} from '../../src/behaviour/catz-stage.ts';
+import { type CatzStep, catzFrameAngle, catzTimeline } from '../../src/behaviour/catz-timeline.ts';
 import { averageBreed, type Breed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import { catzArity, parseScripts, readCatzOpcodes, SCRIPTS } from '../../src/formats/script.ts';
@@ -81,6 +87,12 @@ async function run(
     written?: Record<string, string>;
   } = {}
 ) {
+  /* `HARNESS_REUSE=1`: the output the driver last wrote, read again, to
+   * work on the reimplementation without running the engine again. */
+  if (process.env.HARNESS_REUSE && existsSync(join(HARNESS, output))) {
+    return readFileSync(join(HARNESS, output), 'latin1').trim().split(/\r?\n/);
+  }
+
   const stage = join(HARNESS, `stage-${program}`);
   mkdirSync(stage, { recursive: true });
   cpSync(join(HARNESS, `${program}.EXE`), join(stage, `${program}.EXE`));
@@ -477,12 +489,12 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
         eyes: { mode: 1 as const, x: eyeX, y: eyeY },
       };
     };
-    const placedOf = (values: number[]) => {
+    const placedOf = (values: number[], frame?: Frame) => {
       const { shown, rotation, angles, catzHead } = caseOf(values);
       return project(
         breed,
         header,
-        shown,
+        frame ?? shown,
         scalesForAge(breed, 0),
         rotation,
         100,
@@ -502,7 +514,10 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
         wrong.push(`case ${values.join(' ')}: placed`);
       }
 
-      const { left, top, right, bottom } = catzFrameBounds(breed, placed);
+      /* Every ball at its own size too, where the frame's extras size it otherwise. */
+      const { shown } = caseOf(values);
+      const unsized = shown.extras.length ? placedOf(values, { ...shown, extras: [] }) : placed;
+      const { left, top, right, bottom } = catzFrameBounds(breed, placed, unsized);
 
       if ([left, top, right, bottom].join(' ') !== bounds.slice(0, 4).join(' ')) {
         wrong.push(`case ${values.join(' ')}: bounds`);
@@ -703,6 +718,8 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       ticks: number[][];
       fudgers: CatzFudger[];
       blink?: CatzBlink;
+      place?: number[];
+      eyes?: number[];
     }[] = [];
 
     for (const line of lines) {
@@ -732,6 +749,10 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       } else if (kind === 'blink') {
         const [wait, shut, kept] = values;
         last.blink = { wait, shut: shut !== 0, kept };
+      } else if (kind === 'place') {
+        last.place = values;
+      } else if (kind === 'eyes') {
+        last.eyes = values;
       } else if (kind === 'tick') {
         last.ticks.push(values);
       }
@@ -744,7 +765,29 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
 
     let earlier: number | undefined;
 
-    for (const { values, ticks, fudgers, blink } of played) {
+    /* Where each tick puts the cat, from the state the engine left it in:
+     * its frame, turn, head and layered frames (the tick's fields 0, 1, 19
+     * and 20, and 25 to 29), and its eyelids and eyes (30 to 38), by which
+     * it tells one state from another. */
+    /* Its balls sized as its state says (`BallState` `+0x16`, the `place` line's last). */
+    const scale = played.find(({ place }) => place)?.place?.[13] ?? 100;
+    /* The stage it is kept touching: the driver's, 640 by 480. */
+    const STAGE = { left: 0, top: 0, right: 640, bottom: 480 };
+    const placer = new CatzPlacer(breed, header, shaped, {
+      scales: { ...scalesForAge(breed, 0), ball: scale },
+    });
+    const poseOf = (tick: number[]): CatzPose => ({
+      frame: tick[0],
+      rotation: tick[1],
+      tilt: tick[25],
+      roll: tick[26],
+      head: { rotation: tick[27], tilt: tick[28], cock: tick[29] },
+      layer: { first: tick[19], frame: tick[20] },
+      eyes: tick.slice(30, 39),
+    });
+    let placedCount = 0;
+
+    for (const { values, ticks, fudgers, blink, place, eyes } of played) {
       const [action, variant, from, index, seed] = values;
       let [at, state] = [index, BigInt(seed)];
       const random = (n: number, source: 'table' | 'rand') => {
@@ -809,9 +852,84 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       if (layered >= 0) {
         wrong.push(`action ${action} variant ${variant} from ${from}: layer at tick ${layered}`);
       }
+
+      /* And where each tick puts it: a reference frame placed as it is
+       * popped, turned to align and glued by the glue ball; then every tick
+       * moved from the state it was last placed in -- the reference frame,
+       * after one -- to the new one, by its glue ball where the tick is glued
+       * (`PopScript`, seg41:114d to 1257, 1784 to 17ec). */
+      if (place) {
+        const [left, top, right, bottom, frame, rotation, tilt, roll, h1, h2, h3, first, now] =
+          place;
+        let rect = { left, top, right, bottom };
+        const before: CatzPose = {
+          frame,
+          rotation,
+          tilt,
+          roll,
+          head: { rotation: h1, tilt: h2, cock: h3 },
+          layer: { first, frame: now },
+          eyes: eyes?.slice(0, 9),
+        };
+        /* The state as it is, which a reference frame is made from: the
+         * snapshot's, but for the layered action the driver stopped. */
+        let placed: CatzPlaced = { rect, before, current: { ...before, layer: undefined } };
+        let held: CatzStep | null = null;
+        let tick = 0;
+        let misplaced = false;
+
+        for (const [n, step] of steps.entries()) {
+          if (step.reference) {
+            held = step;
+
+            /* Not the last: the tick goes on to the frame after it. */
+            if (n !== steps.length - 1) {
+              continue;
+            }
+          }
+
+          if (tick >= shown.length) {
+            break;
+          }
+
+          const pose = poseOf(shown[tick]);
+          const kind = held
+            ? `after reference ${held.frame} turn ${held.turn}`
+            : step.glue
+              ? 'glued'
+              : 'plain';
+
+          placed = placeCatzTick(placer, placed, pose, {
+            reference: held ?? undefined,
+            glued: !!step.glue,
+            area: STAGE,
+          });
+          held = null;
+          rect = placed.rect;
+
+          const theirRect = shown[tick].slice(21, 25);
+
+          if ([rect.left, rect.top, rect.right, rect.bottom].join(' ') !== theirRect.join(' ')) {
+            if (!misplaced) {
+              wrong.push(
+                `action ${action} variant ${variant} from ${from}: placed at tick ${tick} (${kind}, ${JSON.stringify(pose)}), ${[rect.left, rect.top, rect.right, rect.bottom].join(' ')} not ${theirRect.join(' ')}`
+              );
+            }
+
+            /* Gone on from the engine's, to find any later case that differs too. */
+            misplaced = true;
+            const [l, t, r, b] = theirRect;
+            placed = { ...placed, rect: { left: l, top: t, right: r, bottom: b } };
+          }
+
+          placedCount++;
+          tick++;
+        }
+      }
     }
 
     expect(played).toHaveLength(cases.length);
+    expect(placedCount).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
   }, 2700000);
 
