@@ -10,6 +10,7 @@ import { CATZ_BRAIN } from './catz-brain.ts';
 /** The cat's own states these model, by CATZDLL.DLL's numbers (`eKatState_…`). */
 export const CATZ_STATE = {
   lookAtObjects: 12,
+  preExplore: 13,
   passTheTime: 19,
   locomote: 22,
   tired: 26,
@@ -39,6 +40,21 @@ export interface CatzStateWorld {
   curiosities?: number[];
   ticks?: number;
   x1500?: number;
+
+  /** Exploring: the stage (CATZDLL's `ds:2ba6` to `2bac`), the cat's width and height (`+0x33c4`, `+0x33c6`), its target point (`GetTargetPt`, space 0), the draw rectangle of its kin 0x22 (`GetKin`), and the cursor's (`PetParams` `+0x104` to `+0x10a`; all 0 where it has not moved). */
+  stage?: CatzBox;
+  size?: { width: number; height: number };
+  point?: { x: number; y: number };
+  kin?: CatzBox;
+  cursor?: CatzBox;
+}
+
+/** A rectangle, its edges. */
+export interface CatzBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
 }
 
 /**
@@ -178,6 +194,10 @@ export interface CatzStateTick {
   x35a6?: number;
   x35a4?: number;
 
+  /** Exploring: where it walks to (`+0x34cc`, `+0x34ce`) and how (`+0x35a8`). */
+  goal?: { x: number; y: number };
+  explore?: number;
+
   /** Looking at things: ticks to its next look, and the sound it made (`MapAndPlayCatSound` 7), its action. */
   ticks?: number;
   sound?: number;
@@ -208,6 +228,12 @@ export interface CatzStateTick {
  *   quarter of what its seriousness leaves of 100. With nothing left to look
  *   at, or without an age one time in two, it has its moment (8,
  *   `catzPreMoment`). Its script done, it pushes 0xc after 0x5f, else 0x93;
+ * - exploring (13; `DoCatPreExplore`, seg24:05d1): it chooses where to
+ *   walk (`locomote`): to the stage's left or right, a little in from it,
+ *   level with its target point; 250 below that point, or, too low, up by
+ *   the stage's top; or beside its kin 0x22, or the cursor where it has
+ *   moved, four times in five -- left or right of it where there is room, a
+ *   side at random where both, idling (6) where neither, 250 below its top;
  * - passing the time (19; `DoCatPassTheTime`, seg24:1896): having done
  *   something, one time in two it looks at things (12), or on the screen
  *   saver readies its moment (`catzPreMoment`) and has it (8); else it does
@@ -356,6 +382,57 @@ export function catzStateTick(
       }
 
       return done({ ...tick, ticks, pushed: world.x1500 === 0x5f ? 0xc : 0x93 });
+    }
+    case CATZ_STATE.preExplore: {
+      const stage = world.stage!;
+      const { width, height } = world.size!;
+      const point = world.point!;
+      const cursor = world.cursor!;
+      let way = random(world.screenSaver ? 3 : 5);
+      const moved =
+        cursor.left !== 0 || cursor.top !== 0 || cursor.right !== 0 || cursor.bottom !== 0;
+      const chasing = moved && percent() < 80;
+      let goal: { x: number; y: number };
+      let explore: number;
+
+      if (chasing) {
+        way = 3;
+      }
+
+      if (way === 0) {
+        explore = 1;
+        goal = { x: width + stage.left, y: point.y };
+      } else if (way === 1) {
+        explore = 2;
+        goal = { x: stage.right - width, y: point.y };
+      } else if (way === 2) {
+        explore = 3;
+        const half = Math.trunc(height / 2) * 2;
+        goal = { x: point.x, y: point.y + 250 };
+
+        if (goal.y > stage.bottom - half) {
+          goal.y = half + stage.top;
+        }
+      } else {
+        const box = chasing ? cursor : world.kin!;
+        const half = Math.trunc(width / 2);
+        const high = stage.top + 20 < box.top;
+        const left = half + stage.left < box.left - width && high;
+        const right = stage.right - half > box.right + width && high;
+
+        if (!left && !right) {
+          return done({ global: 6 });
+        }
+
+        explore = left && right ? (percent() < 50 ? 4 : 5) : left ? 4 : 5;
+        goal = { x: explore === 4 ? box.left - width : box.right + width, y: box.top + 250 };
+
+        if (chasing) {
+          explore += 4;
+        }
+      }
+
+      return done({ state: CATZ_STATE.locomote, goal, explore, x35a6: 0 });
     }
     case CATZ_STATE.passTheTime: {
       const behave = (n: number) => catzBehavior(mind, n, random) !== 0;

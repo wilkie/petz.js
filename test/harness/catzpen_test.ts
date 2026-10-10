@@ -213,20 +213,24 @@ const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
 /**
  * Cases of a tick of the cat's own state: a seed, the brains' values and
  * centres, the state, the global state, `+0x3502`, `+0x34ca`, `+0x3504`,
- * `+0x1500` and 8 curiosities. Of the first 342, the last 192 pass the time,
+ * `+0x1500`, 8 curiosities, and the cursor's rectangle (`PetParams` `+0x104`
+ * on). Of the first 342, the last 192 pass the time,
  * doze and sleep (with little energy, to stay so) and lie tired with each
  * temperament: liveliness, independence, seriousness and fear each low or
  * high. The 160 after look at things, with lists of curiosities of each
- * kind and none.
+ * kind and none; the last 120 explore, the cursor still or about.
  */
-const LOCAL_CASES = Array.from({ length: 502 }, (_, n) => {
-  const looking = n >= 342;
+const LOCAL_CASES = Array.from({ length: 622 }, (_, n) => {
+  const exploring = n >= 502;
+  const looking = n >= 342 && !exploring;
   const tempered = n >= 150 && !looking;
-  const state = looking
-    ? 12
-    : tempered
-      ? [19, 19, 19, 19, 27, 27, 26, 28, 28, 28, 28, 28][Math.floor((n - 150) / 16)]
-      : [26, 28, 28, 28, 29, 27, 27, 19, 19, 19][n % 10];
+  const state = exploring
+    ? 13
+    : looking
+      ? 12
+      : tempered
+        ? [19, 19, 19, 19, 27, 27, 26, 28, 28, 28, 28, 28][Math.floor((n - 150) / 16)]
+        : [26, 28, 28, 28, 29, 27, 27, 19, 19, 19][n % 10];
   const brains = Array.from(
     { length: 12 },
     (_, b) => LEVELS[(n * 3 + b * 11 + ((n * b) % 6)) % LEVELS.length]
@@ -239,6 +243,9 @@ const LOCAL_CASES = Array.from({ length: 502 }, (_, n) => {
   }
 
   const kinds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 0x17, 0x1b, 14, 20];
+  const left = [0, 50, 230, 400, 560][n % 5];
+  const top = [0, 10, 30, 100, 300][(n >> 1) % 5];
+  const cursor = exploring && n % 3 !== 0 ? [left, top, left + 10, top + 10] : [0, 0, 0, 0];
   const curiosities = Array.from({ length: 8 }, (_, k) =>
     looking && k < (n % 7) + 1 ? kinds[(n * 5 + k * 7) % kinds.length] : 0
   );
@@ -248,7 +255,7 @@ const LOCAL_CASES = Array.from({ length: 502 }, (_, n) => {
     ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 7) % LEVELS.length]),
     state,
-    looking ? 6 : state === 26 && Math.floor(n / 20) % 2 ? 21 : 9,
+    looking || exploring ? 6 : state === 26 && Math.floor(n / 20) % 2 ? 21 : 9,
     looking
       ? Math.floor(n / 7) % 4
       : tempered && state === 28
@@ -258,6 +265,7 @@ const LOCAL_CASES = Array.from({ length: 502 }, (_, n) => {
     looking && n % 5 === 0 ? 3 : 0,
     looking && n % 3 === 0 ? 0x5f : 0,
     ...curiosities,
+    ...cursor,
   ];
 });
 
@@ -761,6 +769,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
      * action it pushed and began. */
     let localSeed = 0;
     let localArea = 0;
+    let room: number[] = [];
     let ticked = 0;
 
     for (const line of lines) {
@@ -769,6 +778,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 
       if (kind === 'local') {
         [localSeed, localArea] = values;
+      } else if (kind === 'stage') {
+        room = values;
       } else if (kind === 'localed') {
         const c = LOCAL_CASES.find(([s]) => s === localSeed)!;
         const [state, global, count, passed, ticks, x1500] = c.slice(25);
@@ -785,26 +796,28 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             count,
             passed,
             area3: localArea === 3,
-            curiosities: c.slice(31),
+            curiosities: c.slice(31, 39),
             ticks,
             x1500,
+            stage: { left: room[0], top: room[1], right: room[2], bottom: room[3] },
+            size: { width: room[4], height: room[5] },
+            point: { x: room[6], y: room[7] },
+            kin: { left: room[9], top: room[10], right: room[11], bottom: room[12] },
+            cursor: { left: c[39], top: c[40], right: c[41], bottom: c[42] },
           },
           random
         );
-        const first = (history: number[]) => {
-          const marked = history.indexOf(-2) < 0 ? 10 : history.indexOf(-2);
-          return marked ? history[marked - 1] : undefined;
-        };
         const [energy, theirCount] = values.slice(20);
         /* The actions pushed through the cat's slot `0xb8`, in turn: the
          * handler's first, then any its scripts went on to. (The engine's
          * own record of the last ten, `+0x14a8`, can be overrun in a tick.) */
-        const pushes = values[35];
+        const pushes = values[37];
         /* And the global state asked for (the global machine's slot `0x1c`),
          * the first, none entered: the tick held to its own step. */
         const theirGlobal = values[33] ? values[34] : undefined;
-        const [theirTicks, , layered] = values.slice(44);
-        const [theirPassed, after, idle, looks, , x35a6, x35a4] = values.slice(47);
+        const theirState = values[35] ? values[36] : undefined;
+        const [theirTicks, , layered, goalX, goalY, explore] = values.slice(46);
+        const [theirPassed, after, idle, looks, , x35a6, x35a4] = values.slice(52);
         const looking = state === 12;
         const changed = ours.state !== undefined || ours.global !== undefined;
         const said = [
@@ -820,22 +833,24 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             ours.moment.looksBeforeGoing,
             ours.moment.pushed,
           ],
-          ours.x35a6 && [ours.x35a6, ours.x35a4],
+          ours.x35a6 !== undefined && [ours.x35a6, ours.x35a4],
           looking && [ours.ticks, ours.x35a4, Boolean(ours.sound)],
+          ours.goal && [ours.goal.x, ours.goal.y, ours.explore],
         ].join(' ');
         const theirs = [
-          first(values.slice(0, 10)),
+          theirState,
           /* A state entered may go on at once, as sleeping where it may not
            * sleep goes to idling: only this tick's own step is held. */
           ours.state === undefined ? theirGlobal : undefined,
           energy,
           changed ? '' : theirCount,
-          changed ? undefined : pushes ? values[36] : undefined,
+          changed ? undefined : pushes ? values[38] : undefined,
           state === 19 ? theirPassed : passed,
-          ours.moment && [after, idle, looks, pushes ? values[36] : undefined],
-          ours.x35a6 && [x35a6, x35a4],
+          ours.moment && [after, idle, looks, pushes ? values[38] : undefined],
+          ours.x35a6 !== undefined && [x35a6, ours.x35a4 === undefined ? undefined : x35a4],
           /* `+0x35a4` as the tick set it, where it did; else as the case before left it. */
           looking && [theirTicks, ours.x35a4 === undefined ? undefined : x35a4, layered > 0],
+          ours.goal && [goalX, goalY, explore],
         ].join(' ');
 
         if (said !== theirs) {

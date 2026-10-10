@@ -32,11 +32,13 @@
  *   each case in `CURIOUS.TXT`, `curiosities seed`, and `curious` and the 50
  *   curiosities `GetCuriosities` lists;
  * * for each case in `LOCAL.TXT`, `local seed area` (`GetSpriteScreenArea`,
- *   606, of 0x1d), and after a tick of the cat's state, `localed` and its
+ *   606, of 0x1d), `stage` and what exploring reads, and after a tick of
+ *   the cat's state, `localed` and its
  *   own machine's history, the global machine's, its energy, `+0x3502`, the
  *   action playing (`+0x1502`) and the last ten actions pushed (`+0x14a8`
  *   on, newest first), how many global states were asked for through the
- *   global machine's slot `0x1c` (none entered) and the first, how many
+ *   global machine's slot `0x1c` (none entered) and the first, the same of
+ *   its own states through its machine's slot `0x14`, how many
  *   actions were pushed through the cat's
  *   slot `0xb8` and the first 8 in turn, and the fields `PreMoment` and
  *   passing the time set;
@@ -84,6 +86,9 @@ typedef int(__cdecl __far *AREA)(void __far *cat, int kind);
 typedef void(__cdecl __far *DISPATCH)(void __far *machine, void __far *params, int enter, int leave);
 
 typedef void(__cdecl __far *PUSH)(void __far *sprite, int action, int variant);
+typedef long(__cdecl __far *TARGETPT)(void __far *apt, int space);
+typedef void __far *(__cdecl __far *GETKIN)(void __far *apt, int type);
+typedef void(__cdecl __far *DRAWRECT)(int __far *rect, void __far *apt, int space);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
@@ -111,6 +116,21 @@ static void __cdecl __far __loadds keep(void __far *machine, int state, void __f
     }
 
     globalled++;
+}
+
+/* The same for the cat's own machine (`+0x2518`), its slot `0x14`. */
+static unsigned char localTable[0x40];
+static int locals[4], localled;
+
+static void __cdecl __far __loadds keepLocal(void __far *machine, int state, void __far *params)
+{
+    (void)machine, (void)params;
+
+    if (localled < 4) {
+        locals[localled] = state;
+    }
+
+    localled++;
 }
 
 static void __cdecl __far __loadds record(void __far *sprite, int action, int variant)
@@ -657,21 +677,23 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
     /* Each case in `LOCAL.TXT`: a line `seed`, the 12 brains' values and
      * their centres, a state of the cat's own, a global state, `+0x3502`,
-     * `+0x34ca`, `+0x3504`, `+0x1500` and the first 8 curiosities
-     * (`+0x362c` on, the rest 0): the cat in them as it is (`+0x2552`; `+0x3a` of the global
+     * `+0x34ca`, `+0x3504`, `+0x1500`, the first 8 curiosities
+     * (`+0x362c` on, the rest 0) and the cursor's rectangle (`PetParams`
+     * `+0x104` on): the cat in them as it is (`+0x2552`; `+0x3a` of the global
      * machine), not entered, its script done, no layered action playing,
      * both machines' histories and the actions pushed marked; a tick of its
      * state (its machine's slot 4, as `BaseNewState` calls it); and
      * `localed` and the two histories, its energy, `+0x3502`, the action
      * playing, the actions pushed, `+0x3504`, `+0x1500`, the layered
-     * frames begun, `+0x34ca`, the moment's `+0x3516`, `+0x350a`,
+     * frames begun, where it walks to (`+0x34cc`, `+0x34ce`) and how
+     * (`+0x35a8`), `+0x34ca`, the moment's `+0x3516`, `+0x350a`,
      * `+0x3506` and `+0x3508`, and `+0x35a6` and `+0x35a4`. */
     file = _lopen(DIRECTORY "\\LOCAL.TXT", OF_READ);
 
     if (cat && file != HFILE_ERROR) {
         unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
         unsigned char __far *machine = cat + 0x2518;
-        void __far *original, __far *globalOriginal;
+        void __far *original, __far *globalOriginal, __far *localOriginal;
         int done;
         DISPATCH dispatch = *(DISPATCH __far *)(*(unsigned char __far *__far *)machine + 4);
 
@@ -701,6 +723,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(cat + 0x362c + 2 * b) = b < 8 ? (int)number(file) : 0;
             }
 
+            for (b = 0; b < 4; b++) {
+                *(int *)(params + 0x104 + 2 * b) = (int)number(file);
+            }
+
             ((RESETSTACK)ordinal(951))(cat, 2);
             ((PLAIN_SPRITE)ordinal(957))(cat);
             *(int __far *)(cat + 0x1502) = -1;
@@ -713,6 +739,26 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             }
 
             say("local %ld %d\r\n", seed, ((AREA)ordinal(606))(cat, 0x1d));
+
+            /* What exploring reads: the stage (CATZDLL's `ds:2ba6` to
+             * `2bac`), the cat's width and height (`+0x33c4`, `+0x33c6`),
+             * its target point (`GetTargetPt`, 10, space 0) and the draw
+             * rectangle of its kin 0x22 (`GetKin`, 18; `GetDrawRect`, 15). */
+            {
+                long point = ((TARGETPT)ordinal(10))(cat, 0);
+                void __far *kin = ((GETKIN)ordinal(18))(cat, 0x22);
+                int rect[4] = {0, 0, 0, 0};
+
+                if (kin) {
+                    ((DRAWRECT)ordinal(15))(rect, kin, 0);
+                }
+
+                say("stage %d %d %d %d %d %d %d %d %d %d %d %d %d\r\n",
+                    *(int __far *)MK_FP(dgroup, 0x2ba6), *(int __far *)MK_FP(dgroup, 0x2ba8),
+                    *(int __far *)MK_FP(dgroup, 0x2baa), *(int __far *)MK_FP(dgroup, 0x2bac),
+                    *(int __far *)(cat + 0x33c4), *(int __far *)(cat + 0x33c6), (int)point,
+                    (int)(point >> 16), kin != 0, rect[0], rect[1], rect[2], rect[3]);
+            }
             original = *(void __far *__far *)cat;
             _fmemcpy(table, original, sizeof table);
             push = *(PUSH *)(table + 0xb8);
@@ -724,11 +770,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(GLOBALSTATE *)(globalTable + 0x1c) = keep;
             *(void __far *__far *)global = globalTable;
             globalled = 0;
+            localOriginal = *(void __far *__far *)machine;
+            _fmemcpy(localTable, localOriginal, sizeof localTable);
+            *(GLOBALSTATE *)(localTable + 0x14) = keepLocal;
+            *(void __far *__far *)machine = localTable;
+            localled = 0;
 
             *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
             dispatch(machine, params, 0, 0);
             *(void __far *__far *)cat = original;
             *(void __far *__far *)global = globalOriginal;
+            *(void __far *__far *)machine = localOriginal;
 
             say("localed");
 
@@ -748,6 +800,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             }
 
             say(" %d %d", globalled, globalled ? globals[0] : -1);
+            say(" %d %d", localled, localled ? locals[0] : -1);
             say(" %d", pushes);
 
             for (b = 0; b < 8; b++) {
@@ -756,6 +809,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
             say(" %d %d %d", *(int __far *)(cat + 0x3504), *(int __far *)(cat + 0x1500),
                 ((REMAINING)ordinal(954))(cat));
+            say(" %d %d %d", *(int __far *)(cat + 0x34cc), *(int __far *)(cat + 0x34ce),
+                *(int __far *)(cat + 0x35a8));
             say(" %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x34ca),
                 *(int __far *)(cat + 0x3516),
                 *(int __far *)(cat + 0x350a), *(int __far *)(cat + 0x3506),
