@@ -28,6 +28,10 @@
  *   and once the moment has begun `entered` and its box, mode, looks, ticks
  *   to the next, what it does meanwhile, mind, look, sound owed and layered
  *   frames begun;
+ * * for each case in `GLOBAL.TXT`, `global seed area` (`GetSpriteScreenArea`,
+ *   606, of 0x1d), and once put in the global state, `globaled` and the
+ *   cat's own machine's history (`+0x2556` on), the global machine's, its
+ *   mode and its brains' effects;
  * * for each case in `CURSOR.TXT`, `cursor seed`, and after a tick of the
  *   moment with the cursor about, `cursored` and the cat's state, the global
  *   machine's history, `+0x35a2`, `+0x35a4`, `+0x35a6` and mode, then as
@@ -62,6 +66,8 @@ typedef int(__cdecl __far *INSHELF)(void __far *apt, int type);
 typedef int(__cdecl __far *SCREENSAVER)(void __far *params);
 typedef int(__cdecl __far *REMAINING)(void __far *sprite);
 typedef void(__cdecl __far *PLAIN_SPRITE)(void __far *sprite);
+typedef void(__cdecl __far *GLOBALSTATE)(void __far *machine, int state, void __far *params);
+typedef int(__cdecl __far *AREA)(void __far *cat, int kind);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
@@ -464,6 +470,86 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(cat + 0x3504), *(int __far *)(cat + 0x350a),
                 *(int __far *)(cat + 0x3514), *(int __far *)(cat + 0x34cc),
                 *(int __far *)(cat + 0x34ce), *(int __far *)(cat + 0x35a0), layered);
+        }
+
+        _lclose(file);
+    }
+
+    /* Each case in `GLOBAL.TXT`: a line `seed`, the 12 brains' values and
+     * their centres, a global state to put the cat in, whether the cursor
+     * has moved (`PetParams` `+0x104` on) and `+0x3574`: the cat with no
+     * global state (`+0x3a` of its machine), both its machines' histories
+     * marked, put in it (`GlobalCatStateMachine::NewState`, 488); and
+     * `globaled` and the two histories, its mode and the effects set on its
+     * brains (`+0x3622` to `+0x3628`). */
+    file = _lopen(DIRECTORY "\\GLOBAL.TXT", OF_READ);
+
+    if (cat && file != HFILE_ERROR) {
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+
+        for (;;) {
+            long seed = number(file);
+            int state, moved, area;
+
+            if (seed < 0) {
+                break;
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a) = (int)number(file);
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42) = (int)number(file);
+            }
+
+            state = (int)number(file);
+            moved = (int)number(file);
+            *(int __far *)(cat + 0x3574) = (int)number(file);
+
+            for (b = 0; b < 4; b++) {
+                *(int *)(params + 0x104 + 2 * b) = b == 0 ? moved : 0;
+            }
+
+            ((RESETSTACK)ordinal(951))(cat, 2);
+            ((PLAIN_SPRITE)ordinal(957))(cat);
+            *(int __far *)(global + 0x3a) = 0;
+
+            for (b = 0; b < 10; b++) {
+                *(int __far *)(global + 0x3e + 2 * b) = -2;
+                *(int __far *)(cat + 0x2556 + 2 * b) = -2;
+            }
+
+            for (b = 0; b < 4; b++) {
+                *(int __far *)(cat + 0x3622 + 2 * b) = -1;
+            }
+
+            area = ((AREA)ordinal(606))(cat, 0x1d);
+            say("global %ld %d\r\n", seed, area);
+            *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
+            ((GLOBALSTATE)ordinal(488))(global, state, params);
+
+            say("globaled");
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(cat + 0x2556 + 2 * b));
+            }
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(global + 0x3e + 2 * b));
+            }
+
+            say(" %d", *(int __far *)(cat + 0x3508));
+
+            for (b = 0; b < 4; b++) {
+                say(" %d", *(int __far *)(cat + 0x3622 + 2 * b));
+            }
+
+            say("\r\n");
+
+            for (b = 0; b < 4; b++) {
+                *(int *)(params + 0x104 + 2 * b) = 0;
+            }
         }
 
         _lclose(file);

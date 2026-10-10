@@ -6,6 +6,7 @@ source:
   [
     src/behaviour/catz-behavior.ts,
     src/behaviour/catz-brain.ts,
+    src/behaviour/catz-global.ts,
     src/behaviour/catz-moment.ts,
     src/behaviour/catz-stage.ts,
     src/render/project.ts,
@@ -66,6 +67,14 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
   - eating alone, one time in twenty, where it has an age;
   - and otherwise: attacking, where three draws come under its seriousness, its liveliness and its energy, or else playing, under `100 − seriousness` and its energy; grooming; eating, under `100 − fullness`; grooming again, under its groom; resting, twice, each under `100 − energy`; being affectionate, three times over, under `100 − independence`; the global state it last chose to play (`+0x3516`, 8 the first time), under `100 − energy`; and idling, twice.
 - [[measured]] `catzMomentChoice` (`src/behaviour/catz-moment.ts`) makes the same choice as the engine for 120 cats' brains in the playpen harness, the cat walking off 21 times and choosing eating, resting, idling, grooming, being affectionate, playing and the moment. The screen saver, `+0xc4`, an empty shelf and attacking did not come up, and are read, not measured.
+
+## Global states
+
+- [[read out]] A cat put in another global state (`GlobalCatStateMachine::NewState`, seg16:0000) has the effects on four of its brains -- liveliness, independence, seriousness and groom (`SetBehaviorEffect`, seg15:1ca9: `+0x3622` to `+0x3628`) -- set to 0, all but for states 0x11 and 0x12; the global state's handler, entering, then sets some again, and begins a state of the cat's own. The handlers are short: what the cat does is in its own states'.
+  - idling (6; `DoGSIdling`, seg24:0000): effects 15 on the first three; watching nothing (mode 1); then, under a third of its age, or the cursor moved (`PetParams` `+0x104` to `+0x10a`) and four times in five, or so placed (`GetSpriteScreenArea` of 0x1d, 3) and with an age, it goes to explore (`preExplore`, 13); else, one time in four or on the screen saver, it passes the time (`passTheTime`, 19) where it has an age; else it looks at things (`lookAtObjects`, 12);
+  - the moment (8; `DoGSMoment`, seg25:0000): the same effects; the cursor moved, three times in four, and not so placed, it idles instead; else its own moment (21);
+  - resting (9; `DoGSResting`, seg30:0000): the same effects; tired (26), or, `+0x3574` set, asleep (28).
+- [[measured]] `catzGlobalBegin` (`src/behaviour/catz-global.ts`) begins these three as the engine does for 90 cats in the playpen harness, every state of its own they may begin in among them.
 
 ## Where the cat is
 

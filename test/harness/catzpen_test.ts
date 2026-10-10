@@ -18,6 +18,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
+import { catzGlobalBegin } from '../../src/behaviour/catz-global.ts';
 import {
   catzMomentBegin,
   catzMomentChoice,
@@ -198,6 +199,16 @@ const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
   n % 3 === 0 ? 1 : 0,
 ]);
 
+/** Cases of a global state begun: a seed, the brains' values and centres, the state, whether the cursor moved, and `+0x3574`. */
+const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
+  (n * 134775813 + 1) % 2147483648,
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 7 + b * 9 + ((n * b) % 4)) % LEVELS.length]),
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 3) % LEVELS.length]),
+  [6, 8, 9][n % 3],
+  Math.floor(n / 3) % 2,
+  Math.floor(n / 6) % 2,
+]);
+
 describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('keeps the parameters CATZ.EXE gives its playpen', async () => {
     if (existsSync(PARAMS)) {
@@ -245,6 +256,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       const directory = stage('CATZPEN');
       cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+      writeFileSync(
+        join(directory, 'GLOBAL.TXT'),
+        GLOBAL_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
+      );
       writeFileSync(
         join(directory, 'CURSOR.TXT'),
         CURSOR_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
@@ -602,6 +617,66 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     }
 
     expect(Object.values(reactions).reduce((a, b) => a + b, 0)).toBe(CURSOR_CASES.length);
+
+    /* And each global state begun: the global states it was put in, in
+     * turn, the first state of its own, its mode and its brains' effects. */
+    let globalCase: number[] = [];
+    let begun = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'global') {
+        globalCase = values;
+      } else if (kind === 'globaled') {
+        const [globalSeed, area] = globalCase;
+        const c = GLOBAL_CASES.find(([s]) => s === globalSeed)!;
+        const [global, moved, sleepy] = c.slice(25);
+        let state = BigInt(globalSeed);
+        const random = (n: number) => {
+          state = (state * 22695477n + 1n) & 0xffffffffn;
+          return Number((state >> 16n) & 0x7fffn) % n;
+        };
+        const ours = catzGlobalBegin(
+          global,
+          {
+            brains: c.slice(1, 13),
+            centres: c.slice(13, 25),
+            state: 0,
+            global: 0,
+            target: 0,
+            count: 0,
+          },
+          { cursorMoved: moved !== 0, area3: area === 3, screenSaver: false, sleepy: sleepy !== 0 },
+          random
+        );
+        const added = (history: number[]) =>
+          history.slice(0, history.indexOf(-2) < 0 ? 10 : history.indexOf(-2)).reverse();
+        const locals = added(values.slice(0, 10));
+        const globals = added(values.slice(10, 20));
+        const [mode, ...effects] = values.slice(20);
+        const said = [ours.globals.join(','), ours.state, ours.mode ?? mode, ours.effects].join(
+          ' '
+        );
+        /* As far as the model goes: a state of its own begun may put it in
+         * another global state again, as exploring does idling. */
+        const theirs = [
+          globals.slice(0, ours.globals.length).join(','),
+          locals[0],
+          mode,
+          effects,
+        ].join(' ');
+
+        if (said !== theirs) {
+          wrong.push(`global seed ${globalSeed} state ${global}: ${said} not ${theirs}`);
+        }
+
+        begun++;
+      }
+    }
+
+    expect(begun).toBe(GLOBAL_CASES.length);
     expect(wrong).toEqual([]);
   }, 1800000);
 });
