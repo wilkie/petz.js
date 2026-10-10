@@ -5,7 +5,7 @@
  * kb/topics/catz-behaviour.md ("The moment").
  */
 
-import { type CatzMind, catzBehavior } from './catz-behavior.ts';
+import { type CatzMind, catzBehavior, catzSound } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 
 /** What else the moment reads of the cat and the game. */
@@ -114,4 +114,121 @@ export function catzMomentChoice(
   }
 
   return { locomote: false, global: list[random(Math.max(list.length, 1))] ?? 0 };
+}
+
+/** The moment's own fields (`CatSprite` `+0x3502` on). */
+export interface CatzMomentState {
+  /** How many times it has looked about (`+0x3502`), and how many it must before it may go (`+0x3506`). */
+  looks: number;
+  looksBeforeGoing: number;
+
+  /** Ticks to its next look about (`+0x3504`). */
+  ticks: number;
+
+  /** Its mode (`+0x3508`): 2 and 3 for watching something, 3 when it was the cursor. */
+  mode: number;
+
+  /** What it does meanwhile (`+0x350a`): action 0x93 or 0xc. */
+  idle: number;
+
+  /** A sound owed (`+0x35a0`). */
+  soundOwed: number;
+
+  /** The box it looks about in (`+0x350c` to `+0x3512`). */
+  box: { left: number; top: number; right: number; bottom: number };
+
+  /** Whether its mind is made up to go (`+0x3514`). */
+  going: boolean;
+
+  /** Where it looks (`+0x34cc`, `+0x34ce`), where it looked at a point. */
+  look?: { x: number; y: number };
+}
+
+/** What a tick of lingering did besides changing the moment's fields. */
+export interface CatzLingered {
+  /** The sound it made (`MapAndPlayCatSound`): one of `catzSound`'s, and its action. */
+  sound?: { sound: number; action: number };
+
+  /** It looked at the user (`LookAtUser`). */
+  lookedAtUser?: boolean;
+
+  /** The action it pushed: what it does meanwhile, or 0x98 to go. */
+  pushed?: number;
+}
+
+/**
+ * A tick of the moment before its mind is made up (`DoCatMoment`,
+ * seg25:314f to 34bb, 3c20 on), its script done: every so many ticks it
+ * looks about -- at a point in its box three times in four, else at the
+ * user -- may swing a fudger, change what it does meanwhile and make a
+ * sound; then, its script done, may make up its mind to go, by behaviour 1
+ * once it has looked about enough, and pushes what it does meanwhile or
+ * 0x98. The ticks to its next look are 9 and up to half of what behaviour 3
+ * leaves of 100 more -- the more serious it is, the fewer -- or 9 to 13 in
+ * mode 3. `soundPlaying` is whether a layered action is playing, in which
+ * case no sound is made.
+ */
+export function catzMomentLinger(
+  mind: CatzMind,
+  moment: CatzMomentState,
+  soundPlaying: boolean,
+  random: (n: number) => number
+): CatzLingered {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const done: CatzLingered = {};
+  const sound = (n: number) => {
+    if (!soundPlaying) {
+      done.sound = { sound: n, action: catzSound(mind, n, random) };
+    }
+  };
+
+  if (moment.ticks === 0) {
+    moment.looks++;
+    const spread = Math.max(1, Math.trunc((100 - catzBehavior(mind, 3, random)) / 2));
+    moment.ticks = random(moment.mode === 3 ? 5 : spread) + 9;
+
+    if (moment.mode !== 3 && moment.mode !== 2) {
+      if (percent() < 75) {
+        const { left, top, right, bottom } = moment.box;
+        const x = random(right - left || 1) + left;
+        const y = random(bottom - top || 1) + top;
+        moment.look = { x, y };
+      } else {
+        done.lookedAtUser = true;
+      }
+    }
+
+    if (percent() < 70) {
+      random(20);
+    }
+
+    if (moment.looks > 5 && percent() < 40) {
+      moment.idle = moment.idle === 0x93 ? 0xc : 0x93;
+    }
+
+    const age = brain(CATZ_BRAIN.age);
+
+    if (moment.soundOwed !== 0 && age !== 0) {
+      moment.soundOwed = 0;
+      sound(5);
+    } else if (percent() < 100 - brain(CATZ_BRAIN.fullness) && percent() < 50 && age !== 0) {
+      sound(6);
+    } else if (percent() < Math.trunc((100 - brain(CATZ_BRAIN.seriousness)) / 4)) {
+      sound(7);
+    }
+  } else {
+    moment.ticks--;
+  }
+
+  if (!moment.going && moment.looksBeforeGoing < moment.looks) {
+    const willing = catzBehavior(mind, 1, random);
+
+    if (percent() < willing || moment.mode === 3) {
+      moment.going = true;
+    }
+  }
+
+  done.pushed = moment.going ? 0x98 : moment.idle;
+  return done;
 }

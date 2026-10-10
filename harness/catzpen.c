@@ -24,6 +24,11 @@
  *   -- what the moment reads -- and after a tick of it, `chose state
  *   global` and the global machine's last ten states (`+0x3e` on), then
  *   `+0x35a4`, `+0x35a6`, `+0x35ce`, `+0x3516`, `+0x33be` and `+0x3508`;
+ * * for each case in `LINGER.TXT`, `linger seed`, and after a tick of the
+ *   moment `lingered` and its looks, ticks to the next, what it does
+ *   meanwhile, whether its mind is made up, where it looks (`+0x34cc`,
+ *   `+0x34ce`), the sound owed, the layered frames begun, the action
+ *   playing (`+0x1502`) and its state;
  * * `frame n state global action shown rotation left top right bottom seed`
  *   then its 12 brains' values, after each frame: its state (`+0x2552`),
  *   its global state (`+0x3a` of the machine `+0x2fba` points to), the
@@ -47,6 +52,8 @@ typedef void(__cdecl __far *HANDLER)(void __far *cat, void __far *params, int en
 typedef void(__cdecl __far *RESETSTACK)(void __far *sprite, int type);
 typedef int(__cdecl __far *INSHELF)(void __far *apt, int type);
 typedef int(__cdecl __far *SCREENSAVER)(void __far *params);
+typedef int(__cdecl __far *REMAINING)(void __far *sprite);
+typedef void(__cdecl __far *PLAIN_SPRITE)(void __far *sprite);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
@@ -262,6 +269,63 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(cat + 0x35a6), *(int __far *)(cat + 0x35ce),
                 *(int __far *)(cat + 0x3516), *(int __far *)(cat + 0x33be),
                 *(int __far *)(cat + 0x3508));
+        }
+
+        _lclose(file);
+    }
+
+    /* Each case in `LINGER.TXT`: a line `seed`, the 12 brains' values and
+     * their centres, then the moment's own `+0x3502` (looks), `+0x3504`
+     * (ticks to the next), `+0x3506` (looks before it may go), `+0x3508`
+     * (mode), `+0x350a` (what it does meanwhile), `+0x35a0` (a sound
+     * owed) and the box it looks about in (`+0x350c` to `+0x3512`): the
+     * cat so, in its moment (21), its script done and no layered action
+     * playing (`ResetLayeredAction`, 957), its mind not made up
+     * (`+0x3514`), the cursor not minded; a tick of the moment (612); and
+     * the moment's fields after, and what layered action has begun
+     * (`GetLayeredFramesRemaining`, 954). */
+    file = _lopen(DIRECTORY "\\LINGER.TXT", OF_READ);
+
+    if (cat && file != HFILE_ERROR) {
+        static const int fields[] = {0x3502, 0x3504, 0x3506, 0x3508, 0x350a, 0x35a0,
+                                     0x350c, 0x350e, 0x3510, 0x3512};
+
+        for (;;) {
+            long seed = number(file);
+            int f, layered;
+
+            if (seed < 0) {
+                break;
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a) = (int)number(file);
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42) = (int)number(file);
+            }
+
+            for (f = 0; f < 10; f++) {
+                *(int __far *)(cat + fields[f]) = (int)number(file);
+            }
+
+            ((RESETSTACK)ordinal(951))(cat, 2);
+            ((PLAIN_SPRITE)ordinal(957))(cat);
+            *(int __far *)(cat + 0x2552) = 21;
+            *(int __far *)(cat + 0x3514) = 0;
+            *(int __far *)(cat + 0x34ca) = 0;
+            say("linger %ld\r\n", seed);
+
+            *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
+            ((HANDLER)ordinal(612))(cat, params, 0, 0);
+            layered = ((REMAINING)ordinal(954))(cat);
+
+            say("lingered %d %d %d %d %d %d %d %d", *(int __far *)(cat + 0x3502),
+                *(int __far *)(cat + 0x3504), *(int __far *)(cat + 0x350a),
+                *(int __far *)(cat + 0x3514), *(int __far *)(cat + 0x34cc),
+                *(int __far *)(cat + 0x34ce), *(int __far *)(cat + 0x35a0), layered);
+            say(" %d %d\r\n", *(int __far *)(cat + 0x1502), *(int __far *)(cat + 0x2552));
         }
 
         _lclose(file);

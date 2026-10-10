@@ -18,7 +18,11 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
-import { catzMomentChoice } from '../../src/behaviour/catz-moment.ts';
+import {
+  catzMomentChoice,
+  catzMomentLinger,
+  type CatzMomentState,
+} from '../../src/behaviour/catz-moment.ts';
 
 const ROOT = process.cwd();
 const WINBOX = join(ROOT, '..', 'winbox.js', 'test', 'win16', 'run-probe.ts');
@@ -150,6 +154,27 @@ const MOMENT_CASES = Array.from({ length: 120 }, (_, n) => [
   n % 3 === 0 ? 1 : 0,
 ]);
 
+/**
+ * Cases of the moment's lingering: a seed, the 12 brains' values and
+ * centres, and its looks, ticks to the next look, looks before it may go,
+ * mode, idle action, sound owed and box.
+ */
+const LINGER_CASES = Array.from({ length: 80 }, (_, n) => [
+  (n * 69069 * 1013 + 7) % 2147483648,
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 3 + b * 7 + ((n * b) % 5)) % LEVELS.length]),
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 13 + b * 5 + ((n + b) % 3)) % LEVELS.length]),
+  n % 9,
+  n % 4 === 3 ? (n % 7) + 1 : 0,
+  n % 7,
+  [0, 0, 2, 3][n % 4],
+  n % 2 ? 0x93 : 0xc,
+  n % 5 === 0 ? 1 : 0,
+  100 + (n % 3) * 20,
+  80,
+  500 - (n % 4) * 50,
+  400,
+]);
+
 describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('keeps the parameters CATZ.EXE gives its playpen', async () => {
     if (existsSync(PARAMS)) {
@@ -197,6 +222,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       const directory = stage('CATZPEN');
       cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+      writeFileSync(
+        join(directory, 'LINGER.TXT'),
+        LINGER_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
+      );
       writeFileSync(
         join(directory, 'MOMENT.TXT'),
         MOMENT_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
@@ -312,6 +341,81 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     }
 
     expect(chosen).toBe(MOMENT_CASES.length);
+
+    /* And each tick of lingering: the moment's fields after, where it
+     * looked, and whether a sound began (a layered action's frames). */
+    let lingerSeed = 0;
+    let lingered = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'linger') {
+        lingerSeed = values[0];
+      } else if (kind === 'lingered') {
+        const c = LINGER_CASES.find(([s]) => s === lingerSeed)!;
+        const [looks, ticks, looksBeforeGoing, mode, idle, soundOwed, left, top, right, bottom] =
+          c.slice(25);
+        const moment: CatzMomentState = {
+          looks,
+          ticks,
+          looksBeforeGoing,
+          mode,
+          idle,
+          soundOwed,
+          box: { left, top, right, bottom },
+          going: false,
+        };
+        let state = BigInt(lingerSeed);
+        const random = (n: number) => {
+          state = (state * 22695477n + 1n) & 0xffffffffn;
+          return Number((state >> 16n) & 0x7fffn) % n;
+        };
+        const done = catzMomentLinger(
+          {
+            brains: c.slice(1, 13),
+            centres: c.slice(13, 25),
+            state: 21,
+            global: 0,
+            target: 0,
+            count: 0,
+          },
+          moment,
+          false,
+          random
+        );
+        const [theirLooks, theirTicks, theirIdle, theirGoing, x, y, owed, layered] = values;
+        const ours = [
+          moment.looks,
+          moment.ticks,
+          moment.idle,
+          Number(moment.going),
+          moment.look?.x ?? x,
+          moment.look?.y ?? y,
+          moment.soundOwed,
+          Number((done.sound?.action ?? -1) >= 0),
+        ];
+        const theirs = [
+          theirLooks,
+          theirTicks,
+          theirIdle,
+          theirGoing,
+          x,
+          y,
+          owed,
+          Number(layered > 0),
+        ];
+
+        if (ours.join(' ') !== theirs.join(' ')) {
+          wrong.push(`linger seed ${lingerSeed}: ${ours.join(' ')} not ${theirs.join(' ')}`);
+        }
+
+        lingered++;
+      }
+    }
+
+    expect(lingered).toBe(LINGER_CASES.length);
     expect(wrong).toEqual([]);
   }, 1800000);
 });
