@@ -232,3 +232,38 @@ export function catzMomentLinger(
   done.pushed = moment.going ? 0x98 : moment.idle;
   return done;
 }
+
+/**
+ * The moment begun (`DoCatMoment` entering, seg25:2cf5 to 2e2d): its looks
+ * and ticks to the next look none, its mind not made up, and a box to look
+ * about in -- a corner anywhere on the stage, and each side up to
+ * `behaviour 3 × 2 + 50` more, at least 1 -- and, where it was watching
+ * something (mode 1), one time in five watching it hard (2). It then turns
+ * to face the user, where it faces more than 96 from them
+ * (`MakeCatFaceForwardIfNeeded`, seg16:35e0; not reimplemented), and goes
+ * on to a tick of lingering.
+ */
+export function catzMomentBegin(
+  mind: CatzMind,
+  moment: CatzMomentState,
+  stage: { left: number; top: number; right: number; bottom: number },
+  random: (n: number) => number
+) {
+  moment.going = false;
+  moment.ticks = 0;
+  moment.looks = 0;
+
+  const left = random(stage.right - stage.left || 1) + stage.left;
+  const top = random(stage.bottom - stage.top || 1) + stage.top;
+  const size = catzBehavior(mind, 3, random) * 2 + 50;
+  let right = random(size) + left;
+  let bottom = random(size) + top;
+
+  right += right === left ? 1 : 0;
+  bottom += bottom === top ? 1 : 0;
+  moment.box = { left, top, right, bottom };
+
+  if (moment.mode === 1 && random(101) < 20) {
+    moment.mode = 2;
+  }
+}

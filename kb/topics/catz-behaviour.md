@@ -52,6 +52,8 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 ## The moment
 
+- [[read out]] Begun (seg25:2cf5 on), the moment chooses a box to look about in: a corner anywhere on the stage, each side up to `behaviour 3 × 2 + 50` more; where it was watching something (mode 1), one time in five it watches it hard (2). It turns to face the user where it faces more than 96 from them (`MakeCatFaceForwardIfNeeded`, seg16:35e0: by its energy and which half of the stage it is in, actions 0x86, 0x87, 0x80 or 0x11b, or 0x80 as a kitten without an age, then 0x150), and goes on to a tick of lingering.
+- [[measured]] `catzMomentBegin` (`src/behaviour/catz-moment.ts`) begins the moment as the engine does for 60 cats in the playpen harness, and lingers on from it alike; they faced the user, so its turning is read, not measured.
 - [[read out]] Until it makes up its mind to go, it lingers (seg25:314f on): every so many ticks it looks about -- three times in four at a point drawn in a box it chose as it began, else at the user (`LookAtUser`), or, watching something (mode 2 or 3, `+0x3508`), at that -- may swing a fudger by up to 10 either way, after five looks may change what it does meanwhile (action 0x93 or 0xc, `+0x350a`), and may make a sound (`MapAndPlayCatSound`): one owed (5), or 6 where a draw comes under `100 − fullness` and another under 50, or else 7 under a quarter of `100 − seriousness`, none as a kitten without an age. The ticks to its next look are 9 and up to `(100 − behaviour 3) / 2` more, or 9 to 13 in mode 3. Each time its script is done it pushes what it does meanwhile, unless it has looked about more than `+0x3506` times and a draw comes under behaviour 1 (always in mode 3): then its mind is made up, and it pushes 0x98.
 - [[measured]] `catzMomentLinger` (`src/behaviour/catz-moment.ts`) lingers as the engine does for 80 cats in the playpen harness: where it looks, its ticks to the next look, what it does meanwhile, the sound it makes and whether its mind is made up.
 - [[read out]] The cat's own state `moment` (21; `DoCatMoment`, seg25:2ce9) is how most activities end. Once its script is done and it has made up its mind to go (`+0x3514`), its fear decides first: unafraid (under 50), it walks off (`locomote`, 22) one time in two; afraid, only where a draw under `100 − fear` comes to 1, almost never.
@@ -93,4 +95,4 @@ The state handlers themselves -- among them how `locomote` and `performLocomote`
 
 ## Not yet
 
-The state handlers themselves -- among them how `locomote` and `performLocomote` choose the point and the walk, run or turn to get there -- and the reflexes. Of the moment, how it begins (the box it looks about in) and what the cursor does to it.
+The state handlers themselves -- among them how `locomote` and `performLocomote` choose the point and the walk, run or turn to get there -- and the reflexes. Of the moment, its turning to face the user, and what the cursor does to it.

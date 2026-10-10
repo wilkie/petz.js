@@ -19,6 +19,7 @@ import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
 import {
+  catzMomentBegin,
   catzMomentChoice,
   catzMomentLinger,
   type CatzMomentState,
@@ -175,6 +176,17 @@ const LINGER_CASES = Array.from({ length: 80 }, (_, n) => [
   400,
 ]);
 
+/** Cases of the moment begun: a seed, the brains' values and centres, its mode, looks before it may go, idle action and sound owed. */
+const ENTER_CASES = Array.from({ length: 60 }, (_, n) => [
+  (n * 1664525 + 1013904223) % 2147483648,
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 11 + ((n * b) % 7)) % LEVELS.length]),
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 3 + b * 13 + ((n + b) % 4)) % LEVELS.length]),
+  [0, 1, 1, 2, 3][n % 5],
+  n % 3 === 0 ? -1 : 3,
+  n % 2 ? 0x93 : 0xc,
+  n % 4 === 0 ? 1 : 0,
+]);
+
 describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('keeps the parameters CATZ.EXE gives its playpen', async () => {
     if (existsSync(PARAMS)) {
@@ -222,6 +234,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       const directory = stage('CATZPEN');
       cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+      writeFileSync(
+        join(directory, 'ENTER.TXT'),
+        ENTER_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
+      );
       writeFileSync(
         join(directory, 'LINGER.TXT'),
         LINGER_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
@@ -416,6 +432,75 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     }
 
     expect(lingered).toBe(LINGER_CASES.length);
+
+    /* And each moment begun: its box and mode, and the tick of lingering it
+     * goes on to. */
+    let entering: number[] = [];
+    let entered = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'enter') {
+        entering = values;
+      } else if (kind === 'entered') {
+        const [enterSeed, left, top, right, bottom] = entering;
+        const c = ENTER_CASES.find(([s]) => s === enterSeed)!;
+        const [mode, looksBeforeGoing, idle, soundOwed] = c.slice(25);
+        const mind = {
+          brains: c.slice(1, 13),
+          centres: c.slice(13, 25),
+          state: 21,
+          global: 0,
+          target: 0,
+          count: 0,
+        };
+        const moment: CatzMomentState = {
+          looks: 0,
+          ticks: 0,
+          looksBeforeGoing,
+          mode,
+          idle,
+          soundOwed,
+          box: { left: 0, top: 0, right: 0, bottom: 0 },
+          going: false,
+        };
+        let state = BigInt(enterSeed);
+        const random = (n: number) => {
+          state = (state * 22695477n + 1n) & 0xffffffffn;
+          return Number((state >> 16n) & 0x7fffn) % n;
+        };
+
+        catzMomentBegin(mind, moment, { left, top, right, bottom }, random);
+        const done = catzMomentLinger(mind, moment, false, random);
+        const [bl, bt, br, bb, theirMode, ...after] = values;
+        const ours = [
+          moment.box.left,
+          moment.box.top,
+          moment.box.right,
+          moment.box.bottom,
+          moment.mode,
+          moment.looks,
+          moment.ticks,
+          moment.idle,
+          Number(moment.going),
+          moment.look?.x ?? after[4],
+          moment.look?.y ?? after[5],
+          moment.soundOwed,
+          Number((done.sound?.action ?? -1) >= 0),
+        ];
+        const theirs = [bl, bt, br, bb, theirMode, ...after.slice(0, 7), Number(after[7] > 0)];
+
+        if (ours.join(' ') !== theirs.join(' ')) {
+          wrong.push(`enter seed ${enterSeed}: ${ours.join(' ')} not ${theirs.join(' ')}`);
+        }
+
+        entered++;
+      }
+    }
+
+    expect(entered).toBe(ENTER_CASES.length);
     expect(wrong).toEqual([]);
   }, 1800000);
 });
