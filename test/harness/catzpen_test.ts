@@ -17,7 +17,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { type CatzMind, catzBehavior } from '../../src/behaviour/catz-behavior.ts';
+import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
 import { catzMomentChoice } from '../../src/behaviour/catz-moment.ts';
 
 const ROOT = process.cwd();
@@ -87,11 +87,61 @@ interface Win16 {
 /** Brain values about the thresholds the engine draws its lines at. */
 const LEVELS = [0, 9, 10, 25, 31, 32, 49, 50, 51, 74, 75, 76, 90, 100];
 
-/** Cases of the cat's brains, each a seed for C's `rand` and the 12 brains' values. */
-const BEHAVIOUR_CASES = Array.from({ length: 60 }, (_, n) => [
-  (n * 2654435761) % 2147483648,
-  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 7 + b * 5 + ((n * b) % 3)) % LEVELS.length]),
-]);
+/** Cases of the cat's brains, each a seed for C's `rand`, the 12 brains' values and their 12 centres. */
+const BEHAVIOUR_CASES = [
+  ...Array.from({ length: 60 }, (_, n) => [
+    (n * 2654435761) % 2147483648,
+    ...Array.from(
+      { length: 12 },
+      (_, b) => LEVELS[(n * 7 + b * 5 + ((n * b) % 3)) % LEVELS.length]
+    ),
+    ...Array.from(
+      { length: 12 },
+      (_, b) => LEVELS[(n * 11 + b * 3 + ((n + b) % 5)) % LEVELS.length]
+    ),
+  ]),
+  /* And each temperament -- liveliness, independence, seriousness and fear
+   * above or below 50 -- with its brains placid now and not, young and old. */
+  ...[
+    [20, 20, 20, 20],
+    [80, 20, 20, 20],
+    [20, 80, 80, 20],
+    [80, 80, 80, 20],
+    [50, 50, 50, 80],
+  ].flatMap(([l, i, s, f], t) =>
+    [0, 1, 2, 3].map((v) => {
+      const now = v % 2 ? [l, i, s, f] : [10, 10, 10, 10];
+      const [age, full] = v < 2 ? [20, 90] : [90, 40];
+      return [
+        1000003 * (t * 4 + v + 1),
+        now[0],
+        50,
+        now[1],
+        now[2],
+        full,
+        50,
+        30,
+        now[3],
+        0,
+        50,
+        0,
+        age,
+        l,
+        50,
+        i,
+        s,
+        50,
+        50,
+        30,
+        f,
+        0,
+        50,
+        0,
+        age,
+      ];
+    })
+  ),
+];
 
 /** Cases of the moment: a seed, the 12 brains' values, and `+0x35d2`. */
 const MOMENT_CASES = Array.from({ length: 120 }, (_, n) => [
@@ -190,21 +240,31 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 
       if (kind === 'case') {
         const [caseSeed, state, global, target, count] = values;
-        const brains = BEHAVIOUR_CASES.find(([s]) => s === caseSeed)!.slice(1);
-        mind = { brains, state, global, target, count };
+        const line = BEHAVIOUR_CASES.find(([s]) => s === caseSeed)!;
+        mind = {
+          brains: line.slice(1, 13),
+          centres: line.slice(13, 25),
+          state,
+          global,
+          target,
+          count,
+        };
         seed = BigInt(caseSeed);
-      } else if (kind === 'behave' && mind) {
+      } else if ((kind === 'behave' || kind === 'sound') && mind) {
         const [behaviour, theirs, after] = values;
         let state = seed;
         const random = (n: number) => {
           state = (state * 22695477n + 1n) & 0xffffffffn;
           return Number((state >> 16n) & 0x7fffn) % n;
         };
-        const ours = catzBehavior(mind, behaviour, random);
+        const ours =
+          kind === 'sound'
+            ? catzSound(mind, behaviour, random)
+            : catzBehavior(mind, behaviour, random);
 
         if (ours !== theirs || state !== BigInt(after)) {
           wrong.push(
-            `seed ${seed} brains ${mind.brains} behaviour ${behaviour}: ${ours} not ${theirs}${state !== BigInt(after) ? ', drew otherwise' : ''}`
+            `seed ${seed} brains ${mind.brains} centres ${mind.centres} ${kind} ${behaviour}: ${ours} not ${theirs}${state !== BigInt(after) ? ', drew otherwise' : ''}`
           );
         }
 
@@ -212,7 +272,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       }
     }
 
-    expect(answered).toBe(BEHAVIOUR_CASES.length * 29);
+    expect(answered).toBe(BEHAVIOUR_CASES.length * (29 + 13));
 
     /* And what each moment chose: no new global state, walking off; else
      * the first it was put in (the history's last before the marks). */

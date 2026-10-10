@@ -11,6 +11,9 @@ export interface CatzMind {
   /** The 12 brains' values (`XBrain::GetVal`, `+0x3a`), in `CATZ_BRAIN`'s order. */
   brains: number[];
 
+  /** And their centres (`+0x42`, `XBrain`'s slot `0x30`): its temperament, for its sounds. */
+  centres?: number[];
+
   /** Its state (`+0x2552`) and its global state (the machine `+0x2fba` points to). */
   state: number;
   global: number;
@@ -196,4 +199,97 @@ export function catzBehavior(
   }
 
   return answers[behaviour] ?? -1;
+}
+
+/**
+ * Which of two actions, by C's `rand` (seg48:1afb): the first for an even
+ * draw, the second for an odd one.
+ */
+function eitherOf(first: number, second: number, random: (n: number) => number) {
+  return random(2) === 0 ? first : second;
+}
+
+/**
+ * The action a sound is made with (`MapCatSound`, seg15:1259), by one of
+ * 12: by the cat's temperament -- its brains' centres, not where they are
+ * now -- frightened (fear 50 or more), independent (lively under 50,
+ * independence and seriousness 50 or more), lively (liveliness 50 or more,
+ * the rest under), placid (all under 50) or serious (all but fear 50 or
+ * more), first that fits, lively where none does; some by chance between
+ * two; three of them a kitten's where it is young. 12 answers whether it
+ * is placid now, by where its brains are. -1 for none.
+ */
+export function catzSound(mind: CatzMind, sound: number, random: (n: number) => number): number {
+  const at = (from: number[]) => (n: number) => from[n];
+  const centre = at(mind.centres ?? mind.brains);
+  const now = at(mind.brains);
+  const [L, I, S, fear] = [
+    CATZ_BRAIN.liveliness,
+    CATZ_BRAIN.independence,
+    CATZ_BRAIN.seriousness,
+    CATZ_BRAIN.fear,
+  ].map(centre);
+  const independent = L < 50 && I > 49 && S > 49 && fear < 50;
+  let lively = L > 49 && I < 50 && S < 50 && fear < 50;
+  const placid = L < 50 && I < 50 && S < 50 && fear < 50;
+  const serious = L > 49 && I > 49 && S > 49 && fear < 50;
+  const frightened = fear > 49;
+  const placidNow =
+    now(CATZ_BRAIN.liveliness) < 50 &&
+    now(CATZ_BRAIN.independence) < 50 &&
+    now(CATZ_BRAIN.seriousness) < 50 &&
+    now(CATZ_BRAIN.fear) < 50;
+  lively ||= !independent && !placid && !serious && !frightened;
+
+  const age = now(CATZ_BRAIN.age);
+  const percent = () => random(101);
+  const young = () => percent() < 100 - age && age < 50;
+  /* By temperament: frightened, independent, lively, placid, serious. */
+  const by = (...actions: (number | (() => number))[]) => {
+    const which = frightened ? 0 : independent ? 1 : lively ? 2 : placid ? 3 : serious ? 4 : -1;
+    const action = actions[which];
+    return action === undefined ? -1 : typeof action === 'function' ? action() : action;
+  };
+  const either = (first: number, second: number) => () => eitherOf(first, second, random);
+
+  switch (sound) {
+    case 1:
+      return by(0x193, either(399, 400), 400, 0x191, 0x192);
+    case 2:
+      return by(0x197, 0x194, 0x195, 0x196, 0x196);
+    case 3:
+      return by(0x19c, 0x198, 0x199, 0x19a, 0x19b);
+    case 4:
+      return by(0x19e, 0x19d, 0x19e, 0x19e, 0x19f);
+    case 5:
+      return by(0x1a4, 0x1a0, 0x1a1, 0x1a2, 0x1a3);
+    case 6:
+      return by(0x1a9, 0x1a5, 0x1a6, 0x1a7, 0x1a8);
+    case 7:
+      return young() ? 0x1c2 : by(0x1ae, 0x1aa, 0x1ab, 0x1ac, 0x1ad);
+    case 8:
+      return by(0x1b3, 0x1af, either(0x1b0, 0x1b3), 0x1b1, 0x1b2);
+    case 9: {
+      if (young()) {
+        return eitherOf(0x1c3, 0x1c2, random);
+      }
+
+      const full = now(CATZ_BRAIN.fullness);
+      const notStuffed = () => full < 81 || percent() > 9;
+
+      if (placidNow && !notStuffed()) {
+        return 0x1b7;
+      }
+
+      return by(either(0x1b9, 0x197), 0x1b4, 0x1b5, () => (notStuffed() ? 0x1b6 : 0x1b7), 0x1b8);
+    }
+    case 10:
+      return young() ? eitherOf(0x1c3, 0x1bb, random) : by(0x2d4, 0x1ba, 0x1bb, 0x1bc, 0x1bd);
+    case 11:
+      return by(either(0x1c1, 0x1b9), 0x1be, 0x1bf, 0x1c0, either(399, 0x192));
+    case 12:
+      return Number(placidNow);
+    default:
+      return -1;
+  }
 }

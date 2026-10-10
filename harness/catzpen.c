@@ -13,10 +13,12 @@
  * * `made`: what each step answered;
  * * `cat segment offset`: the cat, the root apt's 0x1d (`XApt::GetApt`, 9),
  *   its class's table `CatSprite`'s (seg16:499a);
- * * for each case in `CASES.TXT` (`seed` and 12 brains' values), `case seed
+ * * for each case in `CASES.TXT` (`seed`, 12 brains' values and their 12
+ *   centres, `+0x42`), `case seed
  *   state global target 35d6` -- its state, global state and two fields
  *   (`+0x35a4`, `+0x35d6`) -- and `behave p value seed` for each of its 29
- *   behaviours (`MapCatBehavior`, 481), C's `rand` seeded for each;
+ *   behaviours (`MapCatBehavior`, 481), and `sound p value seed` for each of
+ *   its 13 sounds (`MapCatSound`, 483), C's `rand` seeded for each;
  * * for each case in `MOMENT.TXT` (`seed`, 12 brains' values and
  *   `+0x35d2`), `moment seed global target 35d6 35d2 shelf saver c4 35a6`
  *   -- what the moment reads -- and after a tick of it, `chose state
@@ -169,6 +171,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a) = (int)number(file);
             }
 
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42) = (int)number(file);
+            }
+
             say("case %ld %d %d %d %d\r\n", seed, *(int __far *)(cat + 0x2552),
                 *(int __far *)(*(unsigned char __far *__far *)(cat + 0x2fba) + 0x3a),
                 *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35d6));
@@ -180,6 +186,16 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
                 value = ((MAPBEHAVIOR)ordinal(481))(cat, p);
                 say("behave %d %d %lu\r\n", p, value,
+                    *(unsigned long __far *)MK_FP(dgroup, 0x28ba));
+            }
+
+            /* And each of its 13 sounds' actions (`MapCatSound`, 483). */
+            for (p = 0; p < 13; p++) {
+                int value;
+
+                *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
+                value = ((MAPBEHAVIOR)ordinal(483))(cat, p);
+                say("sound %d %d %lu\r\n", p, value,
                     *(unsigned long __far *)MK_FP(dgroup, 0x28ba));
             }
         }
