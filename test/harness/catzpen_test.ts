@@ -21,6 +21,7 @@ import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz
 import {
   catzMomentBegin,
   catzMomentChoice,
+  catzMomentCursor,
   catzMomentLinger,
   type CatzMomentState,
 } from '../../src/behaviour/catz-moment.ts';
@@ -187,6 +188,16 @@ const ENTER_CASES = Array.from({ length: 60 }, (_, n) => [
   n % 4 === 0 ? 1 : 0,
 ]);
 
+/** Cases of the cursor about the cat in its moment: a seed, the brains' values and centres, its looks before it may go, idle action and sound owed. */
+const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
+  (n * 22695477 + 99991) % 2147483648,
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 5 + ((n * b) % 5)) % LEVELS.length]),
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 7 + b * 3 + ((n + b) % 6)) % LEVELS.length]),
+  n % 4,
+  n % 2 ? 0x93 : 0xc,
+  n % 3 === 0 ? 1 : 0,
+]);
+
 describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('keeps the parameters CATZ.EXE gives its playpen', async () => {
     if (existsSync(PARAMS)) {
@@ -234,6 +245,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       const directory = stage('CATZPEN');
       cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+      writeFileSync(
+        join(directory, 'CURSOR.TXT'),
+        CURSOR_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
+      );
       writeFileSync(
         join(directory, 'ENTER.TXT'),
         ENTER_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
@@ -501,6 +516,92 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     }
 
     expect(entered).toBe(ENTER_CASES.length);
+
+    /* And the cursor about: how the cat reacted, by what it left -- the
+     * first global state it was put in, attacking or affectionate; what it
+     * is after (`+0x35a6` 0x17, chasing; `+0x35a2` 1, running) -- or, none,
+     * the tick it lingered on. */
+    let cursorSeed = 0;
+    const reactions: Record<string, number> = {};
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'cursor') {
+        cursorSeed = values[0];
+      } else if (kind === 'cursored') {
+        const c = CURSOR_CASES.find(([s]) => s === cursorSeed)!;
+        const [looksBeforeGoing, idle, soundOwed] = c.slice(25);
+        const mind = {
+          brains: c.slice(1, 13),
+          centres: c.slice(13, 25),
+          state: 21,
+          global: 0,
+          target: 0,
+          count: 0,
+        };
+        const moment: CatzMomentState = {
+          looks: 0,
+          ticks: 4,
+          looksBeforeGoing,
+          mode: 0,
+          idle,
+          soundOwed,
+          box: { left: 0, top: 0, right: 0, bottom: 0 },
+          going: false,
+        };
+        let state = BigInt(cursorSeed);
+        const random = (n: number) => {
+          state = (state * 22695477n + 1n) & 0xffffffffn;
+          return Number((state >> 16n) & 0x7fffn) % n;
+        };
+        const reaction = catzMomentCursor(mind, moment, random);
+        const [theirState, ...rest2] = values;
+        const history = rest2.slice(0, 10);
+        const [x35a2, , x35a6, theirMode, ...after] = rest2.slice(10);
+        const marked = history.indexOf(-2) < 0 ? 10 : history.indexOf(-2);
+        const first = marked > 0 ? history[marked - 1] : null;
+        const theirs =
+          first === 1
+            ? 'attack'
+            : first === 14
+              ? 'affectionate'
+              : x35a6 === 0x17
+                ? 'chase'
+                : x35a2 === 1
+                  ? 'run'
+                  : theirState === 21
+                    ? 'linger'
+                    : `state ${theirState} global ${first}`;
+        let ours: string = reaction ?? 'linger';
+
+        if (!reaction) {
+          const done = catzMomentLinger(mind, moment, false, random);
+          const lingered = [
+            moment.mode,
+            moment.looks,
+            moment.ticks,
+            moment.idle,
+            Number(moment.going),
+            moment.look?.x ?? after[4],
+            moment.look?.y ?? after[5],
+            moment.soundOwed,
+            Number((done.sound?.action ?? -1) >= 0),
+          ].join(' ');
+          const theirLingered = [theirMode, ...after.slice(0, 7), Number(after[7] > 0)].join(' ');
+          ours = lingered === theirLingered ? 'linger' : `linger ${lingered} not ${theirLingered}`;
+        }
+
+        if (ours !== theirs) {
+          wrong.push(`cursor seed ${cursorSeed}: ${ours} not ${theirs}`);
+        }
+
+        reactions[theirs] = (reactions[theirs] ?? 0) + 1;
+      }
+    }
+
+    expect(Object.values(reactions).reduce((a, b) => a + b, 0)).toBe(CURSOR_CASES.length);
     expect(wrong).toEqual([]);
   }, 1800000);
 });

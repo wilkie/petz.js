@@ -267,3 +267,47 @@ export function catzMomentBegin(
     moment.mode = 2;
   }
 }
+
+/** What the cursor about makes a cat in its moment do: chase it, be affectionate, run away, attack, or none. */
+export type CatzCursorReaction = 'chase' | 'affectionate' | 'run' | 'attack';
+
+/**
+ * The cursor about while the cat minds it (`PetParams` `+0x46`, `+0x34ca`;
+ * `DoCatMoment`, seg25:2f36 to 314f): it watches hard (mode 3) and will look
+ * about at once, as though it had looked enough. Then, under its energy --
+ * and, independent, one time in ten -- it chases the cursor (`locomote`)
+ * or, one time in two, turns affectionate (global state 14); else, under
+ * its fear and one time in two, it runs away (`PreRunAway`, then
+ * `locomote`); else, under its seriousness and its liveliness, it attacks
+ * (global state 1). Otherwise it lingers on.
+ */
+export function catzMomentCursor(
+  mind: CatzMind,
+  moment: CatzMomentState,
+  random: (n: number) => number
+): CatzCursorReaction | undefined {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+
+  moment.mode = 3;
+  moment.ticks = 0;
+  moment.looks = moment.looksBeforeGoing;
+
+  if (
+    percent() < brain(CATZ_BRAIN.energy) &&
+    (brain(CATZ_BRAIN.independence) < 50 || percent() < 10)
+  ) {
+    return percent() < 50 ? 'chase' : 'affectionate';
+  }
+
+  if (percent() < brain(CATZ_BRAIN.fear) && percent() < 50) {
+    moment.mode = 1;
+    return 'run';
+  }
+
+  if (percent() < brain(CATZ_BRAIN.seriousness) && percent() < brain(CATZ_BRAIN.liveliness)) {
+    return 'attack';
+  }
+
+  return undefined;
+}

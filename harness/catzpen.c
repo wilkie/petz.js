@@ -28,6 +28,10 @@
  *   and once the moment has begun `entered` and its box, mode, looks, ticks
  *   to the next, what it does meanwhile, mind, look, sound owed and layered
  *   frames begun;
+ * * for each case in `CURSOR.TXT`, `cursor seed`, and after a tick of the
+ *   moment with the cursor about, `cursored` and the cat's state, the global
+ *   machine's history, `+0x35a2`, `+0x35a4`, `+0x35a6` and mode, then as
+ *   `lingered`;
  * * for each case in `LINGER.TXT`, `linger seed`, and after a tick of the
  *   moment `lingered` and its looks, ticks to the next, what it does
  *   meanwhile, whether its mind is made up, where it looks (`+0x34cc`,
@@ -382,6 +386,80 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             say("entered %d %d %d %d %d", *(int __far *)(cat + 0x350c),
                 *(int __far *)(cat + 0x350e), *(int __far *)(cat + 0x3510),
                 *(int __far *)(cat + 0x3512), *(int __far *)(cat + 0x3508));
+            say(" %d %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x3502),
+                *(int __far *)(cat + 0x3504), *(int __far *)(cat + 0x350a),
+                *(int __far *)(cat + 0x3514), *(int __far *)(cat + 0x34cc),
+                *(int __far *)(cat + 0x34ce), *(int __far *)(cat + 0x35a0), layered);
+        }
+
+        _lclose(file);
+    }
+
+    /* Each case in `CURSOR.TXT`: a line `seed`, the 12 brains' values and
+     * their centres, then the moment's looks before it may go (`+0x3506`),
+     * what it does meanwhile and a sound owed: the cat in its moment (21),
+     * minding the cursor (`+0x34ca`), the cursor about (`PetParams` `+0x46`),
+     * its script done and no layered action playing, nothing it is after
+     * (`+0x35a2`, `+0x35a4`, `+0x35a6`), the global machine's history marked;
+     * a tick of the moment (612); and `cursored` and its state, the global
+     * machine's history, `+0x35a2`, `+0x35a4`, `+0x35a6`, then as `lingered`
+     * with its mode. */
+    file = _lopen(DIRECTORY "\\CURSOR.TXT", OF_READ);
+
+    if (cat && file != HFILE_ERROR) {
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+        static const int fields[] = {0x3506, 0x350a, 0x35a0};
+
+        for (;;) {
+            long seed = number(file);
+            int f, layered;
+
+            if (seed < 0) {
+                break;
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a) = (int)number(file);
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42) = (int)number(file);
+            }
+
+            for (f = 0; f < 3; f++) {
+                *(int __far *)(cat + fields[f]) = (int)number(file);
+            }
+
+            ((RESETSTACK)ordinal(951))(cat, 2);
+            ((PLAIN_SPRITE)ordinal(957))(cat);
+            *(int __far *)(cat + 0x2552) = 21;
+            *(int __far *)(cat + 0x34ca) = 1;
+            *(int __far *)(params + 0x46) = 1;
+            *(int __far *)(cat + 0x3508) = 0;
+            *(int __far *)(cat + 0x3504) = 4;
+            *(int __far *)(cat + 0x3514) = 0;
+            *(int __far *)(cat + 0x35a2) = 0;
+            *(int __far *)(cat + 0x35a4) = 0;
+            *(int __far *)(cat + 0x35a6) = 0;
+
+            for (b = 0; b < 10; b++) {
+                *(int __far *)(global + 0x3e + 2 * b) = -2;
+            }
+
+            say("cursor %ld\r\n", seed);
+            *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
+            ((HANDLER)ordinal(612))(cat, params, 0, 0);
+            layered = ((REMAINING)ordinal(954))(cat);
+            *(int __far *)(params + 0x46) = 0;
+
+            say("cursored %d", *(int __far *)(cat + 0x2552));
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(global + 0x3e + 2 * b));
+            }
+
+            say(" %d %d %d %d", *(int __far *)(cat + 0x35a2), *(int __far *)(cat + 0x35a4),
+                *(int __far *)(cat + 0x35a6), *(int __far *)(cat + 0x3508));
             say(" %d %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x3502),
                 *(int __far *)(cat + 0x3504), *(int __far *)(cat + 0x350a),
                 *(int __far *)(cat + 0x3514), *(int __far *)(cat + 0x34cc),
