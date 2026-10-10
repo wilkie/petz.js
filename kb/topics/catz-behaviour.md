@@ -9,6 +9,7 @@ source:
     src/render/project.ts,
     src/formats/engine.ts,
     harness/catzbran.c,
+    harness/catzpen.c,
     test/harness/catzdll_test.ts,
   ]
 topics: [behaviour, drawing-a-dog]
@@ -61,6 +62,8 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 - [[measured]] CATZ.EXE runs on winbox.js to its playpen, and the cat can be read there a frame at a time: its `CatSprite` is found by its class's table (seg16:499a), and each frame drawn its states, action, frame, rectangle, fudgers and brains are kept. A kitten of the Adoption Kit starts in `initKit` (0x48), then sits in its basket (`inBaskets`, 0x49), peeks out of it and back (`peekFromBasket`, `endPeekFromBasket`, 0x4a and 0x4b) six times or so, then climbs out (`exitBasket`, 0x4c), walks (`locomote` and `performLocomote`, 22 and 23) and stalks (2). Walking, its rotation fudger turns it 5 a tick.
 
-## Not yet
+## The playpen harness
+
+- [[measured]] CATZDLL.DLL's playpen runs in the harness ([[guide:reproducing]]) as CATZ.EXE runs it (CATZ.WAD seg4:12eb on), around a cat adopted on the oracle: the parameters the game filled in (`PetParams`, its `ds:13f0`), taken from CATZ.EXE running on winbox.js as `InitPetModule` begins, with the driver's own window and instance; `InitGlobalPetzData`, a `PetModule` and `InitPetModule`, `XApt::InitTree`, and then a frame at a time `OpenScreenDrawPort`, `DoDrawFrame` and `CloseScreenDrawPort` (`harness/catzpen.c`). The cat is the root apt's 0x1d (`InitPetModule`, seg34:1353). On winbox.js's virtual clock a run is the same every time, the cat's states, actions, brains and C's `rand` all.
 
 The state handlers themselves -- among them how `locomote` and `performLocomote` choose the point and the walk, run or turn to get there -- the moment's choice, and the reflexes.
