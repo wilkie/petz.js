@@ -6,6 +6,7 @@ source:
   [
     src/behaviour/catz-behavior.ts,
     src/behaviour/catz-brain.ts,
+    src/behaviour/catz-moment.ts,
     src/behaviour/catz-stage.ts,
     src/render/project.ts,
     src/formats/engine.ts,
@@ -32,7 +33,7 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 - [[read out]] A `StateMachine` (seg42) keeps its state at `+0x3a`, the next at `+0x3c`, the last ten before it, and when the state began. Changing state (`BaseNewState`, seg42:15cc) calls the old state's handler leaving, then the new one's entering; a handler is `DoX(params, enter, leave)`, and one entering may change state again at once.
 - [[read out]] The cat has two: a global state (a `GlobalCatStateMachine`, which `+0x2fba` points to) of 24 — attacking, eating, idling, petting, moment, resting, grooming, playing, scared and the rest — and its own state (at `+0x2518`, its number at `+0x2552`) of 82 — stalking, pouncing, locomote, groom, sleep, petting, the basket states of the Adoption Kit (0x49 to 0x4e). Each machine's handler is a switch with one function a state.
 - [[measured]] Their names are in CATZDLL.DLL, resources of type 32516: 1000 the cat's states (`eKatState_NOTASTATE` …), 3000 its global states (`eKatGS_…`), 2000 and 4000 the mouse's. `readCatzStateNames` in `src/formats/engine.ts` reads them.
-- [[read out]] Most of a cat's activities end by entering the global state `moment` (8), whose handler (`DoCatMoment`, seg25:2ce9) chooses the next activity from the brain's numbers, by C's `rand`.
+- [[read out]] Most of a cat's activities end in its own state `moment` (21), whose handler (`DoCatMoment`, seg25:2ce9) chooses the next global state from the brain's numbers, by C's `rand` (below, "The moment").
 
 ## The brain
 
@@ -45,6 +46,19 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 - [[read out]] The state handlers ask the cat's brains what it is inclined to do through `MapCatBehavior` (seg15:0000; `CatSprite`'s slot `0x2a0`), by one of 29 behaviours, its answer a number, a yes (1) or no (0), or -1. Most are drawn from its liveliness, independence, seriousness and fear, each above or below 50 -- a temperament of sorts -- and some from its energy, fullness, fear, proper diet, catnip or age (`MapValue`, seg48:1cb2: `low + value × (high − low) / 100`, rounded toward 0); some by chance too, by C's `rand`; some by its state, its global state and what it is after. It works its answers out in pairs and blocks, and answers the one asked: behaviour 11 is asked again by 19.
 - [[measured]] `catzBehavior` (`src/behaviour/catz-behavior.ts`) answers every behaviour as the engine does, drawing C's `rand` the same number of times: 60 cats' brains about the engine's thresholds, asked of the cat in the playpen harness (below).
+
+## The moment
+
+- [[read out]] The cat's own state `moment` (21; `DoCatMoment`, seg25:2ce9) is how most activities end. Once its script is done and it has made up its mind to go (`+0x3514`), its fear decides first: unafraid (under 50), it walks off (`locomote`, 22) one time in two; afraid, only where a draw under `100 − fear` comes to 1, almost never.
+- [[read out]] Otherwise it chooses its next global state, `list[rand() % count]`, from a list of up to 31 it fills (`ResetStuffToDo`, `SetStuffToDo`, seg25:44dd and 4503; seg25:3576 to 3c1d):
+  - on the screen saver, resting twice, grooming, idling and the moment, and catnapping one time in two; or the moment alone, where it is so placed (`GetSpriteScreenArea`, 0x1d, is 3);
+  - where `PetParams` `+0xc4` is set, the Adoption Kit's state alone;
+  - eating alone, where it is less full than behaviour 11 says it would be, or, behaviour 18 willing, one time in four where nothing of kind 0xc is on the shelf and `+0x35d2` is set or one time in ten; resting alone, where it has less energy than behaviour 12;
+  - eating alone, one time in twenty, where it has an age;
+  - and otherwise: attacking, where three draws come under its seriousness, its liveliness and its energy, or else playing, under `100 − seriousness` and its energy; grooming; eating, under `100 − fullness`; grooming again, under its groom; resting, twice, each under `100 − energy`; being affectionate, three times over, under `100 − independence`; the global state it last chose to play (`+0x3516`, 8 the first time), under `100 − energy`; and idling, twice.
+- [[measured]] `catzMomentChoice` (`src/behaviour/catz-moment.ts`) makes the same choice as the engine for 120 cats' brains in the playpen harness, the cat walking off 21 times and choosing eating, resting, idling, grooming, being affectionate, playing and the moment. The screen saver, `+0xc4`, an empty shelf and attacking did not come up, and are read, not measured.
+
+## Where the cat is
 
 - [[read out]] A cat is where its rectangle is: the sprite's own (`+0x124` to `+0x12a`), which it is drawn by. `PopScript` (seg41:0052) moves it by two of the cat's `XBallz` methods, each from the state the cat was last placed in (a copy at `+0x246`) to the state it is in (`+0x678`), and neither moving it at all where the two are the same:
   - `MoveFrameRect` (seg47:1e64): the state before worked out again with the new one's angles (its rotation, tilt and roll, `+0x10` to `+0x14`), and the rectangle moved by how far its frame's own rectangle's top left moved from that to the new one's, and sized as the new one. So a frame carries the cat as its own coordinates do, and a turn turns it about where it stands.
@@ -71,3 +85,7 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 - [[measured]] CATZDLL.DLL's playpen runs in the harness ([[guide:reproducing]]) as CATZ.EXE runs it (CATZ.WAD seg4:12eb on), around a cat adopted on the oracle: the parameters the game filled in (`PetParams`, its `ds:13f0`), taken from CATZ.EXE running on winbox.js as `InitPetModule` begins, with the driver's own window and instance; `InitGlobalPetzData`, a `PetModule` and `InitPetModule`, `XApt::InitTree`, and then a frame at a time `OpenScreenDrawPort`, `DoDrawFrame` and `CloseScreenDrawPort` (`harness/catzpen.c`). The cat is the root apt's 0x1d (`InitPetModule`, seg34:1353). On winbox.js's virtual clock a run is the same every time, the cat's states, actions, brains and C's `rand` all.
 
 The state handlers themselves -- among them how `locomote` and `performLocomote` choose the point and the walk, run or turn to get there -- the moment's choice, and the reflexes.
+
+## Not yet
+
+The state handlers themselves -- among them how `locomote` and `performLocomote` choose the point and the walk, run or turn to get there -- and the reflexes. Of the moment, what it does before its mind is made up: how long it lingers, and where it looks meanwhile.

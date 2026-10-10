@@ -18,6 +18,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior } from '../../src/behaviour/catz-behavior.ts';
+import { catzMomentChoice } from '../../src/behaviour/catz-moment.ts';
 
 const ROOT = process.cwd();
 const WINBOX = join(ROOT, '..', 'winbox.js', 'test', 'win16', 'run-probe.ts');
@@ -92,6 +93,13 @@ const BEHAVIOUR_CASES = Array.from({ length: 60 }, (_, n) => [
   ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 7 + b * 5 + ((n * b) % 3)) % LEVELS.length]),
 ]);
 
+/** Cases of the moment: a seed, the 12 brains' values, and `+0x35d2`. */
+const MOMENT_CASES = Array.from({ length: 120 }, (_, n) => [
+  (n * 40503 * 65537 + 12345) % 2147483648,
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 3 + ((n * b) % 4)) % LEVELS.length]),
+  n % 3 === 0 ? 1 : 0,
+]);
+
 describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('keeps the parameters CATZ.EXE gives its playpen', async () => {
     if (existsSync(PARAMS)) {
@@ -139,6 +147,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       const directory = stage('CATZPEN');
       cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+      writeFileSync(
+        join(directory, 'MOMENT.TXT'),
+        MOMENT_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
+      );
       writeFileSync(
         join(directory, 'CASES.TXT'),
         BEHAVIOUR_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
@@ -201,6 +213,45 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     }
 
     expect(answered).toBe(BEHAVIOUR_CASES.length * 29);
+
+    /* And what each moment chose: no new global state, walking off; else
+     * the first it was put in (the history's last before the marks). */
+    let moment: number[] = [];
+    let chosen = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'moment') {
+        moment = values;
+      } else if (kind === 'chose') {
+        const [caseSeed, global, target, count, x35d2, shelf, saver, c4] = moment;
+        const brains = MOMENT_CASES.find(([s]) => s === caseSeed)!.slice(1, 13);
+        let state = BigInt(caseSeed);
+        const random = (n: number) => {
+          state = (state * 22695477n + 1n) & 0xffffffffn;
+          return Number((state >> 16n) & 0x7fffn) % n;
+        };
+        const ours = catzMomentChoice(
+          { brains, state: 21, global, target, count },
+          { shelf: shelf !== 0, screenSaver: saver !== 0, c4, x35d2, x3516: 0 },
+          random
+        );
+        const history = values.slice(2, 12);
+        const added = history.indexOf(-2) < 0 ? 10 : history.indexOf(-2);
+        const theirs = added === 0 ? 'locomote' : `global ${history[added - 1]}`;
+        const said = ours.locomote ? 'locomote' : `global ${ours.global}`;
+
+        if (said !== theirs) {
+          wrong.push(`moment seed ${caseSeed} brains ${brains}: ${said} not ${theirs}`);
+        }
+
+        chosen++;
+      }
+    }
+
+    expect(chosen).toBe(MOMENT_CASES.length);
     expect(wrong).toEqual([]);
   }, 1800000);
 });

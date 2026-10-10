@@ -17,6 +17,11 @@
  *   state global target 35d6` -- its state, global state and two fields
  *   (`+0x35a4`, `+0x35d6`) -- and `behave p value seed` for each of its 29
  *   behaviours (`MapCatBehavior`, 481), C's `rand` seeded for each;
+ * * for each case in `MOMENT.TXT` (`seed`, 12 brains' values and
+ *   `+0x35d2`), `moment seed global target 35d6 35d2 shelf saver c4 35a6`
+ *   -- what the moment reads -- and after a tick of it, `chose state
+ *   global` and the global machine's last ten states (`+0x3e` on), then
+ *   `+0x35a4`, `+0x35a6`, `+0x35ce`, `+0x3516`, `+0x33be` and `+0x3508`;
  * * `frame n state global action shown rotation left top right bottom seed`
  *   then its 12 brains' values, after each frame: its state (`+0x2552`),
  *   its global state (`+0x3a` of the machine `+0x2fba` points to), the
@@ -36,6 +41,10 @@ typedef int(__cdecl __far *DRAWFRAME)(void __far *module, void __far *params);
 typedef void __far *(__cdecl __far *GETPARAMS)(void);
 typedef unsigned char __far *(__cdecl __far *GETAPT)(void __far *apt, int id);
 typedef int(__cdecl __far *MAPBEHAVIOR)(void __far *cat, int parameter);
+typedef void(__cdecl __far *HANDLER)(void __far *cat, void __far *params, int enter, int leave);
+typedef void(__cdecl __far *RESETSTACK)(void __far *sprite, int type);
+typedef int(__cdecl __far *INSHELF)(void __far *apt, int type);
+typedef int(__cdecl __far *SCREENSAVER)(void __far *params);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
@@ -173,6 +182,70 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 say("behave %d %d %lu\r\n", p, value,
                     *(unsigned long __far *)MK_FP(dgroup, 0x28ba));
             }
+        }
+
+        _lclose(file);
+    }
+
+    /* Each case in `MOMENT.TXT`, a line `seed`, the 12 brains' values and
+     * `+0x35d2`: the cat in its moment (21, `+0x2552`) with its script done
+     * (`ResetStack`, 951), its mind made up to go (`+0x3514`), its count
+     * before looking about again not yet run down (`+0x3504`), the cursor
+     * not minded (`+0x34ca`); then a tick of the moment (`DoCatMoment`,
+     * 612), and what it chose. */
+    file = _lopen(DIRECTORY "\\MOMENT.TXT", OF_READ);
+
+    if (cat && file != HFILE_ERROR) {
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+
+        for (;;) {
+            long seed = number(file);
+            int shelf, saver;
+
+            if (seed < 0) {
+                break;
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a) = (int)number(file);
+            }
+
+            *(int __far *)(cat + 0x35d2) = (int)number(file);
+            ((RESETSTACK)ordinal(951))(cat, 2);
+            *(int __far *)(cat + 0x2552) = 21;
+            *(int __far *)(cat + 0x3504) = 5;
+            *(int __far *)(cat + 0x3502) = 0;
+            *(int __far *)(cat + 0x3514) = 1;
+            *(int __far *)(cat + 0x34ca) = 0;
+            *(int __far *)(cat + 0x3508) = 0;
+            *(int __far *)(cat + 0x3516) = 0;
+            shelf = ((INSHELF)ordinal(38))(cat, 0xc);
+            saver = ((SCREENSAVER)ordinal(1242))(params);
+
+            say("moment %ld %d %d %d %d %d %d %d %d\r\n", seed, *(int __far *)(global + 0x3a),
+                *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35d6),
+                *(int __far *)(cat + 0x35d2), shelf, saver, *(int *)(params + 0xc4),
+                *(int __far *)(cat + 0x35a6));
+
+            /* The global machine's history marked, so each state it is put in
+             * after shows: the first is what the moment chose. */
+            for (b = 0; b < 10; b++) {
+                *(int __far *)(global + 0x3e + 2 * b) = -2;
+            }
+
+            *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
+            ((HANDLER)ordinal(612))(cat, params, 0, 0);
+
+            say("chose %d %d", *(int __far *)(cat + 0x2552), *(int __far *)(global + 0x3a));
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(global + 0x3e + 2 * b));
+            }
+
+            say(" %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x35a4),
+                *(int __far *)(cat + 0x35a6), *(int __far *)(cat + 0x35ce),
+                *(int __far *)(cat + 0x3516), *(int __far *)(cat + 0x33be),
+                *(int __far *)(cat + 0x3508));
         }
 
         _lclose(file);
