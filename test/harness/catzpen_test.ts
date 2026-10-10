@@ -19,7 +19,7 @@ import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
 import { catzGlobalBegin } from '../../src/behaviour/catz-global.ts';
-import { catzStateTick } from '../../src/behaviour/catz-states.ts';
+import { catzCuriosities, catzStateTick } from '../../src/behaviour/catz-states.ts';
 import {
   catzMomentBegin,
   catzMomentChoice,
@@ -212,35 +212,70 @@ const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
 
 /**
  * Cases of a tick of the cat's own state: a seed, the brains' values and
- * centres, the state, the global state, `+0x3502` and `+0x34ca`. The last 192
- * pass the time, doze and sleep (with little energy, to stay so) and lie
- * tired with each temperament: liveliness, independence, seriousness and
- * fear each low or high.
+ * centres, the state, the global state, `+0x3502`, `+0x34ca`, `+0x3504`,
+ * `+0x1500` and 8 curiosities. Of the first 342, the last 192 pass the time,
+ * doze and sleep (with little energy, to stay so) and lie tired with each
+ * temperament: liveliness, independence, seriousness and fear each low or
+ * high. The 160 after look at things, with lists of curiosities of each
+ * kind and none.
  */
-const LOCAL_CASES = Array.from({ length: 342 }, (_, n) => {
-  const tempered = n >= 150;
-  const state = tempered
-    ? [19, 19, 19, 19, 27, 27, 26, 28, 28, 28, 28, 28][Math.floor((n - 150) / 16)]
-    : [26, 28, 28, 28, 29, 27, 27, 19, 19, 19][n % 10];
+const LOCAL_CASES = Array.from({ length: 502 }, (_, n) => {
+  const looking = n >= 342;
+  const tempered = n >= 150 && !looking;
+  const state = looking
+    ? 12
+    : tempered
+      ? [19, 19, 19, 19, 27, 27, 26, 28, 28, 28, 28, 28][Math.floor((n - 150) / 16)]
+      : [26, 28, 28, 28, 29, 27, 27, 19, 19, 19][n % 10];
   const brains = Array.from(
     { length: 12 },
     (_, b) => LEVELS[(n * 3 + b * 11 + ((n * b) % 6)) % LEVELS.length]
   );
 
-  if (tempered) {
+  if (tempered || looking) {
     [0, 2, 3, 7].forEach((b, bit) => (brains[b] = (n >> bit) & 1 ? 75 : 25));
-    brains[11] ||= 50;
+    brains[11] ||= looking && n % 9 === 0 ? 0 : 50;
     brains[1] = state === 27 || state === 28 ? 10 : brains[1];
   }
+
+  const kinds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 0x17, 0x1b, 14, 20];
+  const curiosities = Array.from({ length: 8 }, (_, k) =>
+    looking && k < (n % 7) + 1 ? kinds[(n * 5 + k * 7) % kinds.length] : 0
+  );
 
   return [
     (n * 1103515245 + 12345) % 2147483648,
     ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 7) % LEVELS.length]),
     state,
-    state === 26 && Math.floor(n / 20) % 2 ? 21 : 9,
-    tempered && state === 28 ? 0 : [0, 10, 25, 26, 40, 100, 101][n % 7],
-    Math.floor(n / 10) % 2 && !tempered ? 1 : 0,
+    looking ? 6 : state === 26 && Math.floor(n / 20) % 2 ? 21 : 9,
+    looking
+      ? Math.floor(n / 7) % 4
+      : tempered && state === 28
+        ? 0
+        : [0, 10, 25, 26, 40, 100, 101][n % 7],
+    Math.floor(n / 10) % 2 && !tempered && !looking ? 1 : 0,
+    looking && n % 5 === 0 ? 3 : 0,
+    looking && n % 3 === 0 ? 0x5f : 0,
+    ...curiosities,
+  ];
+});
+
+/** Cases of what the cat is curious about: a seed, and the brains' values and centres, the last 64 of each temperament. */
+const CURIOUS_CASES = Array.from({ length: 128 }, (_, n) => {
+  const brains = Array.from(
+    { length: 12 },
+    (_, b) => LEVELS[(n * 5 + b * 13 + ((n * b) % 7)) % LEVELS.length]
+  );
+
+  if (n >= 64) {
+    [0, 2, 3, 7].forEach((b, bit) => (brains[b] = (n >> bit) & 1 ? 75 : 25));
+  }
+
+  return [
+    (n * 69069 + 1013904223) % 2147483648,
+    ...brains,
+    ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 11 + b * 5) % LEVELS.length]),
   ];
 });
 
@@ -291,6 +326,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       const directory = stage('CATZPEN');
       cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+      writeFileSync(
+        join(directory, 'CURIOUS.TXT'),
+        CURIOUS_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
+      );
       writeFileSync(
         join(directory, 'LOCAL.TXT'),
         LOCAL_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
@@ -732,7 +771,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         [localSeed, localArea] = values;
       } else if (kind === 'localed') {
         const c = LOCAL_CASES.find(([s]) => s === localSeed)!;
-        const [state, global, count, passed] = c.slice(25);
+        const [state, global, count, passed, ticks, x1500] = c.slice(25);
         let seed = BigInt(localSeed);
         const random = (n: number) => {
           seed = (seed * 22695477n + 1n) & 0xffffffffn;
@@ -741,7 +780,15 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         const ours = catzStateTick(
           state,
           { brains: c.slice(1, 13), centres: c.slice(13, 25), state, global, target: 0, count: 0 },
-          { global, count, passed, area3: localArea === 3 },
+          {
+            global,
+            count,
+            passed,
+            area3: localArea === 3,
+            curiosities: c.slice(31),
+            ticks,
+            x1500,
+          },
           random
         );
         const first = (history: number[]) => {
@@ -752,8 +799,13 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         /* The actions pushed through the cat's slot `0xb8`, in turn: the
          * handler's first, then any its scripts went on to. (The engine's
          * own record of the last ten, `+0x14a8`, can be overrun in a tick.) */
-        const pushes = values[33];
-        const [theirPassed, after, idle, looks, , x35a6, x35a4] = values.slice(42);
+        const pushes = values[35];
+        /* And the global state asked for (the global machine's slot `0x1c`),
+         * the first, none entered: the tick held to its own step. */
+        const theirGlobal = values[33] ? values[34] : undefined;
+        const [theirTicks, , layered] = values.slice(44);
+        const [theirPassed, after, idle, looks, , x35a6, x35a4] = values.slice(47);
+        const looking = state === 12;
         const changed = ours.state !== undefined || ours.global !== undefined;
         const said = [
           ours.state,
@@ -762,20 +814,28 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           changed ? '' : ours.count,
           ours.pushed,
           ours.passed ?? passed,
-          ours.moment && [ours.moment.after, ours.moment.idle, ours.moment.looksBeforeGoing],
+          ours.moment && [
+            ours.moment.after,
+            ours.moment.idle,
+            ours.moment.looksBeforeGoing,
+            ours.moment.pushed,
+          ],
           ours.x35a6 && [ours.x35a6, ours.x35a4],
+          looking && [ours.ticks, ours.x35a4, Boolean(ours.sound)],
         ].join(' ');
         const theirs = [
-          ours.global === undefined ? first(values.slice(0, 10)) : undefined,
+          first(values.slice(0, 10)),
           /* A state entered may go on at once, as sleeping where it may not
            * sleep goes to idling: only this tick's own step is held. */
-          ours.state === undefined ? first(values.slice(10, 20)) : undefined,
+          ours.state === undefined ? theirGlobal : undefined,
           energy,
           changed ? '' : theirCount,
-          changed ? undefined : pushes ? values[34] : undefined,
+          changed ? undefined : pushes ? values[36] : undefined,
           state === 19 ? theirPassed : passed,
-          ours.moment && [after, idle, looks],
+          ours.moment && [after, idle, looks, pushes ? values[36] : undefined],
           ours.x35a6 && [x35a6, x35a4],
+          /* `+0x35a4` as the tick set it, where it did; else as the case before left it. */
+          looking && [theirTicks, ours.x35a4 === undefined ? undefined : x35a4, layered > 0],
         ].join(' ');
 
         if (said !== theirs) {
@@ -787,6 +847,52 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     }
 
     expect(ticked).toBe(LOCAL_CASES.length);
+
+    /* And what the cat is curious about, given what the shelf holds. */
+    const shelf = lines
+      .find((line) => line.startsWith('shelf '))!
+      .split(' ')
+      .slice(1)
+      .map(Number);
+    let curiousSeed = 0;
+    let curious = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'curiosities') {
+        curiousSeed = values[0];
+      } else if (kind === 'curious') {
+        const c = CURIOUS_CASES.find(([s]) => s === curiousSeed)!;
+        let seed = BigInt(curiousSeed);
+        const random = (n: number) => {
+          seed = (seed * 22695477n + 1n) & 0xffffffffn;
+          return Number((seed >> 16n) & 0x7fffn) % n;
+        };
+        const ours = catzCuriosities(
+          {
+            brains: c.slice(1, 13),
+            centres: c.slice(13, 25),
+            state: 12,
+            global: 6,
+            target: 0,
+            count: 0,
+          },
+          (kind) => shelf[kind] !== 0,
+          random
+        );
+        const theirs = values.slice(0, values.indexOf(0) < 0 ? 50 : values.indexOf(0));
+
+        if (ours.join(' ') !== theirs.join(' ')) {
+          wrong.push(`curious seed ${curiousSeed}: ${ours.join(' ')} not ${theirs.join(' ')}`);
+        }
+
+        curious++;
+      }
+    }
+
+    expect(curious).toBe(CURIOUS_CASES.length);
     expect(wrong).toEqual([]);
   }, 1800000);
 });

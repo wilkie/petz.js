@@ -4,7 +4,7 @@
  * handlers). See kb/topics/catz-behaviour.md ("States of its own").
  */
 
-import { type CatzMind, catzBehavior } from './catz-behavior.ts';
+import { type CatzMind, catzBehavior, catzSound } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 
 /** The cat's own states these model, by CATZDLL.DLL's numbers (`eKatState_…`). */
@@ -34,6 +34,71 @@ export interface CatzStateWorld {
 
   /** Whether the cat's place on the stage is 3 (`GetSpriteScreenArea`, 0x1d). */
   area3?: boolean;
+
+  /** Looking at things: what it is curious about (`+0x362c` on, to the first 0), ticks to its next look (`+0x3504`), and `+0x1500`. */
+  curiosities?: number[];
+  ticks?: number;
+  x1500?: number;
+}
+
+/**
+ * What the cat is curious about, looking at things (`GetCuriosities`,
+ * seg24:2285, the cat's slot `0x240`), by its temperament and what is out of
+ * the shelf, in turn: 0x1b where it is inclined to behaviour 25; 10 to 24;
+ * inclined to 18, one time in two, 0xf under half of what its age leaves of
+ * 100, one of 0xb, 0xc and 0xd, and, inclined to 26, 8 and 0xc; inclined to
+ * 15, up to 5 of 0x17, 5, 6, 7 and 9; each kind of sprite of 1 to 13, 15,
+ * 0x17 and 0x1b the shelf does not hold (`isSpriteInShelf`); and, inclined
+ * to 20, one time in four, 4.
+ */
+export function catzCuriosities(
+  mind: CatzMind,
+  inShelf: (kind: number) => boolean,
+  random: (n: number) => number
+): number[] {
+  const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+  const percent = () => random(101);
+  const list: number[] = [];
+
+  if (behave(25)) {
+    list.push(0x1b);
+  }
+
+  if (behave(24)) {
+    list.push(10);
+  }
+
+  if (behave(18) && percent() < 50) {
+    if (percent() < Math.trunc((100 - mind.brains[CATZ_BRAIN.age]) / 2)) {
+      list.push(0xf);
+    }
+
+    list.push([0xb, 0xc, 0xd][random(3)]);
+
+    if (behave(26)) {
+      list.push(8, 0xc);
+    }
+  }
+
+  if (behave(15)) {
+    const many = random(6);
+
+    for (let n = 0; n < many; n++) {
+      list.push([0x17, 5, 6, 7, 9][random(5)]);
+    }
+  }
+
+  for (const kind of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 0x17, 0x1b]) {
+    if (!inShelf(kind)) {
+      list.push(kind);
+    }
+  }
+
+  if (behave(20) && percent() < 25) {
+    list.push(4);
+  }
+
+  return list;
 }
 
 /** What `PreMoment` (seg25:42ff) readies the moment with. */
@@ -112,6 +177,10 @@ export interface CatzStateTick {
   /** `+0x35a6` and `+0x35a4`, where it set them. */
   x35a6?: number;
   x35a4?: number;
+
+  /** Looking at things: ticks to its next look, and the sound it made (`MapAndPlayCatSound` 7), its action. */
+  ticks?: number;
+  sound?: number;
 }
 
 /**
@@ -130,6 +199,15 @@ export interface CatzStateTick {
  *   asleep; under its energy it wakes (29); else one time in two it naps
  *   by its temperament (behaviours 26 and 24: 0x25c and 0x266), else 0xb4;
  * - waking (29; `DoCatWakeup`, seg30:0741): it idles (global 6);
+ * - looking at things (12; `DoCatLookAtObjects`, seg24:0263): between looks
+ *   it counts down; then, having looked at something, under its energy it
+ *   may go on to do something with the last -- play (15) with most kinds,
+ *   4 with 4, eat (3) with 0xb to 0xd, and 8 and 0xf where inclined to 26,
+ *   attack (1) 0x17 and 0x1b where inclined to 7; else it looks at the next
+ *   (`SetHeadTracking`), 9 to 58 ticks, and may make a sound (7) under a
+ *   quarter of what its seriousness leaves of 100. With nothing left to look
+ *   at, or without an age one time in two, it has its moment (8,
+ *   `catzPreMoment`). Its script done, it pushes 0xc after 0x5f, else 0x93;
  * - passing the time (19; `DoCatPassTheTime`, seg24:1896): having done
  *   something, one time in two it looks at things (12), or on the screen
  *   saver readies its moment (`catzPreMoment`) and has it (8); else it does
@@ -214,6 +292,71 @@ export function catzStateTick(
     }
     case CATZ_STATE.wakeup:
       return done({ global: 6 });
+    case CATZ_STATE.lookAtObjects: {
+      const list = world.curiosities ?? [];
+      const brain = (n: number) => mind.brains[n];
+      let ticks = world.ticks ?? 0;
+      const tick: Partial<CatzStateTick> = {};
+
+      if (ticks !== 0) {
+        ticks--;
+      } else {
+        if (count >= 1 && percent() < brain(CATZ_BRAIN.energy)) {
+          const kind = list[count - 1] ?? 0;
+          tick.x35a4 = kind;
+          const of = (n: number) => catzBehavior(mind, n, random) !== 0;
+          const global = (() => {
+            switch (kind) {
+              case 4:
+                return 4;
+              case 8:
+              case 0xf:
+                return of(26) ? 3 : 15;
+              case 0xb:
+              case 0xc:
+              case 0xd:
+                return 3;
+              case 0x17:
+              case 0x1b:
+                return of(7) ? 1 : 15;
+              case 1:
+              case 2:
+              case 3:
+              case 5:
+              case 6:
+              case 7:
+              case 9:
+              case 10:
+                return 15;
+            }
+          })();
+
+          if (global !== undefined) {
+            return done({ ...tick, global, ticks });
+          }
+        }
+
+        const kind = list[count] ?? 0;
+
+        if (kind === 0 || (brain(CATZ_BRAIN.age) === 0 && percent() < 50)) {
+          const moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, true, random);
+          return done({ ...tick, global: 8, moment, ticks });
+        }
+
+        count++;
+        ticks = random(50) + 9;
+
+        if (percent() < 70) {
+          random(20);
+        }
+
+        if (percent() < Math.trunc((100 - brain(CATZ_BRAIN.seriousness)) / 4)) {
+          tick.sound = catzSound(mind, 7, random);
+        }
+      }
+
+      return done({ ...tick, ticks, pushed: world.x1500 === 0x5f ? 0xc : 0x93 });
+    }
     case CATZ_STATE.passTheTime: {
       const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
 
