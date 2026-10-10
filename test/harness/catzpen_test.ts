@@ -210,19 +210,37 @@ const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
   Math.floor(n / 6) % 2,
 ]);
 
-/** Cases of a tick of the cat's own state: a seed, the brains' values and centres, the state, the global state and `+0x3502`. */
-const LOCAL_CASES = Array.from({ length: 90 }, (_, n) => {
-  const state = [26, 28, 28, 28, 29][n % 5];
+/**
+ * Cases of a tick of the cat's own state: a seed, the brains' values and
+ * centres, the state, the global state, `+0x3502` and `+0x34ca`. The last 192
+ * pass the time, doze and sleep (with little energy, to stay so) and lie
+ * tired with each temperament: liveliness, independence, seriousness and
+ * fear each low or high.
+ */
+const LOCAL_CASES = Array.from({ length: 342 }, (_, n) => {
+  const tempered = n >= 150;
+  const state = tempered
+    ? [19, 19, 19, 19, 27, 27, 26, 28, 28, 28, 28, 28][Math.floor((n - 150) / 16)]
+    : [26, 28, 28, 28, 29, 27, 27, 19, 19, 19][n % 10];
+  const brains = Array.from(
+    { length: 12 },
+    (_, b) => LEVELS[(n * 3 + b * 11 + ((n * b) % 6)) % LEVELS.length]
+  );
+
+  if (tempered) {
+    [0, 2, 3, 7].forEach((b, bit) => (brains[b] = (n >> bit) & 1 ? 75 : 25));
+    brains[11] ||= 50;
+    brains[1] = state === 27 || state === 28 ? 10 : brains[1];
+  }
+
   return [
     (n * 1103515245 + 12345) % 2147483648,
-    ...Array.from(
-      { length: 12 },
-      (_, b) => LEVELS[(n * 3 + b * 11 + ((n * b) % 6)) % LEVELS.length]
-    ),
+    ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 7) % LEVELS.length]),
     state,
-    state === 26 && n % 2 ? 21 : 9,
-    [0, 10, 25, 26, 40, 100, 101][n % 7],
+    state === 26 && Math.floor(n / 20) % 2 ? 21 : 9,
+    tempered && state === 28 ? 0 : [0, 10, 25, 26, 40, 100, 101][n % 7],
+    Math.floor(n / 10) % 2 && !tempered ? 1 : 0,
   ];
 });
 
@@ -703,6 +721,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
      * state it was put in, its energy, its count, and, where it stayed, the
      * action it pushed and began. */
     let localSeed = 0;
+    let localArea = 0;
     let ticked = 0;
 
     for (const line of lines) {
@@ -710,10 +729,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       const values = rest.map(Number);
 
       if (kind === 'local') {
-        localSeed = values[0];
+        [localSeed, localArea] = values;
       } else if (kind === 'localed') {
         const c = LOCAL_CASES.find(([s]) => s === localSeed)!;
-        const [state, global, count] = c.slice(25);
+        const [state, global, count, passed] = c.slice(25);
         let seed = BigInt(localSeed);
         const random = (n: number) => {
           seed = (seed * 22695477n + 1n) & 0xffffffffn;
@@ -722,18 +741,19 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         const ours = catzStateTick(
           state,
           { brains: c.slice(1, 13), centres: c.slice(13, 25), state, global, target: 0, count: 0 },
-          { global, count },
+          { global, count, passed, area3: localArea === 3 },
           random
         );
         const first = (history: number[]) => {
           const marked = history.indexOf(-2) < 0 ? 10 : history.indexOf(-2);
           return marked ? history[marked - 1] : undefined;
         };
-        /* The stored actions it pushed, newest first (`+0x14a8`): the
-         * handler's is the oldest, the transitions and scripts it led to
-         * after it. */
-        const stored = values.slice(23, 33).filter((action) => action !== -1);
         const [energy, theirCount] = values.slice(20);
+        /* The actions pushed through the cat's slot `0xb8`, in turn: the
+         * handler's first, then any its scripts went on to. (The engine's
+         * own record of the last ten, `+0x14a8`, can be overrun in a tick.) */
+        const pushes = values[33];
+        const [theirPassed, after, idle, looks, , x35a6, x35a4] = values.slice(42);
         const changed = ours.state !== undefined || ours.global !== undefined;
         const said = [
           ours.state,
@@ -741,6 +761,9 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           ours.energy,
           changed ? '' : ours.count,
           ours.pushed,
+          ours.passed ?? passed,
+          ours.moment && [ours.moment.after, ours.moment.idle, ours.moment.looksBeforeGoing],
+          ours.x35a6 && [ours.x35a6, ours.x35a4],
         ].join(' ');
         const theirs = [
           ours.global === undefined ? first(values.slice(0, 10)) : undefined,
@@ -749,7 +772,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           ours.state === undefined ? first(values.slice(10, 20)) : undefined,
           energy,
           changed ? '' : theirCount,
-          changed ? undefined : stored.at(-1),
+          changed ? undefined : pushes ? values[34] : undefined,
+          state === 19 ? theirPassed : passed,
+          ours.moment && [after, idle, looks],
+          ours.x35a6 && [x35a6, x35a4],
         ].join(' ');
 
         if (said !== theirs) {

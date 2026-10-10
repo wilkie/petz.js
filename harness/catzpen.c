@@ -28,10 +28,13 @@
  *   and once the moment has begun `entered` and its box, mode, looks, ticks
  *   to the next, what it does meanwhile, mind, look, sound owed and layered
  *   frames begun;
- * * for each case in `LOCAL.TXT`, `local seed`, and after a tick of the
- *   cat's state, `localed` and its own machine's history, the global
- *   machine's, its energy, `+0x3502`, the action playing (`+0x1502`) and
- *   the last ten actions pushed (`+0x14a8` on, newest first);
+ * * for each case in `LOCAL.TXT`, `local seed area` (`GetSpriteScreenArea`,
+ *   606, of 0x1d), and after a tick of the cat's state, `localed` and its
+ *   own machine's history, the global machine's, its energy, `+0x3502`, the
+ *   action playing (`+0x1502`) and the last ten actions pushed (`+0x14a8`
+ *   on, newest first), how many actions were pushed through the cat's
+ *   slot `0xb8` and the first 8 in turn, and the fields `PreMoment` and
+ *   passing the time set;
  * * for each case in `GLOBAL.TXT`, `global seed area` (`GetSpriteScreenArea`,
  *   606, of 0x1d), and once put in the global state, `globaled` and the
  *   cat's own machine's history (`+0x2556` on), the global machine's, its
@@ -52,6 +55,7 @@
  *   (`+0x688`), its rectangle (`+0x124`) and C's `rand` seed (`ds:28ba`).
  */
 #include <dos.h>
+#include <string.h>
 
 #include "catzdll.h"
 
@@ -74,10 +78,28 @@ typedef void(__cdecl __far *GLOBALSTATE)(void __far *machine, int state, void __
 typedef int(__cdecl __far *AREA)(void __far *cat, int kind);
 typedef void(__cdecl __far *DISPATCH)(void __far *machine, void __far *params, int enter, int leave);
 
+typedef void(__cdecl __far *PUSH)(void __far *sprite, int action, int variant);
+
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
 
 static unsigned char params[0x722];
+
+/* A copy of the cat's class's table, its slot `0xb8` (`PushStoredAction`)
+ * the recorder's; and the actions pushed through it, in turn. */
+static unsigned char table[0x300];
+static PUSH push;
+static int pushed[8], pushes;
+
+static void __cdecl __far __loadds record(void __far *sprite, int action, int variant)
+{
+    if (pushes < 8) {
+        pushed[pushes] = action;
+    }
+
+    pushes++;
+    push(sprite, action, variant);
+}
 
 /* The next number of a file, or -1 at its end. */
 static long number(HFILE file)
@@ -561,19 +583,20 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     }
 
     /* Each case in `LOCAL.TXT`: a line `seed`, the 12 brains' values and
-     * their centres, a state of the cat's own, a global state, and
-     * `+0x3502`: the cat in them as it is (`+0x2552`; `+0x3a` of the global
+     * their centres, a state of the cat's own, a global state, `+0x3502`
+     * and `+0x34ca`: the cat in them as it is (`+0x2552`; `+0x3a` of the global
      * machine), not entered, its script done, no layered action playing,
      * both machines' histories and the actions pushed marked; a tick of its
      * state (its machine's slot 4, as `BaseNewState` calls it); and
-     * `localed` and the two
-     * histories, its energy, `+0x3502`, the action playing and the
-     * actions pushed. */
+     * `localed` and the two histories, its energy, `+0x3502`, the action
+     * playing, the actions pushed, `+0x34ca`, the moment's `+0x3516`, `+0x350a`,
+     * `+0x3506` and `+0x3508`, and `+0x35a6` and `+0x35a4`. */
     file = _lopen(DIRECTORY "\\LOCAL.TXT", OF_READ);
 
     if (cat && file != HFILE_ERROR) {
         unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
         unsigned char __far *machine = cat + 0x2518;
+        void __far *original;
         DISPATCH dispatch = *(DISPATCH __far *)(*(unsigned char __far *__far *)machine + 4);
 
         for (;;) {
@@ -594,6 +617,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int __far *)(cat + 0x2552) = (int)number(file);
             *(int __far *)(global + 0x3a) = (int)number(file);
             *(int __far *)(cat + 0x3502) = (int)number(file);
+            *(int __far *)(cat + 0x34ca) = (int)number(file);
             ((RESETSTACK)ordinal(951))(cat, 2);
             ((PLAIN_SPRITE)ordinal(957))(cat);
             *(int __far *)(cat + 0x1502) = -1;
@@ -603,9 +627,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(cat + 0x2556 + 2 * b) = -2;
             }
 
-            say("local %ld\r\n", seed);
+            say("local %ld %d\r\n", seed, ((AREA)ordinal(606))(cat, 0x1d));
+            original = *(void __far *__far *)cat;
+            _fmemcpy(table, original, sizeof table);
+            push = *(PUSH *)(table + 0xb8);
+            *(PUSH *)(table + 0xb8) = record;
+            *(void __far *__far *)cat = table;
+            pushes = 0;
+
             *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
             dispatch(machine, params, 0, 0);
+            *(void __far *__far *)cat = original;
 
             say("localed");
 
@@ -624,7 +656,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 say(" %d", *(int __far *)(cat + 0x14a8 + 2 * b));
             }
 
-            say("\r\n");
+            say(" %d", pushes);
+
+            for (b = 0; b < 8; b++) {
+                say(" %d", b < pushes ? pushed[b] : -1);
+            }
+
+            say(" %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x34ca),
+                *(int __far *)(cat + 0x3516),
+                *(int __far *)(cat + 0x350a), *(int __far *)(cat + 0x3506),
+                *(int __far *)(cat + 0x3508), *(int __far *)(cat + 0x35a6),
+                *(int __far *)(cat + 0x35a4));
         }
 
         _lclose(file);
