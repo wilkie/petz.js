@@ -13,6 +13,10 @@
  * * `made`: what each step answered;
  * * `cat segment offset`: the cat, the root apt's 0x1d (`XApt::GetApt`, 9),
  *   its class's table `CatSprite`'s (seg16:499a);
+ * * for each case in `CASES.TXT` (`seed` and 12 brains' values), `case seed
+ *   state global target 35d6` -- its state, global state and two fields
+ *   (`+0x35a4`, `+0x35d6`) -- and `behave p value seed` for each of its 29
+ *   behaviours (`MapCatBehavior`, 481), C's `rand` seeded for each;
  * * `frame n state global action shown rotation left top right bottom seed`
  *   then its 12 brains' values, after each frame: its state (`+0x2552`),
  *   its global state (`+0x3a` of the machine `+0x2fba` points to), the
@@ -31,11 +35,32 @@ typedef int(__cdecl __far *PORT)(void __far *params);
 typedef int(__cdecl __far *DRAWFRAME)(void __far *module, void __far *params);
 typedef void __far *(__cdecl __far *GETPARAMS)(void);
 typedef unsigned char __far *(__cdecl __far *GETAPT)(void __far *apt, int id);
+typedef int(__cdecl __far *MAPBEHAVIOR)(void __far *cat, int parameter);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
 
 static unsigned char params[0x722];
+
+/* The next number of a file, or -1 at its end. */
+static long number(HFILE file)
+{
+    char c;
+    long n = 0;
+    int digits = 0, negative = 0;
+
+    while (_lread(file, &c, 1) == 1) {
+        if (c == '-') {
+            negative = 1;
+        } else if (c >= '0' && c <= '9') {
+            n = 10 * n + c - '0', digits++;
+        } else if (digits) {
+            break;
+        }
+    }
+
+    return digits ? (negative ? -n : n) : -1;
+}
 
 long FAR PASCAL WindowProc(HWND window, UINT message, WPARAM w, LPARAM l)
 {
@@ -115,6 +140,43 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
     cat = findCat();
     say("cat %u %u\r\n", FP_SEG(cat), FP_OFF(cat));
+
+    /* Each case in `CASES.TXT`, a line `seed` and the 12 brains' values: the
+     * brains set so (`+0x3a` of each), and then for each of its 29
+     * behaviours, C's `rand` seeded so, what `MapCatBehavior` answers (481)
+     * and where `rand` got to. */
+    file = _lopen(DIRECTORY "\\CASES.TXT", OF_READ);
+
+    if (cat && file != HFILE_ERROR) {
+        for (;;) {
+            long seed = number(file);
+            int p;
+
+            if (seed < 0) {
+                break;
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a) = (int)number(file);
+            }
+
+            say("case %ld %d %d %d %d\r\n", seed, *(int __far *)(cat + 0x2552),
+                *(int __far *)(*(unsigned char __far *__far *)(cat + 0x2fba) + 0x3a),
+                *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35d6));
+
+            for (p = 0; p < 29; p++) {
+                int value;
+
+                /* Answered first: the arguments of a call are worked out last to first. */
+                *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
+                value = ((MAPBEHAVIOR)ordinal(481))(cat, p);
+                say("behave %d %d %lu\r\n", p, value,
+                    *(unsigned long __far *)MK_FP(dgroup, 0x28ba));
+            }
+        }
+
+        _lclose(file);
+    }
 
     for (n = 0; n < FRAMES; n++) {
         /* The cursor at the stage's corner, away from the cat (`+0x108`, `+0x10a`). */

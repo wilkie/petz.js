@@ -4,6 +4,7 @@ name: How a cat behaves
 summary: How a Catz cat decides what to do — a tick of reflexes and two state machines over the script player, its states named in CATZDLL.DLL, and a brain of 12 numbers drawn back toward centres its breed sets.
 source:
   [
+    src/behaviour/catz-behavior.ts,
     src/behaviour/catz-brain.ts,
     src/behaviour/catz-stage.ts,
     src/render/project.ts,
@@ -40,7 +41,10 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 - [[read out]] `CatSprite::InitBrain` (seg16:1c30) makes them from the cat's lines' `[Default Factors]` — eleven lines of `centre, spread, rate`, which Catz reads whole (Linez `+0x1de8`, seg39:12c2) and averages with the kitten's ([[format:lnz]]): each brain's rate, then its centre, `centre + spread − 2 × (rand() % spread)` — so drawn about the breed's, a different cat each time — and its value there. An Adoption Kit kitten has no fleas, a diet half proper and all its energy.
 - [[measured]] The harness ([[guide:reproducing]]) makes a cat's brains in CATZDLL on winbox.js for five breeds at five ages, and `initCatzBrains` and `updateCatzBrain` (`src/behaviour/catz-brain.ts`), given C's `rand` from where the engine's was, make every value, centre and rate the same, and move them the same.
 
-## Where the cat is
+## What it is inclined to do
+
+- [[read out]] The state handlers ask the cat's brains what it is inclined to do through `MapCatBehavior` (seg15:0000; `CatSprite`'s slot `0x2a0`), by one of 29 behaviours, its answer a number, a yes (1) or no (0), or -1. Most are drawn from its liveliness, independence, seriousness and fear, each above or below 50 -- a temperament of sorts -- and some from its energy, fullness, fear, proper diet, catnip or age (`MapValue`, seg48:1cb2: `low + value × (high − low) / 100`, rounded toward 0); some by chance too, by C's `rand`; some by its state, its global state and what it is after. It works its answers out in pairs and blocks, and answers the one asked: behaviour 11 is asked again by 19.
+- [[measured]] `catzBehavior` (`src/behaviour/catz-behavior.ts`) answers every behaviour as the engine does, drawing C's `rand` the same number of times: 60 cats' brains about the engine's thresholds, asked of the cat in the playpen harness (below).
 
 - [[read out]] A cat is where its rectangle is: the sprite's own (`+0x124` to `+0x12a`), which it is drawn by. `PopScript` (seg41:0052) moves it by two of the cat's `XBallz` methods, each from the state the cat was last placed in (a copy at `+0x246`) to the state it is in (`+0x678`), and neither moving it at all where the two are the same:
   - `MoveFrameRect` (seg47:1e64): the state before worked out again with the new one's angles (its rotation, tilt and roll, `+0x10` to `+0x14`), and the rectangle moved by how far its frame's own rectangle's top left moved from that to the new one's, and sized as the new one. So a frame carries the cat as its own coordinates do, and a turn turns it about where it stands.

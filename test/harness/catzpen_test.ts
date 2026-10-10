@@ -17,6 +17,8 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { type CatzMind, catzBehavior } from '../../src/behaviour/catz-behavior.ts';
+
 const ROOT = process.cwd();
 const WINBOX = join(ROOT, '..', 'winbox.js', 'test', 'win16', 'run-probe.ts');
 const HARNESS = join(ROOT, 'oracle', 'build', 'harness');
@@ -81,6 +83,15 @@ interface Win16 {
   machine: { cpu: { core: { read8(selector: number, offset: number): number } } };
 }
 
+/** Brain values about the thresholds the engine draws its lines at. */
+const LEVELS = [0, 9, 10, 25, 31, 32, 49, 50, 51, 74, 75, 76, 90, 100];
+
+/** Cases of the cat's brains, each a seed for C's `rand` and the 12 brains' values. */
+const BEHAVIOUR_CASES = Array.from({ length: 60 }, (_, n) => [
+  (n * 2654435761) % 2147483648,
+  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 7 + b * 5 + ((n * b) % 3)) % LEVELS.length]),
+]);
+
 describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('keeps the parameters CATZ.EXE gives its playpen', async () => {
     if (existsSync(PARAMS)) {
@@ -118,27 +129,78 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   }, 1800000);
 
   it('runs a cat in its playpen, the same every time', async () => {
-    const directory = stage('CATZPEN');
-    cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
-    cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+    let text: string;
 
-    const { runProbe } = await import(WINBOX);
-    const result = await runProbe('catzpen', 1, false, true, 240, {
-      display: 'vga256',
-      virtual: true,
-      program: { directory, file: 'CATZPEN.EXE', folder: 'CATZPEN' },
-      extras: EXTRAS,
-    });
+    /* `HARNESS_REUSE=1`: the driver's last output read again, to work on the
+     * reimplementation without running the engine. */
+    if (process.env.HARNESS_REUSE && existsSync(join(HARNESS, 'CATZPEN.OUT'))) {
+      text = readFileSync(join(HARNESS, 'CATZPEN.OUT'), 'latin1');
+    } else {
+      const directory = stage('CATZPEN');
+      cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
+      cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+      writeFileSync(
+        join(directory, 'CASES.TXT'),
+        BEHAVIOUR_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
+      );
 
-    expect(result.failure ?? null).toBeNull();
-    const file = await result.fileSystem.open(['CATZPEN.OUT']);
-    const text = new TextDecoder().decode(new Uint8Array(await file.read(0, file.info.size)));
-    writeFileSync(join(HARNESS, 'CATZPEN.OUT'), text);
+      const { runProbe } = await import(WINBOX);
+      const result = await runProbe('catzpen', 1, false, true, 240, {
+        display: 'vga256',
+        virtual: true,
+        program: { directory, file: 'CATZPEN.EXE', folder: 'CATZPEN' },
+        extras: EXTRAS,
+      });
+
+      expect(result.failure ?? null).toBeNull();
+      const file = await result.fileSystem.open(['CATZPEN.OUT']);
+      text = new TextDecoder().decode(new Uint8Array(await file.read(0, file.info.size)));
+      writeFileSync(join(HARNESS, 'CATZPEN.OUT'), text);
+    }
+
     const lines = text.trim().split(/\r?\n/);
 
     expect(lines.slice(0, 3)).toEqual(['made global 0', 'made module 0', 'made tree']);
     expect(lines[3]).not.toBe('cat 0 0');
     expect(lines.filter((line) => line.startsWith('frame '))).toHaveLength(400);
     expect(readFileSync(PARAMS)).toHaveLength(0x722);
+
+    /* Each behaviour as MapCatBehavior answers it, and C's `rand` where it
+     * left it: drawn from each case's seed as Borland's runtime draws it. */
+    const wrong: string[] = [];
+    let mind: CatzMind | null = null;
+    let seed = 0n;
+    let answered = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'case') {
+        const [caseSeed, state, global, target, count] = values;
+        const brains = BEHAVIOUR_CASES.find(([s]) => s === caseSeed)!.slice(1);
+        mind = { brains, state, global, target, count };
+        seed = BigInt(caseSeed);
+      } else if (kind === 'behave' && mind) {
+        const [behaviour, theirs, after] = values;
+        let state = seed;
+        const random = (n: number) => {
+          state = (state * 22695477n + 1n) & 0xffffffffn;
+          return Number((state >> 16n) & 0x7fffn) % n;
+        };
+        const ours = catzBehavior(mind, behaviour, random);
+
+        if (ours !== theirs || state !== BigInt(after)) {
+          wrong.push(
+            `seed ${seed} brains ${mind.brains} behaviour ${behaviour}: ${ours} not ${theirs}${state !== BigInt(after) ? ', drew otherwise' : ''}`
+          );
+        }
+
+        answered++;
+      }
+    }
+
+    expect(answered).toBe(BEHAVIOUR_CASES.length * 29);
+    expect(wrong).toEqual([]);
   }, 1800000);
 });
