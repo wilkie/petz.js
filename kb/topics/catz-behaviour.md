@@ -76,6 +76,15 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
   - resting (9; `DoGSResting`, seg30:0000): the same effects; tired (26), or, `+0x3574` set, asleep (28).
 - [[measured]] `catzGlobalBegin` (`src/behaviour/catz-global.ts`) begins these three as the engine does for 90 cats in the playpen harness, every state of its own they may begin in among them.
 
+## States of its own
+
+- [[read out]] Each of the cat's own states is a handler (`DoCat…`) called each tick with whether it is being entered and left; most do their work only where `PopScript` answers that the script is done (bit 1), and then push the cat's next action or put it in another state. Resting's three:
+  - lying tired (26; `DoCatTired`, seg30:0113): where its global state is catnapping (21), it has its energy put at 20 and walks off (`locomote`, 22); else, under its energy (`rand() % 101`), it dozes (27), and otherwise sleeps (28);
+  - asleep (28; `DoCatSleep`, seg30:0426): entered, it pushes its sleeping and counts from 0 (`+0x3502`), but where one of its methods (slot `0x234`) answers 3 it is put back to idling at once. Every tick, script done or not, the count goes up to 101, and past it starts again with a little more energy. Its script done, under a quarter of its energy it wakes (29); else, asleep less than 26 ticks or nine times in ten, one time in two it dreams by its temperament -- the first of behaviours 28, 26, 25, 27 and 24 it is inclined to, actions 0x26e, 0x25a, 0x26d, 0x26f and 0x25b -- else sleeps on (0xd5); else it stirs (0x1d4);
+  - waking (29; `DoCatWakeup`, seg30:0741): it idles (global 6).
+- [[read out]] An action is pushed by its number (`PushStoredAction`, seg40:57bb, the cat's slot `0xb8`): the number and one of its scripts -- the one given, or one at random (`ScriptRand`) -- looked up in the breed's table of them (`+0x14bc`, 16 bytes each: how many scripts at `+0`, the position it ends in at `+4`, where its scripts are at `+0xc`). It is kept as the newest of the last ten pushed (`+0x14a8` on, newest first), the transition to it from where the cat stands is pushed before it (`PushTransitionToAction`, itself pushed so and so kept), and then `actionStart` (0x7532) and the number, the script, and `alignScripts` and `actionDone` (0x7533, 0x7531). So the action a state chose is the oldest of what one tick kept: the transitions, and any action its scripts go on to, come after it.
+- [[measured]] `catzStateTick` (`src/behaviour/catz-states.ts`) ticks these three as the engine does for 90 cats in the playpen harness, script done -- the states they go to, the energy and count, and the action each pushed; catnapping, waking, stirring and every dream among them. Where a state entered goes on at once, as sleep where the cat may not sleep, only the tick's own step is held.
+
 ## Where the cat is
 
 - [[read out]] A cat is where its rectangle is: the sprite's own (`+0x124` to `+0x12a`), which it is drawn by. `PopScript` (seg41:0052) moves it by two of the cat's `XBallz` methods, each from the state the cat was last placed in (a copy at `+0x246`) to the state it is in (`+0x678`), and neither moving it at all where the two are the same:
@@ -102,8 +111,6 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 - [[measured]] CATZDLL.DLL's playpen runs in the harness ([[guide:reproducing]]) as CATZ.EXE runs it (CATZ.WAD seg4:12eb on), around a cat adopted on the oracle: the parameters the game filled in (`PetParams`, its `ds:13f0`), taken from CATZ.EXE running on winbox.js as `InitPetModule` begins, with the driver's own window and instance; `InitGlobalPetzData`, a `PetModule` and `InitPetModule`, `XApt::InitTree`, and then a frame at a time `OpenScreenDrawPort`, `DoDrawFrame` and `CloseScreenDrawPort` (`harness/catzpen.c`). The cat is the root apt's 0x1d (`InitPetModule`, seg34:1353). On winbox.js's virtual clock a run is the same every time, the cat's states, actions, brains and C's `rand` all.
 
-The state handlers themselves -- among them how `locomote` and `performLocomote` choose the point and the walk, run or turn to get there -- the moment's choice, and the reflexes.
-
 ## Not yet
 
-The state handlers themselves -- among them how `locomote` and `performLocomote` choose the point and the walk, run or turn to get there -- and the reflexes. Of the moment, its turning to face the user.
+The other state handlers -- among them dozing (27), looking at things (12), exploring (13), passing the time (19), and how `locomote` and `performLocomote` choose the point and the walk, run or turn to get there -- and the reflexes. Of the moment, its turning to face the user; of sleep, what slot `0x234` answers.

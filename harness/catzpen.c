@@ -28,6 +28,10 @@
  *   and once the moment has begun `entered` and its box, mode, looks, ticks
  *   to the next, what it does meanwhile, mind, look, sound owed and layered
  *   frames begun;
+ * * for each case in `LOCAL.TXT`, `local seed`, and after a tick of the
+ *   cat's state, `localed` and its own machine's history, the global
+ *   machine's, its energy, `+0x3502`, the action playing (`+0x1502`) and
+ *   the last ten actions pushed (`+0x14a8` on, newest first);
  * * for each case in `GLOBAL.TXT`, `global seed area` (`GetSpriteScreenArea`,
  *   606, of 0x1d), and once put in the global state, `globaled` and the
  *   cat's own machine's history (`+0x2556` on), the global machine's, its
@@ -68,6 +72,7 @@ typedef int(__cdecl __far *REMAINING)(void __far *sprite);
 typedef void(__cdecl __far *PLAIN_SPRITE)(void __far *sprite);
 typedef void(__cdecl __far *GLOBALSTATE)(void __far *machine, int state, void __far *params);
 typedef int(__cdecl __far *AREA)(void __far *cat, int kind);
+typedef void(__cdecl __far *DISPATCH)(void __far *machine, void __far *params, int enter, int leave);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
@@ -550,6 +555,76 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             for (b = 0; b < 4; b++) {
                 *(int *)(params + 0x104 + 2 * b) = 0;
             }
+        }
+
+        _lclose(file);
+    }
+
+    /* Each case in `LOCAL.TXT`: a line `seed`, the 12 brains' values and
+     * their centres, a state of the cat's own, a global state, and
+     * `+0x3502`: the cat in them as it is (`+0x2552`; `+0x3a` of the global
+     * machine), not entered, its script done, no layered action playing,
+     * both machines' histories and the actions pushed marked; a tick of its
+     * state (its machine's slot 4, as `BaseNewState` calls it); and
+     * `localed` and the two
+     * histories, its energy, `+0x3502`, the action playing and the
+     * actions pushed. */
+    file = _lopen(DIRECTORY "\\LOCAL.TXT", OF_READ);
+
+    if (cat && file != HFILE_ERROR) {
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+        unsigned char __far *machine = cat + 0x2518;
+        DISPATCH dispatch = *(DISPATCH __far *)(*(unsigned char __far *__far *)machine + 4);
+
+        for (;;) {
+            long seed = number(file);
+
+            if (seed < 0) {
+                break;
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a) = (int)number(file);
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42) = (int)number(file);
+            }
+
+            *(int __far *)(cat + 0x2552) = (int)number(file);
+            *(int __far *)(global + 0x3a) = (int)number(file);
+            *(int __far *)(cat + 0x3502) = (int)number(file);
+            ((RESETSTACK)ordinal(951))(cat, 2);
+            ((PLAIN_SPRITE)ordinal(957))(cat);
+            *(int __far *)(cat + 0x1502) = -1;
+            for (b = 0; b < 10; b++) {
+                *(int __far *)(cat + 0x14a8 + 2 * b) = -1;
+                *(int __far *)(global + 0x3e + 2 * b) = -2;
+                *(int __far *)(cat + 0x2556 + 2 * b) = -2;
+            }
+
+            say("local %ld\r\n", seed);
+            *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
+            dispatch(machine, params, 0, 0);
+
+            say("localed");
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(cat + 0x2556 + 2 * b));
+            }
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(global + 0x3e + 2 * b));
+            }
+
+            say(" %d %d %d", *(int __far *)(cat + 0x2fda + 0x52 + 0x3a),
+                *(int __far *)(cat + 0x3502), *(int __far *)(cat + 0x1502));
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(cat + 0x14a8 + 2 * b));
+            }
+
+            say("\r\n");
         }
 
         _lclose(file);

@@ -19,6 +19,7 @@ import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
 import { catzGlobalBegin } from '../../src/behaviour/catz-global.ts';
+import { catzStateTick } from '../../src/behaviour/catz-states.ts';
 import {
   catzMomentBegin,
   catzMomentChoice,
@@ -209,6 +210,22 @@ const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
   Math.floor(n / 6) % 2,
 ]);
 
+/** Cases of a tick of the cat's own state: a seed, the brains' values and centres, the state, the global state and `+0x3502`. */
+const LOCAL_CASES = Array.from({ length: 90 }, (_, n) => {
+  const state = [26, 28, 28, 28, 29][n % 5];
+  return [
+    (n * 1103515245 + 12345) % 2147483648,
+    ...Array.from(
+      { length: 12 },
+      (_, b) => LEVELS[(n * 3 + b * 11 + ((n * b) % 6)) % LEVELS.length]
+    ),
+    ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 7) % LEVELS.length]),
+    state,
+    state === 26 && n % 2 ? 21 : 9,
+    [0, 10, 25, 26, 40, 100, 101][n % 7],
+  ];
+});
+
 describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('keeps the parameters CATZ.EXE gives its playpen', async () => {
     if (existsSync(PARAMS)) {
@@ -256,6 +273,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       const directory = stage('CATZPEN');
       cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+      writeFileSync(
+        join(directory, 'LOCAL.TXT'),
+        LOCAL_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
+      );
       writeFileSync(
         join(directory, 'GLOBAL.TXT'),
         GLOBAL_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
@@ -677,6 +698,69 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     }
 
     expect(begun).toBe(GLOBAL_CASES.length);
+
+    /* And each tick of a state of its own: the state it went to, the global
+     * state it was put in, its energy, its count, and, where it stayed, the
+     * action it pushed and began. */
+    let localSeed = 0;
+    let ticked = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'local') {
+        localSeed = values[0];
+      } else if (kind === 'localed') {
+        const c = LOCAL_CASES.find(([s]) => s === localSeed)!;
+        const [state, global, count] = c.slice(25);
+        let seed = BigInt(localSeed);
+        const random = (n: number) => {
+          seed = (seed * 22695477n + 1n) & 0xffffffffn;
+          return Number((seed >> 16n) & 0x7fffn) % n;
+        };
+        const ours = catzStateTick(
+          state,
+          { brains: c.slice(1, 13), centres: c.slice(13, 25), state, global, target: 0, count: 0 },
+          { global, count },
+          random
+        );
+        const first = (history: number[]) => {
+          const marked = history.indexOf(-2) < 0 ? 10 : history.indexOf(-2);
+          return marked ? history[marked - 1] : undefined;
+        };
+        /* The stored actions it pushed, newest first (`+0x14a8`): the
+         * handler's is the oldest, the transitions and scripts it led to
+         * after it. */
+        const stored = values.slice(23, 33).filter((action) => action !== -1);
+        const [energy, theirCount] = values.slice(20);
+        const changed = ours.state !== undefined || ours.global !== undefined;
+        const said = [
+          ours.state,
+          ours.global,
+          ours.energy,
+          changed ? '' : ours.count,
+          ours.pushed,
+        ].join(' ');
+        const theirs = [
+          ours.global === undefined ? first(values.slice(0, 10)) : undefined,
+          /* A state entered may go on at once, as sleeping where it may not
+           * sleep goes to idling: only this tick's own step is held. */
+          ours.state === undefined ? first(values.slice(10, 20)) : undefined,
+          energy,
+          changed ? '' : theirCount,
+          changed ? undefined : stored.at(-1),
+        ].join(' ');
+
+        if (said !== theirs) {
+          wrong.push(`local seed ${localSeed} state ${state}: ${said} not ${theirs}`);
+        }
+
+        ticked++;
+      }
+    }
+
+    expect(ticked).toBe(LOCAL_CASES.length);
     expect(wrong).toEqual([]);
   }, 1800000);
 });
