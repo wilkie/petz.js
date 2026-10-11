@@ -5,6 +5,7 @@
  */
 
 import { type CatzMind, catzBehavior, catzSound } from './catz-behavior.ts';
+import { CATZ_TURN } from '../render/raster.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 
 /** The cat's own states these model, by CATZDLL.DLL's numbers (`eKatState_…`). */
@@ -62,6 +63,35 @@ export interface CatzStateWorld {
 
   /** Whether the cat's place on the stage is 1 (`GetSpriteScreenArea`, 0x1d). */
   area1?: boolean;
+
+  /** Walking on: its draw rectangle, `+0x688` (the angle steering left it), `+0x35a8`, `+0x35f4`, `+0x35ee` and `+0x35a4`, whether the shelf holds a kind of sprite, and `PetParams` `+0xc4`. */
+  rect?: CatzBox;
+  x688?: number;
+  x35a8?: number;
+  x35f4?: number;
+  x35ee?: number;
+  x35a4?: number;
+  inShelf?: (kind: number) => boolean;
+  c4?: number;
+}
+
+/** The angle from one point to another (`PtToPtAngle`, seg14:1c93): `atan2` in 256ths of a turn, rounded toward 0 (seg48:17a2), the shorter way (`ShortestAngle`, seg48:1d00); 0x81 where they are one. */
+export function catzPtToPtAngle(from: { x: number; y: number }, to: { x: number; y: number }) {
+  const [dx, dy] = [from.x - to.x, from.y - to.y];
+
+  if (!dx && !dy) {
+    return 0x81;
+  }
+
+  const angle = Math.trunc((Math.atan2(dy, dx) * 256) / CATZ_TURN);
+
+  /* As `ShortestAngle` has it: below -128 it gives -256 less the angle, which `atan2` never asks of it. */
+  return angle > 128 ? angle - 256 : angle < -128 ? -256 - angle : angle;
+}
+
+/** How far apart two points are (`Dist`, seg48:1a21), rounded toward 0. */
+export function catzDist(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.trunc(Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2));
 }
 
 /** A rectangle, its edges. */
@@ -220,6 +250,13 @@ export interface CatzStateTick {
 
   /** All the actions it pushed, in turn. */
   pushes?: number[];
+
+  /** Walking on: the words that set its steering (`targetSprite4`, 0x756d: what to, the box's width and height, and its share), the layered action begun, the sound made, `+0x688` (before the steering moves it on) and `+0x35aa` where set, and its fullness after. */
+  steer?: number[];
+  layered?: number;
+  x688?: number;
+  x35aa?: number;
+  fullness?: number;
 
   /** Looking at things: ticks to its next look, and the sound it made (`MapAndPlayCatSound` 7), its action. */
   ticks?: number;
@@ -472,6 +509,10 @@ export function catzStateTick(
       tick.head!.push('track');
       return done({ ...tick, state: CATZ_STATE.performLocomote });
     }
+    case CATZ_STATE.performLocomote: {
+      const walked = catzWalkOn(mind, world, random);
+      return { ...walked, pushed: walked.pushes?.[0] };
+    }
     case CATZ_STATE.preExplore: {
       const stage = world.stage!;
       const { width, height } = world.size!;
@@ -558,4 +599,280 @@ export function catzStateTick(
     default:
       return done({});
   }
+}
+
+/**
+ * A tick of walking on (23; `DoCatPerformLocomote`, seg25:07c6), not
+ * entered, its script done, walking to its marker (`+0x35a6` 0x16), until
+ * it is there (`+0x35aa` 0): see `catzStateTick`.
+ */
+function catzWalkOn(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+  const percent = () => random(101);
+  const stage = world.stage!;
+  const { width, height } = world.size!;
+  const at = world.point!;
+  const G = world.global;
+  const tick: CatzStateTick = {
+    energy: brain(CATZ_BRAIN.energy),
+    fullness: brain(CATZ_BRAIN.fullness),
+    count: world.count,
+    pushes: [],
+    head: [],
+  };
+  const push = (action: number) => tick.pushes!.push(action);
+  const age = brain(CATZ_BRAIN.age);
+  let mark = { ...world.goal! };
+  let kind = world.x35a6 ?? 0x16;
+  let walkedTo = kind;
+
+  /* Its marker kept on the stage, but catnapping or in global states 16 and 17. */
+  if (G !== 21 && G !== 17 && G !== 16) {
+    const kept = {
+      x: Math.min(stage.right, Math.max(stage.left, mark.x)),
+      y: Math.min(stage.bottom, Math.max(stage.top, mark.y)),
+    };
+
+    if (kept.x !== mark.x || kept.y !== mark.y) {
+      mark = kept;
+      tick.marker = kept;
+      walkedTo = 0x16;
+    }
+  }
+
+  /* Past 20 strides, but catnapping or in 16 and 17, it gives up its goal for the stage's middle. */
+  const givenUp = world.count > 20 && G !== 21 && G !== 17 && G !== 16;
+  let g = G;
+
+  if (givenUp) {
+    kind = 0x16;
+    tick.x35a6 = 0x16;
+    mark = {
+      x: Math.trunc((stage.right - stage.left) / 2) + stage.left,
+      y: Math.trunc((stage.bottom - stage.top) / 2) + stage.top,
+    };
+    tick.marker = mark;
+    tick.head!.push('off');
+    tick.mode = 1;
+    g = 0;
+  } else {
+    tick.count = world.count + 1;
+  }
+
+  let x688 = world.x688 ?? 0;
+  const rect = world.rect!;
+  const onStage =
+    rect.right > stage.left &&
+    rect.left < stage.right &&
+    rect.bottom > stage.top &&
+    rect.top < stage.bottom;
+
+  if (!onStage) {
+    x688 = catzPtToPtAngle(at, mark);
+    tick.x688 = x688;
+  }
+
+  /* Steering (`targetSprite4`): the box it looks for its marker in, by its global state. */
+  let near = world.area1 ?? false;
+  let within = 0x60;
+  let chance = 0;
+  let box = [width, height, 4];
+  const notArea3 = !world.area3;
+
+  switch (g) {
+    case 3:
+    case 4:
+      box = [width * 2, height * 2, 4];
+      near = notArea3;
+      break;
+    case 8:
+      chance = 20;
+      break;
+    case 0xd:
+      box = world.c4 ? [width, height, 4] : [Math.trunc(width / 2), height, 10];
+      break;
+    case 0xe:
+      box = [width, height, 3];
+      break;
+    case 0xf:
+      box = [Math.trunc((width * 3) / 2), Math.trunc((height * 3) / 2), 3];
+      near = notArea3;
+      break;
+    case 0x10:
+      box = [width * 2, height * 2, 1];
+      near = true;
+      within = 0x80;
+      break;
+    case 0x14:
+      box = [width * 2, height * 2, 4];
+      break;
+    case 0x15:
+      box = [width * 2, height * 2, 4];
+      within = 0x80;
+      break;
+    case 0x16:
+      box = [width * 2, height * 2, 4];
+      within = 0x80;
+      break;
+  }
+
+  tick.steer = [0x756d, walkedTo, ...box, 0x756f];
+
+  const aligned = world.inShelf!(kind)
+    ? x688 <= -64 || x688 >= 64
+    : x688 >= -within && x688 <= within;
+
+  if (percent() < chance && aligned && near) {
+    if (G === 16) {
+      tick.state = 4;
+    } else if (givenUp) {
+      tick.global = 6;
+    } else {
+      /* Its transition to a neutral pose (`PushTransitionToNeutral` 0x6b), by its pose: not reimplemented. */
+      tick.x35aa = 1;
+      tick.pushes = undefined;
+    }
+
+    return tick;
+  }
+
+  /* On the way: the next stride. */
+  tick.x35aa = 0;
+  const distance = catzDist(mark, at);
+
+  if (behave(26) && percent() < Math.trunc((100 - brain(CATZ_BRAIN.energy)) / 2)) {
+    push(0x2a6);
+  }
+
+  if (world.area3) {
+    push(0x254);
+    return tick;
+  }
+
+  const fleas = brain(CATZ_BRAIN.fleas);
+
+  if (
+    fleas >= 50 &&
+    percent() < Math.trunc((fleas - 50) / 2) &&
+    G !== 21 &&
+    brain(CATZ_BRAIN.fear) < 75 &&
+    world.area1
+  ) {
+    if (fleas > catzBehavior(mind, 13, random) && percent() < 50) {
+      tick.global = 13;
+    } else {
+      push(0x26a);
+    }
+
+    return tick;
+  }
+
+  if (percent() < Math.trunc(brain(CATZ_BRAIN.catnipped) / 2) && world.area1) {
+    push(0x27b);
+    return tick;
+  }
+
+  const runs =
+    (width * 4 < distance && (G !== 13 || world.c4) && brain(CATZ_BRAIN.energy) > 20) ||
+    G === 16 ||
+    (G === 17 && (width * 3 < distance || world.x35f4)) ||
+    (G === 21 && world.x35ee === 10);
+
+  if (runs) {
+    if (percent() < Math.trunc((100 - age) / 20) + 1 && age !== 0 && world.area1) {
+      tick.state = 25;
+      return tick;
+    }
+
+    push(age < 50 ? 10 : 0x254);
+
+    /* Tired and hungry by it (`CatGetsTiredAndHungry` 1, 1, seg16:36fb). */
+    if (percent() < 100 - brain(CATZ_BRAIN.liveliness)) {
+      tick.energy = Math.max(0, tick.energy - 1);
+    }
+
+    if (percent() < 10) {
+      tick.fullness = Math.max(0, tick.fullness! - 1);
+    }
+
+    return tick;
+  }
+
+  if (
+    G === 15 &&
+    world.x35a4 !== 12 &&
+    world.area1 &&
+    percent() < Math.trunc((100 - age) / 5) + 5
+  ) {
+    tick.sound = catzSound(mind, 10, random);
+    push(age === 0 ? 0x2aa : 0xf1);
+    return tick;
+  }
+
+  if (brain(CATZ_BRAIN.fear) >= 50 && percent() < 15 && G !== 22 && G !== 17 && world.area1) {
+    tick.sound = catzSound(mind, 10, random);
+    push(age === 0 ? 0x2ab : 0x296);
+    return tick;
+  }
+
+  /* Its layered actions as it goes (`StartLocomotionLayering`, seg25:4521; `LayerAnimation`, seg15:1a24). */
+  const layer = (type: number, a: number, b: number) => {
+    if (tick.layered !== undefined) {
+      return;
+    }
+
+    const x1500 = world.x1500 ?? 0;
+    const matches = a === -1 || a === x1500 || b === -1 || b === x1500;
+    const [odds, behaviour, action] = [
+      [20, 28, 0x1d9],
+      [75, 24, 0x1e0],
+      [75, 25, 0x1e2],
+      [brain(CATZ_BRAIN.fear), 27, 0x287],
+    ][type];
+
+    if (percent() < odds && matches && behave(behaviour)) {
+      tick.layered = action;
+    }
+  };
+
+  if (brain(CATZ_BRAIN.energy) > 25) {
+    layer(0, 0x74, 0x76);
+  }
+
+  layer(1, -1, -1);
+  layer(2, -1, -1);
+  layer(3, -1, -1);
+
+  const near3 =
+    (G === 13 &&
+      !world.c4 &&
+      Math.abs(catzPtToPtAngle(at, world.goal!) - x688) <= 30 &&
+      width * 4 > distance &&
+      world.x35a8 !== 3) ||
+    (brain(CATZ_BRAIN.fear) >= 50 && width * 3 > distance && G !== 17 && G !== 22);
+
+  if (near3) {
+    push(age < 50 ? 3 : 0);
+    return tick;
+  }
+
+  if (
+    percent() < 100 - brain(CATZ_BRAIN.energy) &&
+    kind !== 0xc &&
+    kind !== 0xf &&
+    kind !== 0xb &&
+    G !== 22 &&
+    behave(26)
+  ) {
+    push(0x2af);
+  } else {
+    push(age < 50 ? 0xb7 : 5);
+  }
+
+  return tick;
 }

@@ -89,6 +89,7 @@ typedef void(__cdecl __far *PUSH)(void __far *sprite, int action, int variant);
 typedef long(__cdecl __far *TARGETPT)(void __far *apt, int space);
 typedef void __far *(__cdecl __far *GETKIN)(void __far *apt, int type);
 typedef void(__cdecl __far *DRAWRECT)(int __far *rect, void __far *apt, int space);
+typedef void(__cdecl __far *MOVETO)(void __far *apt, int space, int __far *point);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
@@ -158,6 +159,24 @@ static void __cdecl __far __loadds userward(void __far *sprite, int a, int b, in
 
     looked++;
     lookAtUser(sprite, a, b, c, d);
+}
+
+/* And its slot `0xa4`, which pushes words to its script: the first 6 words
+ * of the first call that steers it (`targetSprite4`, 0x756d), passed on with
+ * what else it was given. */
+typedef void(__cdecl __far *WORDS)(void __far *sprite, int a, int b, int c, int d, int e, int f,
+                                   int g, int h);
+static WORDS words;
+static int worded[6], wordings;
+
+static void __cdecl __far __loadds wording(void __far *sprite, int a, int b, int c, int d, int e,
+                                           int f, int g, int h)
+{
+    if (a == 0x756d && wordings++ == 0) {
+        worded[0] = a, worded[1] = b, worded[2] = c, worded[3] = d, worded[4] = e, worded[5] = f;
+    }
+
+    words(sprite, a, b, c, d, e, f, g, h);
 }
 
 static void __cdecl __far __loadds record(void __far *sprite, int action, int variant)
@@ -707,8 +726,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
      * `+0x34ca`, `+0x3504`, `+0x1500`, the first 8 curiosities
      * (`+0x362c` on, the rest 0) and the cursor's rectangle (`PetParams`
      * `+0x104` on), whether it is entering, `+0x3508`, `+0x35fc`,
-     * `+0x35a6`, `+0x35a2`, `+0x35ac`, and where it walks to (`+0x34cc`,
-     * `+0x34ce`): the cat in them as it is (`+0x2552`; `+0x3a` of the global
+     * `+0x35a6`, `+0x35a2`, `+0x35ac`, where it walks to (`+0x34cc`,
+     * `+0x34ce`; walking on, its marker put there), `+0x688`, `+0x35aa`,
+     * `+0x35a8`, `+0x35f4`, `+0x35ee` and `+0x35a4`: the cat in them as it is (`+0x2552`; `+0x3a` of the global
      * machine), entering or not, its script done, no layered action playing,
      * both machines' histories and the actions pushed marked; a tick of its
      * state (its machine's slot 4, as `BaseNewState` calls it); and
@@ -716,7 +736,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
      * playing, the actions pushed, `+0x3504`, `+0x1500`, the layered
      * frames begun, where it walks to (`+0x34cc`, `+0x34ce`) and how
      * (`+0x35a8`), the calls to its head, the target point of its kin 0x16
-     * and `+0x35ac`, `+0x34ca`, the moment's `+0x3516`, `+0x350a`,
+     * and `+0x35ac`, the first words pushed to its script (its slot `0xa4`),
+     * its fullness, `+0x688` and `+0x35aa`, `+0x34ca`, the moment's `+0x3516`, `+0x350a`,
      * `+0x3506` and `+0x3508`, and `+0x35a6` and `+0x35a4`. */
     file = _lopen(DIRECTORY "\\LOCAL.TXT", OF_READ);
 
@@ -724,7 +745,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
         unsigned char __far *machine = cat + 0x2518;
         void __far *original, __far *globalOriginal, __far *localOriginal;
-        int done, enter, x35fc, x35a2, x35ac;
+        int done, enter, x35fc, x35a2, x35ac, x688;
         DISPATCH dispatch = *(DISPATCH __far *)(*(unsigned char __far *__far *)machine + 4);
 
         for (;;) {
@@ -765,6 +786,24 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             x35ac = (int)number(file);
             *(int __far *)(cat + 0x34cc) = (int)number(file);
             *(int __far *)(cat + 0x34ce) = (int)number(file);
+            x688 = (int)number(file);
+            *(int __far *)(cat + 0x35aa) = (int)number(file);
+            *(int __far *)(cat + 0x35a8) = (int)number(file);
+            *(int __far *)(cat + 0x35f4) = (int)number(file);
+            *(int __far *)(cat + 0x35ee) = (int)number(file);
+            *(int __far *)(cat + 0x35a4) = (int)number(file);
+
+            /* Walking on (23), its marker (kin 0x16) put where it walks to
+             * (its method `0x44`, as `DoCatLocomote` puts it). */
+            if (*(int __far *)(cat + 0x2552) == 23) {
+                void __far *marker = ((GETKIN)ordinal(18))(cat, 0x16);
+
+                if (marker) {
+                    MOVETO move = *(MOVETO __far *)(*(unsigned char __far *__far *)marker + 0x44);
+
+                    move(marker, 0, (int __far *)(cat + 0x34cc));
+                }
+            }
 
             ((RESETSTACK)ordinal(951))(cat, 2);
             ((PLAIN_SPRITE)ordinal(957))(cat);
@@ -773,6 +812,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int __far *)(cat + 0x35fc) = x35fc;
             *(int __far *)(cat + 0x35a2) = x35a2;
             *(int __far *)(cat + 0x35ac) = x35ac;
+            *(int __far *)(cat + 0x688) = x688;
+
+            /* No box to find a target in (`+0x250e`, `+0x2510`; its share,
+             * `+0x2512`, 1, which `MakeFocusRect` divides by), so that
+             * `PopScript` never finds one there from a case before. */
+            *(int __far *)(cat + 0x250e) = 0;
+            *(int __far *)(cat + 0x2510) = 0;
+            *(int __far *)(cat + 0x2512) = 1;
 
             for (b = 0; b < 10; b++) {
                 *(int __far *)(cat + 0x14a8 + 2 * b) = -1;
@@ -789,17 +836,19 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             {
                 long point = ((TARGETPT)ordinal(10))(cat, 0);
                 void __far *kin = ((GETKIN)ordinal(18))(cat, 0x22);
-                int rect[4] = {0, 0, 0, 0};
+                int rect[4] = {0, 0, 0, 0}, own[4];
 
                 if (kin) {
                     ((DRAWRECT)ordinal(15))(rect, kin, 0);
                 }
 
-                say("stage %d %d %d %d %d %d %d %d %d %d %d %d %d\r\n",
+                ((DRAWRECT)ordinal(15))(own, cat, 0);
+                say("stage %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\r\n",
                     *(int __far *)MK_FP(dgroup, 0x2ba6), *(int __far *)MK_FP(dgroup, 0x2ba8),
                     *(int __far *)MK_FP(dgroup, 0x2baa), *(int __far *)MK_FP(dgroup, 0x2bac),
                     *(int __far *)(cat + 0x33c4), *(int __far *)(cat + 0x33c6), (int)point,
-                    (int)(point >> 16), kin != 0, rect[0], rect[1], rect[2], rect[3]);
+                    (int)(point >> 16), kin != 0, rect[0], rect[1], rect[2], rect[3], own[0], own[1],
+                    own[2], own[3]);
             }
             original = *(void __far *__far *)cat;
             _fmemcpy(table, original, sizeof table);
@@ -810,6 +859,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             lookAtUser = *(LOOK *)(table + 0x2e0);
             *(LOOK *)(table + 0x2e0) = userward;
             looked = 0;
+            words = *(WORDS *)(table + 0xa4);
+            *(WORDS *)(table + 0xa4) = wording;
+            wordings = 0;
             *(void __far *__far *)cat = table;
             pushes = 0;
             globalOriginal = *(void __far *__far *)global;
@@ -874,6 +926,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 say(" %d %d %d %d", marker != 0, (int)point, (int)(point >> 16),
                     *(int __far *)(cat + 0x35ac));
             }
+
+            /* The words that first steered it through slot `0xa4`, its
+             * fullness, `+0x688` and `+0x35aa`. */
+            say(" %d", wordings);
+
+            for (b = 0; b < 6; b++) {
+                say(" %d", wordings ? worded[b] : -1);
+            }
+
+            say(" %d %d %d", *(int __far *)(cat + 0x2fda + 4 * 0x52 + 0x3a), *(int __far *)(cat + 0x688),
+                *(int __far *)(cat + 0x35aa));
             say(" %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x34ca),
                 *(int __far *)(cat + 0x3516),
                 *(int __far *)(cat + 0x350a), *(int __far *)(cat + 0x3506),

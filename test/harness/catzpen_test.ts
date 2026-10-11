@@ -219,23 +219,27 @@ const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
  * doze and sleep (with little energy, to stay so) and lie tired with each
  * temperament: liveliness, independence, seriousness and fear each low or
  * high. The 160 after look at things, with lists of curiosities of each
- * kind and none; 120 explore, the cursor still or about; and the last 120
- * walk, entering or not, to points on and off the stage.
+ * kind and none; 120 explore, the cursor still or about; 120 ready a walk,
+ * entering or not, to points on and off the stage; and the last 120 walk on
+ * to their marker, by each global state but 1 and 17.
  */
-const LOCAL_CASES = Array.from({ length: 742 }, (_, n) => {
-  const walking = n >= 622;
+const LOCAL_CASES = Array.from({ length: 862 }, (_, n) => {
+  const walkingOn = n >= 742;
+  const walking = n >= 622 && !walkingOn;
   const exploring = n >= 502 && !walking;
   const looking = n >= 342 && !exploring;
   const tempered = n >= 150 && !looking;
-  const state = walking
-    ? 22
-    : exploring
-      ? 13
-      : looking
-        ? 12
-        : tempered
-          ? [19, 19, 19, 19, 27, 27, 26, 28, 28, 28, 28, 28][Math.floor((n - 150) / 16)]
-          : [26, 28, 28, 28, 29, 27, 27, 19, 19, 19][n % 10];
+  const state = walkingOn
+    ? 23
+    : walking
+      ? 22
+      : exploring
+        ? 13
+        : looking
+          ? 12
+          : tempered
+            ? [19, 19, 19, 19, 27, 27, 26, 28, 28, 28, 28, 28][Math.floor((n - 150) / 16)]
+            : [26, 28, 28, 28, 29, 27, 27, 19, 19, 19][n % 10];
   const brains = Array.from(
     { length: 12 },
     (_, b) => LEVELS[(n * 3 + b * 11 + ((n * b) % 6)) % LEVELS.length]
@@ -247,11 +251,17 @@ const LOCAL_CASES = Array.from({ length: 742 }, (_, n) => {
     brains[1] = state === 27 || state === 28 ? 10 : brains[1];
   }
 
+  /* Walking on, half without catnip, which would take a stride of its own one time in two, and with few fleas or many. */
+  if (walkingOn) {
+    brains[10] = n % 2 ? 0 : brains[10];
+    brains[6] = [0, 60, 90][n % 3];
+  }
+
   const kinds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 0x17, 0x1b, 14, 20];
   const left = [0, 50, 230, 400, 560][n % 5];
   const top = [0, 10, 30, 100, 300][(n >> 1) % 5];
   const cursor = exploring && n % 3 !== 0 ? [left, top, left + 10, top + 10] : [0, 0, 0, 0];
-  /* Walking: whether entering, the mode, `+0x35fc`, what it walks to, `+0x35a2`, `+0x35ac`, and the point. */
+  /* Walking: whether entering, the mode, `+0x35fc`, what it walks to, `+0x35a2`, `+0x35ac`, the point, `+0x688`, `+0x35aa`, `+0x35a8`, `+0x35f4`, `+0x35ee` and `+0x35a4`. */
   const walk = walking
     ? [
         n % 6 !== 5 ? 1 : 0,
@@ -262,8 +272,31 @@ const LOCAL_CASES = Array.from({ length: 742 }, (_, n) => {
         n % 8 === 0 ? 1 : 0,
         [-50, 100, 300, 500, 700][(n >> 1) % 5],
         [-20, 50, 200, 360, 500][(n >> 2) % 5],
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
       ]
-    : [0, 0, 0, 0, 0, 0, 0, 0];
+    : walkingOn
+      ? [
+          0,
+          1,
+          0,
+          0x16,
+          0,
+          0,
+          [-30, 60, 235, 400, 520][n % 5],
+          [-30, 40, 185, 300, 420][(n >> 1) % 5],
+          [-100, -64, -20, 0, 30, 64, 96, 127][n % 8],
+          0,
+          n % 3 === 0 ? 3 : 1,
+          0,
+          0,
+          n % 2 ? 12 : 0,
+        ]
+      : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const curiosities = Array.from({ length: 8 }, (_, k) =>
     looking && k < (n % 7) + 1 ? kinds[(n * 5 + k * 7) % kinds.length] : 0
   );
@@ -273,21 +306,25 @@ const LOCAL_CASES = Array.from({ length: 742 }, (_, n) => {
     ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 7) % LEVELS.length]),
     state,
-    walking
-      ? [6, 14, 21, 1, 9, 16][n % 6]
-      : looking || exploring
-        ? 6
-        : state === 26 && Math.floor(n / 20) % 2
-          ? 21
-          : 9,
-    looking
-      ? Math.floor(n / 7) % 4
-      : tempered && state === 28
-        ? 0
-        : [0, 10, 25, 26, 40, 100, 101][n % 7],
+    walkingOn
+      ? [6, 3, 8, 13, 14, 15, 16, 20, 21, 22, 9, 4][n % 12]
+      : walking
+        ? [6, 14, 21, 1, 9, 16][n % 6]
+        : looking || exploring
+          ? 6
+          : state === 26 && Math.floor(n / 20) % 2
+            ? 21
+            : 9,
+    walkingOn
+      ? [0, 5, 20, 21, 30][Math.floor(n / 12) % 5]
+      : looking
+        ? Math.floor(n / 7) % 4
+        : tempered && state === 28
+          ? 0
+          : [0, 10, 25, 26, 40, 100, 101][n % 7],
     Math.floor(n / 10) % 2 && !tempered && !looking ? 1 : 0,
     looking && n % 5 === 0 ? 3 : 0,
-    looking && n % 3 === 0 ? 0x5f : 0,
+    looking && n % 3 === 0 ? 0x5f : walkingOn ? [0, 0x74, 0x76, 5][n % 4] : 0,
     ...curiosities,
     ...cursor,
     ...walk,
@@ -792,6 +829,12 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     /* And each tick of a state of its own: the state it went to, the global
      * state it was put in, its energy, its count, and, where it stayed, the
      * action it pushed and began. */
+    /* What the shelf holds, by kind of sprite. */
+    const shelf = lines
+      .find((line) => line.startsWith('shelf '))!
+      .split(' ')
+      .slice(1)
+      .map(Number);
     let localSeed = 0;
     let localArea = 0;
     let room: number[] = [];
@@ -809,6 +852,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         const c = LOCAL_CASES.find(([s]) => s === localSeed)!;
         const [state, global, count, passed, ticks, x1500] = c.slice(25);
         const [enter, mode, x35fc, x35a6In, x35a2, x35acIn, wantX, wantY] = c.slice(43, 51);
+        const [x688In, , x35a8In, x35f4, x35ee, x35a4In] = c.slice(51, 57);
         let seed = BigInt(localSeed);
         const random = (n: number) => {
           seed = (seed * 22695477n + 1n) & 0xffffffffn;
@@ -821,7 +865,6 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             global,
             count,
             passed,
-            area3: localArea === 3,
             curiosities: c.slice(31, 39),
             ticks,
             x1500,
@@ -838,6 +881,14 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             x35ac: x35acIn,
             goal: { x: wantX, y: wantY },
             area1: localArea === 1,
+            area3: localArea === 3,
+            rect: { left: room[13], top: room[14], right: room[15], bottom: room[16] },
+            x688: x688In,
+            x35a8: x35a8In,
+            x35f4,
+            x35ee,
+            x35a4: x35a4In,
+            inShelf: (kind) => shelf[kind] !== 0,
           },
           random
         );
@@ -856,7 +907,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           values[53 + 2 * k] === 0xe0 ? (values[54 + 2 * k] ? 'track' : 'off') : 'user'
         );
         const [marked, markX, markY, x35ac] = values.slice(61, 65);
-        const [theirPassed, after, idle, looks, theirMode, x35a6, x35a4] = values.slice(65);
+        const [wordings, ...worded] = values.slice(65, 72);
+        const [fullness, , x35aa] = values.slice(72, 75);
+        const [theirPassed, after, idle, looks, theirMode, x35a6, x35a4] = values.slice(75);
+        const walkingOn = state === 23;
         const walking = state === 22;
         /* The handler's own pushes: its scripts may go on to more in the tick. */
         const pushedAll = values.slice(38, 38 + Math.min(pushes, 8, ours.pushes?.length || 8));
@@ -878,6 +932,17 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           ours.x35a6 !== undefined && [ours.x35a6, ours.x35a4],
           looking && [ours.ticks, ours.x35a4, Boolean(ours.sound)],
           !walking && ours.goal && [ours.goal.x, ours.goal.y, ours.explore],
+          walkingOn && [
+            ours.steer,
+            ours.layered !== undefined || Boolean(ours.sound),
+            ours.x35aa ?? 0,
+            ours.fullness,
+            ours.marker ? [ours.marker.x, ours.marker.y] : '',
+            ours.head,
+            ours.pushes,
+            ours.mode ?? mode,
+            ours.x35a6 ?? x35a6In,
+          ],
           walking && [
             ours.mode ?? mode,
             ours.goal ? [ours.goal.x, ours.goal.y] : [wantX, wantY],
@@ -895,13 +960,25 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           ours.state === undefined ? theirGlobal : undefined,
           energy,
           changed ? '' : theirCount,
-          changed ? undefined : pushes ? values[38] : undefined,
+          changed || (walkingOn && !ours.pushes) ? undefined : pushes ? values[38] : undefined,
           state === 19 ? theirPassed : passed,
           ours.moment && [after, idle, looks, pushes ? values[38] : undefined],
           ours.x35a6 !== undefined && [x35a6, ours.x35a4 === undefined ? undefined : x35a4],
           /* `+0x35a4` as the tick set it, where it did; else as the case before left it. */
           looking && [theirTicks, ours.x35a4 === undefined ? undefined : x35a4, layered > 0],
           !walking && ours.goal && [goalX, goalY, explore],
+          walkingOn && [
+            wordings ? worded : undefined,
+            layered > 0,
+            /* (`+0x688` the steering moves on as the script is popped.) */
+            x35aa,
+            fullness,
+            ours.marker && marked ? [markX, markY] : '',
+            heads,
+            ours.pushes && pushedAll,
+            theirMode,
+            x35a6,
+          ],
           walking && [
             theirMode,
             [goalX, goalY],
@@ -924,11 +1001,6 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     expect(ticked).toBe(LOCAL_CASES.length);
 
     /* And what the cat is curious about, given what the shelf holds. */
-    const shelf = lines
-      .find((line) => line.startsWith('shelf '))!
-      .split(' ')
-      .slice(1)
-      .map(Number);
     let curiousSeed = 0;
     let curious = 0;
 
