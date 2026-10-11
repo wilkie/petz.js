@@ -55,8 +55,8 @@ const EXTRAS = [
   ['WINDOWS', 'PFFOO.VAL'],
 ].map((parts) => ({ parts, file: join(DRIVE, ...parts) }));
 
-/** How many frames of a cat's day are followed. */
-const TRACE_FRAMES = 2000;
+/** How many frames of a cat's day are followed: 2,000, or as `TRACE_FRAMES` says. */
+const TRACE_FRAMES = Number(process.env.TRACE_FRAMES ?? 2000);
 
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
 const describeHarness = ready ? describe : describe.skip;
@@ -1074,7 +1074,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   }, 1800000);
 
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
-    const out = join(HARNESS, 'CATZTRACE.OUT');
+    const out = join(
+      HARNESS,
+      TRACE_FRAMES === 2000 ? 'CATZTRACE.OUT' : `CATZTRACE-${TRACE_FRAMES}.OUT`
+    );
     let text: string;
 
     if (process.env.HARNESS_REUSE && existsSync(out)) {
@@ -1085,12 +1088,19 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
       writeFileSync(join(directory, 'TRACE.TXT'), `${TRACE_FRAMES}\r\n`);
       const { runProbe } = await import(WINBOX);
-      const result = await runProbe('catztrace', 1, false, true, 7200, {
-        display: 'vga256',
-        virtual: true,
-        program: { directory, file: 'CATZPEN.EXE', folder: 'CATZPEN' },
-        extras: EXTRAS,
-      });
+      const result = await runProbe(
+        'catztrace',
+        1,
+        false,
+        true,
+        7200 * Math.ceil(TRACE_FRAMES / 2000),
+        {
+          display: 'vga256',
+          virtual: true,
+          program: { directory, file: 'CATZPEN.EXE', folder: 'CATZPEN' },
+          extras: EXTRAS,
+        }
+      );
 
       expect(result.failure ?? null).toBeNull();
       const file = await result.fileSystem.open(['CATZPEN.OUT']);
@@ -1105,7 +1115,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       ?.split(' ')
       .slice(1)
       .map(Number);
-    const { held, goneOn, wrong, tally } = followTrace(lines, (kind) =>
+    const { held, unread, wrong, tally } = followTrace(lines, (kind) =>
       shelf ? shelf[kind] !== 0 : false
     );
 
@@ -1115,15 +1125,15 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           ([state, [ticks, acted, compared]]) =>
             `state ${state}: ${ticks} ticks, ${acted} acted, ${compared} held`
         )
-        .join('\n') + `\n${held} held, ${goneOn} its script went on or unread`
+        .join('\n') + `\n${held} held, ${unread} unread`
     );
     expect(held).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
-  }, 3600000);
+  }, 14400000);
 });
 
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
-const FOLLOWED = new Set([12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32, 56, 57]);
+const FOLLOWED = new Set([2, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32, 56, 57]);
 
 /**
  * A cat's day held to the reimplementation: each `tick` the driver wrote
@@ -1135,8 +1145,9 @@ const FOLLOWED = new Set([12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32, 56, 57]);
  * its paw and the swat's fields) and `ticked` after (the global and own states asked
  * for, the actions pushed, its head's calls, its steering's words, and its
  * fields and brains again). Where the engine acted -- pushed an action or
- * asked for a state -- its script was mostly done, and the reimplementation,
- * given the same, should act the same: the first state asked for, the first global
+ * asked for a state, not as `PopScript` pushes the next action as its script
+ * goes on -- its script was done, and the reimplementation, given the same,
+ * should act the same: the first state asked for, the first global
  * state, and, where neither, the first action pushed. Where nothing was done,
  * its script went on, which `catzStateTick` does not model, and the tick is
  * only counted. Walking on, whether `PopScript` found what it walks to is
@@ -1146,7 +1157,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
   const wrong: string[] = [];
   const tally: Record<number, [number, number, number]> = {};
   let held = 0;
-  let goneOn = 0;
+  let unread = 0;
   let before: number[] | null = null;
 
   for (const line of lines) {
@@ -1173,7 +1184,9 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       global: values[0] ? values[1] : undefined,
       state: values[2] ? values[3] : undefined,
     };
-    const pushedFirst = values[4] ? values[5] : undefined;
+    /* The handler's own first push: not one its script made as it went on. */
+    const handlers = [0, 1, 2, 3].filter((k) => k < values[4] && values[9 + k] === 0);
+    const pushedFirst = handlers.length ? values[5 + handlers[0]] : undefined;
     const acted =
       asked.global !== undefined || asked.state !== undefined || pushedFirst !== undefined;
 
@@ -1181,10 +1194,17 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       continue;
     }
 
+    /* Entered: only readying a walk (22) and sharpening its claws (32) are
+     * reimplemented so. */
+    if (enter && state !== 22 && state !== 32) {
+      counts[1]++;
+      continue;
+    }
+
     counts[1]++;
 
-    /* Swatting, nothing it plays with about: not held. */
-    if ((state === 56 || state === 57) && b[91] === -1) {
+    /* Swatting or stalking, nothing it plays with about: not held. */
+    if ((state === 2 || state === 56 || state === 57) && b[91] === -1) {
       continue;
     }
 
@@ -1245,12 +1265,6 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
         globalHeld ? asked.global : '',
         changed ? '' : pushedFirst,
       ].join(' ');
-      /* The engine only pushed, and its script pushed it: its script went on. */
-      if (changed && asked.state === undefined && asked.global === undefined) {
-        goneOn++;
-        continue;
-      }
-
       counts[2]++;
       held++;
 
@@ -1316,16 +1330,18 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
             zone: b[103],
             x3596: b[104],
           },
+          layeredPlaying: b[81] > 0,
+          prey: { x: b[96], y: b[97] },
+          preyHeld: b[105] !== 0,
+          x35b8: b[106],
+          preyArea3: b[107] === 3,
         },
         random
       );
       const changed = ours.state !== undefined || ours.global !== undefined;
 
-      /* Where the engine's way reads what it never set, nothing is held;
-       * nor where the engine only pushed and the reimplementation, its
-       * script done, changes state: the engine's script pushed it, as it
-       * went on. */
-      if (ours.unread || (changed && asked.state === undefined && asked.global === undefined)) {
+      /* Where the engine's way reads what it never set, nothing is held. */
+      if (ours.unread) {
         return null;
       }
 
@@ -1355,7 +1371,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     );
 
     if (!ways.length) {
-      goneOn++;
+      unread++;
       continue;
     }
 
@@ -1369,5 +1385,5 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     }
   }
 
-  return { held, goneOn, wrong, tally };
+  return { held, unread, wrong, tally };
 }

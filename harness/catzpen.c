@@ -96,6 +96,7 @@ typedef void(__cdecl __far *ORIENT)(void __far *cat, int ball, int __far *at, in
                                     int __far *facing, int __far *delta);
 typedef int(__cdecl __far *MISS)(void __far *cat);
 typedef int(__cdecl __far *CURSTATE)(void __far *machine);
+typedef int(__cdecl __far *HELD)(void __far *cat, int kind);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
@@ -196,10 +197,15 @@ static void __cdecl __far __loadds wording(void __far *sprite, int a, int b, int
     words(sprite, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p);
 }
 
+static unsigned pushedBy[8];
+
 static void __cdecl __far __loadds record(void __far *sprite, int action, int variant)
 {
+    /* Who pushed it: the code segment it was called from, its return
+     * address's, just below its first argument on the stack. */
     if (pushes < 8) {
         pushed[pushes] = action;
+        pushedBy[pushes] = ((unsigned __far *)&sprite)[-1];
     }
 
     pushes++;
@@ -351,8 +357,14 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
         say(" %d %d %d %d %d %d %d %d %d", facing, delta[0], delta[1], at[0], at[1], toy[0], toy[1],
             miss, mouse);
-        say(" %d %d %d %d %d\r\n", *(int __far *)(cat + 0x358e), *(int __far *)(cat + 0x3590),
+        say(" %d %d %d %d %d", *(int __far *)(cat + 0x358e), *(int __far *)(cat + 0x3590),
             *(int __far *)(cat + 0x3592), *(int __far *)(cat + 0x3594), *(int __far *)(cat + 0x3596));
+
+        /* And whether the user holds what it plays with
+         * (`IsThisSpriteBeingHeld`, 521), the stalk's action (`+0x35b8`), and
+         * where what it plays with is on the stage (`GetSpriteScreenArea`). */
+        say(" %d %d %d\r\n", ((HELD)ordinal(521))(cat, *(int __far *)(cat + 0x35a4)),
+            *(int __far *)(cat + 0x35b8), ((AREA)ordinal(606))(cat, *(int __far *)(cat + 0x35a4)));
     }
 
     pushes = globalled = localled = looked = wordings = 0;
@@ -363,6 +375,15 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
     for (b = 0; b < 4; b++) {
         say(" %d", b < pushes ? pushed[b] : -1);
+    }
+
+    /* And whether each was pushed by its script going on: from
+     * `ScriptSprite`'s code (seg40, as `ResetStack`, 951; seg41, as
+     * `PopScript`, 992), not the handler's. */
+    for (b = 0; b < 4; b++) {
+        say(" %d", b < pushes ? pushedBy[b] == FP_SEG(ordinal(992)) ||
+                                    pushedBy[b] == FP_SEG(ordinal(951))
+                              : -1);
     }
 
     say(" %d", looked);

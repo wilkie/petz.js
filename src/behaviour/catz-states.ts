@@ -21,6 +21,7 @@ export const CATZ_STATE = {
   wakeup: 29,
   sharpenClaws: 32,
   swatting: 56,
+  stalking: 2,
   mayEndSwatting: 57,
 } as const;
 
@@ -83,6 +84,49 @@ export interface CatzStateWorld {
 
   /** Swatting: how what it plays with lies to its paw, and its swat's fields. */
   swat?: CatzSwat;
+
+  /** Whether a layered action plays already (`GetLayeredFramesRemaining`). */
+  layeredPlaying?: boolean;
+
+  /** Stalking: where its prey (`+0x35a4`) is, whether the user holds it, and the stalk's action (`+0x35b8`, -1 for none). */
+  prey?: { x: number; y: number };
+  preyHeld?: boolean;
+  preyArea3?: boolean;
+  x35b8?: number;
+}
+
+/**
+ * A layered action begun, where none plays (`LayerAnimation`, seg15:1a24,
+ * beginning): by its type, one time in five inclined to behaviour 28, 0x1d9;
+ * three times in four to 24, 0x1e0; three in four to 25, 0x1e2; under its
+ * fear, to 27, 0x287 -- where `+0x1500` is one of the two given, or either
+ * is -1.
+ */
+function catzLayerAnimation(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  tick: CatzStateTick,
+  type: number,
+  a: number,
+  b: number,
+  random: (n: number) => number
+) {
+  if (tick.layered !== undefined || world.layeredPlaying) {
+    return;
+  }
+
+  const x1500 = world.x1500 ?? 0;
+  const matches = a === -1 || a === x1500 || b === -1 || b === x1500;
+  const [odds, behaviour, action] = [
+    [20, 28, 0x1d9],
+    [75, 24, 0x1e0],
+    [75, 25, 0x1e2],
+    [mind.brains[CATZ_BRAIN.fear], 27, 0x287],
+  ][type];
+
+  if (random(101) < odds && matches && catzBehavior(mind, behaviour, random) !== 0) {
+    tick.layered = action;
+  }
 }
 
 /**
@@ -109,7 +153,7 @@ export interface CatzSwat {
   x3596: number;
 }
 
-/** The angle from one point to another (`PtToPtAngle`, seg14:1c93): `atan2` in 256ths of a turn, rounded toward 0 (seg48:17a2), the shorter way (`ShortestAngle`, seg48:1d00); 0x81 where they are one. */
+/** The angle from one point to another (`PtToPtAngle`, seg14:1c93): `atan2` in 256ths of a turn, rounded toward 0 (seg48:17a2), and a quarter turn more (`add ax,0x40` at seg14:1cec, as steering's aim has it), the shorter way (`ShortestAngle`, seg48:1d00); 0x81 where they are one. */
 export function catzPtToPtAngle(from: { x: number; y: number }, to: { x: number; y: number }) {
   const [dx, dy] = [from.x - to.x, from.y - to.y];
 
@@ -117,9 +161,9 @@ export function catzPtToPtAngle(from: { x: number; y: number }, to: { x: number;
     return 0x81;
   }
 
-  const angle = Math.trunc((Math.atan2(dy, dx) * 256) / CATZ_TURN);
+  const angle = Math.trunc((Math.atan2(dy, dx) * 256) / CATZ_TURN) + 64;
 
-  /* As `ShortestAngle` has it: below -128 it gives -256 less the angle, which `atan2` never asks of it. */
+  /* As `ShortestAngle` has it: below -128 it gives -256 less the angle, which a quarter turn more than `atan2` never asks of it. */
   return angle > 128 ? angle - 256 : angle < -128 ? -256 - angle : angle;
 }
 
@@ -433,6 +477,8 @@ export function catzStateTick(
       return world.enter ? done({ pushed: 0x13f }) : done({ global: 6 });
     case CATZ_STATE.swatting:
       return catzSwatting(mind, world, random);
+    case CATZ_STATE.stalking:
+      return catzStalking(mind, world, random);
     case CATZ_STATE.mayEndSwatting:
       return catzMayEndSwatting(mind, world, random);
     case CATZ_STATE.lookAtObjects: {
@@ -879,25 +925,9 @@ function catzWalkOn(
     return tick;
   }
 
-  /* Its layered actions as it goes (`StartLocomotionLayering`, seg25:4521; `LayerAnimation`, seg15:1a24). */
-  const layer = (type: number, a: number, b: number) => {
-    if (tick.layered !== undefined) {
-      return;
-    }
-
-    const x1500 = world.x1500 ?? 0;
-    const matches = a === -1 || a === x1500 || b === -1 || b === x1500;
-    const [odds, behaviour, action] = [
-      [20, 28, 0x1d9],
-      [75, 24, 0x1e0],
-      [75, 25, 0x1e2],
-      [brain(CATZ_BRAIN.fear), 27, 0x287],
-    ][type];
-
-    if (percent() < odds && matches && behave(behaviour)) {
-      tick.layered = action;
-    }
-  };
+  /* Its layered actions as it goes (`StartLocomotionLayering`, seg25:4521). */
+  const layer = (type: number, a: number, b: number) =>
+    catzLayerAnimation(mind, world, tick, type, a, b, random);
 
   if (brain(CATZ_BRAIN.energy) > 25) {
     layer(0, 0x74, 0x76);
@@ -1288,6 +1318,139 @@ function catzMayEndSwatting(
     case 8:
       tick.pushed = 0x40;
       break;
+  }
+
+  return tick;
+}
+
+/** `ShortestAngle` (seg48:1d00): an angle the shorter way, but below -128 -256 less it. */
+function catzShortestAngle(angle: number) {
+  return angle > 128 ? angle - 256 : angle < -128 ? -256 - angle : angle;
+}
+
+/**
+ * A tick of stalking (2; `DoCatStalking`, seg14:050f), its script done, by
+ * the angle it must turn to face its prey (`+0x35a4`; its angle to it less
+ * `+0x688`, the shorter way) and how far it is. Far (400 or more) and not
+ * serious (49 or less), it gives up and walks to it (22). Else, turned more
+ * than 100 away, it turns: 0x239, under half of what its energy leaves of
+ * 100, with an age; else 0x104 and 0x15. Then, the prey not placed so (3,
+ * `GetSpriteScreenArea` of it), facing it within 29 and nearer than 400 --
+ * or, nearer than 200, under its age -- unless a third of what its age leaves of 100
+ * says no, and not afraid or seven times in ten, it pounces: diving (8),
+ * where the prey is the cursor (0x17) or held, under `MapValue(0, 75, age)`,
+ * else pouncing (3); otherwise it pushes 0x103. The cat itself placed so
+ * (3), it makes for a corner away from the prey
+ * (`TargetACornerToAvoidSprite`, `+0x35a2` 1) and walks there (22); else it
+ * creeps on: its layered
+ * actions (the mouse's: one time in four with an age, inclined to behaviour
+ * 7, one of 0x2ff to 0x302; else `LayerAnimation` 0 and 3 by 0x6a or 0x14);
+ * three times in four it creeps -- seven in ten its creep (`+0x35b8`, 0x6a
+ * or 0x151 at random where none), steered at its angle, else 0xb1 or 0xb0
+ * by which way it is turned, and 0x15 -- tiring and hungering; else 0x15,
+ * and, inclined to behaviour 26, one time in ten 0x259 and idling (6).
+ */
+function catzStalking(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const tick: CatzStateTick = {
+    energy: brain(CATZ_BRAIN.energy),
+    fullness: brain(CATZ_BRAIN.fullness),
+    count: world.count,
+    pushes: [],
+  };
+  const push = (action: number) => {
+    tick.pushes!.push(action);
+    tick.pushed ??= action;
+  };
+  const at = world.point!;
+  const prey = world.prey!;
+  const angle = catzPtToPtAngle(at, prey);
+  const off = angle - (world.x688 ?? 0);
+  const turn = catzShortestAngle(off);
+  const distance = catzDist(at, prey);
+  const age = brain(CATZ_BRAIN.age);
+
+  if (distance >= 401 && brain(CATZ_BRAIN.seriousness) <= 49) {
+    tick.x35a6 = world.x35a4;
+    tick.state = 0x16;
+    return tick;
+  }
+
+  if (turn > 100 || turn < -100) {
+    if (percent() < Math.trunc((100 - brain(CATZ_BRAIN.energy)) / 2) && age !== 0) {
+      push(0x239);
+    } else {
+      push(0x104);
+      push(0x15);
+    }
+
+    return tick;
+  }
+
+  /* Where the prey, not the cat, is placed so (3), it does not creep up. */
+  if (!world.preyArea3) {
+    let creeps = turn < -29 || turn > 29 || distance > 399;
+
+    if (creeps && distance < 200 && percent() < age) {
+      creeps = false;
+    }
+
+    if (!creeps) {
+      if (
+        percent() >= Math.trunc((100 - age) / 3) &&
+        (brain(CATZ_BRAIN.fear) < 50 || percent() > 29)
+      ) {
+        const dives =
+          (world.x35a4 === 0x17 || world.preyHeld) && percent() < mapCatzValue(0, 75, age);
+        tick.state = dives ? 8 : 3;
+        return tick;
+      }
+
+      push(0x103);
+    }
+  }
+
+  if (world.area3) {
+    tick.x35a6 = world.x35a4;
+    tick.state = 0x16;
+    return tick;
+  }
+
+  if (world.x35a4 === 0x1b && percent() < 25 && age !== 0 && catzBehavior(mind, 7, random) !== 0) {
+    tick.layered = [0x2ff, 0x300, 0x301, 0x302][random(4)];
+  } else {
+    catzLayerAnimation(mind, world, tick, 0, 0x6a, 0x14, random);
+    catzLayerAnimation(mind, world, tick, 3, 0x6a, 0x14, random);
+  }
+
+  if (percent() < 75) {
+    if (percent() < 70) {
+      const creep = world.x35b8 === -1 ? [0x6a, 0x151][random(2)] : world.x35b8!;
+      push(creep);
+    } else {
+      push(off < 0 ? 0xb1 : 0xb0);
+      push(0x15);
+    }
+
+    if (percent() < 100 - brain(CATZ_BRAIN.liveliness)) {
+      tick.energy = Math.max(0, tick.energy - 1);
+    }
+
+    if (percent() < 10) {
+      tick.fullness = Math.max(0, tick.fullness! - 1);
+    }
+  } else {
+    push(0x15);
+
+    if (catzBehavior(mind, 26, random) !== 0 && percent() < 10) {
+      push(0x259);
+      tick.global = 6;
+    }
   }
 
   return tick;
