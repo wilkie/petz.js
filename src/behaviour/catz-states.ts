@@ -916,7 +916,9 @@ function catzArrive(
     y: Math.trunc((stage.bottom - stage.top) / 2) + stage.top,
   };
   const age = brain(CATZ_BRAIN.age);
+  /* The moment readied (`PreMoment`, after it idling, 0x93 meanwhile, not watching) and had: where the switch goes on to seg25:21aa. */
   const moment = () => {
+    tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
     tick.global = 8;
   };
 
@@ -983,6 +985,19 @@ function catzArrive(
       }
 
       return moment();
+    case 0xf:
+      if (moved) {
+        return moment();
+      }
+
+      tick.state =
+        world.x688! >= -32 &&
+        world.x688! <= 32 &&
+        (world.x35a6 === 0xc || world.x35a6 === 8) &&
+        world.inShelf!(world.x35a6)
+          ? 0x16
+          : 0x38;
+      return;
     case 0x10:
       if (moved) {
         return moment();
@@ -1018,10 +1033,7 @@ function catzArrive(
       tick.x33be = 3;
       tick.global = 0x16;
       return;
-    default: {
-      /* Its moment readied, after it idling, 0x93 meanwhile, not watching (`PreMoment`). */
-      tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
-      tick.global = 8;
-    }
+    default:
+      return moment();
   }
 }

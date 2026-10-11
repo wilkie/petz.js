@@ -42,6 +42,8 @@
  *   actions were pushed through the cat's
  *   slot `0xb8` and the first 8 in turn, and the fields `PreMoment` and
  *   passing the time set;
+ * * following its day (`TRACE.TXT`, the number of frames, and no cases),
+ *   `tick` and `ticked` for each tick of a state of its own;
  * * for each case in `GLOBAL.TXT`, `global seed area` (`GetSpriteScreenArea`,
  *   606, of 0x1d), and once put in the global state, `globaled` and the
  *   cat's own machine's history (`+0x2556` on), the global machine's, its
@@ -96,9 +98,11 @@ typedef void(__cdecl __far *MOVETO)(void __far *apt, int space, int __far *point
 
 static unsigned char params[0x722];
 
-/* A copy of the cat's class's table, its slot `0xb8` (`PushStoredAction`)
+/* A copy of the cat's class's table (0x600 bytes, more than its slots: a
+ * slot past a shorter copy is called in a cat's day), its slot `0xb8`
+ * (`PushStoredAction`)
  * the recorder's; and the actions pushed through it, in turn. */
-static unsigned char table[0x300];
+static unsigned char table[0x600];
 static PUSH push;
 static int pushed[8], pushes;
 
@@ -108,15 +112,20 @@ static int pushed[8], pushes;
 static unsigned char globalTable[0x40];
 static int globals[4], globalled;
 
+/* Following a cat's day, each keeper passes the state on to be entered. */
+static GLOBALSTATE passGlobal, passLocal;
+
 static void __cdecl __far __loadds keep(void __far *machine, int state, void __far *params)
 {
-    (void)machine, (void)params;
-
     if (globalled < 4) {
         globals[globalled] = state;
     }
 
     globalled++;
+
+    if (passGlobal) {
+        passGlobal(machine, state, params);
+    }
 }
 
 /* The same for the cat's own machine (`+0x2518`), its slot `0x14`. */
@@ -125,13 +134,15 @@ static int locals[4], localled;
 
 static void __cdecl __far __loadds keepLocal(void __far *machine, int state, void __far *params)
 {
-    (void)machine, (void)params;
-
     if (localled < 4) {
         locals[localled] = state;
     }
 
     localled++;
+
+    if (passLocal) {
+        passLocal(machine, state, params);
+    }
 }
 
 /* And its slots `0xe0` (`SetHeadTracking`) and `0x2e0` (`LookAtUser`):
@@ -161,22 +172,24 @@ static void __cdecl __far __loadds userward(void __far *sprite, int a, int b, in
     lookAtUser(sprite, a, b, c, d);
 }
 
-/* And its slot `0xa4`, which pushes words to its script: the first 6 words
- * of the first call that steers it (`targetSprite4`, 0x756d), passed on with
- * what else it was given. */
+/* And its slot `0xa4`, which pushes words to its script up to 0x756f: the
+ * first 6 words of the first call that steers it (`targetSprite4`, 0x756d),
+ * and 16 words passed on, more than any call gives it. */
 typedef void(__cdecl __far *WORDS)(void __far *sprite, int a, int b, int c, int d, int e, int f,
-                                   int g, int h);
+                                   int g, int h, int i, int j, int k, int l, int m, int n, int o,
+                                   int p);
 static WORDS words;
 static int worded[6], wordings;
 
 static void __cdecl __far __loadds wording(void __far *sprite, int a, int b, int c, int d, int e,
-                                           int f, int g, int h)
+                                           int f, int g, int h, int i, int j, int k, int l, int m,
+                                           int n, int o, int p)
 {
     if (a == 0x756d && wordings++ == 0) {
         worded[0] = a, worded[1] = b, worded[2] = c, worded[3] = d, worded[4] = e, worded[5] = f;
     }
 
-    words(sprite, a, b, c, d, e, f, g, h);
+    words(sprite, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p);
 }
 
 static void __cdecl __far __loadds record(void __far *sprite, int action, int variant)
@@ -224,6 +237,154 @@ static unsigned char __far *findCat(void)
                : 0;
 }
 
+/* Following a cat's day (`TRACE.TXT`): its machine's slot 4 wrapped, so that
+ * each tick of a state of its own -- not those its entering calls -- is
+ * written `tick` with C's `rand` seed, whether entered and left, and the
+ * fields its handlers read, and then `ticked` with what it did. */
+static DISPATCH handle;
+static unsigned char __far *traced;
+static unsigned traceData;
+static int depth;
+
+static void traceFields(unsigned char __far *cat)
+{
+    static const unsigned at[] = {0x2552, 0x3502, 0x34ca, 0x3504, 0x1500, 0x3508, 0x35fc, 0x35a6,
+                                  0x35a2, 0x35ac, 0x34cc, 0x34ce, 0x688,  0x35aa, 0x35a8, 0x35f4,
+                                  0x35ee, 0x35a4, 0x3516, 0x350a, 0x3506, 0x33be};
+    unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+    int b;
+
+    say(" %d", *(int __far *)(global + 0x3a));
+
+    for (b = 0; b < sizeof at / sizeof at[0]; b++) {
+        say(" %d", *(int __far *)(cat + at[b]));
+    }
+
+    for (b = 0; b < 12; b++) {
+        say(" %d", *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a));
+    }
+}
+
+static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, int enter, int leave)
+{
+    unsigned char __far *cat = traced;
+    int b;
+
+    if (depth++) {
+        handle(machine, p, enter, leave);
+        depth--;
+        return;
+    }
+
+    say("tick %lu %d %d %d", *(unsigned long __far *)MK_FP(traceData, 0x28ba), enter, leave,
+        ((AREA)ordinal(606))(cat, 0x1d));
+    traceFields(cat);
+
+    for (b = 0; b < 12; b++) {
+        say(" %d", *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42));
+    }
+
+    for (b = 0; b < 8; b++) {
+        say(" %d", *(int __far *)(cat + 0x362c + 2 * b));
+    }
+
+    for (b = 0; b < 4; b++) {
+        say(" %d", *(int *)(params + 0x104 + 2 * b));
+    }
+
+    {
+        long point = ((TARGETPT)ordinal(10))(cat, 0);
+        void __far *kin = ((GETKIN)ordinal(18))(cat, 0x22);
+        void __far *marker = ((GETKIN)ordinal(18))(cat, 0x16);
+        long mark = marker ? ((TARGETPT)ordinal(10))(marker, 0) : 0;
+        int rect[4] = {0, 0, 0, 0}, own[4];
+
+        if (kin) {
+            ((DRAWRECT)ordinal(15))(rect, kin, 0);
+        }
+
+        ((DRAWRECT)ordinal(15))(own, cat, 0);
+        say(" %d %d %d %d %d %d %d %d", *(int __far *)MK_FP(traceData, 0x2ba6),
+            *(int __far *)MK_FP(traceData, 0x2ba8), *(int __far *)MK_FP(traceData, 0x2baa),
+            *(int __far *)MK_FP(traceData, 0x2bac), *(int __far *)(cat + 0x33c4),
+            *(int __far *)(cat + 0x33c6), (int)point, (int)(point >> 16));
+        say(" %d %d %d %d %d %d %d %d %d %d %d %d\r\n", rect[0], rect[1], rect[2], rect[3], own[0],
+            own[1], own[2], own[3], (int)mark, (int)(mark >> 16),
+            ((REMAINING)ordinal(954))(cat), *(int *)(params + 0xc4));
+    }
+
+    pushes = globalled = localled = looked = wordings = 0;
+    handle(machine, p, enter, leave);
+
+    say("ticked %d %d %d %d %d", globalled, globalled ? globals[0] : -1, localled,
+        localled ? locals[0] : -1, pushes);
+
+    for (b = 0; b < 4; b++) {
+        say(" %d", b < pushes ? pushed[b] : -1);
+    }
+
+    say(" %d", looked);
+
+    for (b = 0; b < 4; b++) {
+        say(" %d", b < 2 * looked ? looks[b] : -1);
+    }
+
+    say(" %d", wordings);
+
+    for (b = 0; b < 6; b++) {
+        say(" %d", wordings ? worded[b] : -1);
+    }
+
+    traceFields(cat);
+    say(" %d\r\n", ((REMAINING)ordinal(954))(cat));
+    depth--;
+}
+
+/* The recorders put in the cat's, its machine's and the global machine's
+ * tables for good, each passing on what it is given. */
+static void install(unsigned char __far *cat)
+{
+    unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+    unsigned char __far *machine = cat + 0x2518;
+
+    _fmemcpy(table, *(void __far *__far *)cat, sizeof table);
+    push = *(PUSH *)(table + 0xb8);
+    track = *(LOOK *)(table + 0xe0);
+    lookAtUser = *(LOOK *)(table + 0x2e0);
+    words = *(WORDS *)(table + 0xa4);
+    *(PUSH *)(table + 0xb8) = record;
+    *(LOOK *)(table + 0xe0) = tracking;
+    *(LOOK *)(table + 0x2e0) = userward;
+    *(WORDS *)(table + 0xa4) = wording;
+    *(void __far *__far *)cat = table;
+
+    _fmemcpy(globalTable, *(void __far *__far *)global, sizeof globalTable);
+    passGlobal = *(GLOBALSTATE *)(globalTable + 0x1c);
+    *(GLOBALSTATE *)(globalTable + 0x1c) = keep;
+    *(void __far *__far *)global = globalTable;
+
+    _fmemcpy(localTable, *(void __far *__far *)machine, sizeof localTable);
+    passLocal = *(GLOBALSTATE *)(localTable + 0x14);
+    *(GLOBALSTATE *)(localTable + 0x14) = keepLocal;
+    handle = *(DISPATCH *)(localTable + 4);
+    *(DISPATCH *)(localTable + 4) = tracing;
+    *(void __far *__far *)machine = localTable;
+    traced = cat;
+
+    /* And what the shelf holds, by kind, to 35. */
+    {
+        int b;
+
+        say("shelf");
+
+        for (b = 0; b < 35; b++) {
+            say(" %d", ((INSHELF)ordinal(38))(cat, b));
+        }
+
+        say("\r\n");
+    }
+}
+
 int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int show)
 {
     WNDCLASS kind;
@@ -232,7 +393,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     unsigned dgroup;
     unsigned char __far *module;
     unsigned char __far *cat;
-    int answer, n, b;
+    int answer, n, b, frames = FRAMES;
 
     (void)previous, (void)command, (void)show;
 
@@ -243,6 +404,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     /* The library's data segment, where `GetParamsPtr` points before any
      * parameters are set: C's `rand` keeps its seed there (`ds:28ba`). */
     dgroup = FP_SEG(((GETPARAMS)ordinal(1240))());
+    traceData = dgroup;
 
     file = _lopen(DIRECTORY "\\PARAMS.BIN", OF_READ);
     _lread(file, params, sizeof params);
@@ -967,7 +1129,19 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         _lclose(file);
     }
 
-    for (n = 0; n < FRAMES; n++) {
+    /* Following its day: as many frames as `TRACE.TXT` says. */
+    file = _lopen(DIRECTORY "\\TRACE.TXT", OF_READ);
+
+    if (file != HFILE_ERROR) {
+        frames = (int)number(file);
+        _lclose(file);
+
+        if (cat) {
+            install(cat);
+        }
+    }
+
+    for (n = 0; n < frames; n++) {
         /* The cursor at the stage's corner, away from the cat (`+0x108`, `+0x10a`). */
         *(int *)(params + 0x108) = 0;
         *(int *)(params + 0x10a) = 0;
@@ -979,6 +1153,11 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         if (!cat) {
             cat = findCat();
+
+            if (cat && frames != FRAMES) {
+                install(cat);
+            }
+
             continue;
         }
 

@@ -54,6 +54,9 @@ const EXTRAS = [
   ['WINDOWS', 'PFFOO.VAL'],
 ].map((parts) => ({ parts, file: join(DRIVE, ...parts) }));
 
+/** How many frames of a cat's day are followed. */
+const TRACE_FRAMES = 2000;
+
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
 const describeHarness = ready ? describe : describe.skip;
 
@@ -1068,4 +1071,198 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     expect(curious).toBe(CURIOUS_CASES.length);
     expect(wrong).toEqual([]);
   }, 1800000);
+
+  it('follows a cat through its day, each tick of its own states as the engine', async () => {
+    const out = join(HARNESS, 'CATZTRACE.OUT');
+    let text: string;
+
+    if (process.env.HARNESS_REUSE && existsSync(out)) {
+      text = readFileSync(out, 'latin1');
+    } else {
+      const directory = stage('CATZTRACE');
+      cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
+      cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
+      writeFileSync(join(directory, 'TRACE.TXT'), `${TRACE_FRAMES}\r\n`);
+      const { runProbe } = await import(WINBOX);
+      const result = await runProbe('catztrace', 1, false, true, 7200, {
+        display: 'vga256',
+        virtual: true,
+        program: { directory, file: 'CATZPEN.EXE', folder: 'CATZPEN' },
+        extras: EXTRAS,
+      });
+
+      expect(result.failure ?? null).toBeNull();
+      const file = await result.fileSystem.open(['CATZPEN.OUT']);
+      text = new TextDecoder().decode(new Uint8Array(await file.read(0, file.info.size)));
+      writeFileSync(out, text);
+    }
+
+    const lines = text.trim().split(/\r?\n/);
+    expect(lines.filter((line) => line.startsWith('frame '))).toHaveLength(TRACE_FRAMES);
+    const shelf = lines
+      .find((line) => line.startsWith('shelf '))
+      ?.split(' ')
+      .slice(1)
+      .map(Number);
+    const { held, wrong, tally } = followTrace(lines, (kind) =>
+      shelf ? shelf[kind] !== 0 : false
+    );
+
+    console.log(
+      Object.entries(tally)
+        .map(
+          ([state, [ticks, acted, compared]]) =>
+            `state ${state}: ${ticks} ticks, ${acted} acted, ${compared} held`
+        )
+        .join('\n')
+    );
+    expect(held).toBeGreaterThan(0);
+    expect(wrong).toEqual([]);
+  }, 3600000);
 });
+
+/** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
+const FOLLOWED = new Set([12, 13, 19, 22, 23, 26, 27, 28, 29]);
+
+/**
+ * A cat's day held to the reimplementation: each `tick` the driver wrote
+ * before a tick of a state of its own (C's `rand` seed, entered and left, its
+ * place on the stage, its global state, its fields, brains and their
+ * centres, its curiosities, the cursor, the stage, its size and point, its
+ * kin 0x22's and its own rectangles, its marker, the layered frames left and
+ * `PetParams` `+0xc4`) and `ticked` after (the global and own states asked
+ * for, the actions pushed, its head's calls, its steering's words, and its
+ * fields and brains again). Where the engine acted -- pushed an action or
+ * asked for a state -- its script was done, and the reimplementation, given
+ * the same, should act the same: the first state asked for, the first global
+ * state, and, where neither, the first action pushed. Where nothing was done,
+ * its script went on, which `catzStateTick` does not model, and the tick is
+ * only counted. Walking on, whether `PopScript` found what it walks to is
+ * not known, and either will do.
+ */
+function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
+  const wrong: string[] = [];
+  const tally: Record<number, [number, number, number]> = {};
+  let held = 0;
+  let before: number[] | null = null;
+
+  for (const line of lines) {
+    const [kind, ...rest] = line.split(' ');
+    const values = rest.map(Number);
+
+    if (kind === 'tick') {
+      before = values;
+      continue;
+    }
+
+    if (kind !== 'ticked' || !before) {
+      continue;
+    }
+
+    const b = before;
+    before = null;
+    const [seedValue, enter, leave, area, global] = b;
+    const field = (n: number) => b[5 + n];
+    const state = field(0);
+    const counts = (tally[state] ??= [0, 0, 0]);
+    counts[0]++;
+    const asked = {
+      global: values[0] ? values[1] : undefined,
+      state: values[2] ? values[3] : undefined,
+    };
+    const pushedFirst = values[4] ? values[5] : undefined;
+    const acted =
+      asked.global !== undefined || asked.state !== undefined || pushedFirst !== undefined;
+
+    if (!acted || leave) {
+      continue;
+    }
+
+    counts[1]++;
+
+    /* Walking on, its end is not reimplemented in global states 1, 3, 4, 13 and 17, nor in 14 with an age (brain 11). */
+    if (
+      !FOLLOWED.has(state) ||
+      (state === 23 && [1, 3, 4, 13, 17].includes(global)) ||
+      (state === 23 && global === 14 && b[27 + 11] !== 0)
+    ) {
+      continue;
+    }
+
+    const brains = b.slice(27, 39);
+    const centres = b.slice(39, 51);
+    const box = (at: number) => ({
+      left: b[at],
+      top: b[at + 1],
+      right: b[at + 2],
+      bottom: b[at + 3],
+    });
+    const said = (found: boolean) => {
+      let seed = BigInt(seedValue);
+      const random = (n: number) => {
+        seed = (seed * 22695477n + 1n) & 0xffffffffn;
+        return Number((seed >> 16n) & 0x7fffn) % n;
+      };
+      const ours = catzStateTick(
+        state,
+        { brains, centres, state, global, target: 0, count: 0 },
+        {
+          global,
+          count: field(1),
+          passed: field(2),
+          ticks: field(3),
+          x1500: field(4),
+          mode: field(5),
+          x35fc: field(6),
+          x35a6: field(7),
+          x35a2: field(8),
+          x35ac: field(9),
+          goal: { x: field(10), y: field(11) },
+          x688: field(12),
+          x35aa: field(13),
+          x35a8: field(14),
+          x35f4: field(15),
+          x35ee: field(16),
+          x35a4: field(17),
+          curiosities: b.slice(51, 59),
+          cursor: box(59),
+          stage: box(63),
+          size: { width: b[67], height: b[68] },
+          point: { x: b[69], y: b[70] },
+          kin: box(71),
+          rect: box(75),
+          area1: area === 1,
+          area3: area === 3,
+          enter: enter === 1,
+          inShelf,
+          c4: b[82],
+          found,
+        },
+        random
+      );
+      const changed = ours.state !== undefined || ours.global !== undefined;
+
+      /* A global state the cat is put in is entered at once, and its
+       * entering asks for a state of its own: that is not this tick's. Nor
+       * is an action pushed where the state changed, nor a first arrival's
+       * transition to a neutral pose, which is by the cat's pose. */
+      const stateHeld = ours.global === undefined;
+      const pushHeld = !changed && !(state === 23 && ours.pushes === undefined);
+      return [
+        [stateHeld ? ours.state : '', ours.global, pushHeld ? ours.pushed : ''].join(' '),
+        [stateHeld ? asked.state : '', asked.global, pushHeld ? pushedFirst : ''].join(' '),
+      ];
+    };
+    const ways = state === 23 ? [said(false), said(true)] : [said(false)];
+    counts[2]++;
+    held++;
+
+    if (!ways.some(([ours, engine]) => ours === engine)) {
+      wrong.push(
+        `seed ${seedValue} state ${state} global ${global}: ${ways.map(([ours, engine]) => `${ours} not ${engine}`).join(' or ')}`
+      );
+    }
+  }
+
+  return { held, wrong, tally };
+}
