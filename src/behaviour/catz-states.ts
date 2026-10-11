@@ -19,6 +19,7 @@ export const CATZ_STATE = {
   dozing: 27,
   sleep: 28,
   wakeup: 29,
+  sharpenClaws: 32,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -288,6 +289,8 @@ export interface CatzStateTick {
  *   asleep; under its energy it wakes (29); else one time in two it naps
  *   by its temperament (behaviours 26 and 24: 0x25c and 0x266), else 0xb4;
  * - waking (29; `DoCatWakeup`, seg30:0741): it idles (global 6);
+ * - sharpening its claws (32; `DoCatSharpenClaws`, seg30:0e84): entered, it
+ *   pushes 0x13f; its script done, it idles (global 6);
  * - looking at things (12; `DoCatLookAtObjects`, seg24:0263): between looks
  *   it counts down; then, having looked at something, under its energy it
  *   may go on to do something with the last -- play (15) with most kinds,
@@ -397,6 +400,8 @@ export function catzStateTick(
     }
     case CATZ_STATE.wakeup:
       return done({ global: 6 });
+    case CATZ_STATE.sharpenClaws:
+      return world.enter ? done({ pushed: 0x13f }) : done({ global: 6 });
     case CATZ_STATE.lookAtObjects: {
       const list = world.curiosities ?? [];
       const brain = (n: number) => mind.brains[n];
