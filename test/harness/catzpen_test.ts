@@ -26,6 +26,7 @@ import {
   catzMomentCursor,
   catzMomentLinger,
   type CatzMomentState,
+  catzMomentTick,
 } from '../../src/behaviour/catz-moment.ts';
 
 const ROOT = process.cwd();
@@ -1122,7 +1123,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 });
 
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
-const FOLLOWED = new Set([12, 13, 19, 22, 23, 26, 27, 28, 29]);
+const FOLLOWED = new Set([12, 13, 19, 21, 22, 23, 26, 27, 28, 29]);
 
 /**
  * A cat's day held to the reimplementation: each `tick` the driver wrote
@@ -1180,10 +1181,10 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     counts[1]++;
 
-    /* Walking on, its end is not reimplemented in global states 1, 3, 4, 13 and 17, nor in 14 with an age (brain 11). */
+    /* Walking on, its end is not reimplemented in global states 1, 3, 4 and 17, nor in 14 with an age (brain 11). */
     if (
       !FOLLOWED.has(state) ||
-      (state === 23 && [1, 3, 4, 13, 17].includes(global)) ||
+      (state === 23 && [1, 3, 4, 17].includes(global)) ||
       (state === 23 && global === 14 && b[27 + 11] !== 0)
     ) {
       continue;
@@ -1191,6 +1192,61 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     const brains = b.slice(27, 39);
     const centres = b.slice(39, 51);
+
+    /* The moment (21): its own fields, and `catzMomentTick`. */
+    if (state === 21) {
+      let seed = BigInt(seedValue);
+      const random = (n: number) => {
+        seed = (seed * 22695477n + 1n) & 0xffffffffn;
+        return Number((seed >> 16n) & 0x7fffn) % n;
+      };
+      const ours = catzMomentTick(
+        { brains, centres, state, global, target: 0, count: 0 },
+        {
+          looks: field(1),
+          ticks: field(3),
+          looksBeforeGoing: field(20),
+          mode: field(5),
+          idle: field(19),
+          soundOwed: b[88],
+          box: { left: b[83], top: b[84], right: b[85], bottom: b[86] },
+          going: b[87] !== 0,
+        },
+        {
+          shelf: inShelf(0xc),
+          screenSaver: false,
+          c4: b[82],
+          x35d2: b[89],
+          x3516: field(18),
+          area3: area === 3,
+          cursorAbout: b[90] !== 0,
+          minded: field(2) !== 0,
+          soundPlaying: b[81] > 0,
+        },
+        random
+      );
+      const changed = ours.state !== undefined || ours.global !== undefined;
+      const stateHeld = ours.global === undefined;
+      const globalHeld = ours.state === undefined;
+      const said = [
+        stateHeld ? ours.state : '',
+        globalHeld ? ours.global : '',
+        changed ? '' : ours.pushed,
+      ].join(' ');
+      const engine = [
+        stateHeld ? asked.state : '',
+        globalHeld ? asked.global : '',
+        changed ? '' : pushedFirst,
+      ].join(' ');
+      counts[2]++;
+      held++;
+
+      if (said !== engine) {
+        wrong.push(`seed ${seedValue} state 21 global ${global}: ${said} not ${engine}`);
+      }
+
+      continue;
+    }
     const box = (at: number) => ({
       left: b[at],
       top: b[at + 1],
@@ -1242,18 +1298,40 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       );
       const changed = ours.state !== undefined || ours.global !== undefined;
 
-      /* A global state the cat is put in is entered at once, and its
-       * entering asks for a state of its own: that is not this tick's. Nor
-       * is an action pushed where the state changed, nor a first arrival's
+      /* Where the engine's way reads what it never set, nothing is held. */
+      if (ours.unread) {
+        return null;
+      }
+
+      /* A state the cat is put in is entered at once, and its entering may
+       * ask for another -- a global state's for one of the cat's own, the
+       * cat's own for a global state: that is not this tick's. Nor is an
+       * action pushed where the state changed, nor a first arrival's
        * transition to a neutral pose, which is by the cat's pose. */
       const stateHeld = ours.global === undefined;
+      const globalHeld = ours.state === undefined;
       const pushHeld = !changed && !(state === 23 && ours.pushes === undefined);
       return [
-        [stateHeld ? ours.state : '', ours.global, pushHeld ? ours.pushed : ''].join(' '),
-        [stateHeld ? asked.state : '', asked.global, pushHeld ? pushedFirst : ''].join(' '),
+        [
+          stateHeld ? ours.state : '',
+          globalHeld ? ours.global : '',
+          pushHeld ? ours.pushed : '',
+        ].join(' '),
+        [
+          stateHeld ? asked.state : '',
+          globalHeld ? asked.global : '',
+          pushHeld ? pushedFirst : '',
+        ].join(' '),
       ];
     };
-    const ways = state === 23 ? [said(false), said(true)] : [said(false)];
+    const ways = (state === 23 ? [said(false), said(true)] : [said(false)]).filter(
+      (way): way is string[] => way !== null
+    );
+
+    if (!ways.length) {
+      continue;
+    }
+
     counts[2]++;
     held++;
 

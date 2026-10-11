@@ -262,8 +262,10 @@ export interface CatzStateTick {
   x35aa?: number;
   fullness?: number;
 
-  /** There: `+0x33be` where set. */
+  /** There: `+0x33be` and `+0x34d0` where set, and whether the engine's way here reads what it never set (grooming, ways 4, 5, 8 and 9). */
   x33be?: number;
+  x34d0?: number;
+  unread?: boolean;
 
   /** Looking at things: ticks to its next look, and the sound it made (`MapAndPlayCatSound` 7), its action. */
   ticks?: number;
@@ -742,7 +744,7 @@ function catzWalkOn(
       tick.x35aa = world.x35aa;
     } else if (world.x35aa) {
       tick.x35aa = 0;
-      catzArrive(mind, world, tick, moved, random);
+      catzArrive(mind, world, tick, moved, x688, random);
     } else if (givenUp) {
       tick.global = 6;
     } else {
@@ -906,6 +908,7 @@ function catzArrive(
   world: CatzStateWorld,
   tick: CatzStateTick,
   moved: boolean,
+  x688: number,
   random: (n: number) => number
 ) {
   const brain = (n: number) => mind.brains[n];
@@ -978,6 +981,44 @@ function catzArrive(
     case 0xb:
       tick.global = 13;
       return;
+    case 0xd: {
+      if (world.c4) {
+        tick.state = 0x1f;
+        return;
+      }
+
+      /* Grooming: a place by how it went (`+0x35a8`), its width times 0.55 (`ds:0x372`) in from an edge -- the stage's or its kin 0x22's -- and the angles it must face within. */
+      const reach = world.size!.width * 0.55;
+      const kin = world.kin!;
+      const ways: Record<number, [number, number, number?, number?]> = {
+        1: [0x22, 0x5e, 0x40, Math.trunc(reach + stage.left)],
+        2: [-0x5e, -0x22, -0x40, Math.trunc(stage.right - reach)],
+        3: [-10, 10],
+        6: [-0x5e, -0x22, -0x40, Math.trunc(kin.left - reach)],
+        7: [0x22, 0x5e, 0x40, Math.trunc(reach + kin.right)],
+      };
+      const way = ways[world.x35a8 ?? 0];
+
+      if (!way) {
+        tick.unread = true;
+        return;
+      }
+
+      const [low, high, facing, x] = way;
+
+      if (facing !== undefined) {
+        tick.x34d0 = facing;
+        tick.goal = { x: x!, y: world.goal!.y };
+      }
+
+      if (x688 > low && x688 < high) {
+        tick.state = world.x35a8 === 3 ? 0x20 : 0x18;
+      } else {
+        tick.state = 0x1f;
+      }
+
+      return;
+    }
     case 0xe:
       if (age === 0 && catzBehavior(mind, 26, random) !== 0 && world.area1 && percent() < 75) {
         tick.state = 0x16;

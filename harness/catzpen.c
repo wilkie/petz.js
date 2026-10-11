@@ -308,10 +308,17 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             *(int __far *)MK_FP(traceData, 0x2ba8), *(int __far *)MK_FP(traceData, 0x2baa),
             *(int __far *)MK_FP(traceData, 0x2bac), *(int __far *)(cat + 0x33c4),
             *(int __far *)(cat + 0x33c6), (int)point, (int)(point >> 16));
-        say(" %d %d %d %d %d %d %d %d %d %d %d %d\r\n", rect[0], rect[1], rect[2], rect[3], own[0],
+        say(" %d %d %d %d %d %d %d %d %d %d %d %d", rect[0], rect[1], rect[2], rect[3], own[0],
             own[1], own[2], own[3], (int)mark, (int)(mark >> 16),
             ((REMAINING)ordinal(954))(cat), *(int *)(params + 0xc4));
     }
+
+    /* And the moment's box (`+0x350c` to `+0x3512`), whether its mind is
+     * made up (`+0x3514`), the sound owed (`+0x35a0`), `+0x35d2`, and
+     * whether the cursor is about (`PetParams` `+0x46`). */
+    say(" %d %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x350c), *(int __far *)(cat + 0x350e),
+        *(int __far *)(cat + 0x3510), *(int __far *)(cat + 0x3512), *(int __far *)(cat + 0x3514),
+        *(int __far *)(cat + 0x35a0), *(int __far *)(cat + 0x35d2), *(int *)(params + 0x46));
 
     pushes = globalled = localled = looked = wordings = 0;
     handle(machine, p, enter, leave);

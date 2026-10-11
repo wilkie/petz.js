@@ -311,3 +311,71 @@ export function catzMomentCursor(
 
   return undefined;
 }
+
+/** What the moment readied by `catzMomentTick` reads besides its own fields and `CatzMomentWorld`. */
+export interface CatzMomentTickWorld extends CatzMomentWorld {
+  /** Whether the cursor is about (`PetParams` `+0x46`), and whether the cat minds it (`+0x34ca`, set once its first script is done). */
+  cursorAbout: boolean;
+  minded: boolean;
+
+  /** Whether a layered action plays (`GetLayeredFramesRemaining`), so that no sound is made. */
+  soundPlaying: boolean;
+}
+
+/** What a tick of the moment did: walked off (`locomote`, 22, to `+0x35a6`), chose a global state, or pushed an action. */
+export interface CatzMomentTicked {
+  state?: number;
+  global?: number;
+  x35a6?: number;
+  pushed?: number;
+}
+
+/**
+ * A tick of the moment (`DoCatMoment`, seg25:2ce9), not begun, its script
+ * done: placed so (3), it walks to the stage's middle; the cursor about and
+ * minded, it reacts to it (`catzMomentCursor`) -- chasing it or running
+ * away, it walks off; turning affectionate or attacking, global states 14
+ * and 1 -- and otherwise lingers on (`catzMomentLinger`); and then, its mind
+ * made up before this tick, it chooses what next (`catzMomentChoice`),
+ * else pushes what it does meanwhile, or 0x98 as its mind is made up.
+ */
+export function catzMomentTick(
+  mind: CatzMind,
+  moment: CatzMomentState,
+  world: CatzMomentTickWorld,
+  random: (n: number) => number
+): CatzMomentTicked {
+  if (world.area3) {
+    return { state: 22, x35a6: 0 };
+  }
+
+  if (world.cursorAbout && world.minded) {
+    const reaction = catzMomentCursor(mind, moment, random);
+
+    switch (reaction) {
+      case 'chase':
+        return { state: 22, x35a6: 0x17 };
+      case 'affectionate':
+        return { global: 14 };
+      case 'run':
+        return { state: 22 };
+      case 'attack':
+        return { global: 1 };
+    }
+  }
+
+  const going = moment.going;
+  const lingered = catzMomentLinger(mind, moment, world.soundPlaying, random);
+
+  if (!going) {
+    return { pushed: lingered.pushed };
+  }
+
+  const chose = catzMomentChoice(mind, world, random);
+
+  if (chose.locomote) {
+    return { state: 22, x35a6: moment.mode === 2 || moment.mode === 3 ? 0x17 : 0 };
+  }
+
+  return { global: chose.global };
+}
