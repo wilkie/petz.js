@@ -13,6 +13,7 @@ export const CATZ_STATE = {
   preExplore: 13,
   passTheTime: 19,
   locomote: 22,
+  performLocomote: 23,
   tired: 26,
   dozing: 27,
   sleep: 28,
@@ -47,6 +48,20 @@ export interface CatzStateWorld {
   point?: { x: number; y: number };
   kin?: CatzBox;
   cursor?: CatzBox;
+
+  /** Whether the state is being entered. */
+  enter?: boolean;
+
+  /** Walking: its mode (`+0x3508`), `+0x35fc`, the kind of sprite it walks to (`+0x35a6`, 0 for a point), `+0x35a2`, `+0x35ac`, and where it walks to (`+0x34cc`, `+0x34ce`). */
+  mode?: number;
+  x35fc?: number;
+  x35a6?: number;
+  x35a2?: number;
+  x35ac?: number;
+  goal?: { x: number; y: number };
+
+  /** Whether the cat's place on the stage is 1 (`GetSpriteScreenArea`, 0x1d). */
+  area1?: boolean;
 }
 
 /** A rectangle, its edges. */
@@ -198,6 +213,14 @@ export interface CatzStateTick {
   goal?: { x: number; y: number };
   explore?: number;
 
+  /** Walking: its mode where it changed, where it put its marker (kin 0x16), and how it turned its head, in turn (`SetHeadTracking` on, `LookAtUser`). */
+  mode?: number;
+  marker?: { x: number; y: number };
+  head?: ('track' | 'user' | 'off')[];
+
+  /** All the actions it pushed, in turn. */
+  pushes?: number[];
+
   /** Looking at things: ticks to its next look, and the sound it made (`MapAndPlayCatSound` 7), its action. */
   ticks?: number;
   sound?: number;
@@ -228,6 +251,16 @@ export interface CatzStateTick {
  *   quarter of what its seriousness leaves of 100. With nothing left to look
  *   at, or without an age one time in two, it has its moment (8,
  *   `catzPreMoment`). Its script done, it pushes 0xc after 0x5f, else 0x93;
+ * - walking (22; `DoCatLocomote`, seg25:01fc): entered, watching hard
+ *   (mode 3), three times in four -- `+0x35fc` 0, not the screen saver nor
+ *   affectionate already -- it turns affectionate instead (global 14, mode
+ *   2). Else, walking to a point (`+0x35a6` 0, or `+0x35a2` 1), it keeps the
+ *   point on the stage, but catnapping or in global states 16 and 17, and
+ *   walks to its marker (kin 0x16) put there; nine times in ten, or
+ *   attacking, it tracks it with its head, else looks at the user; placed
+ *   so (1), not `+0x35ac` nor `+0x35a2`, it shies first where afraid (0xdc)
+ *   and pushes 0xd7. Its script done, it tracks what it walks to and goes
+ *   on (`performLocomote`, 23);
  * - exploring (13; `DoCatPreExplore`, seg24:05d1): it chooses where to
  *   walk (`locomote`): to the stage's left or right, a little in from it,
  *   level with its target point; 250 below that point, or, too low, up by
@@ -382,6 +415,62 @@ export function catzStateTick(
       }
 
       return done({ ...tick, ticks, pushed: world.x1500 === 0x5f ? 0xc : 0x93 });
+    }
+    case CATZ_STATE.locomote: {
+      if (!world.enter) {
+        return done({ state: CATZ_STATE.performLocomote, head: ['track'] });
+      }
+
+      const tick: Partial<CatzStateTick> = { head: [], pushes: [] };
+
+      if (
+        world.mode === 3 &&
+        percent() < 75 &&
+        !world.x35fc &&
+        !world.screenSaver &&
+        world.global !== 14
+      ) {
+        return done({ mode: 2, global: 14 });
+      }
+
+      let target = world.x35a6 ?? 0;
+
+      if (target === 0 || world.x35a2 === 1) {
+        const stage = world.stage!;
+        const goal = { ...world.goal! };
+
+        if (world.global !== 21 && world.global !== 17 && world.global !== 16) {
+          goal.x = Math.min(stage.right, Math.max(stage.left, goal.x));
+          goal.y = Math.min(stage.bottom, Math.max(stage.top, goal.y));
+        }
+
+        target = 0x16;
+        tick.goal = goal;
+        tick.marker = goal;
+      }
+
+      tick.x35a6 = target;
+      /* Looking at the user turns its head's tracking off (`SetHeadTracking` 0) as it does. */
+      tick.head!.push(
+        ...(percent() < 90 || world.global === 1
+          ? ['track' as const]
+          : ['user' as const, 'off' as const])
+      );
+
+      if (world.area1 && !world.x35ac && !world.x35a2) {
+        if (mind.brains[CATZ_BRAIN.fear] > 49) {
+          tick.pushes!.push(0xdc);
+        }
+
+        tick.pushes!.push(0xd7);
+      }
+
+      if (tick.pushes!.length) {
+        return done({ ...tick, pushed: tick.pushes![0] });
+      }
+
+      tick.head!.push('track');
+      return done({ ...tick, state: CATZ_STATE.performLocomote });
     }
     case CATZ_STATE.preExplore: {
       const stage = world.stage!;

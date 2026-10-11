@@ -133,6 +133,33 @@ static void __cdecl __far __loadds keepLocal(void __far *machine, int state, voi
     localled++;
 }
 
+/* And its slots `0xe0` (`SetHeadTracking`) and `0x2e0` (`LookAtUser`):
+ * the first 4 calls, each its slot's and its first argument, passed on with
+ * what else they were given. */
+typedef void(__cdecl __far *LOOK)(void __far *sprite, int a, int b, int c, int d);
+static LOOK track, lookAtUser;
+static int looks[8], looked;
+
+static void __cdecl __far __loadds tracking(void __far *sprite, int a, int b, int c, int d)
+{
+    if (looked < 4) {
+        looks[2 * looked] = 0xe0, looks[2 * looked + 1] = a;
+    }
+
+    looked++;
+    track(sprite, a, b, c, d);
+}
+
+static void __cdecl __far __loadds userward(void __far *sprite, int a, int b, int c, int d)
+{
+    if (looked < 4) {
+        looks[2 * looked] = 0x2e0, looks[2 * looked + 1] = a;
+    }
+
+    looked++;
+    lookAtUser(sprite, a, b, c, d);
+}
+
 static void __cdecl __far __loadds record(void __far *sprite, int action, int variant)
 {
     if (pushes < 8) {
@@ -679,14 +706,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
      * their centres, a state of the cat's own, a global state, `+0x3502`,
      * `+0x34ca`, `+0x3504`, `+0x1500`, the first 8 curiosities
      * (`+0x362c` on, the rest 0) and the cursor's rectangle (`PetParams`
-     * `+0x104` on): the cat in them as it is (`+0x2552`; `+0x3a` of the global
-     * machine), not entered, its script done, no layered action playing,
+     * `+0x104` on), whether it is entering, `+0x3508`, `+0x35fc`,
+     * `+0x35a6`, `+0x35a2`, `+0x35ac`, and where it walks to (`+0x34cc`,
+     * `+0x34ce`): the cat in them as it is (`+0x2552`; `+0x3a` of the global
+     * machine), entering or not, its script done, no layered action playing,
      * both machines' histories and the actions pushed marked; a tick of its
      * state (its machine's slot 4, as `BaseNewState` calls it); and
      * `localed` and the two histories, its energy, `+0x3502`, the action
      * playing, the actions pushed, `+0x3504`, `+0x1500`, the layered
      * frames begun, where it walks to (`+0x34cc`, `+0x34ce`) and how
-     * (`+0x35a8`), `+0x34ca`, the moment's `+0x3516`, `+0x350a`,
+     * (`+0x35a8`), the calls to its head, the target point of its kin 0x16
+     * and `+0x35ac`, `+0x34ca`, the moment's `+0x3516`, `+0x350a`,
      * `+0x3506` and `+0x3508`, and `+0x35a6` and `+0x35a4`. */
     file = _lopen(DIRECTORY "\\LOCAL.TXT", OF_READ);
 
@@ -694,7 +724,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
         unsigned char __far *machine = cat + 0x2518;
         void __far *original, __far *globalOriginal, __far *localOriginal;
-        int done;
+        int done, enter, x35fc, x35a2, x35ac;
         DISPATCH dispatch = *(DISPATCH __far *)(*(unsigned char __far *__far *)machine + 4);
 
         for (;;) {
@@ -727,10 +757,22 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int *)(params + 0x104 + 2 * b) = (int)number(file);
             }
 
+            enter = (int)number(file);
+            *(int __far *)(cat + 0x3508) = (int)number(file);
+            x35fc = (int)number(file);
+            *(int __far *)(cat + 0x35a6) = (int)number(file);
+            x35a2 = (int)number(file);
+            x35ac = (int)number(file);
+            *(int __far *)(cat + 0x34cc) = (int)number(file);
+            *(int __far *)(cat + 0x34ce) = (int)number(file);
+
             ((RESETSTACK)ordinal(951))(cat, 2);
             ((PLAIN_SPRITE)ordinal(957))(cat);
             *(int __far *)(cat + 0x1502) = -1;
             *(int __far *)(cat + 0x1500) = done;
+            *(int __far *)(cat + 0x35fc) = x35fc;
+            *(int __far *)(cat + 0x35a2) = x35a2;
+            *(int __far *)(cat + 0x35ac) = x35ac;
 
             for (b = 0; b < 10; b++) {
                 *(int __far *)(cat + 0x14a8 + 2 * b) = -1;
@@ -763,6 +805,11 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             _fmemcpy(table, original, sizeof table);
             push = *(PUSH *)(table + 0xb8);
             *(PUSH *)(table + 0xb8) = record;
+            track = *(LOOK *)(table + 0xe0);
+            *(LOOK *)(table + 0xe0) = tracking;
+            lookAtUser = *(LOOK *)(table + 0x2e0);
+            *(LOOK *)(table + 0x2e0) = userward;
+            looked = 0;
             *(void __far *__far *)cat = table;
             pushes = 0;
             globalOriginal = *(void __far *__far *)global;
@@ -777,7 +824,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             localled = 0;
 
             *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
-            dispatch(machine, params, 0, 0);
+            dispatch(machine, params, enter, 0);
             *(void __far *__far *)cat = original;
             *(void __far *__far *)global = globalOriginal;
             *(void __far *__far *)machine = localOriginal;
@@ -811,6 +858,22 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 ((REMAINING)ordinal(954))(cat));
             say(" %d %d %d", *(int __far *)(cat + 0x34cc), *(int __far *)(cat + 0x34ce),
                 *(int __far *)(cat + 0x35a8));
+
+            /* The calls to its head (`SetHeadTracking`, `LookAtUser`), the
+             * target point of its kin 0x16 (`GetTargetPt`), and `+0x35ac`. */
+            say(" %d", looked);
+
+            for (b = 0; b < 8; b++) {
+                say(" %d", b < 2 * looked ? looks[b] : -1);
+            }
+
+            {
+                void __far *marker = ((GETKIN)ordinal(18))(cat, 0x16);
+                long point = marker ? ((TARGETPT)ordinal(10))(marker, 0) : 0;
+
+                say(" %d %d %d %d", marker != 0, (int)point, (int)(point >> 16),
+                    *(int __far *)(cat + 0x35ac));
+            }
             say(" %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x34ca),
                 *(int __far *)(cat + 0x3516),
                 *(int __far *)(cat + 0x350a), *(int __far *)(cat + 0x3506),
