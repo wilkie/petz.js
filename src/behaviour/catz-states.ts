@@ -73,6 +73,10 @@ export interface CatzStateWorld {
   x35a4?: number;
   inShelf?: (kind: number) => boolean;
   c4?: number;
+
+  /** Walking on: `+0x35aa` (there before), and whether `PopScript` finds what it walks to in its box (answering 2). */
+  x35aa?: number;
+  found?: boolean;
 }
 
 /** The angle from one point to another (`PtToPtAngle`, seg14:1c93): `atan2` in 256ths of a turn, rounded toward 0 (seg48:17a2), the shorter way (`ShortestAngle`, seg48:1d00); 0x81 where they are one. */
@@ -257,6 +261,9 @@ export interface CatzStateTick {
   x688?: number;
   x35aa?: number;
   fullness?: number;
+
+  /** There: `+0x33be` where set. */
+  x33be?: number;
 
   /** Looking at things: ticks to its next look, and the sound it made (`MapAndPlayCatSound` 7), its action. */
   ticks?: number;
@@ -630,6 +637,7 @@ function catzWalkOn(
   let mark = { ...world.goal! };
   let kind = world.x35a6 ?? 0x16;
   let walkedTo = kind;
+  let moved = false;
 
   /* Its marker kept on the stage, but catnapping or in global states 16 and 17. */
   if (G !== 21 && G !== 17 && G !== 16) {
@@ -642,6 +650,7 @@ function catzWalkOn(
       mark = kept;
       tick.marker = kept;
       walkedTo = 0x16;
+      moved = true;
     }
   }
 
@@ -727,9 +736,13 @@ function catzWalkOn(
     ? x688 <= -64 || x688 >= 64
     : x688 >= -within && x688 <= within;
 
-  if (percent() < chance && aligned && near) {
+  if ((world.found || percent() < chance) && aligned && near) {
     if (G === 16) {
       tick.state = 4;
+      tick.x35aa = world.x35aa;
+    } else if (world.x35aa) {
+      tick.x35aa = 0;
+      catzArrive(mind, world, tick, moved, random);
     } else if (givenUp) {
       tick.global = 6;
     } else {
@@ -750,6 +763,12 @@ function catzWalkOn(
   }
 
   if (world.area3) {
+    push(0x254);
+    return tick;
+  }
+
+  /* Found but not there: its steering stopped (`targetSprite4` all 0), 0x254. */
+  if (world.found && G !== 21) {
     push(0x254);
     return tick;
   }
@@ -875,4 +894,134 @@ function catzWalkOn(
   }
 
   return tick;
+}
+
+/**
+ * There, past the first time (`+0x35aa` 1): what the cat walked there for,
+ * by its global state (seg25:141f to 21fe). `moved` is whether its marker
+ * was moved onto the stage this tick.
+ */
+function catzArrive(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  tick: CatzStateTick,
+  moved: boolean,
+  random: (n: number) => number
+) {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const stage = world.stage!;
+  const middle = {
+    x: Math.trunc((stage.right - stage.left) / 2) + stage.left,
+    y: Math.trunc((stage.bottom - stage.top) / 2) + stage.top,
+  };
+  const age = brain(CATZ_BRAIN.age);
+  const moment = () => {
+    tick.global = 8;
+  };
+
+  switch (world.global) {
+    case 1:
+      if (moved) {
+        return moment();
+      }
+
+      tick.state = world.x35a4 === 0xe ? 0xb : !world.x35a2 || age === 0 ? 2 : 1;
+      return;
+    case 2:
+      tick.state = 7;
+      return;
+    case 5:
+      if (moved) {
+        return moment();
+      }
+
+      tick.state = 0x2e;
+      return;
+    case 6: {
+      const { width } = world.size!;
+      const above = () => world.point!.y - (random(100) + 150);
+      const kin = world.kin!;
+      const cursor = world.cursor!;
+
+      switch (world.x35a8) {
+        case 1:
+          tick.goal = { x: stage.left, y: above() };
+          break;
+        case 2:
+          tick.goal = { x: stage.right, y: above() };
+          break;
+        case 3:
+          tick.goal = { x: world.goal!.x, y: above() };
+          break;
+        case 4:
+        case 5:
+          tick.goal = { x: Math.trunc((kin.right - kin.left) / 2) + kin.left, y: kin.top };
+          break;
+        case 8:
+          tick.goal = { x: width + cursor.left, y: cursor.top };
+          break;
+        case 9:
+          tick.goal = { x: cursor.right - width, y: cursor.top };
+          break;
+      }
+
+      tick.explore = world.x35a8;
+      tick.state = 14;
+      return;
+    }
+    case 8:
+      tick.state = 0x15;
+      return;
+    case 0xb:
+      tick.global = 13;
+      return;
+    case 0xe:
+      if (age === 0 && catzBehavior(mind, 26, random) !== 0 && world.area1 && percent() < 75) {
+        tick.state = 0x16;
+        return;
+      }
+
+      return moment();
+    case 0x10:
+      if (moved) {
+        return moment();
+      }
+
+      return;
+    case 0x14:
+      if (percent() < 50) {
+        tick.x35a6 = 0;
+        tick.state = 0x16;
+        return;
+      }
+
+      return moment();
+    case 0x15:
+      if (world.x35ee !== 10) {
+        tick.state = world.x35ee === 0xb ? 0x47 : 0x41;
+        return;
+      }
+
+      if (percent() > 24) {
+        tick.explore = world.x35a8 === 1 ? 2 : 1;
+        tick.state = 0x47;
+        return;
+      }
+
+      tick.goal = middle;
+      tick.explore = world.x35a8;
+      tick.x35a6 = 0;
+      tick.state = 0x16;
+      return;
+    case 0x16:
+      tick.x33be = 3;
+      tick.global = 0x16;
+      return;
+    default: {
+      /* Its moment readied, after it idling, 0x93 meanwhile, not watching (`PreMoment`). */
+      tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
+      tick.global = 8;
+    }
+  }
 }

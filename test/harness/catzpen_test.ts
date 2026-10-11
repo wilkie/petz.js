@@ -210,6 +210,9 @@ const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
   Math.floor(n / 6) % 2,
 ]);
 
+/** The global states a walk's end is reimplemented for: all but 1, 3, 4, 13, 17 and 14 with an age. */
+const ARRIVALS = [2, 5, 6, 8, 9, 7, 10, 11, 16, 20, 21, 22, 14, 12, 18, 19];
+
 /**
  * Cases of a tick of the cat's own state: a seed, the brains' values and
  * centres, the state, the global state, `+0x3502`, `+0x34ca`, `+0x3504`,
@@ -221,9 +224,12 @@ const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
  * high. The 160 after look at things, with lists of curiosities of each
  * kind and none; 120 explore, the cursor still or about; 120 ready a walk,
  * entering or not, to points on and off the stage; and the last 120 walk on
- * to their marker, by each global state but 1 and 17.
+ * to their marker, by each global state but 1 and 17; and the last 153 are
+ * there, `PopScript` finding the marker, by each global state `ARRIVALS`
+ * names.
  */
-const LOCAL_CASES = Array.from({ length: 862 }, (_, n) => {
+const LOCAL_CASES = Array.from({ length: 1015 }, (_, n) => {
+  const arriving = n >= 862;
   const walkingOn = n >= 742;
   const walking = n >= 622 && !walkingOn;
   const exploring = n >= 502 && !walking;
@@ -251,8 +257,13 @@ const LOCAL_CASES = Array.from({ length: 862 }, (_, n) => {
     brains[1] = state === 27 || state === 28 ? 10 : brains[1];
   }
 
+  /* There, in global state 14, without an age. */
+  if (arriving && ARRIVALS[n % ARRIVALS.length] === 14) {
+    brains[11] = 0;
+  }
+
   /* Walking on, half without catnip, which would take a stride of its own one time in two, and with few fleas or many. */
-  if (walkingOn) {
+  if (walkingOn && !arriving) {
     brains[10] = n % 2 ? 0 : brains[10];
     brains[6] = [0, 60, 90][n % 3];
   }
@@ -260,8 +271,13 @@ const LOCAL_CASES = Array.from({ length: 862 }, (_, n) => {
   const kinds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 0x17, 0x1b, 14, 20];
   const left = [0, 50, 230, 400, 560][n % 5];
   const top = [0, 10, 30, 100, 300][(n >> 1) % 5];
-  const cursor = exploring && n % 3 !== 0 ? [left, top, left + 10, top + 10] : [0, 0, 0, 0];
-  /* Walking: whether entering, the mode, `+0x35fc`, what it walks to, `+0x35a2`, `+0x35ac`, the point, `+0x688`, `+0x35aa`, `+0x35a8`, `+0x35f4`, `+0x35ee` and `+0x35a4`. */
+  const cursor =
+    exploring && n % 3 !== 0
+      ? [left, top, left + 10, top + 10]
+      : arriving
+        ? [230, 100, 240, 110]
+        : [0, 0, 0, 0];
+  /* Walking: whether entering, the mode, `+0x35fc`, what it walks to, `+0x35a2`, `+0x35ac`, the point, `+0x688`, `+0x35aa`, `+0x35a8`, `+0x35f4`, `+0x35ee`, `+0x35a4`, and whether `PopScript` finds its target. */
   const walk = walking
     ? [
         n % 6 !== 5 ? 1 : 0,
@@ -278,6 +294,7 @@ const LOCAL_CASES = Array.from({ length: 862 }, (_, n) => {
         0,
         0,
         0,
+        0,
       ]
     : walkingOn
       ? [
@@ -285,18 +302,19 @@ const LOCAL_CASES = Array.from({ length: 862 }, (_, n) => {
           1,
           0,
           0x16,
+          arriving ? (n >> 2) % 2 : 0,
           0,
+          arriving ? [60, 235, 400, 520][n % 4] : [-30, 60, 235, 400, 520][n % 5],
+          arriving ? [40, 185, 300][n % 3] : [-30, 40, 185, 300, 420][(n >> 1) % 5],
+          arriving ? 0 : [-100, -64, -20, 0, 30, 64, 96, 127][n % 8],
+          arriving ? 1 : 0,
+          arriving ? (n % 9) + 1 : n % 3 === 0 ? 3 : 1,
           0,
-          [-30, 60, 235, 400, 520][n % 5],
-          [-30, 40, 185, 300, 420][(n >> 1) % 5],
-          [-100, -64, -20, 0, 30, 64, 96, 127][n % 8],
-          0,
-          n % 3 === 0 ? 3 : 1,
-          0,
-          0,
-          n % 2 ? 12 : 0,
+          arriving ? [0, 10, 11][n % 3] : 0,
+          arriving ? [0, 14][(n >> 1) % 2] : n % 2 ? 12 : 0,
+          arriving ? 1 : 0,
         ]
-      : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const curiosities = Array.from({ length: 8 }, (_, k) =>
     looking && k < (n % 7) + 1 ? kinds[(n * 5 + k * 7) % kinds.length] : 0
   );
@@ -306,22 +324,26 @@ const LOCAL_CASES = Array.from({ length: 862 }, (_, n) => {
     ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 7) % LEVELS.length]),
     state,
-    walkingOn
-      ? [6, 3, 8, 13, 14, 15, 16, 20, 21, 22, 9, 4][n % 12]
-      : walking
-        ? [6, 14, 21, 1, 9, 16][n % 6]
-        : looking || exploring
-          ? 6
-          : state === 26 && Math.floor(n / 20) % 2
-            ? 21
-            : 9,
-    walkingOn
-      ? [0, 5, 20, 21, 30][Math.floor(n / 12) % 5]
-      : looking
-        ? Math.floor(n / 7) % 4
-        : tempered && state === 28
-          ? 0
-          : [0, 10, 25, 26, 40, 100, 101][n % 7],
+    arriving
+      ? ARRIVALS[n % ARRIVALS.length]
+      : walkingOn
+        ? [6, 3, 8, 13, 14, 15, 16, 20, 21, 22, 9, 4][n % 12]
+        : walking
+          ? [6, 14, 21, 1, 9, 16][n % 6]
+          : looking || exploring
+            ? 6
+            : state === 26 && Math.floor(n / 20) % 2
+              ? 21
+              : 9,
+    arriving
+      ? 3
+      : walkingOn
+        ? [0, 5, 20, 21, 30][Math.floor(n / 12) % 5]
+        : looking
+          ? Math.floor(n / 7) % 4
+          : tempered && state === 28
+            ? 0
+            : [0, 10, 25, 26, 40, 100, 101][n % 7],
     Math.floor(n / 10) % 2 && !tempered && !looking ? 1 : 0,
     looking && n % 5 === 0 ? 3 : 0,
     looking && n % 3 === 0 ? 0x5f : walkingOn ? [0, 0x74, 0x76, 5][n % 4] : 0,
@@ -852,7 +874,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         const c = LOCAL_CASES.find(([s]) => s === localSeed)!;
         const [state, global, count, passed, ticks, x1500] = c.slice(25);
         const [enter, mode, x35fc, x35a6In, x35a2, x35acIn, wantX, wantY] = c.slice(43, 51);
-        const [x688In, , x35a8In, x35f4, x35ee, x35a4In] = c.slice(51, 57);
+        const [x688In, x35aaIn, x35a8In, x35f4, x35ee, x35a4In, found] = c.slice(51, 58);
         let seed = BigInt(localSeed);
         const random = (n: number) => {
           seed = (seed * 22695477n + 1n) & 0xffffffffn;
@@ -889,6 +911,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             x35ee,
             x35a4: x35a4In,
             inShelf: (kind) => shelf[kind] !== 0,
+            x35aa: x35aaIn,
+            found: found === 1,
           },
           random
         );
@@ -908,8 +932,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         );
         const [marked, markX, markY, x35ac] = values.slice(61, 65);
         const [wordings, ...worded] = values.slice(65, 72);
-        const [fullness, , x35aa] = values.slice(72, 75);
-        const [theirPassed, after, idle, looks, theirMode, x35a6, x35a4] = values.slice(75);
+        const [fullness, , x35aa, x33be] = values.slice(72, 76);
+        const [theirPassed, after, idle, looks, theirMode, x35a6, x35a4] = values.slice(76);
         const walkingOn = state === 23;
         const walking = state === 22;
         /* The handler's own pushes: its scripts may go on to more in the tick. */
@@ -935,13 +959,14 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           walkingOn && [
             ours.steer,
             ours.layered !== undefined || Boolean(ours.sound),
-            ours.x35aa ?? 0,
+            ours.x35aa ?? x35aaIn,
             ours.fullness,
             ours.marker ? [ours.marker.x, ours.marker.y] : '',
             ours.head,
             ours.pushes,
             ours.mode ?? mode,
             ours.x35a6 ?? x35a6In,
+            ours.x33be,
           ],
           walking && [
             ours.mode ?? mode,
@@ -978,6 +1003,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             ours.pushes && pushedAll,
             theirMode,
             x35a6,
+            ours.x33be === undefined ? undefined : x33be,
           ],
           walking && [
             theirMode,

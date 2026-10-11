@@ -728,7 +728,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
      * `+0x104` on), whether it is entering, `+0x3508`, `+0x35fc`,
      * `+0x35a6`, `+0x35a2`, `+0x35ac`, where it walks to (`+0x34cc`,
      * `+0x34ce`; walking on, its marker put there), `+0x688`, `+0x35aa`,
-     * `+0x35a8`, `+0x35f4`, `+0x35ee` and `+0x35a4`: the cat in them as it is (`+0x2552`; `+0x3a` of the global
+     * `+0x35a8`, `+0x35f4`, `+0x35ee`, `+0x35a4` and whether `PopScript` is
+     * to find its target: the cat in them as it is (`+0x2552`; `+0x3a` of the global
      * machine), entering or not, its script done, no layered action playing,
      * both machines' histories and the actions pushed marked; a tick of its
      * state (its machine's slot 4, as `BaseNewState` calls it); and
@@ -737,7 +738,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
      * frames begun, where it walks to (`+0x34cc`, `+0x34ce`) and how
      * (`+0x35a8`), the calls to its head, the target point of its kin 0x16
      * and `+0x35ac`, the first words pushed to its script (its slot `0xa4`),
-     * its fullness, `+0x688` and `+0x35aa`, `+0x34ca`, the moment's `+0x3516`, `+0x350a`,
+     * its fullness, `+0x688`, `+0x35aa` and `+0x33be`, `+0x34ca`, the
+     * moment's `+0x3516`, `+0x350a`,
      * `+0x3506` and `+0x3508`, and `+0x35a6` and `+0x35a4`. */
     file = _lopen(DIRECTORY "\\LOCAL.TXT", OF_READ);
 
@@ -745,8 +747,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
         unsigned char __far *machine = cat + 0x2518;
         void __far *original, __far *globalOriginal, __far *localOriginal;
-        int done, enter, x35fc, x35a2, x35ac, x688;
+        int done, enter, x35fc, x35a2, x35ac, x688, found, place[4];
         DISPATCH dispatch = *(DISPATCH __far *)(*(unsigned char __far *__far *)machine + 4);
+
+        for (b = 0; b < 4; b++) {
+            place[b] = *(int __far *)(cat + 0x124 + 2 * b);
+        }
 
         for (;;) {
             long seed = number(file);
@@ -792,6 +798,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int __far *)(cat + 0x35f4) = (int)number(file);
             *(int __far *)(cat + 0x35ee) = (int)number(file);
             *(int __far *)(cat + 0x35a4) = (int)number(file);
+            found = (int)number(file);
 
             /* Walking on (23), its marker (kin 0x16) put where it walks to
              * (its method `0x44`, as `DoCatLocomote` puts it). */
@@ -816,10 +823,23 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
             /* No box to find a target in (`+0x250e`, `+0x2510`; its share,
              * `+0x2512`, 1, which `MakeFocusRect` divides by), so that
-             * `PopScript` never finds one there from a case before. */
-            *(int __far *)(cat + 0x250e) = 0;
-            *(int __far *)(cat + 0x2510) = 0;
-            *(int __far *)(cat + 0x2512) = 1;
+             * `PopScript` never finds one there from a case before; or,
+             * where it is to be found, the marker (kin 0x16) the target
+             * (`+0x1504`) and a box about the head so big, and moved ahead of
+             * it so little, that it holds the stage. */
+            *(int __far *)(cat + 0x250e) = found ? 2000 : 0;
+            *(int __far *)(cat + 0x2510) = found ? 2000 : 0;
+            *(int __far *)(cat + 0x2512) = found ? 2000 : 1;
+
+            if (found) {
+                *(void __far *__far *)(cat + 0x1504) = ((GETKIN)ordinal(18))(cat, 0x16);
+            }
+
+            /* Where it was at the first case (its rectangle, `+0x124` to
+             * `+0x12a`), as a target found moves it as it is popped. */
+            for (b = 0; b < 4; b++) {
+                *(int __far *)(cat + 0x124 + 2 * b) = place[b];
+            }
 
             for (b = 0; b < 10; b++) {
                 *(int __far *)(cat + 0x14a8 + 2 * b) = -1;
@@ -935,8 +955,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 say(" %d", wordings ? worded[b] : -1);
             }
 
-            say(" %d %d %d", *(int __far *)(cat + 0x2fda + 4 * 0x52 + 0x3a), *(int __far *)(cat + 0x688),
-                *(int __far *)(cat + 0x35aa));
+            say(" %d %d %d %d", *(int __far *)(cat + 0x2fda + 4 * 0x52 + 0x3a),
+                *(int __far *)(cat + 0x688), *(int __far *)(cat + 0x35aa), *(int __far *)(cat + 0x33be));
             say(" %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x34ca),
                 *(int __far *)(cat + 0x3516),
                 *(int __far *)(cat + 0x350a), *(int __far *)(cat + 0x3506),
