@@ -1123,15 +1123,16 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 });
 
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
-const FOLLOWED = new Set([12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32]);
+const FOLLOWED = new Set([12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32, 56, 57]);
 
 /**
  * A cat's day held to the reimplementation: each `tick` the driver wrote
  * before a tick of a state of its own (C's `rand` seed, entered and left, its
  * place on the stage, its global state, its fields, brains and their
  * centres, its curiosities, the cursor, the stage, its size and point, its
- * kin 0x22's and its own rectangles, its marker, the layered frames left and
- * `PetParams` `+0xc4`) and `ticked` after (the global and own states asked
+ * kin 0x22's and its own rectangles, its marker, the layered frames left,
+ * `PetParams` `+0xc4`, the moment's fields, how what it plays with lies to
+ * its paw and the swat's fields) and `ticked` after (the global and own states asked
  * for, the actions pushed, its head's calls, its steering's words, and its
  * fields and brains again). Where the engine acted -- pushed an action or
  * asked for a state -- its script was mostly done, and the reimplementation,
@@ -1181,6 +1182,11 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     }
 
     counts[1]++;
+
+    /* Swatting, nothing it plays with about: not held. */
+    if ((state === 56 || state === 57) && b[91] === -1) {
+      continue;
+    }
 
     /* Walking on, its end is not reimplemented in global states 1, 3, 4 and 17, nor in 14 with an age (brain 11). */
     if (
@@ -1300,6 +1306,16 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           inShelf,
           c4: b[82],
           found,
+          swat: {
+            facing: b[91],
+            dx: b[92],
+            dy: b[93],
+            miss: b[98],
+            mouseRunning: b[99] === 1,
+            side: b[100],
+            zone: b[103],
+            x3596: b[104],
+          },
         },
         random
       );

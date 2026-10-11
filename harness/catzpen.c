@@ -92,6 +92,10 @@ typedef long(__cdecl __far *TARGETPT)(void __far *apt, int space);
 typedef void __far *(__cdecl __far *GETKIN)(void __far *apt, int type);
 typedef void(__cdecl __far *DRAWRECT)(int __far *rect, void __far *apt, int space);
 typedef void(__cdecl __far *MOVETO)(void __far *apt, int space, int __far *point);
+typedef void(__cdecl __far *ORIENT)(void __far *cat, int ball, int __far *at, int kind, int __far *toy,
+                                    int __far *facing, int __far *delta);
+typedef int(__cdecl __far *MISS)(void __far *cat);
+typedef int(__cdecl __far *CURSTATE)(void __far *machine);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
@@ -316,9 +320,40 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
     /* And the moment's box (`+0x350c` to `+0x3512`), whether its mind is
      * made up (`+0x3514`), the sound owed (`+0x35a0`), `+0x35d2`, and
      * whether the cursor is about (`PetParams` `+0x46`). */
-    say(" %d %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x350c), *(int __far *)(cat + 0x350e),
+    say(" %d %d %d %d %d %d %d %d", *(int __far *)(cat + 0x350c), *(int __far *)(cat + 0x350e),
         *(int __far *)(cat + 0x3510), *(int __far *)(cat + 0x3512), *(int __far *)(cat + 0x3514),
         *(int __far *)(cat + 0x35a0), *(int __far *)(cat + 0x35d2), *(int *)(params + 0x46));
+
+    /* And, where what it plays with (`+0x35a4`) is about, how it lies to its
+     * paw, ball 0x31 (`GetOrientationInfo`, its slot `0x304`: which way it
+     * faces, the toy less the paw, the paw, the toy), how far the paw misses
+     * it (`GetSwatMissDistance`, `0x308`); the mouse's state (kin 0x1b, its
+     * machine's slot 8), -1 for none; and the swat's fields (`+0x358e` to
+     * `+0x3596`). */
+    {
+        unsigned char __far *table = *(unsigned char __far *__far *)cat;
+        int at[2] = {0, 0}, toy[2] = {0, 0}, delta[2] = {0, 0}, facing = -1, miss = -1, mouse = -1;
+        unsigned char __far *kin = ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4));
+
+        if (kin) {
+            (*(ORIENT __far *)(table + 0x304))(cat, 0x31, at, *(int __far *)(cat + 0x35a4), toy,
+                                               &facing, delta);
+            miss = (*(MISS __far *)(table + 0x308))(cat);
+        }
+
+        kin = ((GETKIN)ordinal(18))(cat, 0x1b);
+
+        if (kin) {
+            unsigned char __far *machine = kin + 0x2518;
+
+            mouse = (*(CURSTATE __far *)(*(unsigned char __far *__far *)machine + 8))(machine);
+        }
+
+        say(" %d %d %d %d %d %d %d %d %d", facing, delta[0], delta[1], at[0], at[1], toy[0], toy[1],
+            miss, mouse);
+        say(" %d %d %d %d %d\r\n", *(int __far *)(cat + 0x358e), *(int __far *)(cat + 0x3590),
+            *(int __far *)(cat + 0x3592), *(int __far *)(cat + 0x3594), *(int __far *)(cat + 0x3596));
+    }
 
     pushes = globalled = localled = looked = wordings = 0;
     handle(machine, p, enter, leave);

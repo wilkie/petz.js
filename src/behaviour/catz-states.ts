@@ -4,7 +4,7 @@
  * handlers). See kb/topics/catz-behaviour.md ("States of its own").
  */
 
-import { type CatzMind, catzBehavior, catzSound } from './catz-behavior.ts';
+import { type CatzMind, catzBehavior, catzSound, mapCatzValue } from './catz-behavior.ts';
 import { CATZ_TURN } from '../render/raster.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 
@@ -20,6 +20,8 @@ export const CATZ_STATE = {
   sleep: 28,
   wakeup: 29,
   sharpenClaws: 32,
+  swatting: 56,
+  mayEndSwatting: 57,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -78,6 +80,33 @@ export interface CatzStateWorld {
   /** Walking on: `+0x35aa` (there before), and whether `PopScript` finds what it walks to in its box (answering 2). */
   x35aa?: number;
   found?: boolean;
+
+  /** Swatting: how what it plays with lies to its paw, and its swat's fields. */
+  swat?: CatzSwat;
+}
+
+/**
+ * How what a cat plays with (`+0x35a4`) lies to its paw, ball 0x31, as
+ * `GetOrientationInfo` (seg29:1999) and `GetSwatMissDistance` (seg29:1b55)
+ * give it -- the paw where the cat's balls put it on the stage, not
+ * reimplemented here -- and the swat's own fields.
+ */
+export interface CatzSwat {
+  /** Which way it faces the toy (0 to 3, by `+0x688`), and the toy less the paw. */
+  facing: number;
+  dx: number;
+  dy: number;
+
+  /** How far the paw is from the toy. */
+  miss: number;
+
+  /** Whether the mouse (kin 0x1b) is in its state 1. */
+  mouseRunning: boolean;
+
+  /** `+0x358e`, its side; `+0x3594`, the zone it swatted in last; `+0x3596`. */
+  side: number;
+  zone: number;
+  x3596: number;
 }
 
 /** The angle from one point to another (`PtToPtAngle`, seg14:1c93): `atan2` in 256ths of a turn, rounded toward 0 (seg48:17a2), the shorter way (`ShortestAngle`, seg48:1d00); 0x81 where they are one. */
@@ -402,6 +431,10 @@ export function catzStateTick(
       return done({ global: 6 });
     case CATZ_STATE.sharpenClaws:
       return world.enter ? done({ pushed: 0x13f }) : done({ global: 6 });
+    case CATZ_STATE.swatting:
+      return catzSwatting(mind, world, random);
+    case CATZ_STATE.mayEndSwatting:
+      return catzMayEndSwatting(mind, world, random);
     case CATZ_STATE.lookAtObjects: {
       const list = world.curiosities ?? [];
       const brain = (n: number) => mind.brains[n];
@@ -1082,4 +1115,180 @@ function catzArrive(
     default:
       return moment();
   }
+}
+
+/**
+ * A swat (56; `DoCatSwatting`, seg29:0bd3), its script done and not cued to
+ * strike (cue 5, the strike, is not reimplemented): by how far the toy is
+ * above its paw, against its width times 0.8, 0.45, 0.3, 0.2 and -0.2
+ * (`ds:0x386` to `0x3a6`), a zone, 8 down to 1, and the swat for it, one of
+ * two by its side (`+0x358e`). In zone 8 again it may give up the toy
+ * instead -- under `MapValue(10, 60, 100 - age)`, 0x138, and three times in
+ * four walking off (22), else playing (global 15). Under a third of its
+ * energy it makes a sound (10); it swats, tires and hungers, counts the swat
+ * (two in zone 8), may change its side or `+0x3596`, and past a twentieth
+ * of its energy in swats, one time in two -- or the mouse running -- may end
+ * (57).
+ */
+function catzSwatting(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const swat = world.swat!;
+  const width = world.size!.width;
+  const up = -swat.dy;
+  const over = (share: number) => Math.trunc(width * share) < up;
+  const age = brain(CATZ_BRAIN.age);
+  const tick: CatzStateTick = {
+    energy: brain(CATZ_BRAIN.energy),
+    fullness: brain(CATZ_BRAIN.fullness),
+    count: world.count,
+    pushes: [],
+  };
+  let zone: number;
+  let left: number;
+  let right: number;
+
+  if (over(0.8)) {
+    [zone, left, right] = [8, 0x5f, 0x60];
+
+    if (swat.zone === 8 && percent() < mapCatzValue(10, 60, 100 - age)) {
+      tick.pushes!.push(0x138);
+      tick.pushed = 0x138;
+
+      if (percent() < 75) {
+        tick.state = 0x16;
+      } else {
+        tick.global = 0xf;
+      }
+
+      return tick;
+    }
+  } else if (over(0.45)) {
+    zone = 7;
+    [left, right] = percent() < Math.trunc(age / 4) ? [0x27e, 0x27e] : [0xf4, 0xf5];
+  } else if (over(0.3)) {
+    [zone, left, right] = [6, 0x54, 0x59];
+  } else if (over(0.2)) {
+    if (swat.dx > 0 && swat.facing === 1) {
+      [zone, left, right] = [4, 0x63, 0x63];
+    } else if (swat.dx < -0x28 && swat.facing === 1) {
+      [zone, left, right] = [5, 0x66, 0x66];
+    } else {
+      [zone, left, right] = swat.x3596 === 1 ? [3, 0x4b, 0x4f] : [3, 0x53, 0x58];
+    }
+  } else if (over(-0.2)) {
+    [zone, left, right] = swat.x3596 === 1 ? [2, 0x4c, 0x50] : [2, 0x55, 0x5a];
+  } else {
+    [zone, left, right] = [1, 0x5c, 0x5d];
+  }
+
+  const action = swat.side ? right : left;
+
+  if (percent() < Math.trunc(brain(CATZ_BRAIN.energy) / 3)) {
+    tick.sound = catzSound(mind, 10, random);
+  }
+
+  tick.pushes!.push(action);
+  tick.pushed = action;
+
+  if (percent() < 100 - brain(CATZ_BRAIN.liveliness)) {
+    tick.energy = Math.max(0, tick.energy - 1);
+  }
+
+  if (percent() < 10) {
+    tick.fullness = Math.max(0, tick.fullness! - 1);
+  }
+
+  tick.count = world.count + (zone === 8 ? 2 : 1);
+
+  if (percent() < 30) {
+    percent();
+  } else if (percent() < 20) {
+    percent();
+  }
+
+  if (Math.trunc(tick.energy / 20) < tick.count && percent() < 50) {
+    tick.state = 0x39;
+  } else if (world.x35a4 === 0x1b && swat.mouseRunning) {
+    tick.state = 0x39;
+  }
+
+  return tick;
+}
+
+/**
+ * Whether to stop swatting (57; `DoCatMayEndSwatting`, seg29:15d9), not
+ * entered: the toy near (its paw missing it by under 100) -- and, where it
+ * was near as it began (`+0x34ca`), one time in five -- and the mouse not
+ * running, it swats again (56). Else, its script done, it counts; past a
+ * twentieth of its energy it stops -- the toy far, or not inclined to
+ * behaviour 8, or the mouse running -- for eating (3) after 0xb or 0xc, else
+ * idling (6), or swats again; and otherwise pushes, by the zone it swatted in
+ * last, 0x15 (1), one of two by its side (2 to 6), or 0x40 (7 and 8).
+ */
+function catzMayEndSwatting(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const swat = world.swat!;
+  const mouse = world.x35a4 === 0x1b && swat.mouseRunning;
+  const age = brain(CATZ_BRAIN.age);
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+
+  if (swat.miss < 100) {
+    const stays = world.passed ? percent() > 19 : false;
+
+    if (!stays && !mouse) {
+      tick.state = 0x38;
+      return tick;
+    }
+  }
+
+  tick.count = world.count + 1;
+
+  if (Math.trunc(brain(CATZ_BRAIN.energy) / 20) < tick.count) {
+    if (swat.miss > 100 || catzBehavior(mind, 8, random) === 0 || mouse) {
+      tick.global = world.x35a4 === 0xc || world.x35a4 === 0xb ? 3 : 6;
+    } else {
+      tick.state = 0x38;
+    }
+
+    return tick;
+  }
+
+  if (tick.count > 1) {
+    catzBehavior(mind, 9, random);
+  }
+
+  const pick = (still: number, aged: number, other: number) =>
+    swat.x3596 === 1 ? (age === 0 ? 0xd7 : still) : age !== 0 && percent() < 50 ? aged : other;
+
+  switch (swat.zone) {
+    case 1:
+      tick.pushed = 0x15;
+      break;
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6: {
+      const left = pick(0x128, 0x2ba, 0x127);
+      const right = pick(299, 699, 0x12a);
+      tick.pushed = swat.side ? right : left;
+      break;
+    }
+    case 7:
+    case 8:
+      tick.pushed = 0x40;
+      break;
+  }
+
+  return tick;
 }
