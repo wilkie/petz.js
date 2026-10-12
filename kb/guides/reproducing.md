@@ -92,6 +92,7 @@ pnpm test:harness
 The harness runs Catz's engine, `CATZDLL.DLL` from the CD-ROM's install, on [winbox.js](../../../winbox.js), the clean-room Windows 3.1 beside this repository, with no DOSBox, and holds what its functions answer to the reimplementation case by case.
 
 - **Drivers:** each is a small Win16 program in `harness/`. It loads the library, calls a function of it by ordinal on cases of its own, and writes what it answers. They are built with the Open Watcom compiler winbox.js's oracle fetches.
+- **Rebuild after a change:** the tests run the drivers already built in `oracle/build/harness/` and do not rebuild them, so after changing a driver run `pnpm harness:build` again; otherwise the tests run the old driver, and fields it does not yet write are read as missing.
 - **The tests:** `test/harness/` runs each driver as winbox.js runs one of its probes, beside the library and `SOSLIB03.DLL`, and reads the answers back. They are skipped without winbox.js, the drivers or the Catz install.
 - [[measured]] **So far, both agree on every case:**
   - `Mag` (seg48:1a95), on 875 vectors;

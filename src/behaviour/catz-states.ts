@@ -21,7 +21,9 @@ export const CATZ_STATE = {
   wakeup: 29,
   sharpenClaws: 32,
   swatting: 56,
+  preStalking: 1,
   stalking: 2,
+  begging: 35,
   mayEndSwatting: 57,
 } as const;
 
@@ -93,6 +95,16 @@ export interface CatzStateWorld {
   preyHeld?: boolean;
   preyArea3?: boolean;
   x35b8?: number;
+
+  /** Eating, there: whether the user holds what it walked to (`+0x35a6`), and `+0x35d2`. */
+  walkedToHeld?: boolean;
+  x35d2?: number;
+
+  /** Walking on: where what it walks to (`+0x35a6`) is, its target point, where that is not its goal (`+0x34cc`). */
+  walkedToAt?: { x: number; y: number };
+
+  /** Begging: whether its script cued it (cue 6) as it was popped. */
+  cued?: boolean;
 }
 
 /**
@@ -141,8 +153,9 @@ export interface CatzSwat {
   dx: number;
   dy: number;
 
-  /** How far the paw is from the toy. */
+  /** How far the paw is from the toy, and where it asks again, its script done, how far then. */
   miss: number;
+  missAgain?: number;
 
   /** Whether the mouse (kin 0x1b) is in its state 1. */
   mouseRunning: boolean;
@@ -477,8 +490,19 @@ export function catzStateTick(
       return world.enter ? done({ pushed: 0x13f }) : done({ global: 6 });
     case CATZ_STATE.swatting:
       return catzSwatting(mind, world, random);
+    case CATZ_STATE.preStalking: {
+      /* `DoCatPreStalking`, seg14:03cf: entered, it tracks what it plays with with its head (3000), and pushes 0xdf where inclined to behaviour 7, then 0x13d; its script done, it stalks (2). */
+      if (world.enter) {
+        const pushes = [...(catzBehavior(mind, 7, random) !== 0 ? [0xdf] : []), 0x13d];
+        return done({ pushed: pushes[0], pushes, head: ['track'] });
+      }
+
+      return done({ state: CATZ_STATE.stalking });
+    }
     case CATZ_STATE.stalking:
       return catzStalking(mind, world, random);
+    case CATZ_STATE.begging:
+      return catzBegging(mind, world, random);
     case CATZ_STATE.mayEndSwatting:
       return catzMayEndSwatting(mind, world, random);
     case CATZ_STATE.lookAtObjects: {
@@ -720,7 +744,7 @@ function catzWalkOn(
   };
   const push = (action: number) => tick.pushes!.push(action);
   const age = brain(CATZ_BRAIN.age);
-  let mark = { ...world.goal! };
+  let mark = { ...(world.walkedToAt ?? world.goal!) };
   let kind = world.x35a6 ?? 0x16;
   let walkedTo = kind;
   let moved = false;
@@ -988,6 +1012,11 @@ function catzArrive(
   };
   const age = brain(CATZ_BRAIN.age);
   /* The moment readied (`PreMoment`, after it idling, 0x93 meanwhile, not watching) and had: where the switch goes on to seg25:21aa. */
+  const walkTo = (goal: { x: number; y: number }) => {
+    if ((tick.x35a6 ?? world.x35a6) === 0x16) {
+      tick.marker = goal;
+    }
+  };
   const moment = () => {
     tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
     tick.global = 8;
@@ -1004,6 +1033,42 @@ function catzArrive(
     case 2:
       tick.state = 7;
       return;
+    case 3: {
+      if (moved) {
+        return moment();
+      }
+
+      /* Eating: its food off the shelf -- 0xc with `+0x35d2` -- it aligns to eat it (0x26), or, the user holding it, begs (0x23), waits for the treat (0x24) for 0xb; 0xf goes to global state 5. On the shelf, it begs. The marker: hiding its food (0x29), inclined to behaviour 27, else grooming (global 13). Another kind reads what nothing set (`bp-0x1c`). */
+      const kind = world.x35a6!;
+      let off: boolean;
+
+      if (kind === 8 || kind === 0xb || kind === 0xd || kind === 0xf) {
+        off = !world.inShelf!(kind);
+      } else if (kind === 0xc) {
+        off = !world.inShelf!(kind) && world.x35d2! > 0;
+      } else if (kind === 0x16) {
+        if (catzBehavior(mind, 27, random) !== 0) {
+          tick.state = 0x29;
+        } else {
+          tick.global = 13;
+        }
+
+        return;
+      } else {
+        tick.unread = true;
+        return;
+      }
+
+      if (off && kind === 0xf) {
+        tick.global = 5;
+      } else if (off && kind === 0xb) {
+        tick.state = world.walkedToHeld ? 0x24 : 0x26;
+      } else {
+        tick.state = off && !world.walkedToHeld ? 0x26 : 0x23;
+      }
+
+      return;
+    }
     case 5:
       if (moved) {
         return moment();
@@ -1040,6 +1105,8 @@ function catzArrive(
       }
 
       tick.explore = world.x35a8;
+      /* What it walks to is moved to its goal (its method `0x44`). */
+      walkTo(tick.goal ?? world.goal!);
       tick.state = 14;
       return;
     }
@@ -1080,6 +1147,10 @@ function catzArrive(
       }
 
       if (x688 > low && x688 < high) {
+        if (world.x35a8 !== 3) {
+          walkTo(tick.goal ?? world.goal!);
+        }
+
         tick.state = world.x35a8 === 3 ? 0x20 : 0x18;
       } else {
         tick.state = 0x1f;
@@ -1089,6 +1160,8 @@ function catzArrive(
     }
     case 0xe:
       if (age === 0 && catzBehavior(mind, 26, random) !== 0 && world.area1 && percent() < 75) {
+        tick.pushes!.push(0x2a6, 0x8c, 0x8c, 0x8c);
+
         tick.state = 0x16;
         return;
       }
@@ -1168,6 +1241,12 @@ function catzSwatting(
   const brain = (n: number) => mind.brains[n];
   const percent = () => random(101);
   const swat = world.swat!;
+
+  /* Cued to strike (cue 5), it turns its head to the toy (its slot `0xe0`) and strikes: not reimplemented. */
+  if (world.cued) {
+    return { energy: brain(CATZ_BRAIN.energy), count: world.count, unread: true };
+  }
+
   const width = world.size!.width;
   const up = -swat.dy;
   const over = (share: number) => Math.trunc(width * share) < up;
@@ -1284,7 +1363,7 @@ function catzMayEndSwatting(
   tick.count = world.count + 1;
 
   if (Math.trunc(brain(CATZ_BRAIN.energy) / 20) < tick.count) {
-    if (swat.miss > 100 || catzBehavior(mind, 8, random) === 0 || mouse) {
+    if ((swat.missAgain ?? swat.miss) > 100 || catzBehavior(mind, 8, random) === 0 || mouse) {
       tick.global = world.x35a4 === 0xc || world.x35a4 === 0xb ? 3 : 6;
     } else {
       tick.state = 0x38;
@@ -1453,5 +1532,64 @@ function catzStalking(
     }
   }
 
+  return tick;
+}
+
+/**
+ * Begging (35; `DoCatBegging`, seg22:0689). Cued (6) as its script is
+ * popped, one time in two it makes a sound (its slot `0x2ac`, 6), and four
+ * times in five tracks what it plays with (`+0x35a4`) with its head, else
+ * looks at the user. For the bottle (0xf) it may suckle, every tick: not
+ * reimplemented. Its script done -- for 4, having begged (`+0x34ca`), one
+ * time in ten it idles (6); else, seven times in ten or not having begged,
+ * it begs (0x2ac without an age; 0x1d0 inclined to behaviour 10; else
+ * 0x146 under 15 energy, else 0x145) and has begged; else it eats (global
+ * 3) where less full than behaviour 11 answers, or idles.
+ */
+function catzBegging(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+
+  if (world.cued) {
+    if (percent() < 50) {
+      tick.sound = 6;
+    }
+
+    tick.head = [percent() < 80 ? 'track' : 'user'];
+  }
+
+  if (world.x35a4 === 0xf) {
+    tick.unread = true;
+    return tick;
+  }
+
+  const begged = world.passed !== 0;
+
+  if (world.x35a4 === 4 && percent() <= 9 && begged) {
+    tick.global = 6;
+    return tick;
+  }
+
+  if (percent() > 29 || !begged) {
+    const action =
+      brain(CATZ_BRAIN.age) === 0
+        ? 0x2ac
+        : catzBehavior(mind, 10, random) !== 0
+          ? 0x1d0
+          : brain(CATZ_BRAIN.energy) < 15
+            ? 0x146
+            : 0x145;
+    tick.pushed = action;
+    tick.pushes = [action];
+    tick.passed = 1;
+    return tick;
+  }
+
+  tick.global = brain(CATZ_BRAIN.fullness) < catzBehavior(mind, 11, random) ? 3 : 6;
   return tick;
 }

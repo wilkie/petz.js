@@ -177,6 +177,36 @@ static void __cdecl __far __loadds userward(void __far *sprite, int a, int b, in
     lookAtUser(sprite, a, b, c, d);
 }
 
+/* And its slots `0x304` (`GetOrientationInfo`) and `0x308`
+ * (`GetSwatMissDistance`), which a swat calls after its script is popped and
+ * the toy has moved: the first's facing and the toy less the paw, and the
+ * first two distances, each passed on. */
+static ORIENT orient;
+static MISS missing;
+static int oriented, orientation[3], missed, misses[2];
+
+static void __cdecl __far __loadds orienting(void __far *cat, int ball, int __far *at, int kind,
+                                              int __far *toy, int __far *facing, int __far *delta)
+{
+    orient(cat, ball, at, kind, toy, facing, delta);
+
+    if (!oriented++) {
+        orientation[0] = *facing, orientation[1] = delta[0], orientation[2] = delta[1];
+    }
+}
+
+static int __cdecl __far __loadds measuring(void __far *cat)
+{
+    int miss = missing(cat);
+
+    if (missed < 2) {
+        misses[missed] = miss;
+    }
+
+    missed++;
+    return miss;
+}
+
 /* And its slot `0xa4`, which pushes words to its script up to 0x756f: the
  * first 6 words of the first call that steers it (`targetSprite4`, 0x756d),
  * and 16 words passed on, more than any call gives it. */
@@ -199,8 +229,17 @@ static void __cdecl __far __loadds wording(void __far *sprite, int a, int b, int
 
 static unsigned pushedBy[8];
 
+/* And, following a day, C's `rand` seed after each push, and the order the
+ * pushes finished in: a push may draw a script at random, and a script
+ * popped pushes before its handler draws. */
+static unsigned traceData;
+static unsigned long pushedSeed[8];
+static int pushedDone[8], finished;
+
 static void __cdecl __far __loadds record(void __far *sprite, int action, int variant)
 {
+    int k;
+
     /* Who pushed it: the code segment it was called from, its return
      * address's, just below its first argument on the stack. */
     if (pushes < 8) {
@@ -208,8 +247,15 @@ static void __cdecl __far __loadds record(void __far *sprite, int action, int va
         pushedBy[pushes] = ((unsigned __far *)&sprite)[-1];
     }
 
-    pushes++;
+    /* (A push pushes its transition through this slot too, so it is
+     * counted before it is passed on.) */
+    k = pushes++;
     push(sprite, action, variant);
+
+    if (k < 8 && traceData) {
+        pushedSeed[k] = *(unsigned long __far *)MK_FP(traceData, 0x28ba);
+        pushedDone[k] = finished++;
+    }
 }
 
 /* The next number of a file, or -1 at its end. */
@@ -362,12 +408,27 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
         /* And whether the user holds what it plays with
          * (`IsThisSpriteBeingHeld`, 521), the stalk's action (`+0x35b8`), and
-         * where what it plays with is on the stage (`GetSpriteScreenArea`). */
-        say(" %d %d %d\r\n", ((HELD)ordinal(521))(cat, *(int __far *)(cat + 0x35a4)),
+         * where what it plays with is on the stage (`GetSpriteScreenArea`);
+         * and whether the user holds what it walks to (`+0x35a6`), and
+         * whether that is on the shelf (`isSpriteInShelf`), and whether it
+         * is about and its target point. */
+        say(" %d %d %d", ((HELD)ordinal(521))(cat, *(int __far *)(cat + 0x35a4)),
             *(int __far *)(cat + 0x35b8), ((AREA)ordinal(606))(cat, *(int __far *)(cat + 0x35a4)));
+        say(" %d %d", ((HELD)ordinal(521))(cat, *(int __far *)(cat + 0x35a6)),
+            ((INSHELF)ordinal(38))(cat, *(int __far *)(cat + 0x35a6)));
+
+        /* And where what it walks to is (its target point), which a walk
+         * keeps on the stage. */
+        kin = ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a6));
+
+        {
+            long point = kin ? ((TARGETPT)ordinal(10))(kin, 0) : 0;
+
+            say(" %d %d %d\r\n", kin != 0, (int)point, (int)(point >> 16));
+        }
     }
 
-    pushes = globalled = localled = looked = wordings = 0;
+    pushes = globalled = localled = looked = wordings = oriented = missed = finished = 0;
     handle(machine, p, enter, leave);
 
     say("ticked %d %d %d %d %d", globalled, globalled ? globals[0] : -1, localled,
@@ -399,7 +460,16 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
     }
 
     traceFields(cat);
-    say(" %d\r\n", ((REMAINING)ordinal(954))(cat));
+    say(" %d", ((REMAINING)ordinal(954))(cat));
+    say(" %d %d %d %d %d %d %d", oriented, oriented ? orientation[0] : -1,
+        oriented ? orientation[1] : 0, oriented ? orientation[2] : 0, missed,
+        missed ? misses[0] : -1, missed > 1 ? misses[1] : -1);
+
+    for (b = 0; b < 4; b++) {
+        say(" %lu %d", b < pushes ? pushedSeed[b] : 0ul, b < pushes ? pushedDone[b] : -1);
+    }
+
+    say("\r\n");
     depth--;
 }
 
@@ -419,6 +489,10 @@ static void install(unsigned char __far *cat)
     *(LOOK *)(table + 0xe0) = tracking;
     *(LOOK *)(table + 0x2e0) = userward;
     *(WORDS *)(table + 0xa4) = wording;
+    orient = *(ORIENT *)(table + 0x304);
+    missing = *(MISS *)(table + 0x308);
+    *(ORIENT *)(table + 0x304) = orienting;
+    *(MISS *)(table + 0x308) = measuring;
     *(void __far *__far *)cat = table;
 
     _fmemcpy(globalTable, *(void __far *__far *)global, sizeof globalTable);

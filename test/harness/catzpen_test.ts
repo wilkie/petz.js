@@ -214,8 +214,8 @@ const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
   Math.floor(n / 6) % 2,
 ]);
 
-/** The global states a walk's end is reimplemented for: all but 1, 3, 4, 13, 17 and 14 with an age. */
-const ARRIVALS = [2, 5, 6, 8, 9, 7, 10, 11, 16, 20, 21, 22, 14, 12, 18, 19];
+/** The global states a walk's end is reimplemented for: all but 1, 4, 13, 17 and 14 with an age, and 3 only at the marker, the playpen's food being on its shelf. */
+const ARRIVALS = [2, 5, 6, 8, 9, 7, 10, 11, 16, 20, 21, 22, 14, 12, 18, 19, 3];
 
 /**
  * Cases of a tick of the cat's own state: a seed, the brains' values and
@@ -230,26 +230,34 @@ const ARRIVALS = [2, 5, 6, 8, 9, 7, 10, 11, 16, 20, 21, 22, 14, 12, 18, 19];
  * entering or not, to points on and off the stage; and the last 120 walk on
  * to their marker, by each global state but 1 and 17; and the last 153 are
  * there, `PopScript` finding the marker, by each global state `ARRIVALS`
- * names.
+ * names; 64 beg, for 4, 0xb, 0xc, the cursor's and nothing,
+ * having begged or not, about to eat or idle; and the last 16 are about to
+ * stalk, entering or not.
  */
-const LOCAL_CASES = Array.from({ length: 1015 }, (_, n) => {
-  const arriving = n >= 862;
-  const walkingOn = n >= 742;
-  const walking = n >= 622 && !walkingOn;
-  const exploring = n >= 502 && !walking;
-  const looking = n >= 342 && !exploring;
-  const tempered = n >= 150 && !looking;
-  const state = walkingOn
-    ? 23
-    : walking
-      ? 22
-      : exploring
-        ? 13
-        : looking
-          ? 12
-          : tempered
-            ? [19, 19, 19, 19, 27, 27, 26, 28, 28, 28, 28, 28][Math.floor((n - 150) / 16)]
-            : [26, 28, 28, 28, 29, 27, 27, 19, 19, 19][n % 10];
+const LOCAL_CASES = Array.from({ length: 1095 }, (_, n) => {
+  const preStalking = n >= 1079;
+  const begging = n >= 1015 && !preStalking;
+  const arriving = n >= 862 && n < 1015;
+  const walkingOn = n >= 742 && n < 1015;
+  const walking = n >= 622 && n < 742;
+  const exploring = n >= 502 && n < 622;
+  const looking = n >= 342 && n < 502;
+  const tempered = n >= 150 && n < 342;
+  const state = preStalking
+    ? 1
+    : begging
+      ? 35
+      : walkingOn
+        ? 23
+        : walking
+          ? 22
+          : exploring
+            ? 13
+            : looking
+              ? 12
+              : tempered
+                ? [19, 19, 19, 19, 27, 27, 26, 28, 28, 28, 28, 28][Math.floor((n - 150) / 16)]
+                : [26, 28, 28, 28, 29, 27, 27, 19, 19, 19][n % 10];
   const brains = Array.from(
     { length: 12 },
     (_, b) => LEVELS[(n * 3 + b * 11 + ((n * b) % 6)) % LEVELS.length]
@@ -259,6 +267,12 @@ const LOCAL_CASES = Array.from({ length: 1015 }, (_, n) => {
     [0, 2, 3, 7].forEach((b, bit) => (brains[b] = (n >> bit) & 1 ? 75 : 25));
     brains[11] ||= looking && n % 9 === 0 ? 0 : 50;
     brains[1] = state === 27 || state === 28 ? 10 : brains[1];
+  }
+
+  /* Begging, some without an age and some with little energy. */
+  if (begging) {
+    brains[11] = n % 5 === 0 ? 0 : brains[11];
+    brains[1] = n % 7 === 0 ? 10 : brains[1];
   }
 
   /* There, in global state 14, without an age. */
@@ -318,7 +332,25 @@ const LOCAL_CASES = Array.from({ length: 1015 }, (_, n) => {
           arriving ? [0, 14][(n >> 1) % 2] : n % 2 ? 12 : 0,
           arriving ? 1 : 0,
         ]
-      : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      : begging || preStalking
+        ? [
+            preStalking ? n % 2 : 0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            [4, 0xb, 0xc, 4, 0x17, 0][n % 6],
+            0,
+          ]
+        : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const curiosities = Array.from({ length: 8 }, (_, k) =>
     looking && k < (n % 7) + 1 ? kinds[(n * 5 + k * 7) % kinds.length] : 0
   );
@@ -328,17 +360,21 @@ const LOCAL_CASES = Array.from({ length: 1015 }, (_, n) => {
     ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 7) % LEVELS.length]),
     state,
-    arriving
-      ? ARRIVALS[n % ARRIVALS.length]
-      : walkingOn
-        ? [6, 3, 8, 13, 14, 15, 16, 20, 21, 22, 9, 4][n % 12]
-        : walking
-          ? [6, 14, 21, 1, 9, 16][n % 6]
-          : looking || exploring
-            ? 6
-            : state === 26 && Math.floor(n / 20) % 2
-              ? 21
-              : 9,
+    preStalking
+      ? 15
+      : begging
+        ? [3, 6][n % 2]
+        : arriving
+          ? ARRIVALS[n % ARRIVALS.length]
+          : walkingOn
+            ? [6, 3, 8, 13, 14, 15, 16, 20, 21, 22, 9, 4][n % 12]
+            : walking
+              ? [6, 14, 21, 1, 9, 16][n % 6]
+              : looking || exploring
+                ? 6
+                : state === 26 && Math.floor(n / 20) % 2
+                  ? 21
+                  : 9,
     arriving
       ? 3
       : walkingOn
@@ -917,6 +953,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             inShelf: (kind) => shelf[kind] !== 0,
             x35aa: x35aaIn,
             found: found === 1,
+            cued: values[52] > 0,
           },
           random
         );
@@ -928,7 +965,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         /* And the global state asked for (the global machine's slot `0x1c`),
          * the first, none entered: the tick held to its own step. */
         const theirGlobal = values[33] ? values[34] : undefined;
-        const theirState = values[35] ? values[36] : undefined;
+        /* Prestalking entered: its pushes held, not whether its script, popped at once, is done and it goes on to stalk (2). */
+        const theirState = values[35] && !(state === 1 && enter) ? values[36] : undefined;
         const [theirTicks, , layered, goalX, goalY, explore] = values.slice(46);
         const looked = values[52];
         const heads = Array.from({ length: Math.min(looked, 4) }, (_, k) =>
@@ -949,7 +987,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           ours.global,
           ours.energy,
           changed ? '' : ours.count,
-          ours.pushed,
+          /* Changing state, its pushes are held below, not its first. */
+          changed ? undefined : ours.pushed,
           ours.passed ?? passed,
           ours.moment && [
             ours.moment.after,
@@ -990,7 +1029,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           energy,
           changed ? '' : theirCount,
           changed || (walkingOn && !ours.pushes) ? undefined : pushes ? values[38] : undefined,
-          state === 19 ? theirPassed : passed,
+          state === 19 || state === 35 ? theirPassed : passed,
           ours.moment && [after, idle, looks, pushes ? values[38] : undefined],
           ours.x35a6 !== undefined && [x35a6, ours.x35a4 === undefined ? undefined : x35a4],
           /* `+0x35a4` as the tick set it, where it did; else as the case before left it. */
@@ -1133,7 +1172,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 });
 
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
-const FOLLOWED = new Set([2, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32, 56, 57]);
+const FOLLOWED = new Set([1, 2, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32, 35, 56, 57]);
 
 /**
  * A cat's day held to the reimplementation: each `tick` the driver wrote
@@ -1187,6 +1226,14 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     /* The handler's own first push: not one its script made as it went on. */
     const handlers = [0, 1, 2, 3].filter((k) => k < values[4] && values[9 + k] === 0);
     const pushedFirst = handlers.length ? values[5 + handlers[0]] : undefined;
+    /* Its draws begin after its script's pushes as it was popped, which may
+     * each draw a script: from the seed after the last of them to finish
+     * before its own (a push pushes its transition within it). */
+    const scripted = [0, 1, 2, 3]
+      .filter((k) => k < Math.min(values[4], handlers.length ? handlers[0] : 4))
+      .sort((j, k) => values[69 + 2 * k] - values[69 + 2 * j]);
+    const startSeed =
+      scripted.length && values.length > 69 ? values[68 + 2 * scripted[0]] : seedValue;
     const acted =
       asked.global !== undefined || asked.state !== undefined || pushedFirst !== undefined;
 
@@ -1208,10 +1255,10 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       continue;
     }
 
-    /* Walking on, its end is not reimplemented in global states 1, 3, 4 and 17, nor in 14 with an age (brain 11). */
+    /* Walking on, its end is not reimplemented in global states 1, 4 and 17, nor in 14 with an age (brain 11). */
     if (
       !FOLLOWED.has(state) ||
-      (state === 23 && [1, 3, 4, 17].includes(global)) ||
+      (state === 23 && [1, 4, 17].includes(global)) ||
       (state === 23 && global === 14 && b[27 + 11] !== 0)
     ) {
       continue;
@@ -1222,7 +1269,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     /* The moment (21): its own fields, and `catzMomentTick`. */
     if (state === 21) {
-      let seed = BigInt(seedValue);
+      let seed = BigInt(startSeed);
       const random = (n: number) => {
         seed = (seed * 22695477n + 1n) & 0xffffffffn;
         return Number((seed >> 16n) & 0x7fffn) % n;
@@ -1281,7 +1328,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       bottom: b[at + 3],
     });
     const said = (found: boolean) => {
-      let seed = BigInt(seedValue);
+      let seed = BigInt(startSeed);
       const random = (n: number) => {
         seed = (seed * 22695477n + 1n) & 0xffffffffn;
         return Number((seed >> 16n) & 0x7fffn) % n;
@@ -1317,14 +1364,16 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           area1: area === 1,
           area3: area === 3,
           enter: enter === 1,
-          inShelf,
+          inShelf: (kind) => (kind === field(7) ? b[109] !== 0 : inShelf(kind)),
           c4: b[82],
           found,
           swat: {
-            facing: b[91],
-            dx: b[92],
-            dy: b[93],
-            miss: b[98],
+            /* As the handler had them, after its script was popped, where the trace has them. */
+            facing: values[61] > 0 ? values[62] : b[91],
+            dx: values[61] > 0 ? values[63] : b[92],
+            dy: values[61] > 0 ? values[64] : b[93],
+            miss: values[65] > 0 ? values[66] : b[98],
+            missAgain: values[65] > 1 ? values[67] : undefined,
             mouseRunning: b[99] === 1,
             side: b[100],
             zone: b[103],
@@ -1335,6 +1384,10 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           preyHeld: b[105] !== 0,
           x35b8: b[106],
           preyArea3: b[107] === 3,
+          walkedToHeld: b[108] !== 0,
+          walkedToAt: b[110] ? { x: b[111], y: b[112] } : undefined,
+          cued: values[13] > 0,
+          x35d2: b[89],
         },
         random
       );
