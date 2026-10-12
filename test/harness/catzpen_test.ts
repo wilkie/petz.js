@@ -1154,7 +1154,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       ?.split(' ')
       .slice(1)
       .map(Number);
-    const { held, unread, wrong, tally } = followTrace(lines, (kind) =>
+    const { held, unread, unknown, wrong, tally } = followTrace(lines, (kind) =>
       shelf ? shelf[kind] !== 0 : false
     );
 
@@ -1164,7 +1164,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           ([state, [ticks, acted, compared]]) =>
             `state ${state}: ${ticks} ticks, ${acted} acted, ${compared} held`
         )
-        .join('\n') + `\n${held} held, ${unread} unread`
+        .join('\n') + `\n${held} held, ${unread} unread, ${unknown} unseeded`
     );
     expect(held).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
@@ -1197,6 +1197,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
   const tally: Record<number, [number, number, number]> = {};
   let held = 0;
   let unread = 0;
+  let unknown = 0;
   let before: number[] | null = null;
 
   for (const line of lines) {
@@ -1226,14 +1227,13 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     /* The handler's own first push: not one its script made as it went on. */
     const handlers = [0, 1, 2, 3].filter((k) => k < values[4] && values[9 + k] === 0);
     const pushedFirst = handlers.length ? values[5 + handlers[0]] : undefined;
-    /* Its draws begin after its script's pushes as it was popped, which may
-     * each draw a script: from the seed after the last of them to finish
-     * before its own (a push pushes its transition within it). */
-    const scripted = [0, 1, 2, 3]
-      .filter((k) => k < Math.min(values[4], handlers.length ? handlers[0] : 4))
-      .sort((j, k) => values[69 + 2 * k] - values[69 + 2 * j]);
-    const startSeed =
-      scripted.length && values.length > 69 ? values[68 + 2 * scripted[0]] : seedValue;
+    /* Its script, popped, may push before it draws, and a push may draw a
+     * script; then `PopScript` may draw more, unseen, before the handler
+     * does. Where those pushes drew, where its draws begin is not known. */
+    const scripted = [0, 1, 2, 3].filter(
+      (k) => k < Math.min(values[4], handlers.length ? handlers[0] : 4)
+    );
+    const unseeded = values.length > 69 && scripted.some((k) => values[68 + 2 * k] !== seedValue);
     const acted =
       asked.global !== undefined || asked.state !== undefined || pushedFirst !== undefined;
 
@@ -1249,6 +1249,11 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     }
 
     counts[1]++;
+
+    if (unseeded) {
+      unknown++;
+      continue;
+    }
 
     /* Swatting or stalking, nothing it plays with about: not held. */
     if ((state === 2 || state === 56 || state === 57) && b[91] === -1) {
@@ -1269,7 +1274,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     /* The moment (21): its own fields, and `catzMomentTick`. */
     if (state === 21) {
-      let seed = BigInt(startSeed);
+      let seed = BigInt(seedValue);
       const random = (n: number) => {
         seed = (seed * 22695477n + 1n) & 0xffffffffn;
         return Number((seed >> 16n) & 0x7fffn) % n;
@@ -1328,7 +1333,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       bottom: b[at + 3],
     });
     const said = (found: boolean) => {
-      let seed = BigInt(startSeed);
+      let seed = BigInt(seedValue);
       const random = (n: number) => {
         seed = (seed * 22695477n + 1n) & 0xffffffffn;
         return Number((seed >> 16n) & 0x7fffn) % n;
@@ -1438,5 +1443,5 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     }
   }
 
-  return { held, unread, wrong, tally };
+  return { held, unread, unknown, wrong, tally };
 }
