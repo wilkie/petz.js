@@ -86,6 +86,7 @@ typedef void(__cdecl __far *PLAIN_SPRITE)(void __far *sprite);
 typedef void(__cdecl __far *GLOBALSTATE)(void __far *machine, int state, void __far *params);
 typedef int(__cdecl __far *AREA)(void __far *cat, int kind);
 typedef void(__cdecl __far *DISPATCH)(void __far *machine, void __far *params, int enter, int leave);
+typedef void(__cdecl __far *CATSTATE)(void __far *cat, int state, void __far *params);
 
 typedef void(__cdecl __far *PUSH)(void __far *sprite, int action, int variant);
 typedef long(__cdecl __far *TARGETPT)(void __far *apt, int space);
@@ -308,7 +309,7 @@ static void hookRand(void)
  * its script had -- to strike (5), to look (6) -- so the engine runs what it
  * does then. */
 static unsigned char __far *traced;
-static int forcing, forcedTicks;
+static int forcing, forcedTicks, pouncedTicks;
 static unsigned long forced, forcedNow;
 
 static int asked, askedCue[4], askedAnswer[4];
@@ -418,6 +419,21 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         handle(machine, p, enter, leave);
         depth--;
         return;
+    }
+
+    /* Where `TRACE.TXT` asks (2), on every fourth tick of stalking (2) or
+     * swatting (56, 57) at something it plays with, the cat is put to pounce
+     * (3) for its handler, as stalking does (`CatSprite::NewState`, 497):
+     * the tick it leaves and the one it enters pouncing in are followed. */
+    if (forcing & 2 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+
+        if ((state == 2 || state == 56 || state == 57) &&
+            ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4)) && pouncedTicks++ % 4 == 3) {
+            depth--;
+            ((CATSTATE)ordinal(497))(cat, 3, p);
+            return;
+        }
     }
 
     say("tick %lu %d %d %d", *(unsigned long __far *)MK_FP(traceData, 0x28ba), enter, leave,
@@ -531,7 +547,7 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
     {
         int state = *(int __far *)(cat + 0x2552);
 
-        forced = forcing && (state == 56 || state == 35) && forcedTicks++ & 1
+        forced = forcing & 1 && (state == 56 || state == 35) && forcedTicks++ & 1
                      ? 1ul << (state == 56 ? 5 : 6)
                      : 0;
         forcedNow = forced;
@@ -1406,7 +1422,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
     if (file != HFILE_ERROR) {
         frames = (int)number(file);
-        forcing = number(file) > 0;
+        forcing = (int)number(file);
         _lclose(file);
 
         if (cat) {
