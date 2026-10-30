@@ -266,11 +266,36 @@ static void __cdecl __far __loadds record(void __far *sprite, int action, int va
 /* And C's `rand` itself (seg1:4b21), following a day: a far jump over its
  * start to this, which draws as it does -- the seed (`ds:28ba`) times
  * 0x15a4e35, plus 1, its high word less its top bit -- and keeps, for the
- * first 16 draws of a tick, the seed before each and the code segment it was
- * called from, its return address's, just below its first argument. */
+ * first 16 draws of a tick, the seed before each and whether script code
+ * (seg40, seg41) drew it: called from it, its return address's code segment
+ * just below its first argument, or, deeper, a return address into it on the
+ * stack between here and the tick (`tickTop`), as a script's action may call
+ * on the cat's code to draw. */
 static int draws;
 static unsigned long drawnSeed[16];
 static unsigned drawnBy[16];
+static unsigned __far *tickTop;
+
+static int scripted(unsigned __far *from)
+{
+    unsigned pop = FP_SEG(ordinal(992)), reset = FP_SEG(ordinal(951));
+
+    if (from[-1] == pop || from[-1] == reset) {
+        return 1;
+    }
+
+    if (!tickTop || FP_SEG(from) != FP_SEG(tickTop)) {
+        return 0;
+    }
+
+    for (; from + 1 < tickTop; from++) {
+        if (from[1] == pop || from[1] == reset) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
 
 static int __cdecl __far __loadds drawing(int unused)
 {
@@ -278,7 +303,7 @@ static int __cdecl __far __loadds drawing(int unused)
 
     if (draws < 16) {
         drawnSeed[draws] = *seed;
-        drawnBy[draws] = ((unsigned __far *)&unused)[-1];
+        drawnBy[draws] = scripted((unsigned __far *)&unused);
     }
 
     draws++;
@@ -538,8 +563,9 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         say(" %d %d %d", ((INSHELF)ordinal(38))(cat, *(int __far *)(cat + 0x35a4)),
             *(int __far *)ordinal(119), kin ? *(int __far *)(kin + 0x1d0) : -1);
 
-        /* And `+0xee0`, which a pounce asks of its catch. */
-        say(" %d\r\n", *(int __far *)(cat + 0xee0));
+        /* And `+0xee0`, which a pounce asks of its catch, and `+0x35be`,
+         * whether it has let its victim go. */
+        say(" %d %d\r\n", *(int __far *)(cat + 0xee0), *(int __far *)(cat + 0x35be));
     }
 
     pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
@@ -558,7 +584,9 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         }
         forcedNow = forced;
     }
+    tickTop = (unsigned __far *)&cat;
     handle(machine, p, enter, leave);
+    tickTop = 0;
     forced = 0;
 
     say("ticked %d %d %d %d %d", globalled, globalled ? globals[0] : -1, localled,
@@ -604,8 +632,7 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
     say(" %d", draws);
 
     for (b = 0; b < 16; b++) {
-        say(" %lu %d", b < draws ? drawnSeed[b] : 0ul,
-            b < draws ? drawnBy[b] == FP_SEG(ordinal(992)) || drawnBy[b] == FP_SEG(ordinal(951)) : -1);
+        say(" %lu %d", b < draws ? drawnSeed[b] : 0ul, b < draws ? drawnBy[b] : -1);
     }
 
 

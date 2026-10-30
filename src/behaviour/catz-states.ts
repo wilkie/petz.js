@@ -26,6 +26,9 @@ export const CATZ_STATE = {
   begging: 35,
   pouncing: 3,
   mayEndSwatting: 57,
+  victimCaptured: 5,
+  victimWrestle: 6,
+  carryVictim: 7,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -110,6 +113,9 @@ export interface CatzStateWorld {
   /** The cues it was given (`IsCued`), where known; and pouncing, whether it has caught its prey (`+0xee0`). */
   cues?: number[];
   caught?: boolean;
+
+  /** Its victim: whether it has let it go (`+0x35be`), its way back to a neutral pose pushed. */
+  released?: boolean;
 }
 
 /**
@@ -519,6 +525,12 @@ export function catzStateTick(
       return catzBegging(mind, world, random);
     case CATZ_STATE.pouncing:
       return catzPouncing(mind, world, random);
+    case CATZ_STATE.victimCaptured:
+    case CATZ_STATE.victimWrestle:
+      return catzVictim(state, mind, world, random);
+    case CATZ_STATE.carryVictim:
+      /* `DoCatCarryVictim`, seg33:15ac: its script done, it lets its victim go (its slot `0x238`) and walks on, to nothing (22). */
+      return done({ state: CATZ_STATE.locomote, x35a6: 0 });
     case CATZ_STATE.mayEndSwatting:
       return catzMayEndSwatting(mind, world, random);
     case CATZ_STATE.lookAtObjects: {
@@ -1803,4 +1815,105 @@ function catzPouncing(
 
   tick.global = 6;
   return tick;
+}
+
+/**
+ * Its victim caught (5; `DoCatVictimCaptured`, seg19:06af) or wrestled
+ * (6; `DoCatVictimWrestle`, seg19:0ab8). Entering, it holds it (its slots
+ * `0xf0`, `0xf8`), has done nothing with it (`+0x34ca`) nor let it go
+ * (`+0x35be`), and the mouse is stilled; leaving, unless let go, it throws
+ * it (`StrikeToy`, a draw of the angle). Each tick, its script cued so (cue
+ * 7), three times in four it makes the victim's sound
+ * (`PlaySpriteContactSound`: the mouse's and 9's one of two) and one time in
+ * five its own (`MapAndPlayCatSound`, 10 or 3 by a draw).
+ *
+ * Its script done, caught (5): let go, it walks off from the mouse (kin
+ * 0x1b's `+0x26ca` 0x1d), puts it down (its slot `0xf0`, 7) and pushes
+ * 0x269, and idles (global 2); having done something, under a third of its
+ * liveliness, it lets go (`PushTransitionToNeutralPos` 0x20, by its script's
+ * code); else nine times in ten it does something: the mouse, inclined to
+ * behaviour 28 one time in two, it wrestles (6), else 0x232; 6 one time in
+ * four or where `+0x1500` is 0x44 it wrestles, else 0x236; the others one
+ * time in four it wrestles, else 0x233; the tenth time, it readies its moment
+ * (`PreMoment`, after it idling, 0x93 meanwhile) and has it (global 8).
+ *
+ * Wrestled (6): nine times in ten, one time in four having done something
+ * (which wrestling never sets) it is caught again (5); else 0x295 the mouse
+ * or where inclined to behaviour 15 one time in four, 0x268 the others; the
+ * tenth time its moment, as caught.
+ */
+function catzVictim(
+  state: number,
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const kind = world.x35a4;
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+  const moment = () => {
+    tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
+    tick.global = 8;
+    return tick;
+  };
+  const push = (action: number) => {
+    tick.pushed = action;
+    tick.pushes = [action];
+    return tick;
+  };
+
+  if (world.cues?.includes(7)) {
+    if (percent() < 75 && (kind === 9 || kind === 0x1b)) {
+      random(2);
+    }
+
+    if (percent() < 20) {
+      tick.sound = catzSound(mind, percent() < 50 ? 10 : 3, random);
+    }
+  }
+
+  if (state === CATZ_STATE.victimWrestle) {
+    if (percent() >= 90) {
+      return moment();
+    }
+
+    if (percent() < 25 && world.passed !== 0) {
+      tick.state = CATZ_STATE.victimCaptured;
+      return tick;
+    }
+
+    return push(
+      (catzBehavior(mind, 15, random) !== 0 && percent() < 25) || kind === 0x1b ? 0x295 : 0x268
+    );
+  }
+
+  if (world.released) {
+    tick.global = 2;
+    return push(0x269);
+  }
+
+  /* Its way back to a neutral pose is pushed by its script's code, not held. */
+  if (world.passed !== 0 && percent() < Math.trunc(brain(CATZ_BRAIN.liveliness) / 3)) {
+    return tick;
+  }
+
+  if (percent() >= 90) {
+    return moment();
+  }
+
+  tick.passed = 1;
+  const wrestles =
+    kind === 0x1b
+      ? catzBehavior(mind, 28, random) !== 0 && percent() < 50
+      : kind === 6
+        ? percent() < 25 || world.x1500 === 0x44
+        : percent() < 25;
+
+  if (wrestles) {
+    tick.state = CATZ_STATE.victimWrestle;
+    return tick;
+  }
+
+  return push(kind === 0x1b ? 0x232 : kind === 6 ? 0x236 : 0x233);
 }
