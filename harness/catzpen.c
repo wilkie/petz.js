@@ -307,7 +307,7 @@ static void hookRand(void)
  * cues asked in a tick and their answers; and, where `TRACE.TXT` asks, on
  * every other tick of swatting (56) and begging (35) cues the cat as though
  * its script had -- to strike (5), to look (6) -- so the engine runs what it
- * does then. */
+ * does then; and, where it is put to pounce, of pouncing (3), to catch (2). */
 static unsigned char __far *traced;
 static int forcing, forcedTicks, pouncedTicks;
 static unsigned long forced, forcedNow;
@@ -550,6 +550,12 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         forced = forcing & 1 && (state == 56 || state == 35) && forcedTicks++ & 1
                      ? 1ul << (state == 56 ? 5 : 6)
                      : 0;
+
+        /* And, put to pounce, on every other tick of pouncing (3), to catch
+         * (2). */
+        if (forcing & 2 && state == 3 && forcedTicks++ & 1) {
+            forced = 1ul << 2;
+        }
         forcedNow = forced;
     }
     handle(machine, p, enter, leave);
