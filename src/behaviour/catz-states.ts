@@ -153,6 +153,15 @@ export interface CatzSwat {
   dx: number;
   dy: number;
 
+  /** Cued to strike, where it pushed and swung after all: which way it faced the toy, and the toy less the paw, as it asked again. */
+  again?: { facing: number; dx: number; dy: number };
+
+  /** Cued to strike: `+0x3592`, whether the toy is on the shelf, whether the shelf is closed (`XApt::m_nShelfClosed`), and the toy's `+0x1d0`. */
+  x3592?: number;
+  shelved?: boolean;
+  shelfClosed?: boolean;
+  x1d0?: number;
+
   /** How far the paw is from the toy, and where it asks again, its script done, how far then. */
   miss: number;
   missAgain?: number;
@@ -1240,11 +1249,18 @@ function catzSwatting(
 ): CatzStateTick {
   const brain = (n: number) => mind.brains[n];
   const percent = () => random(101);
-  const swat = world.swat!;
+  let swat = world.swat!;
+  let before: number[] = [];
 
-  /* Cued to strike (cue 5), it turns its head to the toy (its slot `0xe0`) and strikes: not reimplemented. */
+  /* Cued to strike (cue 5, and `+0x3590` 1: where it turns its head to the toy). */
   if (world.cued) {
-    return { energy: brain(CATZ_BRAIN.energy), count: world.count, unread: true };
+    const struck = catzStrike(mind, world, random);
+
+    if ('tick' in struck) {
+      return struck.tick;
+    }
+
+    ({ swat, before } = struck);
   }
 
   const width = world.size!.width;
@@ -1265,8 +1281,8 @@ function catzSwatting(
     [zone, left, right] = [8, 0x5f, 0x60];
 
     if (swat.zone === 8 && percent() < mapCatzValue(10, 60, 100 - age)) {
-      tick.pushes!.push(0x138);
-      tick.pushed = 0x138;
+      tick.pushes!.push(...before, 0x138);
+      tick.pushed = before[0] ?? 0x138;
 
       if (percent() < 75) {
         tick.state = 0x16;
@@ -1301,8 +1317,8 @@ function catzSwatting(
     tick.sound = catzSound(mind, 10, random);
   }
 
-  tick.pushes!.push(action);
-  tick.pushed = action;
+  tick.pushes!.push(...before, action);
+  tick.pushed = before[0] ?? action;
 
   if (percent() < 100 - brain(CATZ_BRAIN.liveliness)) {
     tick.energy = Math.max(0, tick.energy - 1);
@@ -1592,4 +1608,108 @@ function catzBegging(
 
   tick.global = brain(CATZ_BRAIN.fullness) < catzBehavior(mind, 11, random) ? 3 : 6;
   return tick;
+}
+
+/**
+ * A swat's strike (`DoCatSwatting`, seg29:0cee to 113b): cued (cue 5) with
+ * `+0x3590` 1, it asks how the toy lies (writing the toy's point to
+ * `+0x34cc`) and turns its head to it (3000). Facing it as 3, three times in
+ * four it walks off (22), else plays (global 15). As 0 to 2, the paw more
+ * than 100 off: the first time (`+0x3592`) it turns to its other side
+ * (`+0x358e`), pushes 0xdf where not inclined to behaviour 8, or 0x141
+ * where inclined to 9, and swings; again, it may end (57). Nearer, it
+ * strikes -- on the shelf, open, only under 30 without an age, else 2 --
+ * off its angle (`+0x688`) by up to 49 one way or the other by its side:
+ * the cursor (0x17) it moves; from the open shelf it may take the toy into
+ * the pen (`ShelfToPen`), and food (0xc, 0xd, 0xf) so taken has it eat
+ * (global 3); the ball (5) off the shelf, nine times in ten, it swings
+ * after all. Then, `+0x35ac` 1, three times in four it walks off (22), else
+ * plays (15). Otherwise, facing another way, it swings as it was not cued.
+ */
+function catzStrike(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): { tick: CatzStateTick } | { swat: CatzSwat; before: number[] } {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const swat = world.swat!;
+  const tick: CatzStateTick = {
+    energy: brain(CATZ_BRAIN.energy),
+    fullness: brain(CATZ_BRAIN.fullness),
+    count: world.count,
+    pushes: [],
+  };
+  /* Swinging after all, it asks how the toy lies again. */
+  const swing = (before: number[], side = swat.side) => ({
+    swat: { ...swat, ...swat.again, side },
+    before,
+  });
+  /* (`+0x35ac` is made 1.) */
+  const leave = () => {
+    if (percent() < 75) {
+      tick.state = 0x16;
+    } else {
+      tick.global = 0xf;
+    }
+
+    return { tick };
+  };
+
+  if (swat.facing === 3) {
+    if (percent() < 75) {
+      tick.state = 0x16;
+    } else {
+      tick.global = 0xf;
+    }
+
+    return { tick };
+  }
+
+  if (swat.facing < 0 || swat.facing > 2) {
+    return swing([]);
+  }
+
+  if (swat.miss > 100) {
+    if (swat.x3592) {
+      tick.state = 0x39;
+      return { tick };
+    }
+
+    const side = swat.side === 1 ? 0 : 1;
+
+    if (catzBehavior(mind, 8, random) === 0) {
+      return swing([0xdf], side);
+    }
+
+    return swing(catzBehavior(mind, 9, random) !== 0 ? [0x141] : [], side);
+  }
+
+  const shelved = swat.shelved!;
+  const open = shelved && !swat.shelfClosed;
+
+  if (open && percent() >= (brain(CATZ_BRAIN.age) === 0 ? 30 : 2)) {
+    return swing([]);
+  }
+
+  /* Its angle off `+0x688`, by up to 49 (`rand() % 50`), for where the toy goes. */
+  random(50);
+
+  if (world.x35a4 !== 0x17 && open) {
+    /* `ShelfToPen` answers the cat's slot `0x14c` where the toy's `+0x1d0` is 0: not reimplemented. */
+    if (swat.x1d0 === 0) {
+      return { tick: { ...tick, unread: true } };
+    }
+
+    if (world.x35a4 === 0xc || world.x35a4 === 0xd || world.x35a4 === 0xf) {
+      tick.global = 3;
+      return { tick };
+    }
+  }
+
+  if (world.x35a4 === 5 && percent() < 90 && !shelved) {
+    return swing([]);
+  }
+
+  return leave();
 }

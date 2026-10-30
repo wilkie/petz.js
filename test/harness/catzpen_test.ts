@@ -1227,13 +1227,22 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     /* The handler's own first push: not one its script made as it went on. */
     const handlers = [0, 1, 2, 3].filter((k) => k < values[4] && values[9 + k] === 0);
     const pushedFirst = handlers.length ? values[5 + handlers[0]] : undefined;
-    /* Its script, popped, may push before it draws, and a push may draw a
-     * script; then `PopScript` may draw more, unseen, before the handler
-     * does. Where those pushes drew, where its draws begin is not known. */
+    /* Its script, popped, may push and draw before the handler does: the
+     * trace keeps each draw of C's `rand` in the tick, the seed before it and
+     * whether script code (seg40, seg41) drew it, so its draws begin at the
+     * first the script did not draw. Older traces keep only the seed after
+     * each push, and where the script's pushes before its own drew, where its
+     * draws begin is not known. */
+    const draws = values.length > 77 ? values[76] : undefined;
+    const own = [...Array(Math.min(draws ?? 0, 16)).keys()].find((k) => values[78 + 2 * k] === 0);
     const scripted = [0, 1, 2, 3].filter(
       (k) => k < Math.min(values[4], handlers.length ? handlers[0] : 4)
     );
-    const unseeded = values.length > 69 && scripted.some((k) => values[68 + 2 * k] !== seedValue);
+    const unseeded =
+      draws === undefined
+        ? values.length > 69 && scripted.some((k) => values[68 + 2 * k] !== seedValue)
+        : own === undefined && draws > 16;
+    const startSeed = own === undefined ? seedValue : values[77 + 2 * own];
     const acted =
       asked.global !== undefined || asked.state !== undefined || pushedFirst !== undefined;
 
@@ -1274,7 +1283,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     /* The moment (21): its own fields, and `catzMomentTick`. */
     if (state === 21) {
-      let seed = BigInt(seedValue);
+      let seed = BigInt(startSeed);
       const random = (n: number) => {
         seed = (seed * 22695477n + 1n) & 0xffffffffn;
         return Number((seed >> 16n) & 0x7fffn) % n;
@@ -1333,7 +1342,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       bottom: b[at + 3],
     });
     const said = (found: boolean) => {
-      let seed = BigInt(seedValue);
+      let seed = BigInt(startSeed);
       const random = (n: number) => {
         seed = (seed * 22695477n + 1n) & 0xffffffffn;
         return Number((seed >> 16n) & 0x7fffn) % n;
@@ -1379,6 +1388,15 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
             dy: values[61] > 0 ? values[64] : b[93],
             miss: values[65] > 0 ? values[66] : b[98],
             missAgain: values[65] > 1 ? values[67] : undefined,
+            /* Cued to strike, as it asked again where it swung after all, and what the strike asks. */
+            again:
+              values.length > 111 && values[61] > 1
+                ? { facing: values[109], dx: values[110], dy: values[111] }
+                : undefined,
+            x3592: b[102],
+            shelved: b[113] !== 0,
+            shelfClosed: b[114] !== 0,
+            x1d0: b[115],
             mouseRunning: b[99] === 1,
             side: b[100],
             zone: b[103],

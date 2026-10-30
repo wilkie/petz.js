@@ -179,20 +179,24 @@ static void __cdecl __far __loadds userward(void __far *sprite, int a, int b, in
 
 /* And its slots `0x304` (`GetOrientationInfo`) and `0x308`
  * (`GetSwatMissDistance`), which a swat calls after its script is popped and
- * the toy has moved: the first's facing and the toy less the paw, and the
- * first two distances, each passed on. */
+ * the toy has moved: the first two calls' facing and the toy less the paw,
+ * and the first two distances, each passed on. */
 static ORIENT orient;
 static MISS missing;
-static int oriented, orientation[3], missed, misses[2];
+static int oriented, orientation[6], missed, misses[2];
 
 static void __cdecl __far __loadds orienting(void __far *cat, int ball, int __far *at, int kind,
                                               int __far *toy, int __far *facing, int __far *delta)
 {
     orient(cat, ball, at, kind, toy, facing, delta);
 
-    if (!oriented++) {
-        orientation[0] = *facing, orientation[1] = delta[0], orientation[2] = delta[1];
+    if (oriented < 2) {
+        orientation[3 * oriented] = *facing;
+        orientation[3 * oriented + 1] = delta[0];
+        orientation[3 * oriented + 2] = delta[1];
     }
+
+    oriented++;
 }
 
 static int __cdecl __far __loadds measuring(void __far *cat)
@@ -256,6 +260,45 @@ static void __cdecl __far __loadds record(void __far *sprite, int action, int va
         pushedSeed[k] = *(unsigned long __far *)MK_FP(traceData, 0x28ba);
         pushedDone[k] = finished++;
     }
+}
+
+/* And C's `rand` itself (seg1:4b21), following a day: a far jump over its
+ * start to this, which draws as it does -- the seed (`ds:28ba`) times
+ * 0x15a4e35, plus 1, its high word less its top bit -- and keeps, for the
+ * first 16 draws of a tick, the seed before each and the code segment it was
+ * called from, its return address's, just below its first argument. */
+static int draws;
+static unsigned long drawnSeed[16];
+static unsigned drawnBy[16];
+
+static int __cdecl __far __loadds drawing(int unused)
+{
+    unsigned long __far *seed = (unsigned long __far *)MK_FP(traceData, 0x28ba);
+
+    if (draws < 16) {
+        drawnSeed[draws] = *seed;
+        drawnBy[draws] = ((unsigned __far *)&unused)[-1];
+    }
+
+    draws++;
+    *seed = *seed * 0x15a4e35ul + 1;
+    return (int)(*seed >> 16) & 0x7fff;
+}
+
+typedef UINT(FAR PASCAL *CSTODS)(UINT selector);
+
+static void hookRand(void)
+{
+    /* KERNEL's `AllocCSToDSAlias` (170): a selector to write the code by. */
+    CSTODS alias16 = (CSTODS)GetProcAddress(GetModuleHandle("KERNEL"), MAKEINTRESOURCE(170));
+    UINT alias = alias16(FP_SEG(ordinal(1)));
+    unsigned char __far *code = (unsigned char __far *)MK_FP(alias, 0x4b21);
+    int (__cdecl __far *to)(int) = drawing;
+
+    code[0] = 0xea;
+    *(unsigned __far *)(code + 1) = FP_OFF(to);
+    *(unsigned __far *)(code + 3) = FP_SEG(to);
+    FreeSelector(alias);
 }
 
 /* The next number of a file, or -1 at its end. */
@@ -424,11 +467,18 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         {
             long point = kin ? ((TARGETPT)ordinal(10))(kin, 0) : 0;
 
-            say(" %d %d %d\r\n", kin != 0, (int)point, (int)(point >> 16));
+            say(" %d %d %d", kin != 0, (int)point, (int)(point >> 16));
         }
+
+        /* And, for a strike, whether what it plays with is on the shelf, the
+         * shelf closed (`XApt::m_nShelfClosed`, 119), and its `+0x1d0`,
+         * which `ShelfToPen` asks. */
+        kin = ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4));
+        say(" %d %d %d\r\n", ((INSHELF)ordinal(38))(cat, *(int __far *)(cat + 0x35a4)),
+            *(int __far *)ordinal(119), kin ? *(int __far *)(kin + 0x1d0) : -1);
     }
 
-    pushes = globalled = localled = looked = wordings = oriented = missed = finished = 0;
+    pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws = 0;
     handle(machine, p, enter, leave);
 
     say("ticked %d %d %d %d %d", globalled, globalled ? globals[0] : -1, localled,
@@ -469,6 +519,20 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         say(" %lu %d", b < pushes ? pushedSeed[b] : 0ul, b < pushes ? pushedDone[b] : -1);
     }
 
+    /* And the draws of C's `rand`: how many, and the seed before each and
+     * whether script code (seg40, seg41) drew it. */
+    say(" %d", draws);
+
+    for (b = 0; b < 16; b++) {
+        say(" %lu %d", b < draws ? drawnSeed[b] : 0ul,
+            b < draws ? drawnBy[b] == FP_SEG(ordinal(992)) || drawnBy[b] == FP_SEG(ordinal(951)) : -1);
+    }
+
+
+    /* And the second call to its slot `0x304`: a swat that pushes as it is
+     * cued to strike asks again. */
+    say(" %d %d %d", oriented > 1 ? orientation[3] : -1, oriented > 1 ? orientation[4] : 0,
+        oriented > 1 ? orientation[5] : 0);
     say("\r\n");
     depth--;
 }
@@ -507,6 +571,7 @@ static void install(unsigned char __far *cat)
     *(DISPATCH *)(localTable + 4) = tracing;
     *(void __far *__far *)machine = localTable;
     traced = cat;
+    hookRand();
 
     /* And what the shelf holds, by kind, to 35. */
     {
