@@ -24,6 +24,7 @@ export const CATZ_STATE = {
   preStalking: 1,
   stalking: 2,
   begging: 35,
+  pouncing: 3,
   mayEndSwatting: 57,
 } as const;
 
@@ -105,6 +106,10 @@ export interface CatzStateWorld {
 
   /** Begging: whether its script cued it (cue 6) as it was popped. */
   cued?: boolean;
+
+  /** The cues it was given (`IsCued`), where known; and pouncing, whether it has caught its prey (`+0xee0`). */
+  cues?: number[];
+  caught?: boolean;
 }
 
 /**
@@ -512,6 +517,8 @@ export function catzStateTick(
       return catzStalking(mind, world, random);
     case CATZ_STATE.begging:
       return catzBegging(mind, world, random);
+    case CATZ_STATE.pouncing:
+      return catzPouncing(mind, world, random);
     case CATZ_STATE.mayEndSwatting:
       return catzMayEndSwatting(mind, world, random);
     case CATZ_STATE.lookAtObjects: {
@@ -1712,4 +1719,88 @@ function catzStrike(
   }
 
   return leave();
+}
+
+/**
+ * A pounce (3; `DoCatPouncing`, seg14:0c60). Entered: not readied to pounce
+ * (`+0x1500` 0x14) it stalks again (2); else it aims at what it plays with
+ * (`+0x35a4`, its target point to `+0x34cc`, led by 50 along the mouse's way
+ * for the mouse), one time in two pushes 0xdf, and leaps (its words 0x7534,
+ * 0x42 and where it aims, through its slot `0xa4`): under 200 away, 0x20f
+ * one time in two or without an age, else 0x21b; farther, 0x2c5 where it
+ * faces 33 to 95 either way (`+0x688`) and so lies the prey from it, with an
+ * age, else 0x35. Cued to catch (2), with an age: food (8, 0xb) it eats
+ * (global 3, `+0x35ce` 2); the mouse it may catch, by draws by its age; the
+ * others it catches where it can. Its script done: having caught it
+ * (`+0xee0`) with an age, the cursor (0x17) has it ready its moment
+ * (watching), else it has its victim (5); else, three times in four without
+ * an age, or under its energy with one, it walks to it (22); else idles (6).
+ */
+function catzPouncing(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const age = brain(CATZ_BRAIN.age);
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+
+  if (world.enter) {
+    if (world.x1500 !== 0x14) {
+      tick.state = 2;
+      return tick;
+    }
+
+    const pushes = percent() < 50 ? [0xdf] : [];
+    const at = world.point!;
+    const prey = world.prey!;
+    const distance = catzDist(at, prey);
+    const angle = catzPtToPtAngle(at, prey);
+    const x688 = world.x688 ?? 0;
+    const aimed =
+      Math.abs(x688) >= 33 &&
+      Math.abs(x688) <= 95 &&
+      Math.abs(angle) >= 33 &&
+      Math.abs(angle) <= 95 &&
+      age !== 0;
+    const leap =
+      distance < 200 ? (percent() < 50 || age === 0 ? 0x20f : 0x21b) : aimed ? 0x2c5 : 0x35;
+    pushes.push(leap);
+    tick.pushes = pushes;
+    tick.pushed = pushes[0];
+    return tick;
+  }
+
+  if (world.cues?.includes(2) && age !== 0) {
+    if (world.x35a4 === 8 || world.x35a4 === 0xb) {
+      tick.global = 3;
+      return tick;
+    }
+
+    /* The mouse: caught at or over what its age leaves of 100, halved; else, with an age, over 69 of another draw. */
+    if (world.x35a4 === 0x1b && percent() < 100 - Math.trunc(age / 2)) {
+      percent();
+    }
+  }
+
+  if (age !== 0 && world.caught) {
+    if (world.x35a4 === 0x17) {
+      tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, true, random);
+      tick.global = 8;
+    } else {
+      tick.state = 5;
+    }
+
+    return tick;
+  }
+
+  if ((age === 0 && percent() <= 74) || (age !== 0 && percent() < brain(CATZ_BRAIN.energy))) {
+    tick.x35a6 = world.x35a4;
+    tick.state = 0x16;
+    return tick;
+  }
+
+  tick.global = 6;
+  return tick;
 }

@@ -58,6 +58,9 @@ const EXTRAS = [
 /** How many frames of a cat's day are followed: 2,000, or as `TRACE_FRAMES` says. */
 const TRACE_FRAMES = Number(process.env.TRACE_FRAMES ?? 2000);
 
+/** `TRACE_CUES=1`: on every other tick of swatting and begging, the cat cued as though by its script (to strike, to look), a day of its own. */
+const TRACE_CUES = process.env.TRACE_CUES === '1';
+
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
 const describeHarness = ready ? describe : describe.skip;
 
@@ -1115,7 +1118,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      TRACE_FRAMES === 2000 ? 'CATZTRACE.OUT' : `CATZTRACE-${TRACE_FRAMES}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1125,7 +1128,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       const directory = stage('CATZTRACE');
       cpSync(join(HARNESS, 'CATZPEN.EXE'), join(directory, 'CATZPEN.EXE'));
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
-      writeFileSync(join(directory, 'TRACE.TXT'), `${TRACE_FRAMES}\r\n`);
+      writeFileSync(join(directory, 'TRACE.TXT'), `${TRACE_FRAMES}\r\n${TRACE_CUES ? 1 : 0}\r\n`);
       const { runProbe } = await import(WINBOX);
       const result = await runProbe(
         'catztrace',
@@ -1172,7 +1175,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 });
 
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
-const FOLLOWED = new Set([1, 2, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32, 35, 56, 57]);
+const FOLLOWED = new Set([1, 2, 3, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32, 35, 56, 57]);
 
 /**
  * A cat's day held to the reimplementation: each `tick` the driver wrote
@@ -1233,6 +1236,13 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
      * first the script did not draw. Older traces keep only the seed after
      * each push, and where the script's pushes before its own drew, where its
      * draws begin is not known. */
+    /* The cues its handler asked of `IsCued` that it was given. */
+    const cues =
+      values.length > 121
+        ? [0, 1, 2, 3]
+            .filter((k) => k < values[113] && values[115 + 2 * k] === 1)
+            .map((k) => values[114 + 2 * k])
+        : undefined;
     const draws = values.length > 77 ? values[76] : undefined;
     const own = [...Array(Math.min(draws ?? 0, 16)).keys()].find((k) => values[78 + 2 * k] === 0);
     const scripted = [0, 1, 2, 3].filter(
@@ -1250,9 +1260,9 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       continue;
     }
 
-    /* Entered: only readying a walk (22) and sharpening its claws (32) are
-     * reimplemented so. */
-    if (enter && state !== 22 && state !== 32) {
+    /* Entered: only pouncing (3), readying a walk (22) and sharpening its
+     * claws (32) are reimplemented so. */
+    if (enter && state !== 3 && state !== 22 && state !== 32) {
       counts[1]++;
       continue;
     }
@@ -1409,7 +1419,16 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           preyArea3: b[107] === 3,
           walkedToHeld: b[108] !== 0,
           walkedToAt: b[110] ? { x: b[111], y: b[112] } : undefined,
-          cued: values[13] > 0,
+          /* Cued: as the trace has `IsCued` answer, or, in older traces, as
+           * it turned its head, which only a cued swat or beg does. */
+          cued:
+            cues === undefined
+              ? values[13] > 0
+              : state === 56
+                ? cues.includes(5) && b[101] === 1
+                : cues.includes(6),
+          cues,
+          caught: b[116] !== 0,
           x35d2: b[89],
         },
         random
@@ -1426,8 +1445,11 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
        * cat's own for a global state: that is not this tick's. Nor is an
        * action pushed where the state changed, nor a first arrival's
        * transition to a neutral pose, which is by the cat's pose. */
-      const stateHeld = ours.global === undefined;
-      const globalHeld = ours.state === undefined;
+      /* Entered, a pounce pops its script at once: its pushes are held, not
+       * whether that script is done and it goes on. */
+      const pushesOnly = enter && state === 3 && !changed;
+      const stateHeld = ours.global === undefined && !pushesOnly;
+      const globalHeld = ours.state === undefined && !pushesOnly;
       const pushHeld = !changed && !(state === 23 && ours.pushes === undefined);
       return [
         [

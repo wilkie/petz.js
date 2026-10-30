@@ -301,6 +301,51 @@ static void hookRand(void)
     FreeSelector(alias);
 }
 
+/* And `ScriptSprite::IsCued` (966), which answers as it does -- the cues of
+ * the sprite (`+0x2514`, a bit each) -- and keeps, for the cat, the first 4
+ * cues asked in a tick and their answers; and, where `TRACE.TXT` asks, on
+ * every other tick of swatting (56) and begging (35) cues the cat as though
+ * its script had -- to strike (5), to look (6) -- so the engine runs what it
+ * does then. */
+static unsigned char __far *traced;
+static int forcing, forcedTicks;
+static unsigned long forced, forcedNow;
+
+static int asked, askedCue[4], askedAnswer[4];
+
+static int __cdecl __far __loadds cueing(unsigned char __far *sprite, int cue)
+{
+    unsigned long cues = *(unsigned long __far *)(sprite + 0x2514);
+    int answer;
+
+    if (sprite != traced) {
+        return (int)(cues >> cue) & 1;
+    }
+
+    answer = (int)((cues | forced) >> cue) & 1;
+
+    if (asked < 4) {
+        askedCue[asked] = cue, askedAnswer[asked] = answer;
+    }
+
+    asked++;
+    return answer;
+}
+
+static void hookCued(void)
+{
+    CSTODS alias16 = (CSTODS)GetProcAddress(GetModuleHandle("KERNEL"), MAKEINTRESOURCE(170));
+    void __far *at = ordinal(966);
+    UINT alias = alias16(FP_SEG(at));
+    unsigned char __far *code = (unsigned char __far *)MK_FP(alias, FP_OFF(at));
+    int (__cdecl __far *to)(unsigned char __far *, int) = cueing;
+
+    code[0] = 0xea;
+    *(unsigned __far *)(code + 1) = FP_OFF(to);
+    *(unsigned __far *)(code + 3) = FP_SEG(to);
+    FreeSelector(alias);
+}
+
 /* The next number of a file, or -1 at its end. */
 static long number(HFILE file)
 {
@@ -474,12 +519,25 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
          * shelf closed (`XApt::m_nShelfClosed`, 119), and its `+0x1d0`,
          * which `ShelfToPen` asks. */
         kin = ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4));
-        say(" %d %d %d\r\n", ((INSHELF)ordinal(38))(cat, *(int __far *)(cat + 0x35a4)),
+        say(" %d %d %d", ((INSHELF)ordinal(38))(cat, *(int __far *)(cat + 0x35a4)),
             *(int __far *)ordinal(119), kin ? *(int __far *)(kin + 0x1d0) : -1);
+
+        /* And `+0xee0`, which a pounce asks of its catch. */
+        say(" %d\r\n", *(int __far *)(cat + 0xee0));
     }
 
-    pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws = 0;
+    pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
+        asked = 0;
+    {
+        int state = *(int __far *)(cat + 0x2552);
+
+        forced = forcing && (state == 56 || state == 35) && forcedTicks++ & 1
+                     ? 1ul << (state == 56 ? 5 : 6)
+                     : 0;
+        forcedNow = forced;
+    }
     handle(machine, p, enter, leave);
+    forced = 0;
 
     say("ticked %d %d %d %d %d", globalled, globalled ? globals[0] : -1, localled,
         localled ? locals[0] : -1, pushes);
@@ -533,6 +591,16 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
      * cued to strike asks again. */
     say(" %d %d %d", oriented > 1 ? orientation[3] : -1, oriented > 1 ? orientation[4] : 0,
         oriented > 1 ? orientation[5] : 0);
+
+    /* And the cues it was given as though its script had cued them. */
+    say(" %d", (int)forcedNow);
+
+    /* And the cues the cat's handler asked about, and the answers. */
+    say(" %d", asked);
+
+    for (b = 0; b < 4; b++) {
+        say(" %d %d", b < asked ? askedCue[b] : -1, b < asked ? askedAnswer[b] : -1);
+    }
     say("\r\n");
     depth--;
 }
@@ -572,6 +640,8 @@ static void install(unsigned char __far *cat)
     *(void __far *__far *)machine = localTable;
     traced = cat;
     hookRand();
+
+    hookCued();
 
     /* And what the shelf holds, by kind, to 35. */
     {
@@ -1336,6 +1406,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
     if (file != HFILE_ERROR) {
         frames = (int)number(file);
+        forcing = number(file) > 0;
         _lclose(file);
 
         if (cat) {
