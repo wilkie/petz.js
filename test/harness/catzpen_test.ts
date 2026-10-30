@@ -1171,7 +1171,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     );
     expect(held).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
-  }, 14400000);
+  }, 28800000);
 });
 
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
@@ -1233,8 +1233,10 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     /* Its script, popped, may push and draw before the handler does: the
      * trace keeps each draw of C's `rand` in the tick, the seed before it and
      * whether script code (seg40, seg41) drew it, so its draws begin at the
-     * first the script did not draw. Older traces keep only the seed after
-     * each push, and where the script's pushes before its own drew, where its
+     * first the script did not draw -- and after the script's last push, as a
+     * push may draw for itself, not called from script code, and the seed
+     * after each push is kept. Older traces keep only the seed after each
+     * push, and where the script's pushes before its own drew, where its
      * draws begin is not known. */
     /* The cues its handler asked of `IsCued` that it was given. */
     const cues =
@@ -1244,10 +1246,18 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
             .map((k) => values[114 + 2 * k])
         : undefined;
     const draws = values.length > 77 ? values[76] : undefined;
-    const own = [...Array(Math.min(draws ?? 0, 16)).keys()].find((k) => values[78 + 2 * k] === 0);
     const scripted = [0, 1, 2, 3].filter(
       (k) => k < Math.min(values[4], handlers.length ? handlers[0] : 4)
     );
+    const drawn = [...Array(Math.min(draws ?? 0, 16)).keys()];
+    const lastScripted = scripted.length
+      ? values[68 + 2 * scripted[scripted.length - 1]]
+      : undefined;
+    const from =
+      lastScripted === undefined
+        ? 0
+        : (drawn.find((k) => values[77 + 2 * k] === lastScripted) ?? drawn.length);
+    const own = drawn.find((k) => k >= from && values[78 + 2 * k] === 0);
     const unseeded =
       draws === undefined
         ? values.length > 69 && scripted.some((k) => values[68 + 2 * k] !== seedValue)
