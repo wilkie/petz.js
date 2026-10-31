@@ -352,7 +352,7 @@ static void hookRand(void)
  * does then; and, where it is put to pounce, of pouncing (3), to catch (2),
  * and with its victim (5, 6), to make its sounds (7). */
 static unsigned char __far *traced;
-static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks;
+static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats;
 static unsigned long forced, forcedNow;
 
 static int asked, askedCue[4], askedAnswer[4];
@@ -483,6 +483,29 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         if (state == 5 && wrestledTicks++ % 4 == 3) {
             depth--;
             ((CATSTATE)ordinal(497))(cat, 6, p);
+            return;
+        }
+    }
+
+    /* And where it asks (4), on every tenth tick of prestalking (1),
+     * looking at things (12), its moment (21), walking (23) or grooming
+     * (31), the cat is put in turn to sniff a mouse hole (11), or to align
+     * to eat (38) a piece of food (8) or from the bowl (0xd), what it plays
+     * with and walked to (`+0x35a4`, `+0x35a6`) the food. */
+    if (forcing & 4 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+
+        if ((state == 1 || state == 12 || state == 21 || state == 23 || state == 31) &&
+            eatTicks++ % 10 == 9) {
+            int which = eats++ % 3;
+
+            if (which) {
+                *(int __far *)(cat + 0x35a4) = *(int __far *)(cat + 0x35a6) =
+                    which == 1 ? 8 : 0xd;
+            }
+
+            depth--;
+            ((CATSTATE)ordinal(497))(cat, which ? 38 : 11, p);
             return;
         }
     }

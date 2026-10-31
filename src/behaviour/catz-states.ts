@@ -34,6 +34,11 @@ export const CATZ_STATE = {
   snagging: 9,
   postSnagging: 10,
   postDangling: 34,
+  sniffMouseHole: 11,
+  alignToEat: 38,
+  eatPieceOfFood: 39,
+  eatHide: 41,
+  eatFromBowl: 40,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -577,6 +582,29 @@ export function catzStateTick(
       const kind = world.x35a4!;
       return [8, 0xb, 0xc, 0xd].includes(kind) ? done({ global: 3 }) : done({});
     }
+    case CATZ_STATE.alignToEat: {
+      /* `DoCatAlignToEat`, seg22:1291: entering, it tracks its food with its head (3000), turns toward it by `+0x688` (to -40, 40, -32 or 35, or as it faces), and moves its nose to it (0x123, 0x1cf, 0x125). Its script done, by what it walked to (`+0x35a6`): a treat (0xb) the user holds it nibbles (0x25), else, its head let go and the treat's `+0x9e` -1000, it eats (0x27), as a piece (8); catnip (4) it nibbles (0x2b); else it eats from the bowl (0x28). */
+      const food = world.x35a6;
+
+      if (food === 0xb) {
+        return done({ state: world.walkedToHeld ? 0x25 : 0x27 });
+      }
+
+      return done({ state: food === 8 ? 0x27 : food === 4 ? 0x2b : 0x28 });
+    }
+    case CATZ_STATE.eatPieceOfFood:
+      return catzEatPiece(mind, world, random);
+    case CATZ_STATE.eatFromBowl:
+      return catzEatBowl(mind, world, random);
+    case CATZ_STATE.eatHide:
+      /* `DoCatEatHide`, seg22:2353: entering, 0x20d; its script done, eating (global 3). */
+      return done({ global: 3 });
+    case CATZ_STATE.sniffMouseHole:
+      /* `DoCatSniffMouseHole`, seg14:1850: entering, it tracks what it plays with with its head (3000); inclined to behaviour 7, the mouse in (kin 0x1b's slot `0x110`), under its age, it aims at the hole, a quarter of its width and height past its target point, faces 0x40, sniffs (0x123, 0x1cf, 0x125, 0x2b8), and keeps where kin 0xe is (`+0x35c2`, `+0x34ca` 1); else 0x2a4. Each tick, that kin moved, or its script done, it readies its moment (`PreMoment`, after it idling, 0x93 meanwhile) and has it (8). */
+      return done({
+        moment: catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random),
+        global: 8,
+      });
     case CATZ_STATE.postDangling:
       return catzPostDangling(mind, world, random);
     case CATZ_STATE.lazyWatch: {
@@ -2164,4 +2192,174 @@ function catzPostDangling(
   tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
   tick.global = 8;
   return tick;
+}
+
+/**
+ * Eating a piece of food (39; `DoCatEatPieceOfFood`, seg22:15bb). Entering,
+ * it chews (0x1f4 a treat, else 0x178, and one to four more, 0x1f5 or
+ * 0x203), one time in four with an age 0x2e9, and, not inclined to behaviour
+ * 23, eats (its slots `0x2b4` 1, `0x33c`). Each tick, cued so (cue 0), it
+ * puts its food back on the shelf (`PenToShelf`) and, one time in five each in
+ * turn, looks at the cursor, at the user, or away. Its script done: the bowl
+ * (0xd) off the shelf, one time in four with an age, it walks to it (22,
+ * `+0x35a6` and `+0x35a4` 0xd, `+0x35a2` 0); else it readies its moment
+ * (`PreMoment`, after it idling, 0x93 meanwhile), with an age, full past 95,
+ * one time in four a layered 0x324, and 0x2a5, and has it (8).
+ */
+function catzEatPiece(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const age = brain(CATZ_BRAIN.age);
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+
+  if (world.cues?.includes(0)) {
+    const look = (['track', 'user', 'off'] as const).find(() => percent() < 20);
+
+    if (look) {
+      tick.head = [look];
+    }
+  }
+
+  if (!world.inShelf!(0xd) && percent() < 25 && age !== 0) {
+    tick.x35a6 = 0xd;
+    tick.x35a4 = 0xd;
+    tick.state = CATZ_STATE.locomote;
+    return tick;
+  }
+
+  tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
+
+  if (age !== 0) {
+    if (brain(CATZ_BRAIN.fullness) > 95 && percent() < 25) {
+      tick.layered = 0x324;
+    }
+
+    tick.pushes = [0x2a5];
+    tick.pushed = 0x2a5;
+  }
+
+  tick.global = 8;
+  return tick;
+}
+
+/**
+ * Eating from a bowl (40; `DoCatEatFromBowl`, seg22:19e5), the food bowl
+ * (0xc, `+0x35d2` what is left in it) or the water bowl (0xd). Entering, its
+ * goal not the bowl's point, or the bowl held, it eats on (global 3); else it
+ * has it (its slot `0xf0` 7) and, the food bowl with more than 1 and not
+ * inclined to behaviour 23, eats (`0x2b4` 1). Each tick, cued to (cue 5), it
+ * eats 5 of what is left (to 0) and shows the bowl so; cued 1 or 0, the water
+ * bowl so. Its script done: the food bowl with 1 or less, empty (-1), 0x1ce
+ * and eating (3). Else by its temperament, inclined to behaviour 24, 25, 26,
+ * 27 or none, it goes on chewing -- 0x202, 0x201, 0x208, 0x20c or 0x1cb, the
+ * water bowl 0x1d3, having eaten (`+0x34ca` 1) -- or stops: going to the water
+ * bowl where it is off the shelf (22, after 0x2a5), else letting go and walking
+ * on (24, 27: its slot `0x238`, `+0x35a6` 0, `+0x35a2` 1, 0x2a5, 22) or
+ * readying its moment (25, 26, none: 0x2a5, 8). The food bowl, having eaten,
+ * it stops where full past 75 or by chance (one in ten, or in twenty), and so
+ * where it is empty; inclined to 24 it may first push 0x205 and 0x206 and idle
+ * (6), and to 26, full past 75, push 0x258 and idle or rest (9). The water
+ * bowl, having drunk, it stops -- by chance for 25, 26 and none.
+ */
+function catzEatBowl(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+  const food = world.x35a6;
+  const eaten = world.passed !== 0;
+  const full = brain(CATZ_BRAIN.fullness) > 0x4b;
+  let left = world.x35d2 ?? 0;
+
+  if (world.cues?.includes(5)) {
+    left = Math.max(0, left - 5);
+  }
+
+  const go = (fields: Partial<CatzStateTick>) => {
+    Object.assign(tick, fields);
+    return tick;
+  };
+  const toWater = () => go({ x35a6: 0xd, x35a4: 0xd, pushed: 0x2a5, state: CATZ_STATE.locomote });
+  const letGo = () => go({ x35a6: 0, pushed: 0x2a5, state: CATZ_STATE.locomote });
+  const moment = () =>
+    go({
+      moment: catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random),
+      pushed: 0x2a5,
+      global: 8,
+    });
+  const chew = (action: number) => go({ pushed: food === 0xd ? 0x1d3 : action, passed: 1 });
+  /* The food bowl empty, or as it chose: the water bowl, where off the shelf; else it stops. */
+  const emptied = (stop: () => CatzStateTick) => (!world.inShelf!(0xd) ? toWater() : stop());
+  /* Having eaten: by chance under `odds`, or full; else where it is empty. */
+  const sated = (odds: number, stop: () => CatzStateTick, action: number) =>
+    (eaten && (percent() < odds || full)) || left === 0 ? emptied(stop) : chew(action);
+
+  if (food === 0xc && left <= 1) {
+    return go({ pushed: 0x1ce, global: 3 });
+  }
+
+  if (behave(24)) {
+    if (food === 0xc) {
+      if (percent() < 20) {
+        if (percent() < 50) {
+          return go({ pushed: 0x205, global: 6 });
+        }
+
+        /* 0x205 pushed first, it goes on. */
+        sated(10, letGo, 0x202);
+        tick.pushed = 0x205;
+        return tick;
+      }
+
+      return sated(10, letGo, 0x202);
+    }
+
+    return food === 0xd && eaten ? letGo() : chew(0x202);
+  }
+
+  if (behave(25)) {
+    if (food === 0xc) {
+      return left === 0 ? emptied(moment) : chew(0x201);
+    }
+
+    return food === 0xd && eaten && percent() < 30 ? moment() : chew(0x201);
+  }
+
+  if (behave(26)) {
+    if (food === 0xc) {
+      if (eaten && full) {
+        return percent() < 50 ? go({ pushed: 0x258, global: 6 }) : go({ global: 9 });
+      }
+
+      return left === 0 ? emptied(moment) : chew(0x208);
+    }
+
+    return food === 0xd && eaten && percent() < 50 ? moment() : chew(0x208);
+  }
+
+  if (behave(27)) {
+    if (food === 0xc) {
+      if (eaten && percent() < 10) {
+        return letGo();
+      }
+
+      return sated(5, moment, 0x20c);
+    }
+
+    return food === 0xd && eaten ? moment() : chew(0x20c);
+  }
+
+  if (food === 0xc) {
+    return sated(5, moment, 0x1cb);
+  }
+
+  return food === 0xd && eaten && percent() < 75 ? moment() : chew(0x1cb);
 }
