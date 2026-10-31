@@ -54,6 +54,9 @@ export const CATZ_STATE = {
   mayEndPetting: 51,
   afterPetting: 52,
   upsetPetting: 53,
+  alignToTarget: 24,
+  cursorLick: 54,
+  lackingAffection: 55,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -153,6 +156,11 @@ export interface CatzStateWorld {
 
   /** Petted: see `CatzPetting`. */
   petting?: CatzPetting;
+
+  /** Affectionate: where its ball 7 is, the cursor's point it keeps (`+0x35c2`, `+0x35c4`), and the stage it keeps lacking affection (`+0x3598` on). */
+  ball7?: { x: number; y: number };
+  x35c2?: { x: number; y: number };
+  kept?: CatzBox;
 }
 
 /** What a petted cat reads of itself and of the cursor over it. */
@@ -592,6 +600,10 @@ export function catzStateTick(
       return catzDiving(mind, world, random);
     case CATZ_STATE.petting:
       return catzPetting(mind, world, random);
+    case CATZ_STATE.alignToTarget:
+    case CATZ_STATE.cursorLick:
+    case CATZ_STATE.lackingAffection:
+      return catzFond(state, mind, world, random);
     case CATZ_STATE.beginPetting:
     case CATZ_STATE.mayEndPetting:
     case CATZ_STATE.afterPetting:
@@ -1448,8 +1460,31 @@ function catzArrive(
 
       return;
     }
-    case 0xe:
-      if (age === 0 && catzBehavior(mind, 26, random) !== 0 && world.area1 && percent() < 75) {
+    case 0xe: {
+      if (age !== 0) {
+        /* With an age: its marker moved this tick, it lacks affection (0x37); else its ball 7 more than 20 from the cursor, its moment, facing within 0x20 0x139; else it keeps the cursor's point and aligns to it (24). */
+        if (moved) {
+          tick.state = CATZ_STATE.lackingAffection;
+          return;
+        }
+
+        const at = world.walkedToAt ?? world.goal!;
+
+        if (world.ball7 && catzDist(world.ball7, at) > 20) {
+          moment();
+
+          if (world.x688! >= -0x20 && world.x688! <= 0x20) {
+            tick.pushes!.push(0x139);
+          }
+
+          return;
+        }
+
+        tick.state = CATZ_STATE.alignToTarget;
+        return;
+      }
+
+      if (catzBehavior(mind, 26, random) !== 0 && world.area1 && percent() < 75) {
         tick.pushes!.push(0x2a6, 0x8c, 0x8c, 0x8c);
 
         tick.state = 0x16;
@@ -1457,6 +1492,7 @@ function catzArrive(
       }
 
       return moment();
+    }
     case 0xf:
       if (moved) {
         return moment();
@@ -2996,5 +3032,137 @@ function catzPetting(
       return tick;
     default:
       return tick;
+  }
+}
+
+/**
+ * Affectionate's own states. Aligning to a target (24;
+ * `DoCatAlignToTarget`, seg25:3d3a): entering, it asks how its target lies
+ * (its slot `0x304`, by ball 0x16 eating, else 7), an offset of 5 or less
+ * none, and, facing 1, 0 or 2, steps toward it by the greater offset's sign
+ * (0x26, 0x27, 0x23 or 0xf2, a table at seg25:40f1); facing 3, its moment.
+ * Its script done, grooming (13) its state 0x20, affectionate (14) licking
+ * the cursor (0x36), else its moment. Licking the cursor (54;
+ * `DoCatCursorLick`, seg30:1012): see the knowledge base. Lacking affection
+ * (55; `DoCatLackingAffection`, seg30:1358): each tick, the cursor within the
+ * stage it kept, three times in four it goes after it (0x5, walking to 0x17),
+ * else idles (6); its script done, under what its independence leaves of 100
+ * one time in two 0xdb, else idling (6).
+ */
+function catzFond(
+  state: number,
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+  const push = (...actions: number[]) => {
+    tick.pushes = actions;
+    tick.pushed = actions[0];
+    return tick;
+  };
+  const moment = (after = 6) => {
+    tick.moment = catzPreMoment(mind, world.area3 ?? false, after, 0x93, false, random);
+    tick.global = 8;
+    return tick;
+  };
+
+  switch (state) {
+    case CATZ_STATE.alignToTarget: {
+      if (world.enter) {
+        const swat = world.swat!;
+        const dx = Math.abs(swat.dx!) <= 5 ? 0 : swat.dx!;
+        const dy = Math.abs(swat.dy!) <= 5 ? 0 : swat.dy!;
+
+        /* There already, and facing as it would (`+0x34d0` 0x81, as affectionate's walk leaves it). */
+        if (dx === 0 && dy === 0 && world.global === 14) {
+          return tick;
+        }
+
+        const wide = Math.abs(dx) > Math.abs(dy);
+
+        switch (swat.facing) {
+          case 1:
+            return push(wide ? (dx > 0 ? 0x27 : 0x26) : dy > 0 ? 0xf2 : 0x23);
+          case 0:
+            return push(wide ? (dx > 0 ? 0x23 : 0xf2) : dy > 0 ? 0x27 : 0x26);
+          case 2:
+            return push(wide ? (dx > 0 ? 0xf2 : 0x23) : dy > 0 ? 0x26 : 0x27);
+          case 3:
+            return moment();
+          default:
+            return tick;
+        }
+      }
+
+      if (world.global === 13) {
+        tick.state = 0x20;
+        return tick;
+      }
+
+      if (world.global === 14) {
+        tick.state = CATZ_STATE.cursorLick;
+        return tick;
+      }
+
+      return moment();
+    }
+    case CATZ_STATE.cursorLick: {
+      if (world.enter) {
+        return brain(CATZ_BRAIN.fear) >= 50 || percent() < 50 ? push(0x130, 0xda) : push(0xda);
+      }
+
+      const cursor = world.cursorAt!;
+      const kept = world.x35c2!;
+      const moved = Math.abs(kept.x - cursor.x) > 5 || Math.abs(kept.y - cursor.y) > 5;
+      percent();
+
+      if (percent() < 80 && !moved) {
+        if (world.passed === 0 && percent() < 80) {
+          return push(0xda);
+        }
+
+        tick.passed = 1;
+        return push(0x248, 0x248, 0x248, 0x248);
+      }
+
+      moment(8);
+
+      if (world.x688! >= -0x20 && world.x688! <= 0x20 && percent() < 50) {
+        tick.pushes = [0x139];
+        tick.pushed = 0x139;
+      }
+
+      return tick;
+    }
+    default: {
+      const cursor = world.cursorAt!;
+      const kept = world.kept!;
+
+      if (
+        cursor.x > kept.left &&
+        cursor.x < kept.right &&
+        cursor.y > kept.top &&
+        cursor.y < kept.bottom
+      ) {
+        if (percent() < 75) {
+          tick.x35a6 = 0x17;
+          tick.state = CATZ_STATE.locomote;
+          return push(5);
+        }
+
+        tick.global = 6;
+        return tick;
+      }
+
+      if (percent() < 100 - brain(CATZ_BRAIN.independence) && percent() < 50) {
+        return push(0xdb);
+      }
+
+      tick.global = 6;
+      return tick;
+    }
   }
 }

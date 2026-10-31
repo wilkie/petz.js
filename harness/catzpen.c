@@ -87,6 +87,8 @@ typedef void(__cdecl __far *GLOBALSTATE)(void __far *machine, int state, void __
 typedef int(__cdecl __far *AREA)(void __far *cat, int kind);
 typedef void(__cdecl __far *DISPATCH)(void __far *machine, void __far *params, int enter, int leave);
 typedef void(__cdecl __far *CATSTATE)(void __far *cat, int state, void __far *params);
+typedef void(__cdecl __far *BALLPOINT)(void __far *ballz, int __far *point, void __far *state,
+                                       int __far *rect, int ball);
 
 typedef void(__cdecl __far *PUSH)(void __far *sprite, int action, int variant);
 typedef long(__cdecl __far *TARGETPT)(void __far *apt, int space);
@@ -397,7 +399,8 @@ static void hookRand(void)
  * does then; and, where it is put to pounce, of pouncing (3), to catch (2),
  * and with its victim (5, 6), to make its sounds (7). */
 static unsigned char __far *traced;
-static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks;
+static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
+    fondTicks;
 static unsigned long forced, forcedNow;
 
 static int asked, askedCue[4], askedAnswer[4];
@@ -582,6 +585,21 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         }
     }
 
+    /* And where it asks (32), on every tenth tick of the same, not
+     * affectionate already, affectionate (14), so that it walks to the
+     * cursor. */
+    if (forcing & 32 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+
+        if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
+            *(int __far *)(global + 0x3a) != 0xe && fondTicks++ % 10 == 9) {
+            depth--;
+            passGlobal(*(void __far *__far *)(cat + 0x2fba), 0xe, p);
+            return;
+        }
+    }
+
     say("tick %lu %d %d %d", *(unsigned long __far *)MK_FP(traceData, 0x28ba), enter, leave,
         ((AREA)ordinal(606))(cat, 0x1d));
     traceFields(cat);
@@ -714,7 +732,22 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             say(" %d", *(int __far *)(cat + 0x351c + 2 * b));
         }
 
-        say("\r\n");
+        /* And, affectionate, where its ball 7 is (its ballz' slot `0x38`,
+         * by its draw rectangle and frame), the cursor's point it keeps
+         * (`+0x35c2`, `+0x35c4`) and the stage it keeps lacking affection
+         * (`+0x3598` to `+0x359e`). */
+        {
+            unsigned char __far *ballz = *(unsigned char __far *__far *)(cat + 0x242);
+            int rect[4], point[2] = {0, 0};
+
+            ((DRAWRECT)ordinal(15))(rect, cat, 0);
+            (*(BALLPOINT __far *)(*(unsigned char __far *__far *)ballz + 0x38))(
+                ballz, point, cat + 0x678, rect, 7);
+            say(" %d %d %d %d %d %d %d %d\r\n", point[0], point[1], *(int __far *)(cat + 0x35c2),
+                *(int __far *)(cat + 0x35c4), *(int __far *)(cat + 0x3598),
+                *(int __far *)(cat + 0x359a), *(int __far *)(cat + 0x359c),
+                *(int __far *)(cat + 0x359e));
+        }
     }
 
     pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
@@ -1631,6 +1664,16 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         /* The cursor at the stage's corner, away from the cat (`+0x108`, `+0x10a`). */
         *(int *)(params + 0x108) = 0;
         *(int *)(params + 0x10a) = 0;
+
+        /* Or, where `TRACE.TXT` asks (32), the cursor still at the stage's
+         * lower middle (`+0x5a`, `+0x104` on), the hand up, for the cat to
+         * walk to it affectionate; `+0x46`, which ends that, clear. */
+        if (forcing & 32) {
+            *(int *)(params + 0x46) = 0;
+            *(int *)(params + 0x1e) = 0;
+            *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = 235;
+            *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) = 250;
+        }
 
         /* Or, where `TRACE.TXT` asks (16), the user petting it, 300 frames
          * of each 360: the hand down (`+0x1e`), and the cursor's point
