@@ -39,6 +39,8 @@ export const CATZ_STATE = {
   eatPieceOfFood: 39,
   eatHide: 41,
   eatFromBowl: 40,
+  groom: 31,
+  snubObject: 80,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -594,6 +596,40 @@ export function catzStateTick(
     }
     case CATZ_STATE.eatPieceOfFood:
       return catzEatPiece(mind, world, random);
+    case CATZ_STATE.groom: {
+      /* `DoCatGroom`, seg30:0c71: entering, its way (`+0x35a8`) cleared; placed so (3) it readies its moment, watching (`PreMoment`, after it idling, 0x93 meanwhile), and has it (8); without an age, 0x2a8; with more fleas than behaviour 13 answers, a sound (1) and 0x26b, scratching; else, inclined to behaviour 24 one time in two, 0x267, else 0x126, and one time in ten 0x270. Its script done, it idles (6). */
+      if (!world.enter) {
+        return done({ global: 6 });
+      }
+
+      if (world.area3) {
+        return done({
+          moment: catzPreMoment(mind, true, 6, 0x93, true, random),
+          global: 8,
+        });
+      }
+
+      if (mind.brains[CATZ_BRAIN.age] === 0) {
+        return done({ pushed: 0x2a8, pushes: [0x2a8] });
+      }
+
+      if (mind.brains[CATZ_BRAIN.fleas] > catzBehavior(mind, 13, random)) {
+        return done({ sound: catzSound(mind, 1, random), pushed: 0x26b, pushes: [0x26b] });
+      }
+
+      const pushes = [catzBehavior(mind, 24, random) !== 0 && percent() < 50 ? 0x267 : 0x126];
+
+      if (percent() < 10) {
+        pushes.push(0x270);
+      }
+
+      return done({ pushed: pushes[0], pushes });
+    }
+    case CATZ_STATE.snubObject:
+      /* `DoCatSnubObject`, seg30:182e: entering, its slot `0x114` (2, 0xf), it tracks what it plays with with its head (2000) and pushes 0x206; cued (4), a sound (4); its script done, it lets it go (its slot `0x238`) and walks on to nothing (22, `+0x35a6` 0, `+0x35ac`, `+0x35a2` and `+0x1514` 1). */
+      return world.enter
+        ? done({ pushed: 0x206, pushes: [0x206], head: ['track'] })
+        : done({ state: CATZ_STATE.locomote, x35a6: 0 });
     case CATZ_STATE.eatFromBowl:
       return catzEatBowl(mind, world, random);
     case CATZ_STATE.eatHide:

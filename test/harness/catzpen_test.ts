@@ -64,7 +64,7 @@ const TRACE_CUES = process.env.TRACE_CUES === '1';
 /** `TRACE_POUNCE=1`: on every fourth tick of stalking or swatting at a toy, the cat put to pounce, a day of its own. */
 const TRACE_POUNCE = process.env.TRACE_POUNCE === '1';
 
-/** `TRACE_EAT=1`: on every sixth tick of looking at things, the cat put in turn to sniff a mouse hole or to align to eat a piece of food or from the bowl, a day of its own. */
+/** `TRACE_EAT=1`: on every tenth tick of prestalking, looking at things, its moment, walking or grooming, the cat put in turn to sniff a mouse hole or to align to eat the fish, from the water bowl or from the food bowl, a day of its own. */
 const TRACE_EAT = process.env.TRACE_EAT === '1';
 
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
@@ -1186,7 +1186,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
-  38, 39, 40, 41,
+  38, 39, 40, 41, 31, 80,
 ]);
 
 /**
@@ -1287,7 +1287,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     /* Entered: only pouncing (3), readying a walk (22) and sharpening its
      * claws (32) are reimplemented so. */
-    if (enter && state !== 3 && state !== 8 && state !== 22 && state !== 32) {
+    if (enter && ![3, 8, 22, 31, 32, 80].includes(state)) {
       counts[1]++;
       continue;
     }
@@ -1470,7 +1470,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
        * transition to a neutral pose, which is by the cat's pose. */
       /* Entered, a pounce pops its script at once: its pushes are held, not
        * whether that script is done and it goes on. */
-      const pushesOnly = enter && (state === 3 || state === 8) && !changed;
+      const pushesOnly = enter && [3, 8, 31, 80].includes(state) && !changed;
       const stateHeld = ours.global === undefined && !pushesOnly;
       const globalHeld = ours.state === undefined && !pushesOnly;
       const pushHeld = !changed && !(state === 23 && ours.pushes === undefined);

@@ -490,18 +490,24 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
     /* And where it asks (4), on every tenth tick of prestalking (1),
      * looking at things (12), its moment (21), walking (23) or grooming
      * (31), the cat is put in turn to sniff a mouse hole (11), or to align
-     * to eat (38) a piece of food (8) or from the bowl (0xd), what it plays
-     * with and walked to (`+0x35a4`, `+0x35a6`) the food. */
+     * to eat (38) a piece of food (8), from the water bowl (0xd) or from the
+     * food bowl (0xc), what it plays with and walked to (`+0x35a4`,
+     * `+0x35a6`) the food. */
     if (forcing & 4 && !enter && !leave) {
         int state = *(int __far *)(cat + 0x2552);
 
         if ((state == 1 || state == 12 || state == 21 || state == 23 || state == 31) &&
             eatTicks++ % 10 == 9) {
-            int which = eats++ % 3;
+            int which = eats++ % 4;
 
             if (which) {
                 *(int __far *)(cat + 0x35a4) = *(int __far *)(cat + 0x35a6) =
-                    which == 1 ? 8 : 0xd;
+                    which == 1 ? 8 : which == 2 ? 0xd : 0xc;
+            }
+
+            /* The food bowl, filled where it is all but empty. */
+            if (which == 3 && *(int __far *)(cat + 0x35d2) <= 1) {
+                *(int __far *)(cat + 0x35d2) = 100;
             }
 
             depth--;
