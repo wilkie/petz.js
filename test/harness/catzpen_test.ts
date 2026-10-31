@@ -1186,7 +1186,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
-  38, 39, 40, 41, 31, 80,
+  38, 39, 40, 41, 31, 80, 4,
 ]);
 
 /**
@@ -1287,7 +1287,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     /* Entered: only pouncing (3), readying a walk (22) and sharpening its
      * claws (32) are reimplemented so. */
-    if (enter && ![3, 8, 22, 31, 32, 80].includes(state)) {
+    if (enter && ![3, 4, 8, 22, 31, 32, 80].includes(state)) {
       counts[1]++;
       continue;
     }
@@ -1470,7 +1470,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
        * transition to a neutral pose, which is by the cat's pose. */
       /* Entered, a pounce pops its script at once: its pushes are held, not
        * whether that script is done and it goes on. */
-      const pushesOnly = enter && [3, 8, 31, 80].includes(state) && !changed;
+      const pushesOnly = enter && [3, 4, 8, 31, 80].includes(state) && !changed;
       const stateHeld = ours.global === undefined && !pushesOnly;
       const globalHeld = ours.state === undefined && !pushesOnly;
       const pushHeld = !changed && !(state === 23 && ours.pushes === undefined);

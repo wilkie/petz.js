@@ -466,7 +466,7 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
     /* Where `TRACE.TXT` asks (2), on every fourth tick of stalking (2) or
      * swatting (56, 57) at something it plays with, the cat is put to pounce
-     * (3), or, every other time, to snag (8), for its handler, as stalking
+     * (3), or in turn to snag (8) or dive (4), for its handler, as stalking
      * does (`CatSprite::NewState`, 497),
      * and on every fourth tick with its victim (5), to wrestle it (6), as
      * that does: the tick it leaves and the one it enters in are followed. */
@@ -475,8 +475,10 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
         if ((state == 2 || state == 56 || state == 57) &&
             ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4)) && pouncedTicks++ % 4 == 3) {
+            int pounce = pounces++ % 3;
+
             depth--;
-            ((CATSTATE)ordinal(497))(cat, pounces++ & 1 ? 8 : 3, p);
+            ((CATSTATE)ordinal(497))(cat, pounce == 0 ? 3 : pounce == 1 ? 8 : 4, p);
             return;
         }
 

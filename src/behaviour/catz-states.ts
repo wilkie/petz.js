@@ -41,6 +41,7 @@ export const CATZ_STATE = {
   eatFromBowl: 40,
   groom: 31,
   snubObject: 80,
+  diving: 4,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -544,6 +545,8 @@ export function catzStateTick(
       return catzBegging(mind, world, random);
     case CATZ_STATE.pouncing:
       return catzPouncing(mind, world, random);
+    case CATZ_STATE.diving:
+      return catzDiving(mind, world, random);
     case CATZ_STATE.victimCaptured:
     case CATZ_STATE.victimWrestle:
       return catzVictim(state, mind, world, random);
@@ -2398,4 +2401,69 @@ function catzEatBowl(
   }
 
   return food === 0xd && eaten && percent() < 75 ? moment() : chew(0x1cb);
+}
+
+/**
+ * A dive (4; `DoCatDiving`, seg19:0190), where walking in global state 0x10
+ * arrives. Entering, it aims at what it plays with (`+0x35a4`), the mouse led
+ * by 50 along its way where it is not after the cursor; one time in two it
+ * pushes 0xdf; and it leaps -- its words 0x7534, 0x42 and where it aims --
+ * at or over what `MapValue(0, 90, age)` leaves of 100, not at the cursor and
+ * with an age, 0x85 one time in two, else 0x6e or 0x106; else, with an age
+ * one time in two, 0x2bd, else 0x238; then its slot `0x170` with 5. Cued to
+ * catch (2), with an age: 5, 6, 7 and 9 it catches where `IsSpriteCaught`;
+ * the mouse so at or over what half its age leaves of 100. Its script done:
+ * having caught it (`+0xee0`) with an age, the cursor (0x17) it lets go and
+ * readies its moment, watching, and has it (8); else wrestles it (6) where
+ * `+0x1500` is 0x78, else has its victim (5); else, without an age three
+ * times in four, or under its energy, it walks to it (22); else it idles (6).
+ * Leaving, inclined to behaviour 7, 0xdf, else its slot `0x1fc`.
+ */
+function catzDiving(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const age = brain(CATZ_BRAIN.age);
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+
+  if (world.enter) {
+    const pushes = percent() < 50 ? [0xdf] : [];
+
+    if (percent() >= 100 - mapCatzValue(0, 90, age) && world.x35a4 !== 0x17 && age !== 0) {
+      pushes.push(percent() < 50 ? 0x85 : percent() < 50 ? 0x6e : 0x106);
+    } else {
+      pushes.push(age !== 0 && percent() < 50 ? 0x2bd : 0x238);
+    }
+
+    tick.pushes = pushes;
+    tick.pushed = pushes[0];
+    return tick;
+  }
+
+  if (world.cues?.includes(2) && age !== 0 && world.x35a4 === 0x1b) {
+    percent();
+  }
+
+  if (world.caught && age !== 0) {
+    if (world.x35a4 === 0x17) {
+      tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, true, random);
+      tick.global = 8;
+    } else {
+      tick.state = world.x1500 === 0x78 ? CATZ_STATE.victimWrestle : CATZ_STATE.victimCaptured;
+    }
+
+    return tick;
+  }
+
+  if ((age === 0 && percent() < 75) || percent() < brain(CATZ_BRAIN.energy)) {
+    tick.x35a6 = world.x35a4;
+    tick.state = CATZ_STATE.locomote;
+    return tick;
+  }
+
+  tick.global = 6;
+  return tick;
 }
