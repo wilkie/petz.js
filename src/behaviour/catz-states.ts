@@ -894,8 +894,28 @@ function catzWalkOn(
   let chance = 0;
   let box = [width, height, 4];
   const notArea3 = !world.area3;
+  /* Attacking, it may be there at once, facing what it walks to. */
+  let pounces = false;
 
   switch (g) {
+    case 1:
+      /* Attacking: 0xe its width and height, share 3; else twice, share 4, within 0x80, and, without `+0x35a2`, there at once where it faces within 10 of what it walks to and is serious (50 or more) or one time in ten. */
+      near = notArea3;
+
+      if (world.x35a4 === 0xe) {
+        box = [width, height, 3];
+        break;
+      }
+
+      box = [width * 2, height * 2, 4];
+      within = 0x80;
+
+      if (!world.x35a2) {
+        const off = catzPtToPtAngle(at, mark) - x688;
+        pounces =
+          off >= -10 && off <= 10 && (brain(CATZ_BRAIN.seriousness) >= 50 || percent() < 10);
+      }
+      break;
     case 3:
     case 4:
       box = [width * 2, height * 2, 4];
@@ -938,7 +958,7 @@ function catzWalkOn(
     ? x688 <= -64 || x688 >= 64
     : x688 >= -within && x688 <= within;
 
-  if ((world.found || percent() < chance) && aligned && near) {
+  if (pounces || ((world.found || percent() < chance) && aligned && near)) {
     if (G === 16) {
       tick.state = 4;
       tick.x35aa = world.x35aa;
@@ -946,7 +966,12 @@ function catzWalkOn(
       tick.x35aa = 0;
       catzArrive(mind, world, tick, moved, x688, random);
     } else if (givenUp) {
-      tick.global = 6;
+      /* Having given up: on the Adoption Kit, grooming (0xd) and inclined to behaviour 24, its state 0x1f; else it idles. */
+      if (world.c4 && G === 0xd && behave(24)) {
+        tick.state = 0x1f;
+      } else {
+        tick.global = 6;
+      }
     } else {
       /* Its transition to a neutral pose (`PushTransitionToNeutral` 0x6b), by its pose: not reimplemented. */
       tick.x35aa = 1;
