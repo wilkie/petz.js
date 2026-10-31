@@ -1300,8 +1300,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       continue;
     }
 
-    /* Walking on, its end is not reimplemented in global state 17. */
-    if (!FOLLOWED.has(state) || (state === 23 && [17].includes(global))) {
+    if (!FOLLOWED.has(state)) {
       continue;
     }
 

@@ -357,9 +357,10 @@ export interface CatzStateTick {
   /** The moment readied, where it went to it by `PreMoment`. */
   moment?: CatzPreMoment;
 
-  /** `+0x35a6` and `+0x35a4`, where it set them. */
+  /** `+0x35a6` and `+0x35a4`, where it set them, and `+0x35f4`, scared, where it flees no more. */
   x35a6?: number;
   x35a4?: number;
+  x35f4?: number;
 
   /** Exploring: where it walks to (`+0x34cc`, `+0x34ce`) and how (`+0x35a8`). */
   goal?: { x: number; y: number };
@@ -942,9 +943,32 @@ function catzWalkOn(
     case 0x14:
       box = [width * 2, height * 2, 4];
       break;
+    case 0x11:
+      /* Scared: away from kin 0x22, or fleeing (`+0x35f4`), twice its width and height, share 4, near wherever it is; else, within twice its width of what it plays with, placed so (1), it stays away (0x3a, its slot `0x9c` 1); else twice, share 5, not placed 3. Within 0x80. */
+      within = 0x80;
+
+      if (world.x35a4 === 0x22 || world.x35f4) {
+        box = [width * 2, height * 2, 4];
+        near = true;
+        break;
+      }
+
+      if (world.x35a4 && world.prey && catzDist(world.prey, at) < width * 2 && world.area1) {
+        tick.state = 0x3a;
+        return tick;
+      }
+
+      box = [width * 2, height * 2, 5];
+      near = notArea3;
+      break;
     case 0x15:
+      /* Catnapping: `+0x35ee` 10, near wherever it is (and, placed so, a sound, 0xe9). */
       box = [width * 2, height * 2, 4];
       within = 0x80;
+
+      if (world.x35ee === 10) {
+        near = true;
+      }
       break;
     case 0x16:
       box = [width * 2, height * 2, 4];
@@ -1332,6 +1356,53 @@ function catzArrive(
       tick.x33be = 3;
       tick.global = 0x16;
       return;
+    case 0x11: {
+      /* Scared, by how it flees (`+0x35f4`): 3, the moment readied; 1, one time in four it flees no more (3) and, under its fear, walks to the stage's left or right, 10 in, at its middle, else after the cursor (0x17), and otherwise turns its way (`+0x35a8`, 1 and 2) and goes to 0x3d; 2, one time in two the same, to the stage's middle, and otherwise lets go of what it plays with (its slot `0x238`) and walks on to nothing; else, from kin 0x22 it hides (0x3c), else watches scared (0x3b). */
+      const flees = world.x35f4;
+      const away = (to: () => { x: number; y: number }) => {
+        tick.x35f4 = 3;
+
+        if (percent() < brain(CATZ_BRAIN.fear)) {
+          tick.goal = to();
+          tick.x35a6 = 0;
+        } else {
+          tick.x35a6 = 0x17;
+        }
+
+        tick.state = 0x16;
+      };
+
+      if (flees === 3) {
+        return moment();
+      }
+
+      if (flees === 1) {
+        if (percent() < 25) {
+          return away(() => ({
+            x: percent() < 50 ? stage.left + 10 : stage.right - 10,
+            y: middle.y,
+          }));
+        }
+
+        tick.explore = world.x35a8 === 1 ? 2 : 1;
+        tick.state = 0x3d;
+        return;
+      }
+
+      if (flees === 2) {
+        if (percent() < 50) {
+          return away(() => middle);
+        }
+
+        tick.x35a6 = 0;
+        tick.x35a4 = 0;
+        tick.state = 0x16;
+        return;
+      }
+
+      tick.state = world.x35a4 === 0x22 ? 0x3c : 0x3b;
+      return;
+    }
     default:
       return moment();
   }
