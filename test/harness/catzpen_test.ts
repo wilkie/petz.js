@@ -1300,12 +1300,8 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       continue;
     }
 
-    /* Walking on, its end is not reimplemented in global states 4 and 17, nor in 14 with an age (brain 11). */
-    if (
-      !FOLLOWED.has(state) ||
-      (state === 23 && [4, 17].includes(global)) ||
-      (state === 23 && global === 14 && b[27 + 11] !== 0)
-    ) {
+    /* Walking on, its end is not reimplemented in global state 17. */
+    if (!FOLLOWED.has(state) || (state === 23 && [17].includes(global))) {
       continue;
     }
 
