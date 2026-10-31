@@ -332,9 +332,10 @@ static void hookRand(void)
  * cues asked in a tick and their answers; and, where `TRACE.TXT` asks, on
  * every other tick of swatting (56) and begging (35) cues the cat as though
  * its script had -- to strike (5), to look (6) -- so the engine runs what it
- * does then; and, where it is put to pounce, of pouncing (3), to catch (2). */
+ * does then; and, where it is put to pounce, of pouncing (3), to catch (2),
+ * and with its victim (5, 6), to make its sounds (7). */
 static unsigned char __far *traced;
-static int forcing, forcedTicks, pouncedTicks;
+static int forcing, forcedTicks, pouncedTicks, wrestledTicks;
 static unsigned long forced, forcedNow;
 
 static int asked, askedCue[4], askedAnswer[4];
@@ -448,8 +449,9 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
     /* Where `TRACE.TXT` asks (2), on every fourth tick of stalking (2) or
      * swatting (56, 57) at something it plays with, the cat is put to pounce
-     * (3) for its handler, as stalking does (`CatSprite::NewState`, 497):
-     * the tick it leaves and the one it enters pouncing in are followed. */
+     * (3) for its handler, as stalking does (`CatSprite::NewState`, 497),
+     * and on every fourth tick with its victim (5), to wrestle it (6), as
+     * that does: the tick it leaves and the one it enters in are followed. */
     if (forcing & 2 && !enter && !leave) {
         int state = *(int __far *)(cat + 0x2552);
 
@@ -457,6 +459,12 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4)) && pouncedTicks++ % 4 == 3) {
             depth--;
             ((CATSTATE)ordinal(497))(cat, 3, p);
+            return;
+        }
+
+        if (state == 5 && wrestledTicks++ % 4 == 3) {
+            depth--;
+            ((CATSTATE)ordinal(497))(cat, 6, p);
             return;
         }
     }
@@ -578,9 +586,9 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
                      : 0;
 
         /* And, put to pounce, on every other tick of pouncing (3), to catch
-         * (2). */
-        if (forcing & 2 && state == 3 && forcedTicks++ & 1) {
-            forced = 1ul << 2;
+         * (2), and with its victim (5, 6), to make its sounds (7). */
+        if (forcing & 2 && (state == 3 || state == 5 || state == 6) && forcedTicks++ & 1) {
+            forced = 1ul << (state == 3 ? 2 : 7);
         }
         forcedNow = forced;
     }
