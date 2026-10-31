@@ -9,10 +9,13 @@
  *   node scripts/re/disasm.ts THINK.DLL 2:031a --to 03f5
  *   node scripts/re/disasm.ts DOGZDLL.DLL --exports
  *   node scripts/re/disasm.ts DOGZDLL.DLL --callers XDrawPort::MakeColorRamp
+ *   node scripts/re/disasm.ts CATZDLL.DLL 25:2c73 --words 22
  *
  * A function is named as `Class::Method` or by its exported name, or given
  * as segment:offset, the segment in decimal and the offset in hexadecimal. Without `--to` or `--bytes`, it runs to
- * the next export in its segment, or 512 bytes. Reads the module from the
+ * the next export in its segment, or 512 bytes. `--words` prints so many words
+ * from there instead, a switch's jump table, each by the case it is, from 0.
+ * Reads the module from the
  * oracle's drive, by its file name anywhere on it. Needs `ndisasm` (NASM).
  *
  * What this prints is for reading; the knowledge base quotes only a few
@@ -235,6 +238,16 @@ function main() {
     return at === -1 ? null : args[at + 1];
   };
   const bytes = module.segmentBytes(segment);
+
+  if (option('--words')) {
+    for (let at = 0; at < Number(option('--words')); at++) {
+      const word = bytes[start + 2 * at] | (bytes[start + 2 * at + 1] << 8);
+      console.log(`${String(at).padStart(4)} ${word.toString(16).padStart(4, '0')}`);
+    }
+
+    return;
+  }
+
   const next = module.entries
     .filter((entry) => entry.segment === segment && entry.offset > start)
     .reduce((least, entry) => Math.min(least, entry.offset), Math.min(bytes.length, start + 512));

@@ -192,6 +192,49 @@ static int oriented, orientation[6], missed, misses[2];
 static AREA area;
 static int placed, place;
 
+/* And its slots `0x2e8` (`WhichBallBeingPet`), `0x2f8`
+ * (`HasUserStoppedPetting`) and `0x2f0` (`GetCursorMovement`), which a
+ * petted cat asks of the cursor over it: each call counted and its first
+ * answer kept, passed on. */
+typedef int(__cdecl __far *PETTED)(void __far *cat, void __far *params);
+typedef int(__cdecl __far *MOVED)(void __far *cat);
+static PETTED whichBall, stoppedPetting;
+static MOVED cursorMoved;
+static int balled, ball, stopped, stop, moved, movement;
+
+static int __cdecl __far __loadds balling(void __far *cat, void __far *params)
+{
+    int at = whichBall(cat, params);
+
+    if (!balled++) {
+        ball = at;
+    }
+
+    return at;
+}
+
+static int __cdecl __far __loadds stopping(void __far *cat, void __far *params)
+{
+    int at = stoppedPetting(cat, params);
+
+    if (!stopped++) {
+        stop = at;
+    }
+
+    return at;
+}
+
+static int __cdecl __far __loadds moving(void __far *cat)
+{
+    int at = cursorMoved(cat);
+
+    if (!moved++) {
+        movement = at;
+    }
+
+    return at;
+}
+
 static int __cdecl __far __loadds placing(void __far *cat, int kind)
 {
     int at = area(cat, kind);
@@ -653,12 +696,27 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             say(" %d %d", (int)point, (int)(point >> 16));
         }
 
-        /* And `+0x35d4`, the catnip left. */
-        say(" %d\r\n", *(int __far *)(cat + 0x35d4));
+        /* And `+0x35d4`, the catnip left; and, petted, its rate
+         * (`+0x356e`), `+0x3570`, `+0x3572`, `+0x3576`, where the cursor was
+         * (`+0x3518`, `+0x351a`), the cursor's action (`+0x362a`), the mode
+         * it came to may-end with (`+0x356c`), and the first 30 of its
+         * petting modes (`+0x351c` on), newest first. */
+        say(" %d %d %d %d %d %d %d %d", *(int __far *)(cat + 0x35d4),
+            *(int __far *)(cat + 0x356e), *(int __far *)(cat + 0x3570),
+            *(int __far *)(cat + 0x3572), *(int __far *)(cat + 0x3576),
+            *(int __far *)(cat + 0x3518), *(int __far *)(cat + 0x351a),
+            *(int __far *)(cat + 0x362a));
+        say(" %d", *(int __far *)(cat + 0x356c));
+
+        for (b = 0; b < 30; b++) {
+            say(" %d", *(int __far *)(cat + 0x351c + 2 * b));
+        }
+
+        say("\r\n");
     }
 
     pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
-        asked = placed = 0;
+        asked = placed = balled = stopped = moved = 0;
     {
         int state = *(int __far *)(cat + 0x2552);
 
@@ -740,8 +798,11 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         say(" %d %d", b < asked ? askedCue[b] : -1, b < asked ? askedAnswer[b] : -1);
     }
 
-    /* And where it was on the stage as its handler first asked. */
-    say(" %d %d\r\n", placed, placed ? place : -1);
+    /* And where it was on the stage as its handler first asked, and, petted,
+     * the ball under the cursor, whether the user stopped and how far the
+     * cursor moved, as it first asked each. */
+    say(" %d %d %d %d %d %d %d %d\r\n", placed, placed ? place : -1, balled, balled ? ball : -1,
+        stopped, stopped ? stop : -1, moved, moved ? movement : -1);
     depth--;
 }
 
@@ -766,6 +827,12 @@ static void install(unsigned char __far *cat)
     *(ORIENT *)(table + 0x304) = orienting;
     area = *(AREA *)(table + 0x234);
     *(AREA *)(table + 0x234) = placing;
+    whichBall = *(PETTED *)(table + 0x2e8);
+    *(PETTED *)(table + 0x2e8) = balling;
+    stoppedPetting = *(PETTED *)(table + 0x2f8);
+    *(PETTED *)(table + 0x2f8) = stopping;
+    cursorMoved = *(MOVED *)(table + 0x2f0);
+    *(MOVED *)(table + 0x2f0) = moving;
     *(MISS *)(table + 0x308) = measuring;
     *(void __far *__far *)cat = table;
 
@@ -1560,6 +1627,24 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         /* The cursor at the stage's corner, away from the cat (`+0x108`, `+0x10a`). */
         *(int *)(params + 0x108) = 0;
         *(int *)(params + 0x10a) = 0;
+
+        /* Or, where `TRACE.TXT` asks (16), the user petting it: the hand
+         * down (`+0x1e`), and the cursor's point (`+0x5a`) and rectangle
+         * (`+0x104` on) on the cat's target point, wiggled; `+0x46`, which
+         * ends petting where set (`DoGSPetting`), clear. */
+        if (forcing & 16 && cat) {
+            long point = ((TARGETPT)ordinal(10))(cat, 0);
+            int x = (int)point + 6 * (n % 8) - 21, y = (int)(point >> 16) + 3 * (n % 4) - 12;
+
+            *(int *)(params + 0x46) = 0;
+            *(int *)(params + 0x1e) = 1;
+            *(int *)(params + 0x5a) = x;
+            *(int *)(params + 0x5c) = y;
+            *(int *)(params + 0x104) = x;
+            *(int *)(params + 0x106) = y;
+            *(int *)(params + 0x108) = x;
+            *(int *)(params + 0x10a) = y;
+        }
 
         if (((PORT)ordinal(1052))(params) == 0) {
             ((DRAWFRAME)ordinal(859))(module, params);
