@@ -29,6 +29,7 @@ export const CATZ_STATE = {
   victimCaptured: 5,
   victimWrestle: 6,
   carryVictim: 7,
+  lazyWatch: 30,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -116,6 +117,9 @@ export interface CatzStateWorld {
 
   /** Its victim: whether it has let it go (`+0x35be`), its way back to a neutral pose pushed. */
   released?: boolean;
+
+  /** Watching lazily: how (`+0x35b6`), 1 or 2. */
+  x35b6?: number;
 }
 
 /**
@@ -528,6 +532,20 @@ export function catzStateTick(
     case CATZ_STATE.victimCaptured:
     case CATZ_STATE.victimWrestle:
       return catzVictim(state, mind, world, random);
+    case CATZ_STATE.lazyWatch: {
+      /* `DoCatLazyWatch`, seg30:1695: entering, it tracks what it plays with with its head (2000); leaving, it stops; its script done, one time in five, as it watches (`+0x35b6`), it idles (global 6) or rests (9), else pushes 0x93 or 0x8c. */
+      const goes = percent() < 20;
+
+      if (world.x35b6 === 1) {
+        return done(goes ? { global: 6 } : { pushed: 0x93 });
+      }
+
+      if (world.x35b6 === 2) {
+        return done(goes ? { global: 9 } : { pushed: 0x8c });
+      }
+
+      return done({});
+    }
     case CATZ_STATE.carryVictim:
       /* `DoCatCarryVictim`, seg33:15ac: its script done, it lets its victim go (its slot `0x238`) and walks on, to nothing (22). */
       return done({ state: CATZ_STATE.locomote, x35a6: 0 });

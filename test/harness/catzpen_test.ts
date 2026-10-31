@@ -1182,7 +1182,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
 const FOLLOWED = new Set([
-  1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 32, 35, 56, 57,
+  1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 35, 56, 57,
 ]);
 
 /**
@@ -1448,6 +1448,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           cues,
           caught: b[116] !== 0,
           released: b[117] === undefined ? undefined : b[117] !== 0,
+          x35b6: b[118],
           x35d2: b[89],
         },
         random

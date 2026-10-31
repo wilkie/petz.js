@@ -571,9 +571,11 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         say(" %d %d %d", ((INSHELF)ordinal(38))(cat, *(int __far *)(cat + 0x35a4)),
             *(int __far *)ordinal(119), kin ? *(int __far *)(kin + 0x1d0) : -1);
 
-        /* And `+0xee0`, which a pounce asks of its catch, and `+0x35be`,
-         * whether it has let its victim go. */
-        say(" %d %d\r\n", *(int __far *)(cat + 0xee0), *(int __far *)(cat + 0x35be));
+        /* And `+0xee0`, which a pounce asks of its catch, `+0x35be`,
+         * whether it has let its victim go, and `+0x35b6`, how it watches
+         * lazily. */
+        say(" %d %d %d\r\n", *(int __far *)(cat + 0xee0), *(int __far *)(cat + 0x35be),
+            *(int __far *)(cat + 0x35b6));
     }
 
     pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
