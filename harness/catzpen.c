@@ -186,6 +186,23 @@ static ORIENT orient;
 static MISS missing;
 static int oriented, orientation[6], missed, misses[2];
 
+/* And its slot `0x234` (`GetSpriteScreenArea`), which the moment asks of the
+ * cat (0x1d) after its script is popped and has moved it: the first answer
+ * for the cat, passed on. */
+static AREA area;
+static int placed, place;
+
+static int __cdecl __far __loadds placing(void __far *cat, int kind)
+{
+    int at = area(cat, kind);
+
+    if (kind == 0x1d && !placed++) {
+        place = at;
+    }
+
+    return at;
+}
+
 static void __cdecl __far __loadds orienting(void __far *cat, int ball, int __far *at, int kind,
                                               int __far *toy, int __far *facing, int __far *delta)
 {
@@ -335,7 +352,7 @@ static void hookRand(void)
  * does then; and, where it is put to pounce, of pouncing (3), to catch (2),
  * and with its victim (5, 6), to make its sounds (7). */
 static unsigned char __far *traced;
-static int forcing, forcedTicks, pouncedTicks, wrestledTicks;
+static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks;
 static unsigned long forced, forcedNow;
 
 static int asked, askedCue[4], askedAnswer[4];
@@ -449,7 +466,8 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
     /* Where `TRACE.TXT` asks (2), on every fourth tick of stalking (2) or
      * swatting (56, 57) at something it plays with, the cat is put to pounce
-     * (3) for its handler, as stalking does (`CatSprite::NewState`, 497),
+     * (3), or, every other time, to snag (8), for its handler, as stalking
+     * does (`CatSprite::NewState`, 497),
      * and on every fourth tick with its victim (5), to wrestle it (6), as
      * that does: the tick it leaves and the one it enters in are followed. */
     if (forcing & 2 && !enter && !leave) {
@@ -458,7 +476,7 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         if ((state == 2 || state == 56 || state == 57) &&
             ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4)) && pouncedTicks++ % 4 == 3) {
             depth--;
-            ((CATSTATE)ordinal(497))(cat, 3, p);
+            ((CATSTATE)ordinal(497))(cat, pounces++ & 1 ? 8 : 3, p);
             return;
         }
 
@@ -572,14 +590,22 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             *(int __far *)ordinal(119), kin ? *(int __far *)(kin + 0x1d0) : -1);
 
         /* And `+0xee0`, which a pounce asks of its catch, `+0x35be`,
-         * whether it has let its victim go, and `+0x35b6`, how it watches
-         * lazily. */
-        say(" %d %d %d\r\n", *(int __far *)(cat + 0xee0), *(int __far *)(cat + 0x35be),
+         * whether it has let its victim go, `+0x35b6`, how it watches
+         * lazily, and the cursor's (kin 0x17) target point, which a snag
+         * pounce aims at. */
+        say(" %d %d %d", *(int __far *)(cat + 0xee0), *(int __far *)(cat + 0x35be),
             *(int __far *)(cat + 0x35b6));
+        kin = ((GETKIN)ordinal(18))(cat, 0x17);
+
+        {
+            long point = kin ? ((TARGETPT)ordinal(10))(kin, 0) : 0;
+
+            say(" %d %d\r\n", (int)point, (int)(point >> 16));
+        }
     }
 
     pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
-        asked = 0;
+        asked = placed = 0;
     {
         int state = *(int __far *)(cat + 0x2552);
 
@@ -660,7 +686,9 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
     for (b = 0; b < 4; b++) {
         say(" %d %d", b < asked ? askedCue[b] : -1, b < asked ? askedAnswer[b] : -1);
     }
-    say("\r\n");
+
+    /* And where it was on the stage as its handler first asked. */
+    say(" %d %d\r\n", placed, placed ? place : -1);
     depth--;
 }
 
@@ -683,6 +711,8 @@ static void install(unsigned char __far *cat)
     orient = *(ORIENT *)(table + 0x304);
     missing = *(MISS *)(table + 0x308);
     *(ORIENT *)(table + 0x304) = orienting;
+    area = *(AREA *)(table + 0x234);
+    *(AREA *)(table + 0x234) = placing;
     *(MISS *)(table + 0x308) = measuring;
     *(void __far *__far *)cat = table;
 

@@ -30,6 +30,9 @@ export const CATZ_STATE = {
   victimWrestle: 6,
   carryVictim: 7,
   lazyWatch: 30,
+  snagPouncing: 8,
+  snagging: 9,
+  postSnagging: 10,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -120,6 +123,9 @@ export interface CatzStateWorld {
 
   /** Watching lazily: how (`+0x35b6`), 1 or 2. */
   x35b6?: number;
+
+  /** Snagging: the cursor's (kin 0x17) target point. */
+  cursorAt?: { x: number; y: number };
 }
 
 /**
@@ -532,6 +538,43 @@ export function catzStateTick(
     case CATZ_STATE.victimCaptured:
     case CATZ_STATE.victimWrestle:
       return catzVictim(state, mind, world, random);
+    case CATZ_STATE.snagPouncing: {
+      /* `DoCatSnagPouncing`, seg14:1261: entered, not readied to pounce (`+0x1500` 0x14), it stalks again (2); else it aims at the cursor's (kin 0x17) target point, kept at `+0x34cc` (its words 0x7534, 0x42, there, 0x756f), and pushes 0x156, its slot `0x170` with 5. Its script done, the cursor where it was, it snags (9); else it walks to its prey (22, `+0x35a6` the prey's kind, `+0x35ac` 1). */
+      if (world.enter) {
+        return world.x1500 !== 0x14
+          ? done({ state: CATZ_STATE.stalking })
+          : done({ pushed: 0x156, pushes: [0x156], goal: world.cursorAt });
+      }
+
+      const at = world.cursorAt;
+      return at && world.goal && at.x === world.goal.x && at.y === world.goal.y
+        ? done({ state: CATZ_STATE.snagging })
+        : done({ state: CATZ_STATE.locomote, x35a6: world.x35a4 });
+    }
+    case CATZ_STATE.snagging: {
+      /* `DoCatSnagging`, seg14:13c4, whose ticks carry what it snags along with its paw: what it plays with neither the cursor (0x17), nor held, nor on the shelf, it has it (its slots `0x9c` 2, `0xf0`, `0xf8`), and food (8, 0xb to 0xd) it lets go to (`PushTransitionToNeutralPos` 8) and goes on to (10), the rest its victim (5) -- its script done or not. Else, its script done, one time in ten it lets go (`0x9c` 2) and goes to 0x22, else turns its fudger by -4 to 3 and pushes 0x158. */
+      const kind = world.x35a4!;
+
+      if (kind !== 0x17 && !world.preyHeld && !world.inShelf?.(kind)) {
+        return done({
+          state: [8, 0xb, 0xc, 0xd].includes(kind)
+            ? CATZ_STATE.postSnagging
+            : CATZ_STATE.victimCaptured,
+        });
+      }
+
+      if (percent() < 10) {
+        return done({ state: 0x22 });
+      }
+
+      random(8);
+      return done({ pushed: 0x158, pushes: [0x158] });
+    }
+    case CATZ_STATE.postSnagging: {
+      /* `DoCatPostSnagging`, seg14:174d: its script done, it lets go (its slot `0xfc`), and food it eats (global 3), 8 and 0xb with `+0x35ce` 2, 0xc and 0xd with 1. */
+      const kind = world.x35a4!;
+      return [8, 0xb, 0xc, 0xd].includes(kind) ? done({ global: 3 }) : done({});
+    }
     case CATZ_STATE.lazyWatch: {
       /* `DoCatLazyWatch`, seg30:1695: entering, it tracks what it plays with with its head (2000); leaving, it stops; its script done, one time in five, as it watches (`+0x35b6`), it idles (global 6) or rests (9), else pushes 0x93 or 0x8c. */
       const goes = percent() < 20;

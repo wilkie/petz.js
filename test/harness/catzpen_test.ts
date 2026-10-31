@@ -1182,7 +1182,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
 const FOLLOWED = new Set([
-  1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 35, 56, 57,
+  1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 35, 56, 57, 8, 9, 10,
 ]);
 
 /**
@@ -1226,7 +1226,10 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     const b = before;
     before = null;
-    const [seedValue, enter, leave, area, global] = b;
+    const [seedValue, enter, leave, , global] = b;
+    /* Where it was on the stage as its handler first asked, after its script
+     * was popped and moved it, where the trace has it; else as the tick began. */
+    const area = values[122] > 0 ? values[123] : b[3];
     const field = (n: number) => b[5 + n];
     const state = field(0);
     const counts = (tally[state] ??= [0, 0, 0]);
@@ -1280,7 +1283,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     /* Entered: only pouncing (3), readying a walk (22) and sharpening its
      * claws (32) are reimplemented so. */
-    if (enter && state !== 3 && state !== 22 && state !== 32) {
+    if (enter && state !== 3 && state !== 8 && state !== 22 && state !== 32) {
       counts[1]++;
       continue;
     }
@@ -1449,6 +1452,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           caught: b[116] !== 0,
           released: b[117] === undefined ? undefined : b[117] !== 0,
           x35b6: b[118],
+          cursorAt: b[119] === undefined ? undefined : { x: b[119], y: b[120] },
           x35d2: b[89],
         },
         random
@@ -1467,7 +1471,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
        * transition to a neutral pose, which is by the cat's pose. */
       /* Entered, a pounce pops its script at once: its pushes are held, not
        * whether that script is done and it goes on. */
-      const pushesOnly = enter && state === 3 && !changed;
+      const pushesOnly = enter && (state === 3 || state === 8) && !changed;
       const stateHeld = ours.global === undefined && !pushesOnly;
       const globalHeld = ours.state === undefined && !pushesOnly;
       const pushHeld = !changed && !(state === 23 && ours.pushes === undefined);
