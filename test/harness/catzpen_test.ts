@@ -64,7 +64,7 @@ const TRACE_CUES = process.env.TRACE_CUES === '1';
 /** `TRACE_POUNCE=1`: on every fourth tick of stalking or swatting at a toy, the cat put to pounce, a day of its own. */
 const TRACE_POUNCE = process.env.TRACE_POUNCE === '1';
 
-/** `TRACE_EAT=1`: on every tenth tick of prestalking, looking at things, its moment, walking or grooming, the cat put in turn to sniff a mouse hole or to align to eat the fish, from the water bowl or from the food bowl, a day of its own. */
+/** `TRACE_EAT=1`: on every tenth tick of prestalking, looking at things, its moment, walking or grooming, the cat put in turn to sniff a mouse hole, to align to eat the fish, from the water bowl, from the food bowl or the catnip, or to sniff the catnip, a day of its own. */
 const TRACE_EAT = process.env.TRACE_EAT === '1';
 
 /** `TRACE_FEAR=1`: on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put in global state 17, scared, a day of its own. */
@@ -1189,7 +1189,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
-  38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62,
+  38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43,
 ]);
 
 /**
@@ -1290,7 +1290,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     /* Entered: only pouncing (3), readying a walk (22) and sharpening its
      * claws (32) are reimplemented so. */
-    if (enter && ![3, 4, 8, 22, 31, 32, 58, 59, 60, 80].includes(state)) {
+    if (enter && ![3, 4, 8, 22, 31, 32, 42, 58, 59, 60, 80].includes(state)) {
       counts[1]++;
       continue;
     }
@@ -1455,6 +1455,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           released: b[117] === undefined ? undefined : b[117] !== 0,
           x35b6: b[118],
           cursorAt: b[119] === undefined ? undefined : { x: b[119], y: b[120] },
+          x35d4: b[121],
           x35d2: b[89],
         },
         random
@@ -1473,7 +1474,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
        * transition to a neutral pose, which is by the cat's pose. */
       /* Entered, a pounce pops its script at once: its pushes are held, not
        * whether that script is done and it goes on. */
-      const pushesOnly = enter && [3, 4, 8, 31, 58, 59, 60, 80].includes(state) && !changed;
+      const pushesOnly = enter && [3, 4, 8, 31, 42, 58, 59, 60, 80].includes(state) && !changed;
       const stateHeld = ours.global === undefined && !pushesOnly;
       const globalHeld = ours.state === undefined && !pushesOnly;
       const pushHeld = !changed && !(state === 23 && ours.pushes === undefined);

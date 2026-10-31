@@ -47,6 +47,8 @@ export const CATZ_STATE = {
   hide: 60,
   specialFearModes: 61,
   jumpToCeiling: 62,
+  sniffCatnip: 42,
+  nibbleCatnip: 43,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -140,6 +142,9 @@ export interface CatzStateWorld {
 
   /** Snagging: the cursor's (kin 0x17) target point. */
   cursorAt?: { x: number; y: number };
+
+  /** Nibbling catnip: what is left of it (`+0x35d4`). */
+  x35d4?: number;
 }
 
 /**
@@ -552,6 +557,32 @@ export function catzStateTick(
       return catzPouncing(mind, world, random);
     case CATZ_STATE.diving:
       return catzDiving(mind, world, random);
+    case CATZ_STATE.sniffCatnip:
+      /* `DoCatSniffCatnip`, seg22:2555: entering, 0x1cc; its script done, the catnip (4) off the shelf, it aligns to eat it (0x26), else idles (6). */
+      return world.enter
+        ? done({ pushed: 0x1cc, pushes: [0x1cc] })
+        : world.inShelf!(4)
+          ? done({ global: 6 })
+          : done({ state: 0x26 });
+    case CATZ_STATE.nibbleCatnip: {
+      /* `DoCatNibbleCatnip`, seg22:2669: each tick, the catnip moved from its goal (`+0x34cc`) or held, it lets go (its slot `0x9c` 1) and goes for it again (global 4); cued (5), it eats 20 of what is left (`+0x35d4`, to 0) and grows more catnipped (20); its script done, having nibbled (`+0x34ca`, a draw against its catnip of no account), with none left it idles (6), else, having nibbled, 0x279 over 70 left, else 0x2d2. Leaving, under its catnip 0x27a, else, catnipped, a sound (10) and 0x250. */
+      const prey = world.prey!;
+      const goal = world.goal!;
+
+      if (prey.x !== goal.x || prey.y !== goal.y || world.preyHeld) {
+        return done({ global: 4 });
+      }
+
+      const left = world.cues?.includes(5) ? Math.max(0, (world.x35d4 ?? 0) - 20) : world.x35d4;
+
+      if (world.passed !== 0) {
+        percent();
+      }
+
+      return left === 0
+        ? done({ global: 6 })
+        : done({ passed: 1, pushed: left! > 70 ? 0x279 : 0x2d2 });
+    }
     case CATZ_STATE.stayAway:
     case CATZ_STATE.scaredWatch:
     case CATZ_STATE.hide:

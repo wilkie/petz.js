@@ -492,28 +492,32 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
     /* And where it asks (4), on every tenth tick of prestalking (1),
      * looking at things (12), its moment (21), walking (23) or grooming
      * (31), the cat is put in turn to sniff a mouse hole (11), or to align
-     * to eat (38) a piece of food (8), from the water bowl (0xd) or from the
-     * food bowl (0xc), what it plays with and walked to (`+0x35a4`,
-     * `+0x35a6`) the food. */
+     * to eat (38) a piece of food (8), from the water bowl (0xd), from the
+     * food bowl (0xc) or catnip (4), or to sniff the catnip (42), what it
+     * plays with and walked to (`+0x35a4`, `+0x35a6`) the food. */
     if (forcing & 4 && !enter && !leave) {
         int state = *(int __far *)(cat + 0x2552);
 
         if ((state == 1 || state == 12 || state == 21 || state == 23 || state == 31) &&
             eatTicks++ % 10 == 9) {
-            int which = eats++ % 4;
+            static const int foods[] = {0, 8, 0xd, 0xc, 4, 4};
+            int which = eats++ % 6;
 
             if (which) {
-                *(int __far *)(cat + 0x35a4) = *(int __far *)(cat + 0x35a6) =
-                    which == 1 ? 8 : which == 2 ? 0xd : 0xc;
+                *(int __far *)(cat + 0x35a4) = *(int __far *)(cat + 0x35a6) = foods[which];
             }
 
-            /* The food bowl, filled where it is all but empty. */
+            /* The food bowl and the catnip, filled where all but gone. */
             if (which == 3 && *(int __far *)(cat + 0x35d2) <= 1) {
                 *(int __far *)(cat + 0x35d2) = 100;
             }
 
+            if (which >= 4 && *(int __far *)(cat + 0x35d4) <= 0) {
+                *(int __far *)(cat + 0x35d4) = 100;
+            }
+
             depth--;
-            ((CATSTATE)ordinal(497))(cat, which ? 38 : 11, p);
+            ((CATSTATE)ordinal(497))(cat, which == 0 ? 11 : which == 5 ? 42 : 38, p);
             return;
         }
     }
@@ -646,8 +650,11 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         {
             long point = kin ? ((TARGETPT)ordinal(10))(kin, 0) : 0;
 
-            say(" %d %d\r\n", (int)point, (int)(point >> 16));
+            say(" %d %d", (int)point, (int)(point >> 16));
         }
+
+        /* And `+0x35d4`, the catnip left. */
+        say(" %d\r\n", *(int __far *)(cat + 0x35d4));
     }
 
     pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
