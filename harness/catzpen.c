@@ -1628,16 +1628,19 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         *(int *)(params + 0x108) = 0;
         *(int *)(params + 0x10a) = 0;
 
-        /* Or, where `TRACE.TXT` asks (16), the user petting it: the hand
-         * down (`+0x1e`), and the cursor's point (`+0x5a`) and rectangle
-         * (`+0x104` on) on the cat's target point, wiggled; `+0x46`, which
-         * ends petting where set (`DoGSPetting`), clear. */
+        /* Or, where `TRACE.TXT` asks (16), the user petting it, 60 frames
+         * of each 90: the hand down (`+0x1e`), and the cursor's point
+         * (`+0x5a`) and rectangle (`+0x104` on) on the cat's target point,
+         * wiggled; `+0x46`, which ends petting where set (`DoGSPetting`),
+         * clear. The other 30, the hand up, still. */
         if (forcing & 16 && cat) {
             long point = ((TARGETPT)ordinal(10))(cat, 0);
-            int x = (int)point + 6 * (n % 8) - 21, y = (int)(point >> 16) + 3 * (n % 4) - 12;
+            int stroking = n % 90 < 60;
+            int x = (int)point + (stroking ? 6 * (n % 8) - 21 : 0);
+            int y = (int)(point >> 16) + (stroking ? 3 * (n % 4) - 12 : 0);
 
             *(int *)(params + 0x46) = 0;
-            *(int *)(params + 0x1e) = 1;
+            *(int *)(params + 0x1e) = stroking;
             *(int *)(params + 0x5a) = x;
             *(int *)(params + 0x5c) = y;
             *(int *)(params + 0x104) = x;

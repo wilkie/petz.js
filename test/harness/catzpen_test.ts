@@ -70,7 +70,7 @@ const TRACE_EAT = process.env.TRACE_EAT === '1';
 /** `TRACE_FEAR=1`: on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put in global state 17, scared, a day of its own. */
 const TRACE_FEAR = process.env.TRACE_FEAR === '1';
 
-/** `TRACE_PET=1`: the user petting the cat all day, the cursor wiggled on it with the hand down, a day of its own. */
+/** `TRACE_PET=1`: the user petting the cat all day, 60 frames of each 90 the cursor wiggled on it with the hand down, the rest still with it up, a day of its own. */
 const TRACE_PET = process.env.TRACE_PET === '1';
 
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
