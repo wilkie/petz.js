@@ -42,6 +42,11 @@ export const CATZ_STATE = {
   groom: 31,
   snubObject: 80,
   diving: 4,
+  stayAway: 58,
+  scaredWatch: 59,
+  hide: 60,
+  specialFearModes: 61,
+  jumpToCeiling: 62,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -547,6 +552,12 @@ export function catzStateTick(
       return catzPouncing(mind, world, random);
     case CATZ_STATE.diving:
       return catzDiving(mind, world, random);
+    case CATZ_STATE.stayAway:
+    case CATZ_STATE.scaredWatch:
+    case CATZ_STATE.hide:
+    case CATZ_STATE.specialFearModes:
+    case CATZ_STATE.jumpToCeiling:
+      return catzFear(state, mind, world, random);
     case CATZ_STATE.victimCaptured:
     case CATZ_STATE.victimWrestle:
       return catzVictim(state, mind, world, random);
@@ -2466,4 +2477,93 @@ function catzDiving(
 
   tick.global = 6;
   return tick;
+}
+
+/**
+ * The scared cat's own states (`DoGSScared`'s, seg31). Staying away (58;
+ * `DoCatStayAway`, seg31:022b): entering, it tracks what scared it with its
+ * head (3000), pushes 0xdc, makes a sound (2) and, three times in ten,
+ * 0x296 (0x2ab without an age), then 0x254; its script done, it lets go (its
+ * slot `0x238`) and walks on to nothing (22, `+0x35a2` 1). Watching scared
+ * (59; `DoCatScaredWatch`, seg31:039c): entering, its count cleared, head
+ * (2000), 0xdc and a sound (2); each tick, within twice its width of what
+ * scared it, it stays away (0x3a, its slot `0x9c` 1); its script done, past
+ * three times one time in five it readies its moment (`PreMoment`, after it
+ * idling, 0x93 meanwhile) and has it (8), else 0xc. Hiding (60;
+ * `DoCatHide`, seg31:05a4): entering, head (2000), 0x93 three times and
+ * 0x254; its script done, its moment. Its special fear (61;
+ * `DoCatSpecialFearModes`, seg31:06f1): entering, it runs off the stage, 200
+ * past its left (its way 1, facing 0x40) or its right (facing -0x40), walking
+ * on (22) at once. Jumping to the ceiling (62; `DoCatJumpToCeiling`,
+ * seg31:07fb): entering, 0xdc, a sound (8), a neutral pose and 0x216 up to
+ * the stage's top; its script done, past three times one time in five its
+ * moment; else three times in ten a sound (2), and 0x218 without an age, else,
+ * facing 0x40 one time in five, 0x2fb, else 0x320.
+ */
+function catzFear(
+  state: number,
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const age = brain(CATZ_BRAIN.age);
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+  const pushes = (actions: number[]) => {
+    tick.pushes = actions;
+    tick.pushed = actions[0];
+    return tick;
+  };
+  const moment = () => {
+    tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
+    tick.global = 8;
+    return tick;
+  };
+
+  switch (state) {
+    case CATZ_STATE.stayAway:
+      if (world.enter) {
+        tick.sound = catzSound(mind, 2, random);
+        return pushes([0xdc, ...(percent() < 30 ? [age === 0 ? 0x2ab : 0x296] : []), 0x254]);
+      }
+
+      tick.x35a6 = 0;
+      tick.state = CATZ_STATE.locomote;
+      return tick;
+    case CATZ_STATE.scaredWatch:
+      if (world.enter) {
+        tick.sound = catzSound(mind, 2, random);
+        return pushes([0xdc]);
+      }
+
+      if (world.prey && catzDist(world.prey, world.point!) < world.size!.width * 2) {
+        tick.state = CATZ_STATE.stayAway;
+        return tick;
+      }
+
+      tick.count = world.count + 1;
+      return tick.count > 3 && percent() < 20 ? moment() : pushes([0xc]);
+    case CATZ_STATE.hide:
+      return world.enter ? pushes([0x93, 0x93, 0x93, 0x254]) : moment();
+    case CATZ_STATE.specialFearModes:
+      return tick;
+    default: {
+      tick.count = world.count + 1;
+
+      if (tick.count > 3 && percent() < 20) {
+        return moment();
+      }
+
+      if (percent() < 30) {
+        tick.sound = catzSound(mind, 2, random);
+      }
+
+      if (age === 0) {
+        return pushes([0x218]);
+      }
+
+      return pushes([world.x688 === 0x40 && percent() < 20 ? 0x2fb : 0x320]);
+    }
+  }
 }

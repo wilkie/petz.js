@@ -352,7 +352,7 @@ static void hookRand(void)
  * does then; and, where it is put to pounce, of pouncing (3), to catch (2),
  * and with its victim (5, 6), to make its sounds (7). */
 static unsigned char __far *traced;
-static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats;
+static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks;
 static unsigned long forced, forcedNow;
 
 static int asked, askedCue[4], askedAnswer[4];
@@ -514,6 +514,21 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
             depth--;
             ((CATSTATE)ordinal(497))(cat, which ? 38 : 11, p);
+            return;
+        }
+    }
+
+    /* And where it asks (8), on every tenth tick of looking at things (12),
+     * passing the time (19), its moment (21), walking (23) or grooming (31),
+     * the cat is put in global state 17, scared, as the global machine's
+     * `NewState` would (its slot `0x1c`). */
+    if (forcing & 8 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+
+        if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
+            fearTicks++ % 10 == 9) {
+            depth--;
+            passGlobal(*(void __far *__far *)(cat + 0x2fba), 0x11, p);
             return;
         }
     }
