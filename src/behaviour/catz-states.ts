@@ -175,6 +175,9 @@ export interface CatzPetting {
   ball: number;
   stopped?: boolean;
   movement?: number;
+
+  /** Its pose (`+0x1500`) as it asked how far the cursor moved, its script popped. */
+  pose?: number;
 }
 
 /**
@@ -2914,7 +2917,7 @@ function catzPetting(
   switch (mode) {
     case 2: {
       const early = world.count < 5 && age !== 0;
-      const pose = world.x1500;
+      const pose = petting.pose ?? world.x1500;
 
       if (region === 0) {
         return push(0xd7);

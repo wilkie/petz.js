@@ -200,7 +200,7 @@ typedef int(__cdecl __far *PETTED)(void __far *cat, void __far *params);
 typedef int(__cdecl __far *MOVED)(void __far *cat);
 static PETTED whichBall, stoppedPetting;
 static MOVED cursorMoved;
-static int balled, ball, stopped, stop, moved, movement;
+static int balled, ball, stopped, stop, moved, movement, posed;
 
 static int __cdecl __far __loadds balling(void __far *cat, void __far *params)
 {
@@ -228,8 +228,10 @@ static int __cdecl __far __loadds moving(void __far *cat)
 {
     int at = cursorMoved(cat);
 
+    /* And its pose (`+0x1500`) then, its script popped. */
     if (!moved++) {
         movement = at;
+        posed = *(int __far *)((unsigned char __far *)cat + 0x1500);
     }
 
     return at;
@@ -800,9 +802,11 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
     /* And where it was on the stage as its handler first asked, and, petted,
      * the ball under the cursor, whether the user stopped and how far the
-     * cursor moved, as it first asked each. */
-    say(" %d %d %d %d %d %d %d %d\r\n", placed, placed ? place : -1, balled, balled ? ball : -1,
-        stopped, stopped ? stop : -1, moved, moved ? movement : -1);
+     * cursor moved, as it first asked each, and its pose as it asked the
+     * last. */
+    say(" %d %d %d %d %d %d %d %d %d\r\n", placed, placed ? place : -1, balled,
+        balled ? ball : -1, stopped, stopped ? stop : -1, moved, moved ? movement : -1,
+        moved ? posed : -1);
     depth--;
 }
 
@@ -1628,14 +1632,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         *(int *)(params + 0x108) = 0;
         *(int *)(params + 0x10a) = 0;
 
-        /* Or, where `TRACE.TXT` asks (16), the user petting it, 60 frames
-         * of each 90: the hand down (`+0x1e`), and the cursor's point
+        /* Or, where `TRACE.TXT` asks (16), the user petting it, 300 frames
+         * of each 360: the hand down (`+0x1e`), and the cursor's point
          * (`+0x5a`) and rectangle (`+0x104` on) on the cat's target point,
          * wiggled; `+0x46`, which ends petting where set (`DoGSPetting`),
-         * clear. The other 30, the hand up, still. */
+         * clear. The other 60, the hand up, still. */
         if (forcing & 16 && cat) {
             long point = ((TARGETPT)ordinal(10))(cat, 0);
-            int stroking = n % 90 < 60;
+            int stroking = n % 360 < 300;
             int x = (int)point + (stroking ? 6 * (n % 8) - 21 : 0);
             int y = (int)(point >> 16) + (stroking ? 3 * (n % 4) - 12 : 0);
 
