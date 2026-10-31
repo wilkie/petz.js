@@ -33,6 +33,7 @@ export const CATZ_STATE = {
   snagPouncing: 8,
   snagging: 9,
   postSnagging: 10,
+  postDangling: 34,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -575,6 +576,8 @@ export function catzStateTick(
       const kind = world.x35a4!;
       return [8, 0xb, 0xc, 0xd].includes(kind) ? done({ global: 3 }) : done({});
     }
+    case CATZ_STATE.postDangling:
+      return catzPostDangling(mind, world, random);
     case CATZ_STATE.lazyWatch: {
       /* `DoCatLazyWatch`, seg30:1695: entering, it tracks what it plays with with its head (2000); leaving, it stops; its script done, one time in five, as it watches (`+0x35b6`), it idles (global 6) or rests (9), else pushes 0x93 or 0x8c. */
       const goes = percent() < 20;
@@ -1977,4 +1980,92 @@ function catzVictim(
   }
 
   return push(kind === 0x1b ? 0x232 : kind === 6 ? 0x236 : 0x233);
+}
+
+/**
+ * Turning to face the user where it faces more than 96 from them
+ * (`MakeCatFaceForwardIfNeeded`, seg16:35e0, the cat's slot `0x16c`): without
+ * an age 0x80; else by its energy and which half of the stage its target
+ * point is in, 50 or more 0x11b on the left and 0x80 on the right, under
+ * 0x87 and 0x86; then 0x150. The actions pushed, or none where it need not
+ * turn.
+ */
+export function catzFaceForward(mind: CatzMind, world: CatzStateWorld): number[] | undefined {
+  const facing = world.x688 ?? 0;
+
+  if (facing >= -0x60 && facing <= 0x60) {
+    return undefined;
+  }
+
+  const stage = world.stage!;
+  const left = Math.trunc((stage.right - stage.left) / 2) + stage.left > world.point!.x;
+  const turn =
+    mind.brains[CATZ_BRAIN.age] === 0
+      ? 0x80
+      : mind.brains[CATZ_BRAIN.energy] >= 50
+        ? left
+          ? 0x11b
+          : 0x80
+        : left
+          ? 0x87
+          : 0x86;
+  return [turn, 0x150];
+}
+
+/**
+ * After dangling from the cursor (34; `DoPostDangling`, seg23:4a7e), its
+ * script done: it turns to face the user where it must; else, afraid
+ * (behaviour 17) four times in five, it attacks the cursor (global 17, `+0x35a4`
+ * 0x17); else one time in four, not so placed (3), not inclined to behaviour
+ * 26 and with an age, it pushes 0x275 and idles (6); else, under half its
+ * liveliness and half its energy, 0x254 and idles; else it readies its
+ * moment (`PreMoment`, after it idling, 0x93 meanwhile) and has it (8).
+ * Entering, it lands as it was thrown, by how the cursor moved: not
+ * reimplemented.
+ */
+function catzPostDangling(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+  const turns = catzFaceForward(mind, world);
+
+  if (turns) {
+    tick.pushes = turns;
+    tick.pushed = turns[0];
+    return tick;
+  }
+
+  if (catzBehavior(mind, 17, random) !== 0 && percent() < 80) {
+    tick.x35a4 = 0x17;
+    tick.global = 17;
+    return tick;
+  }
+
+  if (
+    percent() < 25 &&
+    !world.area3 &&
+    catzBehavior(mind, 26, random) === 0 &&
+    brain(CATZ_BRAIN.age) !== 0
+  ) {
+    tick.pushed = 0x275;
+    tick.global = 6;
+    return tick;
+  }
+
+  if (
+    percent() < Math.trunc(brain(CATZ_BRAIN.liveliness) / 2) &&
+    percent() < Math.trunc(brain(CATZ_BRAIN.energy) / 2)
+  ) {
+    tick.pushed = 0x254;
+    tick.global = 6;
+    return tick;
+  }
+
+  tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
+  tick.global = 8;
+  return tick;
 }

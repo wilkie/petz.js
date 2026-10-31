@@ -1182,7 +1182,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
 const FOLLOWED = new Set([
-  1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 35, 56, 57, 8, 9, 10,
+  1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10,
 ]);
 
 /**
