@@ -511,7 +511,7 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
 }
 
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
-    fondTicks, suckTicks, treatTicks, napTicks;
+    fondTicks, suckTicks, treatTicks, napTicks, naps;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -730,6 +730,12 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             *(int __far *)(global + 0x3a) != 0x15 && napTicks++ % 10 == 9) {
             depth--;
             passGlobal(global, 0x15, p);
+
+            /* Every other time, the dog's chase (70), as one time in ten it
+             * would be. */
+            if (naps++ & 1 && *(int __far *)(cat + 0x2552) != 0x46) {
+                ((CATSTATE)ordinal(497))(cat, 0x46, p);
+            }
             return;
         }
     }
@@ -972,10 +978,11 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
          * to have come (4) and to be done (0), as it answers the dream; where
          * the dream's float has it (`+0x35dc`, `+0x35e4`, doubles, by their
          * words); the stage the dream keeps to (`ds:2ba6` to `ds:2bac`); and
-         * where the dream's mouse (kin 0x1b) is across. */
+         * where the dream's mouse (kin 0x1b) and the dog (kin 0x1a) are across. */
         {
             unsigned char __far *cloud = ((GETKIN)ordinal(18))(cat, 0x10);
             unsigned char __far *mouse = ((GETKIN)ordinal(18))(cat, 0x1b);
+            unsigned char __far *dog = ((GETKIN)ordinal(18))(cat, 0x1a);
             unsigned long cues = cloud ? *(unsigned long __far *)(cloud + 0x2514) : 0;
 
             say(" %d %d %d %d %d", *(int __far *)(cat + 0x35da), *(int __far *)(cat + 0x35ec),
@@ -991,6 +998,7 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             }
 
             say(" %d", mouse ? (int)((TARGETPT)ordinal(10))(mouse, 0) : 0);
+            say(" %d", dog ? (int)((TARGETPT)ordinal(10))(dog, 0) : 0);
         }
 
         say("\r\n");

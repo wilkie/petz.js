@@ -1215,16 +1215,16 @@ function double(words: number[]): number {
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
   38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55, 44, 45, 46,
-  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69,
+  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69, 70, 71,
 ]);
 
 /** The states whose entering is reimplemented, and those of them whose entered ticks are held only by what they push, their scripts popped at once. */
 const ENTERED = new Set([
   3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65,
-  67, 69,
+  67, 69, 70, 71,
 ]);
 const ENTERED_PUSHES = new Set([
-  3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65, 67, 69,
+  3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65, 67, 69, 70, 71,
 ]);
 
 /**
@@ -1528,6 +1528,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
                   at: { x: double(b.slice(246, 250)), y: double(b.slice(250, 254)) },
                   stage: box(254),
                   mouseX: b[258],
+                  dogX: b[259],
                 },
           bottle:
             b[168] === undefined || b[168] === -1

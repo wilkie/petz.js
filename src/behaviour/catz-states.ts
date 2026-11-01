@@ -77,6 +77,8 @@ export const CATZ_STATE = {
   badDream: 67,
   badDreamMouse: 68,
   dreamEnd: 69,
+  startDogChase: 70,
+  dogChase: 71,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -209,8 +211,9 @@ export interface CatzDream {
   /** The stage the dream keeps to (`ds:2ba6` to `ds:2bac`). */
   stage: { left: number; top: number; right: number; bottom: number };
 
-  /** Where the dream's mouse (kin 0x1b) is across. */
+  /** Where the dream's mouse (kin 0x1b) and the dog (kin 0x1a) are across. */
   mouseX: number;
+  dogX?: number;
 }
 
 /** The cat in the Adoption Kit's baskets. */
@@ -530,6 +533,10 @@ export interface CatzStateTick {
   ticks?: number;
   sound?: number;
 
+  /** Chasing the dog: `+0x35ac` and `+0x35ee`, where set. */
+  x35ac?: number;
+  x35ee?: number;
+
   /** Dreaming: its phase, what it dreams of, `+0x35d8`, and where the float has it, where they changed. */
   dream?: Partial<Pick<CatzDream, 'phase' | 'kind' | 'x35d8' | 'at'>>;
 }
@@ -698,6 +705,9 @@ export function catzStateTick(
     case CATZ_STATE.badDreamMouse:
     case CATZ_STATE.dreamEnd:
       return catzDream(state, mind, world, random);
+    case CATZ_STATE.startDogChase:
+    case CATZ_STATE.dogChase:
+      return catzDogChase(state, mind, world);
     case CATZ_STATE.failSafe:
       /* `DoCatFailSafeState`, seg13:1093: entering, its slot `0x9c` 2 and 0x177; its script done, idling (6). */
       return world.enter ? done({ pushed: 0x177, pushes: [0x177] }) : done({ global: 6 });
@@ -3930,4 +3940,73 @@ function catzDream(
       tick.global = 8;
       return tick;
   }
+}
+
+/**
+ * The dog's chase in CatNapz (CATZDLL.DLL seg18; kb/topics/catz-behaviour.md,
+ * "CatNapz"), the way it runs (`+0x35a8`) 1 to the left, 2 to the right:
+ *
+ * - its start (70; `DoCatStartDogChase`, seg18:15fb): entering, the dog (kin
+ *   0x1a) is put 200 left of the stage at its middle, facing right, its head
+ *   on it (3000), and 0x296. Its script done, it runs to 200 right of the
+ *   stage (`+0x35a6` 0, `+0x35ac` 1, `+0x35ee` 10, way 2) and walks (22);
+ * - the chase (71; `DoCatDogChase`, seg18:1853): entering where `+0x35ee` is
+ *   not 10, the dog put away and 0x2a3. Each tick, chasing (`+0x35ee` 10),
+ *   the dog's script done and it not yet 100 past the stage on the side the
+ *   cat runs to, within 200 of the middle across three times in ten it
+ *   pushes 7, else the cat makes a sound (2), and the dog pushes 1. Its
+ *   script done: the dog past the stage, it and the dog are put 200 past
+ *   that side of it and it runs back -- way 1, to 200 left of the stage,
+ *   `+0x688` 0x40 (its and the dog's); else to 200 right of it, -0x40 --
+ *   and walks (22); not chasing, it idles (6).
+ */
+function catzDogChase(state: number, mind: CatzMind, world: CatzStateWorld): CatzStateTick {
+  const tick: CatzStateTick = { energy: mind.brains[CATZ_BRAIN.energy], count: world.count };
+  const dream = world.dream;
+
+  if (!dream || dream.dogX === undefined) {
+    tick.unread = true;
+    return tick;
+  }
+
+  const stage = dream.stage;
+  const middle = Math.trunc((stage.bottom - stage.top) / 2) + stage.top;
+  const run = () => {
+    tick.x35a6 = 0;
+    tick.x35ac = 1;
+    tick.x35ee = 10;
+    tick.state = CATZ_STATE.locomote;
+    return tick;
+  };
+
+  if (state === CATZ_STATE.startDogChase) {
+    if (world.enter) {
+      tick.pushes = [0x296];
+      tick.pushed = 0x296;
+      tick.head = ['track'];
+      return tick;
+    }
+
+    tick.goal = { x: stage.right + 200, y: middle };
+    tick.explore = 2;
+    return run();
+  }
+
+  const chasing = world.x35ee === 10;
+
+  if (world.enter && !chasing) {
+    tick.pushes = [0x2a3];
+    tick.pushed = 0x2a3;
+    return tick;
+  }
+
+  if (!chasing) {
+    tick.global = 6;
+    return tick;
+  }
+
+  const left = world.x35a8 === 1;
+  tick.goal = { x: left ? stage.left - 200 : stage.right + 200, y: middle };
+  tick.x688 = left ? 0x40 : -0x40;
+  return run();
 }
