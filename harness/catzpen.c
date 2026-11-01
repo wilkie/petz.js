@@ -1907,8 +1907,16 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int *)(params + 0) = n == 10 ? 5 : 0;
 
             /* And the cursor about (`+0x46`) 20 frames of each 400, which
-             * has the cat climb out as it peeks. */
+             * has the cat climb out as it peeks; and at the 350th, out of
+             * the Kit's state, the cat sent back to its basket
+             * (`MakeCatReturnToBasket`, its slot `0x15c`), as its button
+             * does. */
             *(int *)(params + 0x46) = n % 400 >= 200 && n % 400 < 220;
+
+            if (cat && n % 400 == 350 &&
+                *(int __far *)(*(unsigned char __far *__far *)(cat + 0x2fba) + 0x3a) != 0x16) {
+                (*(TOPEN __far *)(*(unsigned char __far *__far *)cat + 0x15c))(cat, params);
+            }
         }
 
         /* Or, where `TRACE.TXT` asks (64), the user with the bottle (kin

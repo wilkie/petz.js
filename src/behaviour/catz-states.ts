@@ -69,6 +69,9 @@ export const CATZ_STATE = {
   peekFromBasket: 74,
   endPeekFromBasket: 75,
   exitBasket: 76,
+  jumpInBasket: 77,
+  dropIntoBasket: 78,
+  failSafe: 79,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -655,7 +658,12 @@ export function catzStateTick(
     case CATZ_STATE.peekFromBasket:
     case CATZ_STATE.endPeekFromBasket:
     case CATZ_STATE.exitBasket:
+    case CATZ_STATE.jumpInBasket:
+    case CATZ_STATE.dropIntoBasket:
       return catzKit(state, mind, world, random);
+    case CATZ_STATE.failSafe:
+      /* `DoCatFailSafeState`, seg13:1093: entering, its slot `0x9c` 2 and 0x177; its script done, idling (6). */
+      return world.enter ? done({ pushed: 0x177, pushes: [0x177] }) : done({ global: 6 });
     case CATZ_STATE.waitForTreat:
     case CATZ_STATE.nibbleTreat:
       return catzTreat(state, mind, world, random);
@@ -3656,6 +3664,15 @@ function catzKit(
       tick.x35a4 = [6, 7, 5][random(3)];
       return go(15);
     }
+    case CATZ_STATE.jumpInBasket:
+    case CATZ_STATE.dropIntoBasket:
+      /* `DoCatJumpInBasket`, seg13:0d29, and `DoCatDropIntoBasket`, seg13:0e9a: entering, its basket's place its goal (its slot `0x3cc`), its words to it, and 0x1c4 jumping, 0x297 dropping; cued (0), in the basket; its script done, in the baskets (0x49, `+0x35f6` -1). */
+      if (world.enter) {
+        return push(state === CATZ_STATE.jumpInBasket ? 0x1c4 : 0x297);
+      }
+
+      tick.state = CATZ_STATE.inBaskets;
+      return tick;
     default:
       if (world.enter) {
         return kit.peekMode === 1 ? push(0x1ca, 0x1c4) : push(0x1c4);
