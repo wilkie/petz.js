@@ -82,7 +82,7 @@ const TRACE_BOTTLE = process.env.TRACE_BOTTLE === '1';
 /** `TRACE_TREAT=1`: the user holding out a treat at the cat's mouth, each 600 frames 400 of them, and the cat put to wait for it on every tenth tick of looking at things, passing the time, its moment, walking or grooming, a day of its own. */
 const TRACE_TREAT = process.env.TRACE_TREAT === '1';
 
-/** `TRACE_KIT=1`: the Adoption Kit, set up at frame 10 as the module's command 5 asks, a day of its own. */
+/** `TRACE_KIT=1`: the Adoption Kit, set up at frame 10 as the module's command 5 asks, the cursor about 20 frames of each 400, a day of its own. */
 const TRACE_KIT = process.env.TRACE_KIT === '1';
 
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
@@ -1205,8 +1205,14 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
   38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55, 44, 45, 46,
-  47, 48, 36, 37, 72, 73, 74, 75,
+  47, 48, 36, 37, 72, 73, 74, 75, 76,
 ]);
+
+/** The states whose entering is reimplemented, and those of them whose entered ticks are held only by what they push, their scripts popped at once. */
+const ENTERED = new Set([
+  3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 72, 76, 80,
+]);
+const ENTERED_PUSHES = new Set([3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 76, 80]);
 
 /**
  * A cat's day held to the reimplementation: each `tick` the driver wrote
@@ -1315,10 +1321,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
      * (49) and going after the bottle (46), which do their work at once,
      * suckling (45), grabbing the bottle (48), after petting (52), licking the
      * cursor (54), fear's first actions (58, 59, 60) and snubbing (80). */
-    if (
-      enter &&
-      ![3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 72, 80].includes(state)
-    ) {
+    if (enter && !ENTERED.has(state)) {
       counts[1]++;
       continue;
     }
@@ -1549,10 +1552,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
        * transition to a neutral pose, which is by the cat's pose. */
       /* Entered, a pounce pops its script at once: its pushes are held, not
        * whether that script is done and it goes on. */
-      const pushesOnly =
-        enter &&
-        [3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 80].includes(state) &&
-        !changed;
+      const pushesOnly = enter && ENTERED_PUSHES.has(state) && !changed;
       const stateHeld = ours.global === undefined && !pushesOnly;
       const globalHeld = ours.state === undefined && !pushesOnly;
       const pushHeld = !changed && !(state === 23 && ours.pushes === undefined);

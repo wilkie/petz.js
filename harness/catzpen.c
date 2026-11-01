@@ -1905,6 +1905,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * baskets set up, and the cat put in them -- for that frame. */
         if (forcing & 256) {
             *(int *)(params + 0) = n == 10 ? 5 : 0;
+
+            /* And the cursor about (`+0x46`) 20 frames of each 400, which
+             * has the cat climb out as it peeks. */
+            *(int *)(params + 0x46) = n % 400 >= 200 && n % 400 < 220;
         }
 
         /* Or, where `TRACE.TXT` asks (64), the user with the bottle (kin

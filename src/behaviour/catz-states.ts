@@ -68,6 +68,7 @@ export const CATZ_STATE = {
   inBaskets: 73,
   peekFromBasket: 74,
   endPeekFromBasket: 75,
+  exitBasket: 76,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -653,6 +654,7 @@ export function catzStateTick(
     case CATZ_STATE.inBaskets:
     case CATZ_STATE.peekFromBasket:
     case CATZ_STATE.endPeekFromBasket:
+    case CATZ_STATE.exitBasket:
       return catzKit(state, mind, world, random);
     case CATZ_STATE.waitForTreat:
     case CATZ_STATE.nibbleTreat:
@@ -3614,6 +3616,45 @@ function catzKit(
 
       tick.state = 0x4c;
       return tick;
+    }
+    case CATZ_STATE.exitBasket: {
+      /* `DoCatExitBasket`, seg13:09d3: entering, out (`+0x35fa` 1, its slot `0x3d8`), 0x171; cued (0), it lets the basket go and has been in it; its script done, by temperament: 24 grooming (13); 27, after the cursor (`+0x35a4` 0x17), one time in two the mouse roused, one time in five scared (17), else playing (15); 25 the same, attacking (1); 26, its energy 50, one time in two eating (3), else affectionate (14); else one time in two affectionate, else playing with one of 6, 7 and 5. */
+      if (world.enter) {
+        return push(0x171);
+      }
+
+      const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+      const go = (global: number) => {
+        tick.global = global;
+        return tick;
+      };
+
+      if (behave(24)) {
+        return go(13);
+      }
+
+      if (behave(27)) {
+        tick.x35a4 = 0x17;
+        percent();
+        return go(percent() < 20 ? 17 : 15);
+      }
+
+      if (behave(25)) {
+        tick.x35a4 = 0x17;
+        percent();
+        return go(1);
+      }
+
+      if (behave(26)) {
+        return go(percent() < 50 ? 3 : 14);
+      }
+
+      if (percent() < 50) {
+        return go(14);
+      }
+
+      tick.x35a4 = [6, 7, 5][random(3)];
+      return go(15);
     }
     default:
       if (world.enter) {
