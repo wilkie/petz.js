@@ -62,6 +62,8 @@ export const CATZ_STATE = {
   chasingSuckling: 46,
   suckleAttempt: 47,
   sucklingGrab: 48,
+  waitForTreat: 36,
+  nibbleTreat: 37,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -624,6 +626,9 @@ export function catzStateTick(
       return catzDiving(mind, world, random);
     case CATZ_STATE.petting:
       return catzPetting(mind, world, random);
+    case CATZ_STATE.waitForTreat:
+    case CATZ_STATE.nibbleTreat:
+      return catzTreat(state, mind, world, random);
     case CATZ_STATE.sucklingUser:
     case CATZ_STATE.sucklingSelf:
     case CATZ_STATE.chasingSuckling:
@@ -3326,4 +3331,154 @@ function catzSuckling(
     default:
       return tick;
   }
+}
+
+/**
+ * A treat (kin 0xb) held out to it. Waiting for it (36; `DoCatWaitForTreat`,
+ * seg22:0a59): each tick, in pose 0x40, its ball 7 within 10 of the treat,
+ * it keeps where the treat is (`+0x35c2`) and nibbles it (0x25); the treat
+ * not held, it walks to it (22, `+0x35a2` 0); else every so many ticks
+ * (`+0x3504`, 9 to 58) it looks at the user or, one time in two, the treat
+ * or the cursor (3000), seven times in ten turns its head by a fudger, and
+ * makes a sound, under what its fullness leaves of 100 one time in two (6),
+ * else under a quarter of what its seriousness leaves (7). Its script done:
+ * not yet begged, 0xd7; placed so (3), walking to it; its first 15 times,
+ * under what its independence leaves of 100 or in pose 0x40, its head on the
+ * treat (2500) and, six times in ten, 0x28c, else 0xd7; inclined to
+ * behaviour 28, under a third of its energy, one time in ten playing (15),
+ * else 0x243; to 16 one time in two begging (0x23); to 7 one time in two
+ * attacking (1); not to 8, one time in four snubbing (11); afraid, one time
+ * in five scared (17); else 0xd7. Nibbling it (37; `DoCatNibbleTreat`,
+ * seg22:107d): its script done, having nibbled, it puts the treat back on the
+ * shelf and eats it (0x27); else the treat more than 10 either way from where
+ * it kept it, it waits for it again (0x24); else 0x189.
+ */
+function catzTreat(
+  state: number,
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const brain = (n: number) => mind.brains[n];
+  const percent = () => random(101);
+  const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+  const push = (action: number) => {
+    tick.pushes = [action];
+    tick.pushed = action;
+    return tick;
+  };
+  const treat = world.prey!;
+
+  if (state === CATZ_STATE.nibbleTreat) {
+    const kept = world.x35c2!;
+    const moved = Math.abs(kept.x - treat.x) > 10 || Math.abs(kept.y - treat.y) > 10;
+
+    if (world.count > 0) {
+      tick.state = CATZ_STATE.eatPieceOfFood;
+      return tick;
+    }
+
+    if (moved) {
+      tick.state = CATZ_STATE.waitForTreat;
+      return tick;
+    }
+
+    tick.count = world.count + 1;
+    return push(0x189);
+  }
+
+  const ball = world.ball7;
+
+  if (
+    world.x1500 === 0x40 &&
+    ball &&
+    Math.abs(ball.x - treat.x) < 10 &&
+    Math.abs(ball.y - treat.y) < 10
+  ) {
+    tick.state = CATZ_STATE.nibbleTreat;
+    return tick;
+  }
+
+  const walk = () => {
+    tick.x35a6 = world.x35a4;
+    tick.state = CATZ_STATE.locomote;
+    return tick;
+  };
+
+  if (!world.preyHeld) {
+    return walk();
+  }
+
+  if (world.ticks === 0) {
+    random(50);
+
+    if (percent() < 50) {
+      tick.head = ['user'];
+    } else {
+      percent();
+      tick.head = ['track'];
+    }
+
+    if (percent() < 70) {
+      random(20);
+    }
+
+    if (percent() < 100 - brain(CATZ_BRAIN.fullness) && percent() < 50) {
+      tick.sound = catzSound(mind, 6, random);
+    } else if (percent() < Math.trunc((100 - brain(CATZ_BRAIN.seriousness)) / 4)) {
+      tick.sound = catzSound(mind, 7, random);
+    }
+  }
+
+  tick.passed = 1;
+
+  if (world.passed === 0) {
+    return push(0xd7);
+  }
+
+  if (world.area3) {
+    return walk();
+  }
+
+  tick.count = world.count + 1;
+
+  if (
+    world.count < 15 &&
+    (percent() < 100 - brain(CATZ_BRAIN.independence) || world.x1500 === 0x40)
+  ) {
+    tick.head = ['track'];
+    return push(percent() < 60 ? 0x28c : 0xd7);
+  }
+
+  if (behave(28) && percent() < Math.trunc(brain(CATZ_BRAIN.energy) / 3)) {
+    if (percent() < 10) {
+      tick.global = 15;
+      return tick;
+    }
+
+    return push(0x243);
+  }
+
+  if (behave(16) && percent() < 50) {
+    tick.state = CATZ_STATE.begging;
+    return tick;
+  }
+
+  if (behave(7) && percent() < 50) {
+    tick.global = 1;
+    return tick;
+  }
+
+  if (!behave(8) && percent() < 25) {
+    tick.global = 11;
+    return tick;
+  }
+
+  if (brain(CATZ_BRAIN.fear) >= 50 && percent() < 20) {
+    tick.global = 17;
+    return tick;
+  }
+
+  return push(0xd7);
 }

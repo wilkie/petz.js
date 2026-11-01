@@ -127,8 +127,25 @@ static int globals[4], globalled;
 /* Following a cat's day, each keeper passes the state on to be entered. */
 static GLOBALSTATE passGlobal, passLocal;
 
+/* How deep the cat's machine's slot 4 is called, its tick at 1. */
+static int depth;
+
+/* Where the global state is changed outside the cat's tick, the same. */
+static int outsideGlobal, outsideGlobalState, outsideGlobalWords[24];
+
 static void __cdecl __far __loadds keep(void __far *machine, int state, void __far *params)
 {
+    if (!depth && !outsideGlobal++) {
+        unsigned __far *from = (unsigned __far *)&machine - 2;
+        int w;
+
+        outsideGlobalState = state;
+
+        for (w = 0; w < 24; w++) {
+            outsideGlobalWords[w] = from[w];
+        }
+    }
+
     if (globalled < 4) {
         globals[globalled] = state;
     }
@@ -144,8 +161,26 @@ static void __cdecl __far __loadds keep(void __far *machine, int state, void __f
 static unsigned char localTable[0x40];
 static int locals[4], localled;
 
+/* And where the cat's own state is changed outside its tick: the first 24
+ * words of the stack from the keeper's return address up -- return
+ * addresses among them, to be named by the segments' selectors, which the
+ * trace writes as it begins -- for the next tick to write. */
+static int outside, outsideState, outsideWords[24];
+
+
 static void __cdecl __far __loadds keepLocal(void __far *machine, int state, void __far *params)
 {
+    if (!depth && !outside++) {
+        unsigned __far *from = (unsigned __far *)&machine - 2;
+        int w;
+
+        outsideState = state;
+
+        for (w = 0; w < 24; w++) {
+            outsideWords[w] = from[w];
+        }
+    }
+
     if (localled < 4) {
         locals[localled] = state;
     }
@@ -464,8 +499,18 @@ static void hookProximity(void)
  * does then; and, where it is put to pounce, of pouncing (3), to catch (2),
  * and with its victim (5, 6), to make its sounds (7). */
 static unsigned char __far *traced;
+/* The treat's own copy of its table (`TRACE.TXT`'s 128), its slot `0x24`
+ * answering whether the user holds it out. */
+static unsigned char treatTable[0x200];
+static int treatHeld;
+
+static int __cdecl __far __loadds treatHolding(void __far *treat)
+{
+    return treatHeld;
+}
+
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
-    fondTicks, suckTicks;
+    fondTicks, suckTicks, treatTicks;
 static unsigned long forced, forcedNow;
 
 static int asked, askedCue[4], askedAnswer[4];
@@ -545,7 +590,6 @@ static unsigned char __far *findCat(void)
 static DISPATCH handle;
 static unsigned char __far *traced;
 static unsigned traceData;
-static int depth;
 
 static void traceFields(unsigned char __far *cat)
 {
@@ -646,6 +690,22 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             fearTicks++ % 10 == 9) {
             depth--;
             passGlobal(*(void __far *__far *)(cat + 0x2fba), 0x11, p);
+            return;
+        }
+    }
+
+    /* And where it asks (128), on every tenth tick of the same, the treat
+     * held out, the cat waits for it (36), it what the cat plays with and
+     * walks to. */
+
+    if (forcing & 128 && !enter && !leave && treatHeld) {
+        int state = *(int __far *)(cat + 0x2552);
+
+        if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
+            treatTicks++ % 10 == 9) {
+            *(int __far *)(cat + 0x35a4) = *(int __far *)(cat + 0x35a6) = 0xb;
+            depth--;
+            ((CATSTATE)ordinal(497))(cat, 0x24, p);
             return;
         }
     }
@@ -840,13 +900,30 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         if (kin) {
             long point = ((TARGETPT)ordinal(10))(kin, 0);
 
-            say(" %d %d %d %d %d %d %d %d %d\r\n", *(int __far *)(kin + 0xfc),
+            say(" %d %d %d %d %d %d %d %d %d", *(int __far *)(kin + 0xfc),
                 *(int __far *)(kin + 0x1da), ((INSHELF)ordinal(38))(cat, 0xf), (int)point,
                 (int)(point >> 16), ((BOTTLED)ordinal(848))(cat), ((BOTTLED)ordinal(844))(cat),
                 *(int __far *)(kin + 0x1d8), *(int __far *)(kin + 0x2520));
         } else {
-            say(" -1 -1 -1 0 0 0 0 0 0\r\n");
+            say(" -1 -1 -1 0 0 0 0 0 0");
         }
+
+        /* And the first change of its own state and of its global state
+         * since, made outside a tick, each with the stack then. */
+        say(" %d %d", outside, outside ? outsideState : -1);
+
+        for (b = 0; b < 24; b++) {
+            say(" %u", outside ? (unsigned)outsideWords[b] : 0u);
+        }
+
+        say(" %d %d", outsideGlobal, outsideGlobal ? outsideGlobalState : -1);
+
+        for (b = 0; b < 24; b++) {
+            say(" %u", outsideGlobal ? (unsigned)outsideGlobalWords[b] : 0u);
+        }
+
+        say("\r\n");
+        outside = outsideGlobal = 0;
     }
 
     pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
@@ -1001,6 +1078,28 @@ static void install(unsigned char __far *cat)
 
     hookCued();
     hookProximity();
+
+    /* And the DLL's code segments' selectors, by number, to name return
+     * addresses by. */
+    {
+        static const int firsts[][2] = {
+            {1, 1}, {2, 2}, {3, 68}, {4, 168}, {5, 200}, {6, 208}, {7, 222}, {8, 248},
+            {9, 364}, {10, 399}, {11, 405}, {12, 446}, {13, 454}, {14, 469}, {15, 480},
+            {16, 488}, {17, 528}, {18, 529}, {19, 539}, {20, 543}, {21, 553}, {22, 559},
+            {23, 575}, {24, 595}, {25, 611}, {26, 622}, {27, 640}, {28, 657}, {29, 674},
+            {30, 686}, {31, 704}, {32, 722}, {33, 838}, {34, 852}, {35, 864}, {36, 873},
+            {37, 886}, {38, 899}, {39, 927}, {40, 944}, {41, 990}, {42, 994}, {43, 1020},
+            {44, 1048}, {45, 1124}, {46, 1161}, {47, 1177}, {48, 1216}};
+        int f;
+
+        say("segments");
+
+        for (f = 0; f < sizeof firsts / sizeof firsts[0]; f++) {
+            say(" %d:%u", firsts[f][0], FP_SEG(ordinal(firsts[f][1])));
+        }
+
+        say("\r\n");
+    }
 
     /* And what the shelf holds, by kind, to 35. */
     {
@@ -1808,6 +1907,49 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             } else if (bottle && cycle == 400) {
                 ((BOTTLEDO)ordinal(790))(bottle);
                 *(int *)(params + 0x1e) = 0;
+            }
+        }
+
+        /* Or, where `TRACE.TXT` asks (128), the user with a treat (kin 0xb),
+         * each 600 frames: taken off the shelf into the pen where it is
+         * there; held -- its table's `IsThisBeingHeld` answering so -- still
+         * at the stage's lower middle (`XApt::MoveDrawPt`, 17), and, while
+         * the cat waits for it (36), at its ball 7, where it would take it;
+         * and let go at 400. */
+        if (forcing & 128 && cat) {
+            int cycle = n % 600;
+            unsigned char __far *treat = ((GETKIN)ordinal(18))(cat, 0xb);
+
+            treatHeld = treat && cycle < 400;
+
+            if (treat && cycle == 0) {
+                if (((INSHELF)ordinal(38))(cat, 0xb)) {
+                    ((TOPEN)ordinal(151))(treat, params);
+                }
+
+                /* Its own copy of its table, whose slot `0x24`
+                 * (`IsThisBeingHeld`) answers as the user holds it. */
+                if (*(void __far *__far *)treat != treatTable) {
+                    _fmemcpy(treatTable, *(void __far *__far *)treat, sizeof treatTable);
+                    *(int(__cdecl __far **)(void __far *))(treatTable + 0x24) = treatHolding;
+                    *(void __far *__far *)treat = treatTable;
+                }
+            }
+
+            if (treatHeld) {
+                unsigned char __far *ballz = *(unsigned char __far *__far *)(cat + 0x242);
+                int rect[4], at[2] = {235, 250};
+
+                /* Moved only where it must be. */
+                if (*(int __far *)(cat + 0x2552) == 36) {
+                    ((DRAWRECT)ordinal(15))(rect, cat, 0);
+                    (*(BALLPOINT __far *)(*(unsigned char __far *__far *)ballz + 0x38))(
+                        ballz, at, cat + 0x678, rect, 7);
+                    ((MOVEPT)ordinal(17))(treat, 0, at);
+                } else if (cycle == 0) {
+                    ((MOVEPT)ordinal(17))(treat, 0, at);
+                }
+
             }
         }
 
