@@ -511,8 +511,17 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
 }
 
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
-    fondTicks, suckTicks, treatTicks;
+    fondTicks, suckTicks, treatTicks, napTicks;
 static unsigned long forced, forcedNow;
+static int cloudCued, cloudTicks;
+
+/* Napping (512), starting a dream (65) in its phase 1 (`+0x35da`) for 20
+ * ticks: the cloud's cue that it has come (4), answered for it. */
+static int cloudComing(unsigned char __far *cat)
+{
+    return forcing & 512 && *(int __far *)(cat + 0x2552) == 65 &&
+           *(int __far *)(cat + 0x35da) == 1 && cloudTicks + 1 >= 20;
+}
 
 static int asked, askedCue[4], askedAnswer[4];
 
@@ -522,7 +531,7 @@ static int __cdecl __far __loadds cueing(unsigned char __far *sprite, int cue)
     int answer;
 
     if (sprite != traced) {
-        return (int)(cues >> cue) & 1;
+        return (int)((cues | (cloudCued && cue == 4 ? 1ul << 4 : 0)) >> cue) & 1;
     }
 
     answer = (int)((cues | forced) >> cue) & 1;
@@ -707,6 +716,20 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             *(int __far *)(cat + 0x35a4) = *(int __far *)(cat + 0x35a6) = 0xb;
             depth--;
             ((CATSTATE)ordinal(497))(cat, 0x24, p);
+            return;
+        }
+    }
+
+    /* And where it asks (512), on every tenth tick of the same, not napping
+     * already, CatNapz (21), its dreams and the dog's chase. */
+    if (forcing & 512 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+
+        if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
+            *(int __far *)(global + 0x3a) != 0x15 && napTicks++ % 10 == 9) {
+            depth--;
+            passGlobal(global, 0x15, p);
             return;
         }
     }
@@ -944,6 +967,32 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
                       : -1);
         }
 
+        /* And, dreaming, the dream's phase (`+0x35da`), what it dreams of
+         * (`+0x35ec`) and `+0x35d8`; whether the cloud (kin 0x10) is cued
+         * to have come (4) and to be done (0), as it answers the dream; where
+         * the dream's float has it (`+0x35dc`, `+0x35e4`, doubles, by their
+         * words); the stage the dream keeps to (`ds:2ba6` to `ds:2bac`); and
+         * where the dream's mouse (kin 0x1b) is across. */
+        {
+            unsigned char __far *cloud = ((GETKIN)ordinal(18))(cat, 0x10);
+            unsigned char __far *mouse = ((GETKIN)ordinal(18))(cat, 0x1b);
+            unsigned long cues = cloud ? *(unsigned long __far *)(cloud + 0x2514) : 0;
+
+            say(" %d %d %d %d %d", *(int __far *)(cat + 0x35da), *(int __far *)(cat + 0x35ec),
+                *(int __far *)(cat + 0x35d8), (int)(cues >> 4 & 1) | cloudComing(cat),
+                (int)(cues & 1));
+
+            for (b = 0; b < 8; b++) {
+                say(" %u", *(unsigned __far *)(cat + 0x35dc + 2 * b));
+            }
+
+            for (b = 0; b < 4; b++) {
+                say(" %d", *(int __far *)MK_FP(traceData, 0x2ba6 + 2 * b));
+            }
+
+            say(" %d", mouse ? (int)((TARGETPT)ordinal(10))(mouse, 0) : 0);
+        }
+
         say("\r\n");
         outside = outsideGlobal = 0;
     }
@@ -961,6 +1010,21 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
          * (2), and with its victim (5, 6), to make its sounds (7). */
         if (forcing & 2 && (state == 3 || state == 5 || state == 6) && forcedTicks++ & 1) {
             forced = 1ul << (state == 3 ? 2 : 7);
+        }
+
+        /* And, napping (512), starting a dream (65): its script's cue to
+         * dream (6) on the second tick, once (`+0x35da`, the dream's phase,
+         * nought till then), and the cloud's that it has come (4) on the
+         * twentieth after: the cloud runs no script in the pen. */
+        cloudCued = 0;
+        if (forcing & 512 && state == 65) {
+            int phase = *(int __far *)(cat + 0x35da);
+
+            if (phase == 0 && forcedTicks++ & 1) {
+                forced = 1ul << 6;
+            }
+            cloudCued = cloudComing(cat);
+            cloudTicks = phase == 1 ? cloudTicks + 1 : 0;
         }
         forcedNow = forced;
     }

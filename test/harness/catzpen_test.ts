@@ -85,6 +85,9 @@ const TRACE_TREAT = process.env.TRACE_TREAT === '1';
 /** `TRACE_KIT=1`: the Adoption Kit, set up at frame 10 as the module's command 5 asks, the cursor about 20 frames of each 400, and the cat sent back to its basket at the 350th, a day of its own. */
 const TRACE_KIT = process.env.TRACE_KIT === '1';
 
+/** `TRACE_NAP=1`: on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put in global state 21, CatNapz, a day of its own; starting a dream, cued to dream (6) once, and its cloud, which runs no script in the pen, cued that it has come (4) after 20 ticks. */
+const TRACE_NAP = process.env.TRACE_NAP === '1';
+
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
 const describeHarness = ready ? describe : describe.skip;
 
@@ -1142,7 +1145,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1154,7 +1157,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
       writeFileSync(
         join(directory, 'TRACE.TXT'),
-        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0) | (TRACE_BOTTLE ? 64 : 0) | (TRACE_TREAT ? 128 : 0) | (TRACE_KIT ? 256 : 0)}\r\n`
+        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0) | (TRACE_BOTTLE ? 64 : 0) | (TRACE_TREAT ? 128 : 0) | (TRACE_KIT ? 256 : 0) | (TRACE_NAP ? 512 : 0)}\r\n`
       );
       const { runProbe } = await import(WINBOX);
       const result = await runProbe(
@@ -1201,19 +1204,27 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   }, 28800000);
 });
 
+/** A double, from its four words, low first, as the trace writes them. */
+function double(words: number[]): number {
+  const view = new DataView(new ArrayBuffer(8));
+  words.forEach((word, k) => view.setUint16(2 * k, word, true));
+  return view.getFloat64(0, true);
+}
+
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
   38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55, 44, 45, 46,
-  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79,
+  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69,
 ]);
 
 /** The states whose entering is reimplemented, and those of them whose entered ticks are held only by what they push, their scripts popped at once. */
 const ENTERED = new Set([
-  3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79,
+  3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65,
+  67, 69,
 ]);
 const ENTERED_PUSHES = new Set([
-  3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79,
+  3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65, 67, 69,
 ]);
 
 /**
@@ -1506,6 +1517,18 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
                   mouseState: b[240],
                 },
           cursorAbout: b[90] !== 0,
+          dream:
+            b[258] === undefined
+              ? undefined
+              : {
+                  phase: b[241],
+                  kind: b[242],
+                  x35d8: b[243],
+                  cloudCome: b[244] !== 0,
+                  at: { x: double(b.slice(246, 250)), y: double(b.slice(250, 254)) },
+                  stage: box(254),
+                  mouseX: b[258],
+                },
           bottle:
             b[168] === undefined || b[168] === -1
               ? undefined

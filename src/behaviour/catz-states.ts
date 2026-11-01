@@ -72,6 +72,11 @@ export const CATZ_STATE = {
   jumpInBasket: 77,
   dropIntoBasket: 78,
   failSafe: 79,
+  startDream: 65,
+  goodDream: 66,
+  badDream: 67,
+  badDreamMouse: 68,
+  dreamEnd: 69,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -183,6 +188,29 @@ export interface CatzStateWorld {
   /** In the Adoption Kit: see `CatzKit`; and whether the cursor is about (`PetParams` `+0x46`). */
   kit?: CatzKit;
   cursorAbout?: boolean;
+
+  /** Dreaming: see `CatzDream`. */
+  dream?: CatzDream;
+}
+
+/** A dream in CatNapz, as the tick begins. */
+export interface CatzDream {
+  /** Its phase (`+0x35da`), what it dreams of (`+0x35ec`) and `+0x35d8`. */
+  phase: number;
+  kind: number;
+  x35d8: number;
+
+  /** Whether the cloud (kin 0x10) is cued that it has come (4). */
+  cloudCome: boolean;
+
+  /** Where the dream's float has the cat (`+0x35dc`, `+0x35e4`: doubles). */
+  at: { x: number; y: number };
+
+  /** The stage the dream keeps to (`ds:2ba6` to `ds:2bac`). */
+  stage: { left: number; top: number; right: number; bottom: number };
+
+  /** Where the dream's mouse (kin 0x1b) is across. */
+  mouseX: number;
 }
 
 /** The cat in the Adoption Kit's baskets. */
@@ -501,6 +529,9 @@ export interface CatzStateTick {
   /** Looking at things: ticks to its next look, and the sound it made (`MapAndPlayCatSound` 7), its action. */
   ticks?: number;
   sound?: number;
+
+  /** Dreaming: its phase, what it dreams of, `+0x35d8`, and where the float has it, where they changed. */
+  dream?: Partial<Pick<CatzDream, 'phase' | 'kind' | 'x35d8' | 'at'>>;
 }
 
 /**
@@ -661,6 +692,12 @@ export function catzStateTick(
     case CATZ_STATE.jumpInBasket:
     case CATZ_STATE.dropIntoBasket:
       return catzKit(state, mind, world, random);
+    case CATZ_STATE.startDream:
+    case CATZ_STATE.goodDream:
+    case CATZ_STATE.badDream:
+    case CATZ_STATE.badDreamMouse:
+    case CATZ_STATE.dreamEnd:
+      return catzDream(state, mind, world, random);
     case CATZ_STATE.failSafe:
       /* `DoCatFailSafeState`, seg13:1093: entering, its slot `0x9c` 2 and 0x177; its script done, idling (6). */
       return world.enter ? done({ pushed: 0x177, pushes: [0x177] }) : done({ global: 6 });
@@ -3679,6 +3716,218 @@ function catzKit(
       }
 
       tick.state = CATZ_STATE.inBaskets;
+      return tick;
+  }
+}
+
+/** `ds:031a`: how far round, at most, the dream's float turns the cat a tick, in radians (a quarter of a degree). */
+const DREAM_SPIN = 0.0043633231299858265;
+
+/**
+ * A dream in CatNapz (CATZDLL.DLL seg18; kb/topics/catz-behaviour.md,
+ * "CatNapz"):
+ *
+ * - starting a dream (65; `DoCatStartDream`, seg18:0202): entering, it turns
+ *   to face the user where it must, pushes 0xb3 and 0xd5, steers (0x7538, 6,
+ *   0x756f) and pushes 0xd5 again, its phase (`+0x35da`) 0. Each tick, in
+ *   phase 0, cued (6), it puts its cloud (kin 0x10) up by a corner of the
+ *   stage (`+0x35ae`), sets it going there, and its phase is 1; the cloud
+ *   cued that it has come (4), its count (`+0x3502`) is 0 and its phase 2;
+ *   in phase 2 it counts 28 ticks, then keeps how far the cloud is from it
+ *   (`+0x35f0`, `+0x35f2`) and floats from its target point (`+0x35dc`,
+ *   `+0x35e4`, doubles), phase 3. In phase 3, within 50 of the stage's
+ *   middle across and down, it lets go (its slot `0x9c` 1) and dreams, three
+ *   times in four well (66), else badly (67); else it floats round the
+ *   middle, a little further round each tick for 100 ticks, its distance
+ *   from it cut to a whole number three times in four or within 10, its
+ *   goal (`+0x34cc`) and its cloud moved with it. Its script done, 0xd5;
+ * - a good dream (66; `DoCatGoodDream`, seg18:090c): entering, not yet
+ *   dreamed (`+0x34ca` 0). Its script done, about four times in ten (60 or
+ *   more of 101), having dreamed, its dream ends (69, `+0x35d8` 1); else it dreams by
+ *   its temperament what its dream sprite (kin 0x13) shows (`+0x35ec`) --
+ *   behaviour 28 three times in four, 1, 2 or 4, 0x29a; 25 so, 10, 0x29e; 27
+ *   so, 10 or 7, 0x2a7; 26 nine times in ten, 0, 3, 6 or 5, 0x29d; 24 three
+ *   times in four, 8, 0x323; else any of 0 to 8, and one time in five 10,
+ *   0x29e, else 0x323 -- and has dreamed. Cued (7), the dream mouse (kin
+ *   0x1b, for 10) or the dream is shown; cued (6), both are put away;
+ * - a bad dream (67; `DoCatBadDream`, seg18:0ed0): entering, its count 0,
+ *   `+0x35d8` 1 to 5, 0x15e. Its script done, with `+0x35ee` 2 one time in
+ *   two, the dream's mouse (68), else its dream ends (69, not dreamed);
+ * - the dream's mouse (68; `DoCatBadDreamMouse`, seg18:10f7): entering, the
+ *   mouse is put left of the stage, its head on it (3000). Each tick, the
+ *   mouse past the stage's right, its dream ends (69, not dreamed); else,
+ *   its script done, 0x2a0;
+ * - the dream's end (69; `DoCatDreamEnd`, seg18:13d5): entering, it and the
+ *   cloud let go (slot `0x9c` 2), 0x2a1 having dreamed, else 0x299, and the
+ *   cloud pushes 1. Its script done, it readies its moment (`PreMoment`,
+ *   after it idling, 0x93 meanwhile) and has it (8).
+ *
+ * The float's own sums are the C library's (`atan2`, `sqrt`, `cos`, `sin`,
+ * seg1), not JavaScript's, so where it has the cat is near, not bit for bit.
+ */
+function catzDream(
+  state: number,
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const percent = () => random(101);
+  const tick: CatzStateTick = { energy: mind.brains[CATZ_BRAIN.energy], count: world.count };
+  const dream = world.dream;
+  const push = (...actions: number[]) => {
+    tick.pushes = actions;
+    tick.pushed = actions[0];
+    return tick;
+  };
+
+  if (!dream) {
+    tick.unread = true;
+    return tick;
+  }
+
+  switch (state) {
+    case CATZ_STATE.startDream: {
+      if (world.enter) {
+        tick.dream = { phase: 0 };
+        return push(...(catzFaceForward(mind, world) ?? []), 0xb3, 0xd5, 0xd5);
+      }
+
+      let phase = dream.phase;
+      let at = dream.at;
+
+      if (phase === 0 && world.cued) {
+        phase = 1;
+        tick.count = 0;
+      }
+
+      if (dream.cloudCome) {
+        phase = 2;
+        tick.count = 0;
+      }
+
+      if (phase === 2) {
+        if (tick.count < 0x1c) {
+          tick.count++;
+        } else {
+          tick.count = 0;
+          phase = 3;
+          at = { ...world.point! };
+        }
+      }
+
+      tick.dream = { phase };
+
+      if (phase === 3) {
+        const stage = dream.stage;
+        const middle = {
+          x: Math.trunc((stage.right - stage.left) / 2) + stage.left,
+          y: Math.trunc((stage.bottom - stage.top) / 2) + stage.top,
+        };
+        const dx = at.x - middle.x;
+        const dy = at.y - middle.y;
+
+        if (Math.abs(Math.trunc(dx)) <= 50 && Math.abs(Math.trunc(dy)) <= 50) {
+          tick.state = percent() < 75 ? CATZ_STATE.goodDream : CATZ_STATE.badDream;
+          return tick;
+        }
+
+        let spin = DREAM_SPIN;
+
+        if (tick.count < 100) {
+          spin = (tick.count / 100) * spin;
+          tick.count++;
+        }
+
+        const angle = Math.atan2(dy, dx) + spin;
+        let distance = Math.sqrt(dy * dy + dx * dx);
+
+        if (percent() < 75 || distance < 10) {
+          distance = Math.trunc(distance);
+        }
+
+        at = {
+          x: Math.cos(angle) * distance + middle.x,
+          y: Math.sin(angle) * distance + middle.y,
+        };
+        tick.dream.at = at;
+        tick.goal = { x: Math.trunc(at.x), y: Math.trunc(at.y) };
+      }
+
+      return push(0xd5);
+    }
+    case CATZ_STATE.goodDream: {
+      const passed = world.enter ? 0 : (world.passed ?? 0);
+
+      if (percent() >= 60 && passed !== 0) {
+        tick.dream = { x35d8: 1 };
+        tick.passed = 1;
+        tick.state = CATZ_STATE.dreamEnd;
+        return tick;
+      }
+
+      const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+      let kind: number;
+      let action: number;
+
+      if (behave(28) && percent() < 75) {
+        kind = [1, 2, 4][random(3)];
+        action = 0x29a;
+      } else if (behave(25) && percent() < 75) {
+        kind = 10;
+        action = 0x29e;
+      } else if (behave(27) && percent() < 75) {
+        kind = random(2) === 0 ? 10 : 7;
+        action = 0x2a7;
+      } else if (behave(26) && percent() < 90) {
+        kind = [0, 3, 6, 5][random(4)];
+        action = 0x29d;
+      } else if (behave(24) && percent() < 75) {
+        kind = 8;
+        action = 0x323;
+      } else {
+        kind = random(9);
+        action = 0x323;
+
+        if (percent() < 20) {
+          kind = 10;
+          action = 0x29e;
+        }
+      }
+
+      tick.dream = { kind };
+      tick.passed = 1;
+      return push(action);
+    }
+    case CATZ_STATE.badDream:
+      if (world.enter) {
+        tick.count = 0;
+        tick.dream = { x35d8: random(5) + 1 };
+        return push(0x15e);
+      }
+
+      if (world.x35ee === 2 && percent() < 50) {
+        tick.state = CATZ_STATE.badDreamMouse;
+        return tick;
+      }
+
+      tick.passed = 0;
+      tick.state = CATZ_STATE.dreamEnd;
+      return tick;
+    case CATZ_STATE.badDreamMouse:
+      if (dream.mouseX > dream.stage.right) {
+        tick.passed = 0;
+        tick.state = CATZ_STATE.dreamEnd;
+        return tick;
+      }
+
+      return push(0x2a0);
+    default:
+      if (world.enter) {
+        return push(world.passed ? 0x2a1 : 0x299);
+      }
+
+      tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
+      tick.global = 8;
       return tick;
   }
 }
