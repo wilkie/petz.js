@@ -76,6 +76,9 @@ const TRACE_PET = process.env.TRACE_PET === '1';
 /** `TRACE_FOND=1`: on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put in global state 14, affectionate, the cursor still at the stage's lower middle, a day of its own. */
 const TRACE_FOND = process.env.TRACE_FOND === '1';
 
+/** `TRACE_BOTTLE=1`: the user offering the cat its bottle, taken off the shelf, held beside it and let go there, each 600 frames, and the cat put to suckle (global 5) on every tenth tick of looking at things, passing the time, its moment, walking or grooming, a day of its own. */
+const TRACE_BOTTLE = process.env.TRACE_BOTTLE === '1';
+
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
 const describeHarness = ready ? describe : describe.skip;
 
@@ -1133,7 +1136,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1145,7 +1148,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
       writeFileSync(
         join(directory, 'TRACE.TXT'),
-        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0)}\r\n`
+        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0) | (TRACE_BOTTLE ? 64 : 0)}\r\n`
       );
       const { runProbe } = await import(WINBOX);
       const result = await runProbe(
@@ -1195,7 +1198,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 /** The states of its own `catzStateTick` reimplements, a tick of each held where the engine acted in it. */
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
-  38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55,
+  38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55, 44, 45, 46,
+  47, 48,
 ]);
 
 /**
@@ -1273,20 +1277,25 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     const scripted = [0, 1, 2, 3].filter(
       (k) => k < Math.min(values[4], handlers.length ? handlers[0] : 4)
     );
-    const drawn = [...Array(Math.min(draws ?? 0, 16)).keys()];
+    /* The draws kept: the first 16 in place, and in newer traces the 17th to
+     * 48th at the line's end. */
+    const kept = values.length >= 135 + 64 ? 48 : 16;
+    const drawn = [...Array(Math.min(draws ?? 0, kept)).keys()];
+    const drawnSeed = (k: number) => (k < 16 ? values[77 + 2 * k] : values[135 + 2 * (k - 16)]);
+    const drawnByScript = (k: number) => (k < 16 ? values[78 + 2 * k] : values[136 + 2 * (k - 16)]);
     const lastScripted = scripted.length
       ? values[68 + 2 * scripted[scripted.length - 1]]
       : undefined;
     const from =
       lastScripted === undefined
         ? 0
-        : (drawn.find((k) => values[77 + 2 * k] === lastScripted) ?? drawn.length);
-    const own = drawn.find((k) => k >= from && values[78 + 2 * k] === 0);
+        : (drawn.find((k) => drawnSeed(k) === lastScripted) ?? drawn.length);
+    const own = drawn.find((k) => k >= from && drawnByScript(k) === 0);
     const unseeded =
       draws === undefined
         ? values.length > 69 && scripted.some((k) => values[68 + 2 * k] !== seedValue)
-        : own === undefined && draws > 16;
-    const startSeed = own === undefined ? seedValue : values[77 + 2 * own];
+        : own === undefined && draws > kept;
+    const startSeed = own === undefined ? seedValue : drawnSeed(own);
     const acted =
       asked.global !== undefined || asked.state !== undefined || pushedFirst !== undefined;
 
@@ -1297,9 +1306,13 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     /* Entered: only these are reimplemented so -- leaping (3, 4, 8),
      * readying a walk (22), grooming (31), sharpening its claws (32),
      * aligning to a target (24), sniffing catnip (42), beginning to be petted
-     * (49), which does its work at once, after petting (52), licking the
+     * (49) and going after the bottle (46), which do their work at once,
+     * suckling (45), grabbing the bottle (48), after petting (52), licking the
      * cursor (54), fear's first actions (58, 59, 60) and snubbing (80). */
-    if (enter && ![3, 4, 8, 22, 24, 31, 32, 42, 49, 52, 54, 58, 59, 60, 80].includes(state)) {
+    if (
+      enter &&
+      ![3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 80].includes(state)
+    ) {
       counts[1]++;
       continue;
     }
@@ -1468,6 +1481,19 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           ball7: b[160] === undefined ? undefined : { x: b[160], y: b[161] },
           x35c2: b[162] === undefined ? undefined : { x: b[162], y: b[163] },
           kept: b[164] === undefined ? undefined : box(164),
+          bottle:
+            b[168] === undefined || b[168] === -1
+              ? undefined
+              : {
+                  held: b[168] !== 0,
+                  x1da: b[169],
+                  shelved: b[170] !== 0,
+                  at: { x: b[171], y: b[172] },
+                  /* As begging or chasing first asked, where the trace has it; else as the tick began. */
+                  near: values[131] > 0 ? values[132] !== 0 : b[173] !== 0,
+                  mouth: values[133] > 0 ? values[134] : b[174],
+                  reach: b[176] ?? 0,
+                },
           petting:
             b[122] === undefined
               ? undefined
@@ -1504,7 +1530,9 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       /* Entered, a pounce pops its script at once: its pushes are held, not
        * whether that script is done and it goes on. */
       const pushesOnly =
-        enter && [3, 4, 8, 24, 31, 42, 52, 54, 58, 59, 60, 80].includes(state) && !changed;
+        enter &&
+        [3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 80].includes(state) &&
+        !changed;
       const stateHeld = ours.global === undefined && !pushesOnly;
       const globalHeld = ours.state === undefined && !pushesOnly;
       const pushHeld = !changed && !(state === 23 && ours.pushes === undefined);

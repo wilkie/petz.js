@@ -57,6 +57,11 @@ export const CATZ_STATE = {
   alignToTarget: 24,
   cursorLick: 54,
   lackingAffection: 55,
+  sucklingUser: 44,
+  sucklingSelf: 45,
+  chasingSuckling: 46,
+  suckleAttempt: 47,
+  sucklingGrab: 48,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -161,6 +166,25 @@ export interface CatzStateWorld {
   ball7?: { x: number; y: number };
   x35c2?: { x: number; y: number };
   kept?: CatzBox;
+
+  /** Its bottle (kin 0xf): see `CatzBottle`. */
+  bottle?: CatzBottle;
+}
+
+/** The cat's bottle (kin 0xf), as the tick begins. */
+export interface CatzBottle {
+  /** Whether the user holds it (`+0xfc`), its `+0x1da`, and whether it is on the shelf. */
+  held: boolean;
+  x1da: number;
+  shelved: boolean;
+
+  /** Its target point, whether the cat is near it (`IsCatProximateToBottle`), and its mouth's distance from the teat (`MouthToNippleDist`). */
+  at: { x: number; y: number };
+  near: boolean;
+  mouth: number;
+
+  /** How far from the teat its mouth may be suckling (`+0x2520`). */
+  reach: number;
 }
 
 /** What a petted cat reads of itself and of the cursor over it. */
@@ -600,6 +624,12 @@ export function catzStateTick(
       return catzDiving(mind, world, random);
     case CATZ_STATE.petting:
       return catzPetting(mind, world, random);
+    case CATZ_STATE.sucklingUser:
+    case CATZ_STATE.sucklingSelf:
+    case CATZ_STATE.chasingSuckling:
+    case CATZ_STATE.suckleAttempt:
+    case CATZ_STATE.sucklingGrab:
+      return catzSuckling(state, mind, world, random);
     case CATZ_STATE.alignToTarget:
     case CATZ_STATE.cursorLick:
     case CATZ_STATE.lackingAffection:
@@ -1943,12 +1973,37 @@ function catzBegging(
     tick.head = [percent() < 80 ? 'track' : 'user'];
   }
 
-  if (world.x35a4 === 0xf) {
-    tick.unread = true;
-    return tick;
-  }
-
   const begged = world.passed !== 0;
+
+  /* Its bottle (0xf): off the shelf and not held, it grabs it (0x30); else, not near it, it goes after it (0x2e); else, its mouth within 30 of the teat and the bottle off the shelf, it suckles the user's (0x2c). Its script done, full past behaviour 11, one time in ten, having begged, it idles (6). */
+  if (world.x35a4 === 0xf) {
+    const bottle = world.bottle;
+
+    if (!bottle) {
+      tick.unread = true;
+      return tick;
+    }
+
+    if (!bottle.held && !bottle.shelved) {
+      tick.state = CATZ_STATE.sucklingGrab;
+      return tick;
+    }
+
+    if (!bottle.near) {
+      tick.state = CATZ_STATE.chasingSuckling;
+      return tick;
+    }
+
+    if (bottle.mouth < 30 && !bottle.shelved) {
+      tick.state = CATZ_STATE.sucklingUser;
+      return tick;
+    }
+
+    if (brain(CATZ_BRAIN.fullness) > catzBehavior(mind, 11, random) && percent() < 10 && begged) {
+      tick.global = 6;
+      return tick;
+    }
+  }
 
   if (world.x35a4 === 4 && percent() <= 9 && begged) {
     tick.global = 6;
@@ -3164,5 +3219,111 @@ function catzFond(
       tick.global = 6;
       return tick;
     }
+  }
+}
+
+/**
+ * Suckling its bottle (kin 0xf; global 5, `DoGSSuckling`, seg33:0000, which
+ * makes it what it plays with and walks to and goes after it, 0x2e). Going
+ * after it (46; `DoChasingSuckling`): its script done, farther from it than
+ * its width it walks on (22); else 0x3 and, near it, it begs for it (0x23).
+ * Its attempt (47) does nothing. Grabbing it (48; `DoSucklingGrab`): entering,
+ * its nose to the teat (0x123, 0x1cf, 0x125); its script done, suckling it
+ * (0x2d). Suckling it (45; `DoSucklingSelf`): entering, the bottle's `+0x1da`
+ * not 1, idling (6); else it latches on and pushes 0x7b 20 to 59 times, then
+ * 0x7f; each tick, the user holding it, suckling the user's (0x2c); its
+ * script done, idling (6).
+ */
+function catzSuckling(
+  state: number,
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const tick: CatzStateTick = { energy: mind.brains[CATZ_BRAIN.energy], count: world.count };
+  const bottle = world.bottle;
+  const push = (...actions: number[]) => {
+    tick.pushes = actions;
+    tick.pushed = actions[0];
+    return tick;
+  };
+
+  if (!bottle) {
+    tick.unread = true;
+    return tick;
+  }
+
+  switch (state) {
+    case CATZ_STATE.chasingSuckling:
+      /* Entering, its words to steer by; then, its script popped at once, as any tick. */
+      if (catzDist(bottle.at, world.point!) > world.size!.width) {
+        tick.state = CATZ_STATE.locomote;
+        return tick;
+      }
+
+      push(3);
+
+      if (bottle.near) {
+        tick.x35a6 = 0xf;
+        tick.x35a4 = 0xf;
+        tick.state = CATZ_STATE.begging;
+      }
+
+      return tick;
+    case CATZ_STATE.sucklingUser: {
+      /* `DoSucklingUser`, seg33:0805: entering, it latches on, nothing nursed (`+0x34ca` 0), and 0x74 so many times; each tick, its mouth farther from the teat than the bottle allows (`+0x2520`), it lets go and begs again (0x23, 0x7c in pose 0x71); else, having nursed, one time in 200 or farther than half that, 0xaf and nursing again (0x74 so many times); the user no longer holding the bottle, suckling it (0x2d); else, its script done, idling (6). */
+      if (world.enter) {
+        return push(0x74);
+      }
+
+      if (bottle.reach < bottle.mouth) {
+        tick.x35a6 = 0xf;
+        tick.x35a4 = 0xf;
+        tick.state = CATZ_STATE.begging;
+        return tick;
+      }
+
+      if ((random(200) === 0 || Math.trunc(bottle.reach / 2) < bottle.mouth) && world.passed) {
+        tick.passed = 0;
+        push(0xaf);
+      }
+
+      if (!bottle.held) {
+        tick.state = CATZ_STATE.sucklingSelf;
+        return tick;
+      }
+
+      if (tick.pushed === undefined) {
+        tick.global = 6;
+      }
+
+      return tick;
+    }
+    case CATZ_STATE.sucklingGrab:
+      if (world.enter) {
+        return push(0x123, 0x1cf, 0x125);
+      }
+
+      tick.state = CATZ_STATE.sucklingSelf;
+      return tick;
+    case CATZ_STATE.sucklingSelf:
+      if (world.enter) {
+        if (bottle.x1da !== 1) {
+          tick.global = 6;
+          return tick;
+        }
+
+        return push(...Array<number>(random(40) + 20).fill(0x7b), 0x7f);
+      }
+
+      if (bottle.held) {
+        tick.state = CATZ_STATE.sucklingUser;
+        return tick;
+      }
+
+      tick.global = 6;
+      return tick;
+    default:
+      return tick;
   }
 }

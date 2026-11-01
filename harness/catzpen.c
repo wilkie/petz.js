@@ -87,6 +87,10 @@ typedef void(__cdecl __far *GLOBALSTATE)(void __far *machine, int state, void __
 typedef int(__cdecl __far *AREA)(void __far *cat, int kind);
 typedef void(__cdecl __far *DISPATCH)(void __far *machine, void __far *params, int enter, int leave);
 typedef void(__cdecl __far *CATSTATE)(void __far *cat, int state, void __far *params);
+typedef int(__cdecl __far *BOTTLED)(void __far *cat);
+typedef void(__cdecl __far *BOTTLEDO)(void __far *bottle);
+typedef void(__cdecl __far *TOPEN)(void __far *apt, void __far *params);
+typedef void(__cdecl __far *MOVEPT)(void __far *apt, int space, int __far *point);
 typedef void(__cdecl __far *BALLPOINT)(void __far *ballz, int __far *point, void __far *state,
                                        int __far *rect, int ball);
 
@@ -201,8 +205,19 @@ static int placed, place;
 typedef int(__cdecl __far *PETTED)(void __far *cat, void __far *params);
 typedef int(__cdecl __far *MOVED)(void __far *cat);
 static PETTED whichBall, stoppedPetting;
-static MOVED cursorMoved;
-static int balled, ball, stopped, stop, moved, movement, posed;
+static MOVED cursorMoved, mouthToTeat;
+static int balled, ball, stopped, stop, moved, movement, posed, mouthed, mouth;
+
+static int __cdecl __far __loadds mouthing(void __far *cat)
+{
+    int at = mouthToTeat(cat);
+
+    if (!mouthed++) {
+        mouth = at;
+    }
+
+    return at;
+}
 
 static int __cdecl __far __loadds balling(void __far *cat, void __far *params)
 {
@@ -336,8 +351,8 @@ static void __cdecl __far __loadds record(void __far *sprite, int action, int va
  * stack between here and the tick (`tickTop`), as a script's action may call
  * on the cat's code to draw. */
 static int draws;
-static unsigned long drawnSeed[16];
-static unsigned drawnBy[16];
+static unsigned long drawnSeed[48];
+static unsigned drawnBy[48];
 static unsigned __far *tickTop;
 
 static int scripted(unsigned __far *from)
@@ -365,7 +380,7 @@ static int __cdecl __far __loadds drawing(int unused)
 {
     unsigned long __far *seed = (unsigned long __far *)MK_FP(traceData, 0x28ba);
 
-    if (draws < 16) {
+    if (draws < 48) {
         drawnSeed[draws] = *seed;
         drawnBy[draws] = scripted((unsigned __far *)&unused);
     }
@@ -391,6 +406,56 @@ static void hookRand(void)
     FreeSelector(alias);
 }
 
+/* And `CatSprite::IsCatProximateToBottle` (848), which begging and
+ * chasing the bottle call directly after popping their scripts: a far jump
+ * over its start to this, which works it out as it does -- the bottle's
+ * target point within a box twice the cat's width and height
+ * (`MakeFocusRect`, its slot `0xd0`, by 8) about its ball 0x25 -- and keeps,
+ * for the cat's tick, how many times it was asked and the first answer. */
+typedef void(__cdecl __far *FOCUS)(void __far *cat, int __far *rect, int __far *point, int width,
+                                   int height, int by);
+typedef int(__cdecl __far *INRECT)(int __far *rect, int __far *point);
+static int proximated, proximate;
+
+static int __cdecl __far __loadds proximity(unsigned char __far *cat)
+{
+    unsigned char __far *ballz = *(unsigned char __far *__far *)(cat + 0x242);
+    void __far *bottle = ((GETKIN)ordinal(18))(cat, 0xf);
+    int rect[4], ball[2], focus[4], point[2];
+    long at;
+    int answer;
+
+    ((DRAWRECT)ordinal(15))(rect, cat, 0);
+    (*(BALLPOINT __far *)(*(unsigned char __far *__far *)ballz + 0x38))(ballz, ball, cat + 0x678,
+                                                                       rect, 0x25);
+    (*(FOCUS __far *)(*(unsigned char __far *__far *)cat + 0xd0))(
+        cat, focus, ball, 2 * *(int __far *)(cat + 0x33c4), 2 * *(int __far *)(cat + 0x33c6), 8);
+    at = ((TARGETPT)ordinal(10))(bottle, 0);
+    point[0] = (int)at;
+    point[1] = (int)(at >> 16);
+    answer = ((INRECT)ordinal(1253))(focus, point);
+
+    if (!proximated++) {
+        proximate = answer;
+    }
+
+    return answer;
+}
+
+static void hookProximity(void)
+{
+    CSTODS alias16 = (CSTODS)GetProcAddress(GetModuleHandle("KERNEL"), MAKEINTRESOURCE(170));
+    void __far *at = ordinal(848);
+    UINT alias = alias16(FP_SEG(at));
+    unsigned char __far *code = (unsigned char __far *)MK_FP(alias, FP_OFF(at));
+    int (__cdecl __far *to)(unsigned char __far *) = proximity;
+
+    code[0] = 0xea;
+    *(unsigned __far *)(code + 1) = FP_OFF(to);
+    *(unsigned __far *)(code + 3) = FP_SEG(to);
+    FreeSelector(alias);
+}
+
 /* And `ScriptSprite::IsCued` (966), which answers as it does -- the cues of
  * the sprite (`+0x2514`, a bit each) -- and keeps, for the cat, the first 4
  * cues asked in a tick and their answers; and, where `TRACE.TXT` asks, on
@@ -400,7 +465,7 @@ static void hookRand(void)
  * and with its victim (5, 6), to make its sounds (7). */
 static unsigned char __far *traced;
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
-    fondTicks;
+    fondTicks, suckTicks;
 static unsigned long forced, forcedNow;
 
 static int asked, askedCue[4], askedAnswer[4];
@@ -585,6 +650,20 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         }
     }
 
+    /* And where it asks (64), on every tenth tick of the same, not suckling
+     * already, suckling (5), so that it goes for the bottle. */
+    if (forcing & 64 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+
+        if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
+            *(int __far *)(global + 0x3a) != 5 && suckTicks++ % 10 == 9) {
+            depth--;
+            passGlobal(global, 5, p);
+            return;
+        }
+    }
+
     /* And where it asks (32), on every tenth tick of the same, not
      * affectionate already, affectionate (14), so that it walks to the
      * cursor. */
@@ -743,15 +822,35 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             ((DRAWRECT)ordinal(15))(rect, cat, 0);
             (*(BALLPOINT __far *)(*(unsigned char __far *__far *)ballz + 0x38))(
                 ballz, point, cat + 0x678, rect, 7);
-            say(" %d %d %d %d %d %d %d %d\r\n", point[0], point[1], *(int __far *)(cat + 0x35c2),
+            say(" %d %d %d %d %d %d %d %d", point[0], point[1], *(int __far *)(cat + 0x35c2),
                 *(int __far *)(cat + 0x35c4), *(int __far *)(cat + 0x3598),
                 *(int __far *)(cat + 0x359a), *(int __far *)(cat + 0x359c),
                 *(int __far *)(cat + 0x359e));
         }
+
+        /* And its bottle (kin 0xf): whether the user holds it (`+0xfc`), its
+         * `+0x1da`, whether it is on the shelf, its target point, and, as
+         * the tick begins, whether the cat is near it
+         * (`IsCatProximateToBottle`, 848) and its mouth's distance from the
+         * teat (`MouthToNippleDist`, 844), `+0x1d8`, 3 where held as a toy
+         * is (`XApt::IsThisBeingHeld`), and `+0x2520`, how far from the
+         * teat its mouth may be suckling. */
+        kin = ((GETKIN)ordinal(18))(cat, 0xf);
+
+        if (kin) {
+            long point = ((TARGETPT)ordinal(10))(kin, 0);
+
+            say(" %d %d %d %d %d %d %d %d %d\r\n", *(int __far *)(kin + 0xfc),
+                *(int __far *)(kin + 0x1da), ((INSHELF)ordinal(38))(cat, 0xf), (int)point,
+                (int)(point >> 16), ((BOTTLED)ordinal(848))(cat), ((BOTTLED)ordinal(844))(cat),
+                *(int __far *)(kin + 0x1d8), *(int __far *)(kin + 0x2520));
+        } else {
+            say(" -1 -1 -1 0 0 0 0 0 0\r\n");
+        }
     }
 
     pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
-        asked = placed = balled = stopped = moved = 0;
+        asked = placed = balled = stopped = moved = proximated = mouthed = 0;
     {
         int state = *(int __far *)(cat + 0x2552);
 
@@ -837,9 +936,20 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
      * the ball under the cursor, whether the user stopped and how far the
      * cursor moved, as it first asked each, and its pose as it asked the
      * last. */
-    say(" %d %d %d %d %d %d %d %d %d\r\n", placed, placed ? place : -1, balled,
+    say(" %d %d %d %d %d %d %d %d %d", placed, placed ? place : -1, balled,
         balled ? ball : -1, stopped, stopped ? stop : -1, moved, moved ? movement : -1,
         moved ? posed : -1);
+
+    /* And whether it was near its bottle as it first asked, its mouth's
+     * distance from the teat as it first asked (its slot `0x358`), and the
+     * 17th to 48th draws, as the first 16. */
+    say(" %d %d %d %d", proximated, proximated ? proximate : -1, mouthed, mouthed ? mouth : -1);
+
+    for (b = 16; b < 48; b++) {
+        say(" %lu %d", b < draws ? drawnSeed[b] : 0ul, b < draws ? drawnBy[b] : -1);
+    }
+
+    say("\r\n");
     depth--;
 }
 
@@ -870,6 +980,8 @@ static void install(unsigned char __far *cat)
     *(PETTED *)(table + 0x2f8) = stopping;
     cursorMoved = *(MOVED *)(table + 0x2f0);
     *(MOVED *)(table + 0x2f0) = moving;
+    mouthToTeat = *(MOVED *)(table + 0x358);
+    *(MOVED *)(table + 0x358) = mouthing;
     *(MISS *)(table + 0x308) = measuring;
     *(void __far *__far *)cat = table;
 
@@ -888,6 +1000,7 @@ static void install(unsigned char __far *cat)
     hookRand();
 
     hookCued();
+    hookProximity();
 
     /* And what the shelf holds, by kind, to 35. */
     {
@@ -1664,6 +1777,39 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         /* The cursor at the stage's corner, away from the cat (`+0x108`, `+0x10a`). */
         *(int *)(params + 0x108) = 0;
         *(int *)(params + 0x10a) = 0;
+
+        /* Or, where `TRACE.TXT` asks (64), the user with the bottle (kin
+         * 0xf), each 600 frames: taken off the shelf into the pen where it
+         * is there (`XApt::ShelfToPlaypen`, 151); held (`ForceSelect`, 791)
+         * beside the cat, a little more than half its width to its right
+         * (`MoveDrawPt`, 793), the cursor on it with the hand down; and let
+         * go there at 400 (`ForceRelease`, 790), on the floor. */
+        if (forcing & 64 && cat) {
+            int cycle = n % 600;
+            void __far *bottle = ((GETKIN)ordinal(18))(cat, 0xf);
+
+            *(int *)(params + 0x46) = 0;
+
+            if (bottle && cycle == 0 && ((INSHELF)ordinal(38))(cat, 0xf)) {
+                ((TOPEN)ordinal(151))(bottle, params);
+            }
+
+            if (bottle && cycle < 400) {
+                long point = ((TARGETPT)ordinal(10))(cat, 0);
+                int at[2];
+
+                at[0] = (int)point + *(int __far *)((unsigned char __far *)cat + 0x33c4) * 3 / 5;
+                at[1] = (int)(point >> 16);
+                ((BOTTLEDO)ordinal(791))(bottle);
+                ((MOVEPT)ordinal(793))(bottle, 0, at);
+                *(int *)(params + 0x1e) = 1;
+                *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = at[0];
+                *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) = at[1];
+            } else if (bottle && cycle == 400) {
+                ((BOTTLEDO)ordinal(790))(bottle);
+                *(int *)(params + 0x1e) = 0;
+            }
+        }
 
         /* Or, where `TRACE.TXT` asks (32), the cursor still at the stage's
          * lower middle (`+0x5a`, `+0x104` on), the hand up, for the cat to
