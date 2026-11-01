@@ -88,6 +88,7 @@ typedef int(__cdecl __far *AREA)(void __far *cat, int kind);
 typedef void(__cdecl __far *DISPATCH)(void __far *machine, void __far *params, int enter, int leave);
 typedef void(__cdecl __far *CATSTATE)(void __far *cat, int state, void __far *params);
 typedef int(__cdecl __far *BOTTLED)(void __far *cat);
+typedef int(__cdecl __far *GETSTATE)(void __far *machine);
 typedef void(__cdecl __far *BOTTLEDO)(void __far *bottle);
 typedef void(__cdecl __far *TOPEN)(void __far *apt, void __far *params);
 typedef void(__cdecl __far *MOVEPT)(void __far *apt, int space, int __far *point);
@@ -920,6 +921,27 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
         for (b = 0; b < 24; b++) {
             say(" %u", outsideGlobal ? (unsigned)outsideGlobalWords[b] : 0u);
+        }
+
+        /* And, in the Adoption Kit, its basket's fields (`+0x3610`, `+0x3612`,
+         * `+0x360e`, `+0x35f6`, `+0x3614` on, 5), `PetParams` `+0xca`, how many
+         * the apt's root has (`+0x1e0`), and the mouse's (kin 0x1b) state (its
+         * machine's slot 8). */
+        {
+            unsigned char __far *root = *(unsigned char __far *__far *)ordinal(70);
+            unsigned char __far *mouse = ((GETKIN)ordinal(18))(cat, 0x1b);
+
+            say(" %d %d %d %d", *(int __far *)(cat + 0x3610), *(int __far *)(cat + 0x3612),
+                *(int __far *)(cat + 0x360e), *(int __far *)(cat + 0x35f6));
+
+            for (b = 0; b < 5; b++) {
+                say(" %d", *(int __far *)(cat + 0x3614 + 2 * b));
+            }
+
+            say(" %d %d %d", *(int *)(params + 0xca), root ? *(int __far *)(root + 0x1e0) : -1,
+                mouse ? (*(GETSTATE __far *)(*(unsigned char __far *__far *)(mouse + 0x2518) +
+                                            8))(mouse + 0x2518)
+                      : -1);
         }
 
         say("\r\n");
@@ -1876,6 +1898,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         /* The cursor at the stage's corner, away from the cat (`+0x108`, `+0x10a`). */
         *(int *)(params + 0x108) = 0;
         *(int *)(params + 0x10a) = 0;
+
+        /* Or, where `TRACE.TXT` asks (256), the Adoption Kit: at frame 10,
+         * its command to the module (`PetParams` `+0`, which
+         * `PetModule::DoDrawFrame` takes) 5 -- its shelf, buttons and
+         * baskets set up, and the cat put in them -- for that frame. */
+        if (forcing & 256) {
+            *(int *)(params + 0) = n == 10 ? 5 : 0;
+        }
 
         /* Or, where `TRACE.TXT` asks (64), the user with the bottle (kin
          * 0xf), each 600 frames: taken off the shelf into the pen where it

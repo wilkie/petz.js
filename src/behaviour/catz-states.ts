@@ -64,6 +64,10 @@ export const CATZ_STATE = {
   sucklingGrab: 48,
   waitForTreat: 36,
   nibbleTreat: 37,
+  initKit: 72,
+  inBaskets: 73,
+  peekFromBasket: 74,
+  endPeekFromBasket: 75,
 } as const;
 
 /** What the cat's state reads of it besides its brains. */
@@ -171,6 +175,25 @@ export interface CatzStateWorld {
 
   /** Its bottle (kin 0xf): see `CatzBottle`. */
   bottle?: CatzBottle;
+
+  /** In the Adoption Kit: see `CatzKit`; and whether the cursor is about (`PetParams` `+0x46`). */
+  kit?: CatzKit;
+  cursorAbout?: boolean;
+}
+
+/** The cat in the Adoption Kit's baskets. */
+export interface CatzKit {
+  /** How it peeks (`+0x3610`), how many times it has (`+0x3612`), how long it waits in its basket (`+0x360e`), its basket (`+0x35f6`, -1 for none), and the baskets it has been in (`+0x3614` on). */
+  peekMode: number;
+  peeks: number;
+  wait: number;
+  basket: number;
+  baskets: number[];
+
+  /** `PetParams` `+0xca`, how many the apt's root has (`+0x1e0`), and the mouse's state (kin 0x1b's machine). */
+  ca: number;
+  rootCount: number;
+  mouseState: number;
 }
 
 /** The cat's bottle (kin 0xf), as the tick begins. */
@@ -626,6 +649,11 @@ export function catzStateTick(
       return catzDiving(mind, world, random);
     case CATZ_STATE.petting:
       return catzPetting(mind, world, random);
+    case CATZ_STATE.initKit:
+    case CATZ_STATE.inBaskets:
+    case CATZ_STATE.peekFromBasket:
+    case CATZ_STATE.endPeekFromBasket:
+      return catzKit(state, mind, world, random);
     case CATZ_STATE.waitForTreat:
     case CATZ_STATE.nibbleTreat:
       return catzTreat(state, mind, world, random);
@@ -3481,4 +3509,118 @@ function catzTreat(
   }
 
   return push(0xd7);
+}
+
+/**
+ * The Adoption Kit (global 22; `DoGSAdoptionKit`, seg13:0000). Beginning
+ * it (72; `DoCatInitKit`): entering, it is put above the stage's corner,
+ * pushes 0x1c4 and is in a basket (its slot `0xf0`, 0x18); its script done,
+ * in the baskets (0x49). In them (73; `DoCatInBaskets`): entering, with no
+ * basket it takes one (its slots `0x3d0`, `0x3d4`), else it climbs out
+ * (0x4c); each tick, waited longer than its wait (`+0x3502` over `+0x360e`),
+ * it peeks out (0x4a), else waits on; its script done, 0x1c4. Peeking (74;
+ * `DoCatPeekFromBasket`): entering, three times in four or never yet, it
+ * peeks plainly (`+0x3610` 0: 0x1c4, then by temperament, 24 0x1c5, 27
+ * 0x2ce, 25 0x2d0, 26 0x2d1, else 0x2cf), else boldly (1: 0x1ca, 0x1c8),
+ * counting peeks where `PetParams` `+0xca`; each tick, the cursor about and
+ * the apt's root holding fewer than ten, it climbs out (0x4c); cued (6), it
+ * watches the mouse unless still and one time in two makes a sound (7); its
+ * script done, by a draw of 2 to 7 over its peeks (unless its basket is 3 and
+ * the mouse not still), `+0xca` 0, or ten or more, it ends its peek (0x4b,
+ * its basket none); else, every basket been in, none, and its basket been in
+ * (unless 3 and the mouse not still), it ends its peek; else it climbs out
+ * (0x4c, its peeks none). Ending it (75; `DoCatEndPeekFromBasket`): entering,
+ * boldly 0x1ca, then 0x1c4; its script done, in the baskets (0x49).
+ */
+function catzKit(
+  state: number,
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const percent = () => random(101);
+  const tick: CatzStateTick = { energy: mind.brains[CATZ_BRAIN.energy], count: world.count };
+  const kit = world.kit;
+  const push = (...actions: number[]) => {
+    tick.pushes = actions;
+    tick.pushed = actions[0];
+    return tick;
+  };
+
+  if (!kit) {
+    tick.unread = true;
+    return tick;
+  }
+
+  switch (state) {
+    case CATZ_STATE.initKit:
+      if (world.enter) {
+        return push(0x1c4);
+      }
+
+      tick.state = CATZ_STATE.inBaskets;
+      return tick;
+    case CATZ_STATE.inBaskets:
+      if (world.count > kit.wait) {
+        tick.state = CATZ_STATE.peekFromBasket;
+        return tick;
+      }
+
+      tick.count = world.count + 1;
+      return push(0x1c4);
+    case CATZ_STATE.peekFromBasket: {
+      if (world.enter) {
+        if (percent() < 75 || kit.peeks === 0) {
+          const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+          const after = behave(24)
+            ? 0x1c5
+            : behave(27)
+              ? 0x2ce
+              : behave(25)
+                ? 0x2d0
+                : behave(26)
+                  ? 0x2d1
+                  : 0x2cf;
+          return push(0x1c4, after);
+        }
+
+        return push(0x1ca, 0x1c8);
+      }
+
+      if (world.cursorAbout && kit.rootCount < 10) {
+        tick.state = 0x4c;
+        return tick;
+      }
+
+      if (world.cues?.includes(6) && percent() < 50) {
+        tick.sound = catzSound(mind, 7, random);
+      }
+
+      const moving = kit.basket === 3 && kit.mouseState !== 1;
+
+      if ((random(6) + 2 > kit.peeks && !moving) || kit.ca === 0 || kit.rootCount >= 10) {
+        tick.state = CATZ_STATE.endPeekFromBasket;
+        return tick;
+      }
+
+      const baskets = kit.baskets.every((been) => been !== 0)
+        ? kit.baskets.map(() => 0)
+        : kit.baskets;
+
+      if (baskets[kit.basket] !== 0 && !moving) {
+        tick.state = CATZ_STATE.endPeekFromBasket;
+        return tick;
+      }
+
+      tick.state = 0x4c;
+      return tick;
+    }
+    default:
+      if (world.enter) {
+        return kit.peekMode === 1 ? push(0x1ca, 0x1c4) : push(0x1c4);
+      }
+
+      tick.state = CATZ_STATE.inBaskets;
+      return tick;
+  }
 }

@@ -82,6 +82,9 @@ const TRACE_BOTTLE = process.env.TRACE_BOTTLE === '1';
 /** `TRACE_TREAT=1`: the user holding out a treat at the cat's mouth, each 600 frames 400 of them, and the cat put to wait for it on every tenth tick of looking at things, passing the time, its moment, walking or grooming, a day of its own. */
 const TRACE_TREAT = process.env.TRACE_TREAT === '1';
 
+/** `TRACE_KIT=1`: the Adoption Kit, set up at frame 10 as the module's command 5 asks, a day of its own. */
+const TRACE_KIT = process.env.TRACE_KIT === '1';
+
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
 const describeHarness = ready ? describe : describe.skip;
 
@@ -1139,7 +1142,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1151,7 +1154,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
       writeFileSync(
         join(directory, 'TRACE.TXT'),
-        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0) | (TRACE_BOTTLE ? 64 : 0) | (TRACE_TREAT ? 128 : 0)}\r\n`
+        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0) | (TRACE_BOTTLE ? 64 : 0) | (TRACE_TREAT ? 128 : 0) | (TRACE_KIT ? 256 : 0)}\r\n`
       );
       const { runProbe } = await import(WINBOX);
       const result = await runProbe(
@@ -1202,7 +1205,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
   38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55, 44, 45, 46,
-  47, 48, 36, 37,
+  47, 48, 36, 37, 72, 73, 74, 75,
 ]);
 
 /**
@@ -1314,7 +1317,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
      * cursor (54), fear's first actions (58, 59, 60) and snubbing (80). */
     if (
       enter &&
-      ![3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 80].includes(state)
+      ![3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 72, 80].includes(state)
     ) {
       counts[1]++;
       continue;
@@ -1484,6 +1487,20 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           ball7: b[160] === undefined ? undefined : { x: b[160], y: b[161] },
           x35c2: b[162] === undefined ? undefined : { x: b[162], y: b[163] },
           kept: b[164] === undefined ? undefined : box(164),
+          kit:
+            b[240] === undefined
+              ? undefined
+              : {
+                  peekMode: b[229],
+                  peeks: b[230],
+                  wait: b[231],
+                  basket: b[232],
+                  baskets: b.slice(233, 238),
+                  ca: b[238],
+                  rootCount: b[239],
+                  mouseState: b[240],
+                },
+          cursorAbout: b[90] !== 0,
           bottle:
             b[168] === undefined || b[168] === -1
               ? undefined
@@ -1534,7 +1551,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
        * whether that script is done and it goes on. */
       const pushesOnly =
         enter &&
-        [3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 80].includes(state) &&
+        [3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 80].includes(state) &&
         !changed;
       const stateHeld = ours.global === undefined && !pushesOnly;
       const globalHeld = ours.state === undefined && !pushesOnly;
