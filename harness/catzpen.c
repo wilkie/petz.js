@@ -513,7 +513,8 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
 
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
     fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks,
-    ignoreTicks, sprayTicks, watchTicks, watches;
+    ignoreTicks, sprayTicks, watchTicks, watches,
+    deepTicks;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -799,6 +800,19 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             depth--;
             passGlobal(global, turn & 1 ? 0x13 : 0x12, p);
             return;
+        }
+    }
+
+    /* And where it asks (16384) with petting (16), on every 40th tick of
+     * being petted (50), its petting modes (`+0x351c`, 40, newest first)
+     * all made 5 or, in turn, 6, as though it had settled so, deeper than
+     * its behaviour 5 lets it go itself. */
+    if (forcing & 16384 && !enter && !leave && *(int __far *)(cat + 0x2552) == 50 &&
+        deepTicks++ % 40 == 39) {
+        int mode = deepTicks / 40 & 1 ? 5 : 6;
+
+        for (b = 0; b < 40; b++) {
+            *(int __far *)(cat + 0x351c + 2 * b) = mode;
         }
     }
 

@@ -94,6 +94,8 @@ const TRACE_GROOM = process.env.TRACE_GROOM === '1';
 const TRACE_IGNORE = process.env.TRACE_IGNORE === '1';
 /** `TRACE_SPRAY=1`: on every tenth tick of looking at things, passing the time, its moment, walking on or grooming, the cat sprayed (18) or, in turn, flea-sprayed (19), every other time so the user what it plays with. */
 const TRACE_SPRAY = process.env.TRACE_SPRAY === '1';
+/** `TRACE_PET_DEEP=1`, with `TRACE_PET`: on every 40th tick of being petted, its petting modes all made 5 or, in turn, 6. */
+const TRACE_PET_DEEP = process.env.TRACE_PET_DEEP === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
@@ -1155,7 +1157,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1181,7 +1183,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_GROOM ? 1024 : 0) |
           (TRACE_FOND_MOVING ? 2048 : 0) |
           (TRACE_IGNORE ? 4096 : 0) |
-          (TRACE_SPRAY ? 8192 : 0)
+          (TRACE_SPRAY ? 8192 : 0) |
+          (TRACE_PET_DEEP ? 16384 : 0)
         }\r\n`
       );
       const { runProbe } = await import(WINBOX);
