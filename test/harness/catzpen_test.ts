@@ -82,7 +82,7 @@ const TRACE_BOTTLE = process.env.TRACE_BOTTLE === '1';
 /** `TRACE_TREAT=1`: the user holding out a treat at the cat's mouth, each 600 frames 400 of them, and the cat put to wait for it on every tenth tick of looking at things, passing the time, its moment, walking or grooming, a day of its own. */
 const TRACE_TREAT = process.env.TRACE_TREAT === '1';
 
-/** `TRACE_KIT=1`: the Adoption Kit, set up at frame 10 as the module's command 5 asks, the cursor about 20 frames of each 400, and the cat sent back to its basket at the 350th, a day of its own. */
+/** `TRACE_KIT=1`: the Adoption Kit, set up at frame 10 as the module's command 5 asks, the cursor about 20 frames of each 400, and at the 350th, in turn, the cat sent back to its basket, dropped into it and put in its fail-safe, a day of its own. */
 const TRACE_KIT = process.env.TRACE_KIT === '1';
 
 /** `TRACE_NAP=1`: on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put in global state 21, CatNapz, a day of its own; starting a dream, cued to dream (6) once, and its cloud, which runs no script in the pen, cued that it has come (4) after 20 ticks; the second time, the dog's chase; 20 ticks into each dream's float, a bad dream, its breed kept at 2, and every other one the dream's mouse 300 ticks in. */

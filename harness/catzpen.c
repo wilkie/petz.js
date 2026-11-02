@@ -2005,14 +2005,29 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
             /* And the cursor about (`+0x46`) 20 frames of each 400, which
              * has the cat climb out as it peeks; and at the 350th, out of
-             * the Kit's state, the cat sent back to its basket
+             * the Kit's state, in turn: the cat sent back to its basket
              * (`MakeCatReturnToBasket`, its slot `0x15c`), as its button
-             * does. */
+             * does; dropped into it (`+0x33be` 4, `+0x35fc` 1 and the Kit,
+             * 22), as `DoDangling` has it let go of above its basket; and
+             * its fail-safe (23), as `PetModule::DoDrawFrame` has it after
+             * an error (`XApex::theirError`). */
             *(int *)(params + 0x46) = n % 400 >= 200 && n % 400 < 220;
 
-            if (cat && n % 400 == 350 &&
-                *(int __far *)(*(unsigned char __far *__far *)(cat + 0x2fba) + 0x3a) != 0x16) {
-                (*(TOPEN __far *)(*(unsigned char __far *__far *)cat + 0x15c))(cat, params);
+            if (cat && n % 400 == 350) {
+                unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+                GLOBALSTATE begin = *(GLOBALSTATE __far *)(*(unsigned char __far *__far *)global + 0x1c);
+
+                if (*(int __far *)(global + 0x3a) != 0x16) {
+                    if (n / 400 % 3 == 0) {
+                        (*(TOPEN __far *)(*(unsigned char __far *__far *)cat + 0x15c))(cat, params);
+                    } else if (n / 400 % 3 == 1) {
+                        *(int __far *)(cat + 0x33be) = 4;
+                        *(int __far *)(cat + 0x35fc) = 1;
+                        begin(global, 0x16, params);
+                    } else {
+                        begin(global, 0x17, params);
+                    }
+                }
             }
         }
 
