@@ -90,6 +90,8 @@ const TRACE_NAP = process.env.TRACE_NAP === '1';
 
 /** `TRACE_GROOM=1`: on every tenth tick of looking at things, passing the time, its moment or walking on, the cat put to grooming (13), a day of its own. */
 const TRACE_GROOM = process.env.TRACE_GROOM === '1';
+/** `TRACE_IGNORE=1`: on every tenth tick of looking at things, passing the time, its moment or walking on, the cat shown the bottle or the cursor, in turn, to ignore it (12) where it may (`ShouldNoticeAndIgnore`). */
+const TRACE_IGNORE = process.env.TRACE_IGNORE === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
@@ -1151,7 +1153,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1163,7 +1165,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
       writeFileSync(
         join(directory, 'TRACE.TXT'),
-        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0) | (TRACE_BOTTLE ? 64 : 0) | (TRACE_TREAT ? 128 : 0) | (TRACE_KIT ? 256 : 0) | (TRACE_NAP ? 512 : 0) | (TRACE_GROOM ? 1024 : 0) | (TRACE_FOND_MOVING ? 2048 : 0)}\r\n`
+        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0) | (TRACE_BOTTLE ? 64 : 0) | (TRACE_TREAT ? 128 : 0) | (TRACE_KIT ? 256 : 0) | (TRACE_NAP ? 512 : 0) | (TRACE_GROOM ? 1024 : 0) | (TRACE_FOND_MOVING ? 2048 : 0) | (TRACE_IGNORE ? 4096 : 0)}\r\n`
       );
       const { runProbe } = await import(WINBOX);
       const result = await runProbe(
@@ -1221,16 +1223,17 @@ function double(words: number[]): number {
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
   38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55, 44, 45, 46,
-  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69, 70, 71,
+  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69, 70, 71, 81,
 ]);
 
 /** The states whose entering is reimplemented, and those of them whose entered ticks are held only by what they push, their scripts popped at once. */
 const ENTERED = new Set([
   3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65,
-  67, 69, 70, 71,
+  67, 69, 70, 71, 81,
 ]);
 const ENTERED_PUSHES = new Set([
   3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65, 67, 69, 70, 71,
+  81,
 ]);
 
 /**
@@ -1504,6 +1507,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           caught: b[116] !== 0,
           released: b[117] === undefined ? undefined : b[117] !== 0,
           x35b6: b[118],
+          x35b4: b[260],
           cursorAt: b[119] === undefined ? undefined : { x: b[119], y: b[120] },
           x35d4: b[121],
           ball7: b[160] === undefined ? undefined : { x: b[160], y: b[161] },

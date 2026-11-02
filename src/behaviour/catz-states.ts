@@ -41,6 +41,7 @@ export const CATZ_STATE = {
   eatFromBowl: 40,
   groom: 31,
   snubObject: 80,
+  ignoreObject: 81,
   diving: 4,
   stayAway: 58,
   scaredWatch: 59,
@@ -166,6 +167,9 @@ export interface CatzStateWorld {
 
   /** Its victim: whether it has let it go (`+0x35be`), its way back to a neutral pose pushed. */
   released?: boolean;
+
+  /** Ignoring: the global state it goes back to (`+0x35b4`). */
+  x35b4?: number;
 
   /** Watching lazily: how (`+0x35b6`), 1 or 2. */
   x35b6?: number;
@@ -847,6 +851,17 @@ export function catzStateTick(
       return world.enter
         ? done({ pushed: 0x206, pushes: [0x206], head: ['track'] })
         : done({ state: CATZ_STATE.locomote, x35a6: 0 });
+    case CATZ_STATE.ignoreObject:
+      /* `DoCatIgnoreObject`, seg30:19a0: entering, its slot `0x114` (2, 0xf), it tracks what it ignores (`+0x35b0`) with its head (2500) and pushes 0x321; cued (4), one time in two a sound (4); its script done, it goes back to the global state it was in (`+0x35b4`). */
+      if (world.enter) {
+        return done({ pushed: 0x321, pushes: [0x321], head: ['track'] });
+      }
+
+      if (world.cues?.includes(4)) {
+        percent();
+      }
+
+      return done({ global: world.x35b4 });
     case CATZ_STATE.eatFromBowl:
       return catzEatBowl(mind, world, random);
     case CATZ_STATE.eatHide:

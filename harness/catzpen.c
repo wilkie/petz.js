@@ -105,6 +105,7 @@ typedef void(__cdecl __far *ORIENT)(void __far *cat, int ball, int __far *at, in
 typedef int(__cdecl __far *MISS)(void __far *cat);
 typedef int(__cdecl __far *CURSTATE)(void __far *machine);
 typedef int(__cdecl __far *HELD)(void __far *cat, int kind);
+typedef int(__cdecl __far *NOTICE)(void __far *cat, int kind, void __far *params);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
 #define FRAMES 400
@@ -511,7 +512,8 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
 }
 
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
-    fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks;
+    fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks,
+    ignoreTicks;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -732,6 +734,29 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             depth--;
             passGlobal(global, 13, p);
             return;
+        }
+    }
+
+    /* And where it asks (4096), on every tenth tick of looking at things,
+     * passing the time, its moment or walking on, not ignoring already, the
+     * cat is shown the bottle (kin 0xf) or, in turn, the cursor (0x17), as
+     * its messages show it what it will not play with: its
+     * `ShouldNoticeAndIgnore` (slot `0x274`), which ignores it (12) where it
+     * may, to go back after to the global state it was in. */
+    if (forcing & 4096 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+
+        if ((state == 12 || state == 19 || state == 21 || state == 23) &&
+            *(int __far *)(global + 0x3a) != 12 && ignoreTicks++ % 10 == 9) {
+            depth--;
+
+            if ((*(NOTICE __far *)(*(unsigned char __far *__far *)cat + 0x274))(
+                    cat, ignoreTicks / 10 & 1 ? 0xf : 0x17, p)) {
+                return;
+            }
+
+            depth++;
         }
     }
 
@@ -1040,6 +1065,9 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             say(" %d", mouse ? (int)((TARGETPT)ordinal(10))(mouse, 0) : 0);
             say(" %d", dog ? (int)((TARGETPT)ordinal(10))(dog, 0) : 0);
         }
+
+        /* And the global state ignoring goes back to (`+0x35b4`). */
+        say(" %d", *(int __far *)(cat + 0x35b4));
 
         say("\r\n");
         outside = outsideGlobal = 0;
