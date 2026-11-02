@@ -2124,11 +2124,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         /* Or, where `TRACE.TXT` asks (32), the cursor still at the stage's
          * lower middle (`+0x5a`, `+0x104` on), the hand up, for the cat to
-         * walk to it affectionate; `+0x46`, which ends that, clear. */
+         * walk to it affectionate; `+0x46`, which ends that, clear. And
+         * where it asks 2048 too, every other 200 frames the cursor just
+         * left of the stage, off it, where the cat lacks affection. */
         if (forcing & 32) {
             *(int *)(params + 0x46) = 0;
             *(int *)(params + 0x1e) = 0;
-            *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = 235;
+            *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) =
+                forcing & 2048 && n / 200 % 2 ? -5 : 235;
             *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) = 250;
         }
 
