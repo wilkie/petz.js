@@ -511,7 +511,7 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
 }
 
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
-    fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams;
+    fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -716,6 +716,21 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             *(int __far *)(cat + 0x35a4) = *(int __far *)(cat + 0x35a6) = 0xb;
             depth--;
             ((CATSTATE)ordinal(497))(cat, 0x24, p);
+            return;
+        }
+    }
+
+    /* And where it asks (1024), on every tenth tick of looking at things,
+     * passing the time, its moment or walking on, not grooming already,
+     * grooming (13), to be let run to its end. */
+    if (forcing & 1024 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+
+        if ((state == 12 || state == 19 || state == 21 || state == 23) &&
+            *(int __far *)(global + 0x3a) != 13 && groomTicks++ % 10 == 9) {
+            depth--;
+            passGlobal(global, 13, p);
             return;
         }
     }

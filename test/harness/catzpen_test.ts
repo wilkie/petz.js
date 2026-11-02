@@ -88,6 +88,9 @@ const TRACE_KIT = process.env.TRACE_KIT === '1';
 /** `TRACE_NAP=1`: on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put in global state 21, CatNapz, a day of its own; starting a dream, cued to dream (6) once, and its cloud, which runs no script in the pen, cued that it has come (4) after 20 ticks; the second time, the dog's chase; 20 ticks into each dream's float, a bad dream, its breed kept at 2, and every other one the dream's mouse 300 ticks in. */
 const TRACE_NAP = process.env.TRACE_NAP === '1';
 
+/** `TRACE_GROOM=1`: on every tenth tick of looking at things, passing the time, its moment or walking on, the cat put to grooming (13), a day of its own. */
+const TRACE_GROOM = process.env.TRACE_GROOM === '1';
+
 const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
 const describeHarness = ready ? describe : describe.skip;
 
@@ -1145,7 +1148,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1157,7 +1160,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       cpSync(PARAMS, join(directory, 'PARAMS.BIN'));
       writeFileSync(
         join(directory, 'TRACE.TXT'),
-        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0) | (TRACE_BOTTLE ? 64 : 0) | (TRACE_TREAT ? 128 : 0) | (TRACE_KIT ? 256 : 0) | (TRACE_NAP ? 512 : 0)}\r\n`
+        `${TRACE_FRAMES}\r\n${(TRACE_CUES ? 1 : 0) | (TRACE_POUNCE ? 2 : 0) | (TRACE_EAT ? 4 : 0) | (TRACE_FEAR ? 8 : 0) | (TRACE_PET ? 16 : 0) | (TRACE_FOND ? 32 : 0) | (TRACE_BOTTLE ? 64 : 0) | (TRACE_TREAT ? 128 : 0) | (TRACE_KIT ? 256 : 0) | (TRACE_NAP ? 512 : 0) | (TRACE_GROOM ? 1024 : 0)}\r\n`
       );
       const { runProbe } = await import(WINBOX);
       const result = await runProbe(
