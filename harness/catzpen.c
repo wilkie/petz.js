@@ -694,14 +694,16 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
     /* And where it asks (8), on every tenth tick of looking at things (12),
      * passing the time (19), its moment (21), walking (23) or grooming (31),
      * the cat is put in global state 17, scared, as the global machine's
-     * `NewState` would (its slot `0x1c`). */
+     * `NewState` would (its slot `0x1c`) -- not scared already, so that it
+     * may flee to its end. */
     if (forcing & 8 && !enter && !leave) {
         int state = *(int __far *)(cat + 0x2552);
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
 
         if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
-            fearTicks++ % 10 == 9) {
+            *(int __far *)(global + 0x3a) != 0x11 && fearTicks++ % 10 == 9) {
             depth--;
-            passGlobal(*(void __far *__far *)(cat + 0x2fba), 0x11, p);
+            passGlobal(global, 0x11, p);
             return;
         }
     }
