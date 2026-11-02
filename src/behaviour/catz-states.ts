@@ -42,6 +42,8 @@ export const CATZ_STATE = {
   groom: 31,
   snubObject: 80,
   ignoreObject: 81,
+  sprayReaction: 63,
+  fleaSprayReaction: 64,
   diving: 4,
   stayAway: 58,
   scaredWatch: 59,
@@ -712,6 +714,9 @@ export function catzStateTick(
     case CATZ_STATE.startDogChase:
     case CATZ_STATE.dogChase:
       return catzDogChase(state, mind, world);
+    case CATZ_STATE.sprayReaction:
+    case CATZ_STATE.fleaSprayReaction:
+      return catzSprayed(state, mind, world, random);
     case CATZ_STATE.failSafe:
       /* `DoCatFailSafeState`, seg13:1093: entering, its slot `0x9c` 2 and 0x177; its script done, idling (6). */
       return world.enter ? done({ pushed: 0x177, pushes: [0x177] }) : done({ global: 6 });
@@ -4026,4 +4031,124 @@ function catzDogChase(state: number, mind: CatzMind, world: CatzStateWorld): Cat
   tick.goal = { x: left ? stage.left - 200 : stage.right + 200, y: middle };
   tick.x688 = left ? 0x40 : -0x40;
   return run();
+}
+
+/**
+ * Sprayed (CATZDLL.DLL seg31; kb/topics/catz-behaviour.md, "Sprayed"):
+ *
+ * - with water (63; `DoCatSprayReaction`, seg31:0af1; global 18): entering,
+ *   it lets go (its slot `0x9c` 2), its count (`+0x3502`) 0, the spray
+ *   (kin 2) what it plays with, its head on it (3000), a sound (8), and,
+ *   one time in two or without an age (brain 11), 0x122, else 0x107. Its
+ *   first nine ticks it is coloured so, and on its ninth set back (its slot
+ *   `0x160`). Its script done: without an age, scared (17); inclined to
+ *   behaviour 28, its moment readied (after it idling, 0x93 meanwhile),
+ *   0x237 and the moment (8); to 25, 0x2c1 and attacking (1); else 0x2c3
+ *   to 26, 0x2c2 to 24, or 0x2c4, and scared (17) -- the cursor (kin 0x17)
+ *   what it plays with each way but the moment;
+ * - with flea spray or colour (64; `DoCatFleaSprayOrColorReaction`,
+ *   seg31:0e51; global 19): entering, sick (brain 8 at 50 or over) and
+ *   having fleas (brain 6 so; `+0x34ca`) as it was, its fleas put to 0 and
+ *   their centre too (`XBrain`'s slots `0x28`, `0x10`), it lets go (2), a
+ *   sound (4) -- of its fleas' centre so put -- 0x97, its head on what it
+ *   plays with (3000), and its sickness up 25 (slot `0x14`, to 100). Then:
+ *   sick as it was, with an age 0x28e, else 0x103; else without an age 0xdc
+ *   and 0x103; sick now, 0x26c; else 0x15d and, one time in two, playing
+ *   with the user (kin 1), 0x15c. Its script done: sick, scared (17); one
+ *   time in two, playing with the user, grooming (13); not having had fleas
+ *   and with an age, inclined to behaviour 25 attacking (1), else snubbing
+ *   (11), the cursor what it plays with; else its moment (8).
+ */
+function catzSprayed(
+  state: number,
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const percent = () => random(101);
+  const tick: CatzStateTick = { energy: mind.brains[CATZ_BRAIN.energy], count: world.count };
+  const push = (...actions: number[]) => {
+    tick.pushes = actions;
+    tick.pushed = actions[0];
+    return tick;
+  };
+  const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+  const age = mind.brains[CATZ_BRAIN.age];
+
+  if (state === CATZ_STATE.sprayReaction) {
+    if (world.enter) {
+      tick.count = 0;
+      tick.x35a4 = 2;
+      tick.head = ['track'];
+      tick.sound = catzSound(mind, 8, random);
+      return push(percent() < 50 || age === 0 ? 0x122 : 0x107);
+    }
+
+    if (age === 0) {
+      return { ...tick, x35a4: 0x17, global: 17 };
+    }
+
+    if (behave(28)) {
+      tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
+      tick.global = 8;
+      return push(0x237);
+    }
+
+    if (behave(25)) {
+      return { ...push(0x2c1), x35a4: 0x17, global: 1 };
+    }
+
+    const action = behave(26) ? 0x2c3 : behave(24) ? 0x2c2 : 0x2c4;
+    return { ...push(action), x35a4: 0x17, global: 17 };
+  }
+
+  const sickness = mind.brains[CATZ_BRAIN.sickness];
+
+  if (world.enter) {
+    const fleas = CATZ_BRAIN.fleas;
+    const sprayed: CatzMind = {
+      ...mind,
+      brains: mind.brains.map((v, k) => (k === fleas ? 0 : v)),
+      centres: (mind.centres ?? mind.brains).map((v, k) => (k === fleas ? 0 : v)),
+    };
+    const sick = sickness >= 50;
+
+    tick.passed = mind.brains[fleas] >= 50 ? 1 : 0;
+    tick.head = ['track'];
+    tick.sound = catzSound(sprayed, 4, random);
+
+    const now = Math.min(sickness + 25, 100);
+
+    if (sick) {
+      return push(0x97, age !== 0 ? 0x28e : 0x103);
+    }
+
+    if (age === 0) {
+      return push(0x97, 0xdc, 0x103);
+    }
+
+    if (now >= 50) {
+      return push(0x97, 0x26c);
+    }
+
+    return push(0x97, 0x15d, ...(percent() < 50 && world.x35a4 === 1 ? [0x15c] : []));
+  }
+
+  if (sickness >= 50) {
+    tick.global = 17;
+    return tick;
+  }
+
+  if (percent() < 50 && world.x35a4 === 1) {
+    tick.global = 13;
+    return tick;
+  }
+
+  if (world.passed === 0 && age !== 0) {
+    return { ...tick, x35a4: 0x17, global: behave(25) ? 1 : 11 };
+  }
+
+  tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
+  tick.global = 8;
+  return tick;
 }

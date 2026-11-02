@@ -513,7 +513,7 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
 
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
     fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks,
-    ignoreTicks;
+    ignoreTicks, sprayTicks;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -757,6 +757,30 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             }
 
             depth++;
+        }
+    }
+
+    /* And where it asks (8192), on every tenth tick of looking at things,
+     * passing the time, its moment, walking on or grooming, not sprayed
+     * already, the cat is sprayed (global 18) or, in turn, flea-sprayed or
+     * coloured (19) -- every other time so, the user (kin 1) what it plays
+     * with (`+0x35a4`), which its reaction asks. */
+    if (forcing & 8192 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+        int now = *(int __far *)(global + 0x3a);
+
+        if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
+            now != 0x12 && now != 0x13 && sprayTicks++ % 10 == 9) {
+            int turn = sprayTicks / 10 % 4;
+
+            if (turn == 3) {
+                *(int __far *)(cat + 0x35a4) = 1;
+            }
+
+            depth--;
+            passGlobal(global, turn & 1 ? 0x13 : 0x12, p);
+            return;
         }
     }
 
