@@ -511,7 +511,7 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
 }
 
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
-    fondTicks, suckTicks, treatTicks, napTicks, naps;
+    fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -731,11 +731,36 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             depth--;
             passGlobal(global, 0x15, p);
 
-            /* Every other time, the dog's chase (70), as one time in ten it
+            /* The second time, the dog's chase (70), as one time in ten it
              * would be. */
-            if (naps++ & 1 && *(int __far *)(cat + 0x2552) != 0x46) {
+            if (naps++ == 1 && *(int __far *)(cat + 0x2552) != 0x46) {
                 ((CATSTATE)ordinal(497))(cat, 0x46, p);
             }
+            return;
+        }
+    }
+
+    /* And, napping (512), 20 ticks into a dream's float (65, phase 3), a
+     * bad dream (67), as one time in four it would be; and in it, the breed
+     * it dreams of (`+0x35ee`, which `LoadRandomLinezFile` draws, 0 to 8)
+     * kept at 2 each tick, so that one time in two it goes on to the dream's
+     * mouse (68). */
+    if (forcing & 512 && !enter && !leave && *(int __far *)(cat + 0x2552) == 65 &&
+        *(int __far *)(cat + 0x35da) == 3 && *(int __far *)(cat + 0x3502) == 20) {
+        badTicks = 0;
+        depth--;
+        ((CATSTATE)ordinal(497))(cat, 67, p);
+        return;
+    }
+
+    /* (And, every other bad dream, 300 ticks in, the dream's mouse (68), as
+     * the coin it tosses at its end does not always give.) */
+    if (forcing & 512 && !enter && !leave && *(int __far *)(cat + 0x2552) == 67) {
+        *(int __far *)(cat + 0x35ee) = 2;
+
+        if (++badTicks == 300 && badDreams++ & 1) {
+            depth--;
+            ((CATSTATE)ordinal(497))(cat, 68, p);
             return;
         }
     }

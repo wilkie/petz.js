@@ -3761,8 +3761,10 @@ const DREAM_SPIN = 0.0043633231299858265;
  *   0x29e, else 0x323 -- and has dreamed. Cued (7), the dream mouse (kin
  *   0x1b, for 10) or the dream is shown; cued (6), both are put away;
  * - a bad dream (67; `DoCatBadDream`, seg18:0ed0): entering, its count 0,
- *   `+0x35d8` 1 to 5, 0x15e. Its script done, with `+0x35ee` 2 one time in
- *   two, the dream's mouse (68), else its dream ends (69, not dreamed);
+ *   `+0x35d8` 1 to 5, 0x15e. Cued (7), it loads a breed at random into
+ *   `+0x35ee` (`LoadRandomLinezFile`) and morphs toward it (`MorphCat`).
+ *   Its script done, with `+0x35ee` 2 one time in two, the dream's mouse
+ *   (68), else its dream ends (69, not dreamed);
  * - the dream's mouse (68; `DoCatBadDreamMouse`, seg18:10f7): entering, the
  *   mouse is put left of the stage, its head on it (3000). Each tick, the
  *   mouse past the stage's right, its dream ends (69, not dreamed); else,
