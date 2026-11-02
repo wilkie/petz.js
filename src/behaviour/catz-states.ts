@@ -2765,8 +2765,9 @@ function catzDiving(
  * `DoCatHide`, seg31:05a4): entering, head (2000), 0x93 three times and
  * 0x254; its script done, its moment. Its special fear (61;
  * `DoCatSpecialFearModes`, seg31:06f1): entering, it runs off the stage, 200
- * past its left (its way 1, facing 0x40) or its right (facing -0x40), walking
- * on (22) at once. Jumping to the ceiling (62; `DoCatJumpToCeiling`,
+ * past its left (its way 1, facing 0x40) or its right (facing -0x40), at its
+ * own height (its target point), `+0x35a6` 0 and `+0x35ac` 1, walking on
+ * (22) at once. Jumping to the ceiling (62; `DoCatJumpToCeiling`,
  * seg31:07fb): entering, 0xdc, a sound (8), a neutral pose and 0x216 up to
  * the stage's top; its script done, past three times one time in five its
  * moment; else three times in ten a sound (2), and 0x218 without an age, else,
@@ -2818,8 +2819,20 @@ function catzFear(
       return tick.count > 3 && percent() < 20 ? moment() : pushes([0xc]);
     case CATZ_STATE.hide:
       return world.enter ? pushes([0x93, 0x93, 0x93, 0x254]) : moment();
-    case CATZ_STATE.specialFearModes:
+    case CATZ_STATE.specialFearModes: {
+      if (!world.enter) {
+        return tick;
+      }
+
+      const stage = world.stage!;
+      const left = world.x35a8 === 1;
+      tick.goal = { x: left ? stage.left - 200 : stage.right + 200, y: world.point!.y };
+      tick.x688 = left ? 0x40 : -0x40;
+      tick.x35a6 = 0;
+      tick.x35ac = 1;
+      tick.state = CATZ_STATE.locomote;
       return tick;
+    }
     default: {
       tick.count = world.count + 1;
 

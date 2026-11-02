@@ -1246,7 +1246,7 @@ const FOLLOWED = new Set([
 /** The states whose entering is reimplemented, and those of them whose entered ticks are held only by what they push, their scripts popped at once. */
 const ENTERED = new Set([
   3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65,
-  67, 69, 70, 71, 81, 63, 64,
+  67, 69, 70, 71, 81, 63, 64, 61,
 ]);
 const ENTERED_PUSHES = new Set([
   3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65, 67, 69, 70, 71,

@@ -513,7 +513,7 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
 
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
     fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks,
-    ignoreTicks, sprayTicks;
+    ignoreTicks, sprayTicks, watchTicks, watches;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -706,6 +706,22 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             passGlobal(global, 0x11, p);
             return;
         }
+    }
+
+    /* And so, on the 20th tick of every other watch scared (59), its flight
+     * of 1 ended as its moment ends it (`DoGSMoment`, seg25:1c00): its way
+     * (`+0x35a8`) turned, 1 and 2, and its special fear (61). */
+    if (forcing & 8 && !enter && !leave && *(int __far *)(cat + 0x2552) == 59) {
+        if (++watchTicks == 20 && watches++ & 1) {
+            int __far *way = (int __far *)(cat + 0x35a8);
+
+            *way = *way == 1 ? 2 : 1;
+            depth--;
+            ((CATSTATE)ordinal(497))(cat, 0x3d, p);
+            return;
+        }
+    } else if (forcing & 8 && enter) {
+        watchTicks = 0;
     }
 
     /* And where it asks (128), on every tenth tick of the same, the treat
