@@ -610,6 +610,11 @@ export function catzStateTick(
 
   switch (state) {
     case CATZ_STATE.tired:
+      /* `DoCatTired`, seg30:0113: entering, 0xb3. */
+      if (world.enter) {
+        return done({ pushed: 0xb3, pushes: [0xb3] });
+      }
+
       if (world.global === 21) {
         energy = 20;
         return done({ state: CATZ_STATE.locomote });
