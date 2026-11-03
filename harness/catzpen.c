@@ -136,8 +136,20 @@ static int depth;
 /* Where the global state is changed outside the cat's tick, the same. */
 static int outsideGlobal, outsideGlobalState, outsideGlobalWords[24];
 
+/* A reflex watched (`keeping` 1): the seed as it first asks a new global
+ * state, and that state, before its entering draws or moves on. */
+static unsigned traceData;
+static int keeping, keptGlobal;
+static unsigned long keptSeed;
+
 static void __cdecl __far __loadds keep(void __far *machine, int state, void __far *params)
 {
+    if (keeping == 1) {
+        keptSeed = *(unsigned long __far *)MK_FP(traceData, 0x28ba);
+        keptGlobal = state;
+        keeping = 2;
+    }
+
     if (!depth && !outsideGlobal++) {
         unsigned __far *from = (unsigned __far *)&machine - 2;
         int w;
@@ -1271,6 +1283,90 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
 /* The recorders put in the cat's, its machine's and the global machine's
  * tables for good, each passing on what it is given. */
+/* And its reflex `HandleCursorWiggling` (slot `0x128`), each call kept
+ * whole: the seed before; its state, global state, `+0x35a4` and `+0x35d6`;
+ * the ring of where the cursor went (`+0x34d2` its index, `+0x34fc`,
+ * `+0x34fe` where it was, the 20 at `+0x34d4`) and `+0x33b8`; the cursor's
+ * (kin 0x17) target point; its brains and their centres; and after, on a
+ * line of its own (`wiggled`), the index, where the cursor was, the ring's word at the index before,
+ * `+0x33b8`, its global state, `+0x35a4` and the seed -- the global state it
+ * asked and the seed as it did, where it did, before that state's entering
+ * drew or moved on. */
+typedef void(__cdecl __far *REFLEX)(void __far *cat, void __far *params);
+static REFLEX wiggle;
+
+static void __cdecl __far __loadds wiggling(void __far *sprite, void __far *params)
+{
+    unsigned char __far *cat = sprite;
+    unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+    unsigned char __far *cursor = ((GETKIN)ordinal(18))(cat, 0x17);
+    long point = cursor ? ((TARGETPT)ordinal(10))(cursor, 0) : 0;
+    int index = *(int __far *)(cat + 0x34d2);
+    int b;
+
+    say("wiggle %lu %d %d %d %d %d %d %d", *(unsigned long __far *)MK_FP(traceData, 0x28ba),
+        *(int __far *)(cat + 0x2552), *(int __far *)(global + 0x3a),
+        *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35d6), index,
+        *(int __far *)(cat + 0x34fc), *(int __far *)(cat + 0x34fe));
+
+    for (b = 0; b < 20; b++) {
+        say(" %d", *(int __far *)(cat + 0x34d4 + 2 * b));
+    }
+
+    say(" %d %d %d", *(int __far *)(cat + 0x33b8), (int)point, (int)(point >> 16));
+
+    for (b = 0; b < 12; b++) {
+        say(" %d %d", *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a),
+            *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42));
+    }
+
+    /* Reacting, it may leave its state, whose tick is written between:
+     * what came after is a line of its own. */
+    say("\r\n");
+    keeping = 1;
+    wiggle(sprite, params);
+    global = *(unsigned char __far *__far *)(cat + 0x2fba);
+    say("wiggled %d %d %d %d %d %d %d %lu\r\n", *(int __far *)(cat + 0x34d2),
+        *(int __far *)(cat + 0x34fc), *(int __far *)(cat + 0x34fe),
+        index >= 0 && index < 20 ? *(int __far *)(cat + 0x34d4 + 2 * index) : -1,
+        *(int __far *)(cat + 0x33b8), keeping == 2 ? keptGlobal : *(int __far *)(global + 0x3a),
+        *(int __far *)(cat + 0x35a4),
+        keeping == 2 ? keptSeed : *(unsigned long __far *)MK_FP(traceData, 0x28ba));
+    keeping = 0;
+}
+
+/* And its reflex `HandleCatExtremeSituations` (slot `0x130`), each call
+ * kept whole: the seed, `+0x358c`, `PetParams` `+0xc4`, its state, global
+ * state, `+0x35a4` and `+0x35d6`, and its brains and their centres, by
+ * pairs; and after, `+0x358c`, `+0x3574`, its brains and the seed. */
+static REFLEX extreme;
+
+static void __cdecl __far __loadds extremes(void __far *sprite, void __far *params)
+{
+    unsigned char __far *cat = sprite;
+    unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+    int b;
+
+    say("extreme %lu %d %d %d %d %d %d", *(unsigned long __far *)MK_FP(traceData, 0x28ba),
+        *(int __far *)(cat + 0x358c), *(int __far *)((unsigned char __far *)params + 0xc4),
+        *(int __far *)(cat + 0x2552), *(int __far *)(global + 0x3a),
+        *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35d6));
+
+    for (b = 0; b < 12; b++) {
+        say(" %d %d", *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a),
+            *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42));
+    }
+
+    extreme(sprite, params);
+    say(" %d %d", *(int __far *)(cat + 0x358c), *(int __far *)(cat + 0x3574));
+
+    for (b = 0; b < 12; b++) {
+        say(" %d", *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a));
+    }
+
+    say(" %lu\r\n", *(unsigned long __far *)MK_FP(traceData, 0x28ba));
+}
+
 static void install(unsigned char __far *cat)
 {
     unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
@@ -1299,6 +1395,10 @@ static void install(unsigned char __far *cat)
     mouthToTeat = *(MOVED *)(table + 0x358);
     *(MOVED *)(table + 0x358) = mouthing;
     *(MISS *)(table + 0x308) = measuring;
+    wiggle = *(REFLEX *)(table + 0x128);
+    *(REFLEX *)(table + 0x128) = wiggling;
+    extreme = *(REFLEX *)(table + 0x130);
+    *(REFLEX *)(table + 0x130) = extremes;
     *(void __far *__far *)cat = table;
 
     _fmemcpy(globalTable, *(void __far *__far *)global, sizeof globalTable);
@@ -2251,6 +2351,22 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             if (late) {
                 *(int __far *)(cat + 0x2fda + 0x52 * 4 + 0x3a) = 80;
             }
+        }
+
+        /* Or, where it asks (131072), the cursor wiggled by the cat, the
+         * hand up, 300 frames of each 600: 20 to its one side and then its
+         * other, frame by frame, and up and down every other frame, for its
+         * reflex (`HandleCursorWiggling`); the rest still beside it. */
+        if (forcing & 131072L && cat) {
+            long point = ((TARGETPT)ordinal(10))(cat, 0);
+            int wiggling = n % 600 < 300;
+            int x = (int)point + 60 + (wiggling ? (n & 1 ? 20 : -20) : 0);
+            int y = (int)(point >> 16) - 20 + (wiggling ? (n & 2 ? 15 : -15) : 0);
+
+            *(int *)(params + 0x46) = 0;
+            *(int *)(params + 0x1e) = 0;
+            *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = x;
+            *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) = y;
         }
 
         /* Or, where `TRACE.TXT` asks (16), the user petting it, 300 frames

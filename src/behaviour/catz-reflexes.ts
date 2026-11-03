@@ -109,3 +109,97 @@ export function catzBehaviorChange(mind: CatzMind, change: number, amounts: Catz
   );
   slide(fear, 15, -sign, 0);
 }
+
+/** Where the cursor went, kept for wiggling (`+0x34d2` on). */
+export interface CatzWiggle {
+  /** The next of the 20 to fill (`+0x34d2`), and, at 20, a look at them. */
+  index: number;
+
+  /** Where the cursor was (`+0x34fc`, `+0x34fe`). */
+  last: { x: number; y: number };
+
+  /** Which way it went each tick (`+0x34d4`, 20): 0 up-left, 1 up, right or still, 2 left and down, 3 right or still and down or still. */
+  ways: number[];
+
+  /** Whether it went one way throughout (`+0x33b8`). */
+  still: number;
+}
+
+/**
+ * The cursor wiggled (`HandleCursorWiggling`, seg23:043d, the cat's slot
+ * `0x128`). Each tick, under 20 kept, which way the cursor (kin 0x17) went
+ * from where it was -- leftward 0 up, else 2; else 1 up, else 3 -- kept in
+ * turn. At 20, the ring begun again, it counts how often the way changed
+ * after fewer than four the same, `+0x33b8` 1 where it never changed; ten or
+ * more, not swatting (56), after a treat (`+0x35a4` 0xb) nor being petted
+ * (global 7), what it reacts to is what the user holds, else the cursor;
+ * not asleep (28), and not playing (15) already where that is the cursor:
+ * inclined to behaviour 17 (afraid) four times in five, scared of it (17);
+ * else inclined to 15, playing with it (15); else to 14, attacking it (1) --
+ * each letting go (its slot `0x9c` 1); else under half its energy its moment
+ * readied (`PreMoment`, its moment after, 0x93 meanwhile), its head on the
+ * cursor (3000), and its moment (8).
+ */
+export function catzCursorWiggling(
+  mind: CatzMind,
+  wiggle: CatzWiggle,
+  cursor: { x: number; y: number },
+  x35a4: number,
+  held: number,
+  random: (n: number) => number
+): { global?: number; x35a4?: number; moment?: boolean; changes?: number } {
+  if (wiggle.index < 20) {
+    const left = wiggle.last.x > cursor.x;
+    const up = wiggle.last.y > cursor.y;
+    wiggle.ways[wiggle.index] = left ? (up ? 0 : 2) : up ? 1 : 3;
+    wiggle.last = { ...cursor };
+    wiggle.index++;
+    return {};
+  }
+
+  wiggle.index = 0;
+  wiggle.still = 1;
+  let run = 0;
+  let changes = 0;
+
+  for (let k = 1; k < 20; k++) {
+    if (wiggle.ways[k - 1] !== wiggle.ways[k]) {
+      if (run < 4) {
+        changes++;
+      }
+
+      run = 0;
+      wiggle.still = 0;
+    } else {
+      run++;
+    }
+  }
+
+  const { state, global } = mind;
+
+  if (changes < 10 || state === 0x38 || x35a4 === 0xb || global === 7) {
+    return { changes };
+  }
+
+  if (state === 0x1c || (global === 15 && held === 0x17)) {
+    return { changes };
+  }
+
+  if (catzBehavior(mind, 17, random) !== 0 && random(101) < 80) {
+    return { changes, x35a4: held, global: 17 };
+  }
+
+  if (catzBehavior(mind, 15, random) !== 0) {
+    return { changes, x35a4: held, global: 15 };
+  }
+
+  if (catzBehavior(mind, 14, random) !== 0) {
+    return { changes, x35a4: held, global: 1 };
+  }
+
+  if (random(101) < Math.trunc(mind.brains[CATZ_BRAIN.energy] / 2)) {
+    return { changes, moment: true, global: 8 };
+  }
+
+  return { changes };
+}

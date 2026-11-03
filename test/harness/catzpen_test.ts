@@ -18,7 +18,6 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
-import { CATZ_BRAIN } from '../../src/behaviour/catz-brain.ts';
 import { catzGlobalBegin } from '../../src/behaviour/catz-global.ts';
 import { catzCuriosities, catzStateTick } from '../../src/behaviour/catz-states.ts';
 import {
@@ -29,7 +28,11 @@ import {
   type CatzMomentState,
   catzMomentTick,
 } from '../../src/behaviour/catz-moment.ts';
-import { catzBehaviorChange, catzExtremeSituations } from '../../src/behaviour/catz-reflexes.ts';
+import {
+  catzBehaviorChange,
+  catzCursorWiggling,
+  catzExtremeSituations,
+} from '../../src/behaviour/catz-reflexes.ts';
 
 const ROOT = process.cwd();
 const WINBOX = join(ROOT, '..', 'winbox.js', 'test', 'win16', 'run-probe.ts');
@@ -102,6 +105,8 @@ const TRACE_PET_DEEP = process.env.TRACE_PET_DEEP === '1';
 const TRACE_FOND_LACKING = process.env.TRACE_FOND_LACKING === '1';
 /** `TRACE_DIET=1`: the cat's proper diet held at 5 its first 1,000 frames, then at 90 and its fullness at 80, its reflexes' extreme situations met. */
 const TRACE_DIET = process.env.TRACE_DIET === '1';
+/** `TRACE_WIGGLE=1`: the cursor wiggled beside the cat, the hand up, 300 frames of each 600, for its reflex. */
+const TRACE_WIGGLE = process.env.TRACE_WIGGLE === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
@@ -1163,7 +1168,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1192,7 +1197,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_SPRAY ? 8192 : 0) |
           (TRACE_PET_DEEP ? 16384 : 0) |
           (TRACE_FOND_LACKING ? 32768 : 0) |
-          (TRACE_DIET ? 65536 : 0)
+          (TRACE_DIET ? 65536 : 0) |
+          (TRACE_WIGGLE ? 131072 : 0)
         }\r\n`
       );
       const { runProbe } = await import(WINBOX);
@@ -1244,85 +1250,164 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       `reflexes: ${reflexes.counted} counted down, ${reflexes.fired} extreme situations, ${reflexes.changed} changing its behaviour`
     );
     expect(reflexes.wrong).toEqual([]);
+
+    const wiggles = followWiggles(lines);
+    console.log(
+      `wiggling: ${wiggles.kept} kept, ${wiggles.looked} looked at, ${wiggles.reacted} reacted to (${wiggles.how.join(' ')})`
+    );
+    expect(wiggles.wrong).toEqual([]);
   }, 28800000);
 });
 
 /**
- * Extreme situations held between ticks (`catzExtremeSituations`): `+0x358c`
- * one less each tick, or, at 0 or under, 280 again with `+0x3574` 0 and, its
- * behaviour changed, liveliness, independence and seriousness moved so --
- * within 1 of it, for each brain may also have been drawn back toward its
- * centre a step that tick, before.
+ * Extreme situations, held call by call (`catzExtremeSituations`): each
+ * `extreme` line the driver wrote around the cat's reflex -- the seed,
+ * `+0x358c`, `PetParams` `+0xc4`, its state, global state, `+0x35a4` and
+ * `+0x35d6`, its brains and centres by pairs; then `+0x358c`, `+0x3574`, its
+ * brains and the seed after.
  */
 function followReflexes(lines: string[]) {
   const wrong: string[] = [];
-  let before: number[] | undefined;
   let counted = 0;
   let fired = 0;
   let changed = 0;
 
   for (const line of lines) {
-    if (!line.startsWith('tick ')) {
+    if (!line.startsWith('extreme ')) {
       continue;
     }
 
-    const b = line.split(' ').slice(1).map(Number);
+    const v = line.split(' ').slice(1).map(Number);
+    const [seed, x358c, c4, state, global, x35a4, x35d6] = v;
+    const pairs = v.slice(7, 31);
+    const mind: CatzMind = {
+      brains: pairs.filter((_, k) => k % 2 === 0),
+      centres: pairs.filter((_, k) => k % 2 === 1),
+      state,
+      global,
+      target: x35a4,
+      count: x35d6,
+    };
+    const [after358c, after3574] = v.slice(31, 33);
+    const brains = v.slice(33, 45);
+    const afterSeed = v[45];
+    const was3574 = after3574;
+    let at = BigInt(seed);
+    const random = (n: number) => {
+      at = (at * 22695477n + 1n) & 0xffffffffn;
+      return Number((at >> 16n) & 0x7fffn) % n;
+    };
+    const ours = catzExtremeSituations(mind, x358c, c4 !== 0, random);
 
-    if (b[261] === undefined) {
-      return { wrong, counted, fired, changed };
+    if (ours.change !== undefined) {
+      changed++;
+      catzBehaviorChange(mind, ours.change, [0, 0, 0, 0]);
     }
 
-    if (before) {
-      const mind: CatzMind = {
-        brains: before.slice(27, 39),
-        centres: before.slice(39, 51),
-        state: before[5],
-        global: before[4],
-        target: 0,
-        count: 0,
-      };
-      const drew = { drawn: false };
-      const ours = catzExtremeSituations(mind, before[261], before[82] !== 0, () => {
-        drew.drawn = true;
-        return 0;
-      });
+    const said = [ours.x358c, ours.x3574 ?? was3574, ...mind.brains, Number(at)];
+    const theirs = [after358c, after3574, ...brains, afterSeed];
 
-      if (drew.drawn) {
-        wrong.push(`seed ${b[0]}: extreme situations drew`);
-      }
-
-      if (ours.x358c !== b[261] || (ours.x3574 !== undefined && ours.x3574 !== b[262])) {
-        wrong.push(
-          `seed ${b[0]}: extreme situations ${ours.x358c} ${ours.x3574} not ${b[261]} ${b[262]}`
-        );
-      }
-
-      if (ours.x3574 === undefined) {
-        counted++;
-      } else {
-        fired++;
-      }
-
-      if (ours.change !== undefined) {
-        changed++;
-        catzBehaviorChange(mind, ours.change, [0, 0, 0, 0]);
-        const brains = b.slice(27, 39);
-        const off = [CATZ_BRAIN.liveliness, CATZ_BRAIN.independence, CATZ_BRAIN.seriousness].filter(
-          (k) => Math.abs(mind.brains[k] - brains[k]) > 1
-        );
-
-        if (off.length) {
-          wrong.push(
-            `seed ${b[0]}: behaviour changed ${ours.change}: ${mind.brains} not ${brains}`
-          );
-        }
-      }
+    if (said.join(' ') !== theirs.join(' ')) {
+      wrong.push(`extreme seed ${seed}: ${said.join(' ')} not ${theirs.join(' ')}`);
     }
 
-    before = b;
+    if (ours.x3574 === undefined) {
+      counted++;
+    } else {
+      fired++;
+    }
   }
 
   return { wrong, counted, fired, changed };
+}
+
+/**
+ * The cursor wiggled, held call by call (`catzCursorWiggling`): each `wiggle`
+ * line the driver wrote before the cat's reflex -- the seed, its state,
+ * global state, `+0x35a4` and `+0x35d6`, the ring and `+0x33b8`, the
+ * cursor's point and its brains and centres, by pairs -- and the `wiggled`
+ * line after it, for its leaving may write a tick between: the ring's index,
+ * where the cursor was, the way kept, `+0x33b8`, its global state,
+ * `+0x35a4` and the seed after -- or the global state it asked and the seed
+ * as it did, before that state's entering drew or moved on. What the user holds is taken from what it
+ * reacted to; where it readies its moment, `PreMoment` draws before it asks
+ * one, and its draws there are not held.
+ */
+function followWiggles(lines: string[]) {
+  const wrong: string[] = [];
+  const how: number[] = [];
+  let kept = 0;
+  let looked = 0;
+  let reacted = 0;
+
+  let v: number[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('wiggle ')) {
+      v = line.split(' ').slice(1).map(Number);
+      continue;
+    }
+
+    if (!line.startsWith('wiggled ')) {
+      continue;
+    }
+
+    v = [...v.slice(0, 55), ...line.split(' ').slice(1).map(Number)];
+    const [seed, state, global, x35a4, x35d6, index, lastX, lastY] = v;
+    const pairs = v.slice(31, 55);
+    const mind: CatzMind = {
+      brains: pairs.filter((_, k) => k % 2 === 0),
+      centres: pairs.filter((_, k) => k % 2 === 1),
+      state,
+      global,
+      target: x35a4,
+      count: x35d6,
+    };
+    const wiggle = { index, last: { x: lastX, y: lastY }, ways: v.slice(8, 28), still: v[28] };
+    const [afterIndex, afterX, afterY, way, still, afterGlobal, afterTarget, afterSeed] =
+      v.slice(55);
+    let at = BigInt(seed);
+    const random = (n: number) => {
+      at = (at * 22695477n + 1n) & 0xffffffffn;
+      return Number((at >> 16n) & 0x7fffn) % n;
+    };
+    const ours = catzCursorWiggling(
+      mind,
+      wiggle,
+      { x: v[29], y: v[30] },
+      x35a4,
+      afterGlobal !== global ? afterTarget : 0x17,
+      random
+    );
+    const said = [
+      wiggle.index,
+      wiggle.last.x,
+      wiggle.last.y,
+      index < 20 ? wiggle.ways[index] : way,
+      index < 20 ? v[28] : wiggle.still,
+      ours.global ?? global,
+      ours.x35a4 ?? x35a4,
+      ours.moment ? afterSeed : Number(at),
+    ];
+    const theirs = [afterIndex, afterX, afterY, way, still, afterGlobal, afterTarget, afterSeed];
+
+    if (said.join(' ') !== theirs.join(' ')) {
+      wrong.push(`wiggle seed ${seed} index ${index}: ${said.join(' ')} not ${theirs.join(' ')}`);
+    }
+
+    if (index < 20) {
+      kept++;
+    } else {
+      looked++;
+    }
+
+    if (ours.global !== undefined) {
+      reacted++;
+      how.push(ours.global);
+    }
+  }
+
+  return { wrong, kept, looked, reacted, how };
 }
 
 /** A double, from its four words, low first, as the trace writes them. */
