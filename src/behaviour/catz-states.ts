@@ -3316,6 +3316,11 @@ function catzFond(
       return tick;
     }
     default: {
+      if (world.enter) {
+        tick.head = ['track'];
+        return push(0xdc, 0xdb);
+      }
+
       const cursor = world.cursorAt!;
       const kept = world.kept!;
 

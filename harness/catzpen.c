@@ -105,6 +105,7 @@ typedef void(__cdecl __far *ORIENT)(void __far *cat, int ball, int __far *at, in
 typedef int(__cdecl __far *MISS)(void __far *cat);
 typedef int(__cdecl __far *CURSTATE)(void __far *machine);
 typedef int(__cdecl __far *HELD)(void __far *cat, int kind);
+typedef void(__cdecl __far *LETGO)(void __far *cat, int how);
 typedef int(__cdecl __far *NOTICE)(void __far *cat, int kind, void __far *params);
 
 #define DIRECTORY "C:\\CORPUS\\CATZPEN"
@@ -514,7 +515,7 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
 static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
     fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks,
     ignoreTicks, sprayTicks, watchTicks, watches,
-    deepTicks;
+    deepTicks, lackTicks, lacks;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -886,6 +887,22 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             *(int __far *)(global + 0x3a) != 0xe && fondTicks++ % 10 == 9) {
             depth--;
             passGlobal(*(void __far *__far *)(cat + 0x2fba), 0xe, p);
+            return;
+        }
+    }
+
+    /* And where it asks (32768) too, on the 5th tick of every other walk
+     * on to the cursor, affectionate, the cat lacks affection (55), as
+     * walking on's arrival puts it where its marker was pulled back onto
+     * the stage (seg25:185e): it lets go (its slot `0x9c` 1) and 0x37. */
+    if (forcing & 32768 && (enter || leave || *(int __far *)(cat + 0x2552) != 23 ||
+                            *(int __far *)(*(unsigned char __far *__far *)(cat + 0x2fba) + 0x3a) != 0xe)) {
+        lackTicks = 0;
+    } else if (forcing & 32768) {
+        if (++lackTicks == 5 && lacks++ & 1) {
+            (*(LETGO __far *)(*(unsigned char __far *__far *)cat + 0x9c))(cat, 1);
+            depth--;
+            ((CATSTATE)ordinal(497))(cat, 0x37, p);
             return;
         }
     }
