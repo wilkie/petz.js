@@ -18,6 +18,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
+import { CATZ_BRAIN } from '../../src/behaviour/catz-brain.ts';
 import { catzGlobalBegin } from '../../src/behaviour/catz-global.ts';
 import { catzCuriosities, catzStateTick } from '../../src/behaviour/catz-states.ts';
 import {
@@ -28,6 +29,7 @@ import {
   type CatzMomentState,
   catzMomentTick,
 } from '../../src/behaviour/catz-moment.ts';
+import { catzBehaviorChange, catzExtremeSituations } from '../../src/behaviour/catz-reflexes.ts';
 
 const ROOT = process.cwd();
 const WINBOX = join(ROOT, '..', 'winbox.js', 'test', 'win16', 'run-probe.ts');
@@ -98,6 +100,8 @@ const TRACE_SPRAY = process.env.TRACE_SPRAY === '1';
 const TRACE_PET_DEEP = process.env.TRACE_PET_DEEP === '1';
 /** `TRACE_FOND_LACKING=1`, with `TRACE_FOND`: on the 5th tick of every other walk on to the cursor, affectionate, the cat put to lack affection (55), as walking on's arrival puts it. */
 const TRACE_FOND_LACKING = process.env.TRACE_FOND_LACKING === '1';
+/** `TRACE_DIET=1`: the cat's proper diet held at 5 its first 1,000 frames, then at 90 and its fullness at 80, its reflexes' extreme situations met. */
+const TRACE_DIET = process.env.TRACE_DIET === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
@@ -1159,7 +1163,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1187,7 +1191,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_IGNORE ? 4096 : 0) |
           (TRACE_SPRAY ? 8192 : 0) |
           (TRACE_PET_DEEP ? 16384 : 0) |
-          (TRACE_FOND_LACKING ? 32768 : 0)
+          (TRACE_FOND_LACKING ? 32768 : 0) |
+          (TRACE_DIET ? 65536 : 0)
         }\r\n`
       );
       const { runProbe } = await import(WINBOX);
@@ -1232,8 +1237,93 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     );
     expect(held).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
+
+    /* And its reflexes, between one tick and the next. */
+    const reflexes = followReflexes(lines);
+    console.log(
+      `reflexes: ${reflexes.counted} counted down, ${reflexes.fired} extreme situations, ${reflexes.changed} changing its behaviour`
+    );
+    expect(reflexes.wrong).toEqual([]);
   }, 28800000);
 });
+
+/**
+ * Extreme situations held between ticks (`catzExtremeSituations`): `+0x358c`
+ * one less each tick, or, at 0 or under, 280 again with `+0x3574` 0 and, its
+ * behaviour changed, liveliness, independence and seriousness moved so --
+ * within 1 of it, for each brain may also have been drawn back toward its
+ * centre a step that tick, before.
+ */
+function followReflexes(lines: string[]) {
+  const wrong: string[] = [];
+  let before: number[] | undefined;
+  let counted = 0;
+  let fired = 0;
+  let changed = 0;
+
+  for (const line of lines) {
+    if (!line.startsWith('tick ')) {
+      continue;
+    }
+
+    const b = line.split(' ').slice(1).map(Number);
+
+    if (b[261] === undefined) {
+      return { wrong, counted, fired, changed };
+    }
+
+    if (before) {
+      const mind: CatzMind = {
+        brains: before.slice(27, 39),
+        centres: before.slice(39, 51),
+        state: before[5],
+        global: before[4],
+        target: 0,
+        count: 0,
+      };
+      const drew = { drawn: false };
+      const ours = catzExtremeSituations(mind, before[261], before[82] !== 0, () => {
+        drew.drawn = true;
+        return 0;
+      });
+
+      if (drew.drawn) {
+        wrong.push(`seed ${b[0]}: extreme situations drew`);
+      }
+
+      if (ours.x358c !== b[261] || (ours.x3574 !== undefined && ours.x3574 !== b[262])) {
+        wrong.push(
+          `seed ${b[0]}: extreme situations ${ours.x358c} ${ours.x3574} not ${b[261]} ${b[262]}`
+        );
+      }
+
+      if (ours.x3574 === undefined) {
+        counted++;
+      } else {
+        fired++;
+      }
+
+      if (ours.change !== undefined) {
+        changed++;
+        catzBehaviorChange(mind, ours.change, [0, 0, 0, 0]);
+        const brains = b.slice(27, 39);
+        const off = [CATZ_BRAIN.liveliness, CATZ_BRAIN.independence, CATZ_BRAIN.seriousness].filter(
+          (k) => Math.abs(mind.brains[k] - brains[k]) > 1
+        );
+
+        if (off.length) {
+          wrong.push(
+            `seed ${b[0]}: behaviour changed ${ours.change}: ${mind.brains} not ${brains}`
+          );
+        }
+      }
+    }
+
+    before = b;
+  }
+
+  return { wrong, counted, fired, changed };
+}
 
 /** A double, from its four words, low first, as the trace writes them. */
 function double(words: number[]): number {

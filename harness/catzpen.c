@@ -512,7 +512,8 @@ static int __cdecl __far __loadds treatHolding(void __far *treat)
     return treatHeld;
 }
 
-static int forcing, forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
+static long forcing;
+static int forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
     fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks,
     ignoreTicks, sprayTicks, watchTicks, watches,
     deepTicks, lackTicks, lacks;
@@ -1139,8 +1140,11 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             say(" %d", dog ? (int)((TARGETPT)ordinal(10))(dog, 0) : 0);
         }
 
-        /* And the global state ignoring goes back to (`+0x35b4`). */
-        say(" %d", *(int __far *)(cat + 0x35b4));
+        /* And the global state ignoring goes back to (`+0x35b4`); and,
+         * for its reflexes, how many ticks before it looks for extreme
+         * situations (`+0x358c`) and `+0x3574`, which they clear. */
+        say(" %d %d %d", *(int __far *)(cat + 0x35b4), *(int __far *)(cat + 0x358c),
+            *(int __far *)(cat + 0x3574));
 
         say("\r\n");
         outside = outsideGlobal = 0;
@@ -2099,7 +2103,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
     if (file != HFILE_ERROR) {
         frames = (int)number(file);
-        forcing = (int)number(file);
+        forcing = number(file);
         _lclose(file);
 
         if (cat) {
@@ -2234,6 +2238,19 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) =
                 forcing & 2048 && n / 200 % 2 ? -5 : 235;
             *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) = 250;
+        }
+
+        /* And where it asks (65536), its diet extreme, for its reflexes:
+         * its first 1,000 frames its proper diet (brain 9) held at 5, after
+         * at 90 and its fullness (brain 4) at 80. */
+        if (forcing & 65536L && cat) {
+            int late = n >= 1000;
+
+            *(int __far *)(cat + 0x2fda + 0x52 * 9 + 0x3a) = late ? 90 : 5;
+
+            if (late) {
+                *(int __far *)(cat + 0x2fda + 0x52 * 4 + 0x3a) = 80;
+            }
         }
 
         /* Or, where `TRACE.TXT` asks (16), the user petting it, 300 frames
