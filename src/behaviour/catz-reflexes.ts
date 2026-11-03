@@ -6,6 +6,7 @@
 
 import { type CatzMind, catzBehavior } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
+import { type CatzBox, catzDist } from './catz-states.ts';
 
 /** How often extreme situations are looked for: every 280 ticks (`+0x358c`, set to 0x118). */
 export const CATZ_EXTREME_TICKS = 0x118;
@@ -202,4 +203,88 @@ export function catzCursorWiggling(
   }
 
   return { changes };
+}
+
+/** What the cat sees of the mouse (kin 0x1b), for `catzSeesMouse`. */
+export interface CatzMouseSeen {
+  /** The mouse's state (its machine's slot `0x8`), 1 in its hole; -1 with no mouse. */
+  state: number;
+  at: { x: number; y: number };
+
+  /** The cat's own target point, and the stage (`ds:2ba6` on). */
+  point: { x: number; y: number };
+  stage: CatzBox;
+
+  /** Whether it has reacted to it since its global state last changed (`+0x33bc`). */
+  x33bc: number;
+}
+
+/**
+ * The cat sees the mouse (`HandleCatSeesMouse`, seg23:0a56, the cat's slot
+ * `0x134`). The mouse out of its hole (not its state 1) and within the stage,
+ * the cat not having reacted since its global state changed (`+0x33bc`, which
+ * the global machine's `NewState` clears) nor with a victim (global 2):
+ * dangling (33, 34) it only turns its head to it (3000); else, asked whether
+ * inclined to behaviours 14 to 17 in turn, asleep (28) and not inclined to
+ * 25, nothing; afraid (17), scared of it (17); inclined to 24 and not 8,
+ * `rand() % 101` under its age, snubbing it (11); inclined to 14 and not 16,
+ * or within 200 of it, attacking it (1); inclined to 15, playing with it
+ * (15); inclined to 16, watching it lazily (10, `+0x35b6` 2 resting or
+ * lazy, else 1). Reacting, the mouse is what it plays with (`+0x35a4`), it
+ * lets go (its slot `0x9c` 1), and `+0x33bc` is 1.
+ */
+export function catzSeesMouse(
+  mind: CatzMind,
+  seen: CatzMouseSeen,
+  random: (n: number) => number
+): { global?: number; x35b6?: number; head?: boolean } {
+  const { stage, at } = seen;
+
+  if (seen.state === 1 || seen.state === -1) {
+    return {};
+  }
+
+  if (at.x < stage.left || at.y < stage.top || at.x > stage.right || at.y > stage.bottom) {
+    return {};
+  }
+
+  if (seen.x33bc !== 0 || mind.global === 2) {
+    return {};
+  }
+
+  if (mind.state === 0x21 || mind.state === 0x22) {
+    return { head: true };
+  }
+
+  const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+  const attack = behave(14);
+  const play = behave(15);
+  const lazy = behave(16);
+  const afraid = behave(17);
+
+  if (mind.state === 0x1c && !behave(25)) {
+    return {};
+  }
+
+  if (afraid) {
+    return { global: 17 };
+  }
+
+  if (behave(24) && !behave(8) && random(101) < mind.brains[CATZ_BRAIN.age]) {
+    return { global: 11 };
+  }
+
+  if ((attack && !lazy) || catzDist(seen.point, at) < 200) {
+    return { global: 1 };
+  }
+
+  if (play) {
+    return { global: 15 };
+  }
+
+  if (lazy) {
+    return { global: 10, x35b6: mind.global === 9 || mind.global === 10 ? 2 : 1 };
+  }
+
+  return {};
 }

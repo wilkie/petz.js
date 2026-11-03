@@ -1367,6 +1367,60 @@ static void __cdecl __far __loadds extremes(void __far *sprite, void __far *para
     say(" %lu\r\n", *(unsigned long __far *)MK_FP(traceData, 0x28ba));
 }
 
+/* And its reflex `HandleCatSeesMouse` (slot `0x134`), each call kept
+ * whole: the seed; the mouse's (kin 0x1b) state, or -1 without one, and its
+ * target point; the cat's; the stage (`ds:2ba6` on); `+0x33bc`; its state,
+ * global state, `+0x35a4`, `+0x35d6` and `+0x35b6`; and its brains and
+ * centres, by pairs. After, on a line of its own (`saw`), the global state
+ * it asked and the seed as it did, where it did (else its global state and
+ * the seed after), `+0x35a4`, `+0x35b6`, `+0x33bc`, and how many times it
+ * turned its head (`SetHeadTracking`, slot `0xe0`). */
+static REFLEX seeMouse;
+
+static void __cdecl __far __loadds seeing(void __far *sprite, void __far *params)
+{
+    unsigned char __far *cat = sprite;
+    unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+    unsigned char __far *mouse = ((GETKIN)ordinal(18))(cat, 0x1b);
+    long point = mouse ? ((TARGETPT)ordinal(10))(mouse, 0) : 0;
+    long at = ((TARGETPT)ordinal(10))(cat, 0);
+    int state = -1;
+    int was = looked;
+    int b;
+
+    if (mouse) {
+        unsigned char __far *machine = mouse + 0x2518;
+
+        state = (*(CURSTATE __far *)(*(unsigned char __far *__far *)machine + 8))(machine);
+    }
+
+    say("mouse %lu %d %d %d %d %d", *(unsigned long __far *)MK_FP(traceData, 0x28ba), state,
+        (int)point, (int)(point >> 16), (int)at, (int)(at >> 16));
+
+    for (b = 0; b < 4; b++) {
+        say(" %d", *(int __far *)MK_FP(traceData, 0x2ba6 + 2 * b));
+    }
+
+    say(" %d %d %d %d %d %d", *(int __far *)(cat + 0x33bc), *(int __far *)(cat + 0x2552),
+        *(int __far *)(global + 0x3a), *(int __far *)(cat + 0x35a4),
+        *(int __far *)(cat + 0x35d6), *(int __far *)(cat + 0x35b6));
+
+    for (b = 0; b < 12; b++) {
+        say(" %d %d", *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a),
+            *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42));
+    }
+
+    say("\r\n");
+    keeping = 1;
+    seeMouse(sprite, params);
+    global = *(unsigned char __far *__far *)(cat + 0x2fba);
+    say("saw %d %lu %d %d %d %d\r\n", keeping == 2 ? keptGlobal : *(int __far *)(global + 0x3a),
+        keeping == 2 ? keptSeed : *(unsigned long __far *)MK_FP(traceData, 0x28ba),
+        *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35b6), *(int __far *)(cat + 0x33bc),
+        looked - was);
+    keeping = 0;
+}
+
 static void install(unsigned char __far *cat)
 {
     unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
@@ -1399,6 +1453,8 @@ static void install(unsigned char __far *cat)
     *(REFLEX *)(table + 0x128) = wiggling;
     extreme = *(REFLEX *)(table + 0x130);
     *(REFLEX *)(table + 0x130) = extremes;
+    seeMouse = *(REFLEX *)(table + 0x134);
+    *(REFLEX *)(table + 0x134) = seeing;
     *(void __far *__far *)cat = table;
 
     _fmemcpy(globalTable, *(void __far *__far *)global, sizeof globalTable);
@@ -2367,6 +2423,13 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int *)(params + 0x1e) = 0;
             *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = x;
             *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) = y;
+        }
+
+        /* And where it asks (262144), every 30 frames, `+0x33bc` cleared, as
+         * a new global state clears it, that it may see the mouse again
+         * (`HandleCatSeesMouse`). */
+        if (forcing & 262144L && cat && n % 30 == 0) {
+            *(int __far *)(cat + 0x33bc) = 0;
         }
 
         /* Or, where `TRACE.TXT` asks (16), the user petting it, 300 frames

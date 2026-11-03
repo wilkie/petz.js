@@ -32,6 +32,7 @@ import {
   catzBehaviorChange,
   catzCursorWiggling,
   catzExtremeSituations,
+  catzSeesMouse,
 } from '../../src/behaviour/catz-reflexes.ts';
 
 const ROOT = process.cwd();
@@ -107,6 +108,8 @@ const TRACE_FOND_LACKING = process.env.TRACE_FOND_LACKING === '1';
 const TRACE_DIET = process.env.TRACE_DIET === '1';
 /** `TRACE_WIGGLE=1`: the cursor wiggled beside the cat, the hand up, 300 frames of each 600, for its reflex. */
 const TRACE_WIGGLE = process.env.TRACE_WIGGLE === '1';
+/** `TRACE_MOUSE=1`: every 30 frames `+0x33bc` cleared, that the cat may see the mouse again. */
+const TRACE_MOUSE = process.env.TRACE_MOUSE === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
@@ -1168,7 +1171,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1198,7 +1201,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_PET_DEEP ? 16384 : 0) |
           (TRACE_FOND_LACKING ? 32768 : 0) |
           (TRACE_DIET ? 65536 : 0) |
-          (TRACE_WIGGLE ? 131072 : 0)
+          (TRACE_WIGGLE ? 131072 : 0) |
+          (TRACE_MOUSE ? 262144 : 0)
         }\r\n`
       );
       const { runProbe } = await import(WINBOX);
@@ -1256,6 +1260,12 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       `wiggling: ${wiggles.kept} kept, ${wiggles.looked} looked at, ${wiggles.reacted} reacted to (${wiggles.how.join(' ')})`
     );
     expect(wiggles.wrong).toEqual([]);
+
+    const mice = followMice(lines);
+    console.log(
+      `seeing the mouse: ${mice.calls} calls, ${mice.out} with it out on the stage, ${mice.reacted} reacted to (${mice.how.join(' ')})`
+    );
+    expect(mice.wrong).toEqual([]);
   }, 28800000);
 });
 
@@ -1408,6 +1418,98 @@ function followWiggles(lines: string[]) {
   }
 
   return { wrong, kept, looked, reacted, how };
+}
+
+/**
+ * The cat seeing the mouse, held call by call (`catzSeesMouse`): each `mouse`
+ * line the driver wrote before the cat's reflex -- the seed, the mouse's
+ * state and point, the cat's point, the stage, `+0x33bc`, its state, global
+ * state, `+0x35a4`, `+0x35d6` and `+0x35b6`, its brains and centres by
+ * pairs -- and the `saw` line after it: the global state it asked and the
+ * seed as it did (else its global state and the seed after), `+0x35a4`,
+ * `+0x35b6`, `+0x33bc` and how often it turned its head. Its head is held
+ * only where it did not react, for its new state may turn it too.
+ */
+function followMice(lines: string[]) {
+  const wrong: string[] = [];
+  const how: number[] = [];
+  let calls = 0;
+  let out = 0;
+  let reacted = 0;
+  let v: number[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('mouse ')) {
+      v = line.split(' ').slice(1).map(Number);
+      continue;
+    }
+
+    if (!line.startsWith('saw ')) {
+      continue;
+    }
+
+    const after = line.split(' ').slice(1).map(Number);
+    const [seed, mouseState, mx, my, cx, cy, left, top, right, bottom, x33bc] = v;
+    const [state, global, x35a4, x35d6, x35b6] = v.slice(11, 16);
+    const pairs = v.slice(16, 40);
+    const mind: CatzMind = {
+      brains: pairs.filter((_, k) => k % 2 === 0),
+      centres: pairs.filter((_, k) => k % 2 === 1),
+      state,
+      global,
+      target: x35a4,
+      count: x35d6,
+    };
+    let at = BigInt(seed);
+    const random = (n: number) => {
+      at = (at * 22695477n + 1n) & 0xffffffffn;
+      return Number((at >> 16n) & 0x7fffn) % n;
+    };
+    const ours = catzSeesMouse(
+      mind,
+      {
+        state: mouseState,
+        at: { x: mx, y: my },
+        point: { x: cx, y: cy },
+        stage: { left, top, right, bottom },
+        x33bc,
+      },
+      random
+    );
+    const reacting = ours.global !== undefined;
+    const said = [
+      ours.global ?? global,
+      Number(at),
+      reacting ? 0x1b : x35a4,
+      ours.x35b6 ?? x35b6,
+      reacting ? 1 : x33bc,
+      reacting ? after[5] : Number(ours.head ?? false),
+    ];
+
+    if (said.join(' ') !== after.join(' ')) {
+      wrong.push(`mouse seed ${seed}: ${said.join(' ')} not ${after.join(' ')}`);
+    }
+
+    calls++;
+
+    if (
+      mouseState !== 1 &&
+      mouseState !== -1 &&
+      mx >= left &&
+      mx <= right &&
+      my >= top &&
+      my <= bottom
+    ) {
+      out++;
+    }
+
+    if (reacting) {
+      reacted++;
+      how.push(ours.global!);
+    }
+  }
+
+  return { wrong, calls, out, reacted, how };
 }
 
 /** A double, from its four words, low first, as the trace writes them. */
