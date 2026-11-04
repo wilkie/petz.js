@@ -32,6 +32,7 @@ import {
   catzBehaviorChange,
   catzCursorWiggling,
   catzExtremeSituations,
+  catzPurring,
   catzScruff,
   catzSeesMouse,
 } from '../../src/behaviour/catz-reflexes.ts';
@@ -1276,6 +1277,19 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       `scruffed: ${scruffs.calls} calls with a button down, ${scruffs.dangled} picked up`
     );
     expect(scruffs.wrong).toEqual([]);
+
+    const purrs = lines.filter((line) => line.startsWith('purr '));
+    const purrsWrong = purrs.flatMap((line) => {
+      const [was, asked, now, after] = line.split(' ').slice(1).map(Number);
+      const ours = catzPurring(was, asked);
+      return ours.x3570 === now && ours.x3572 === after
+        ? []
+        : [`purr ${was} ${asked}: ${ours.x3570} ${ours.x3572} not ${now} ${after}`];
+    });
+    console.log(
+      `purring: ${purrs.length} asked (${[1, 2, 3, 4].map((k) => purrs.filter((line) => line.split(' ')[2] === String(k)).length).join(' ')} of 1 to 4)`
+    );
+    expect(purrsWrong).toEqual([]);
   }, 28800000);
 });
 

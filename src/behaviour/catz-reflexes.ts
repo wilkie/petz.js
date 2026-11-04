@@ -365,3 +365,42 @@ export function catzScruff(
     outOfBasket: state >= 73 && state <= 76,
   };
 }
+
+/** The purrs, louder by 1 and softer by 2 (`HandlePurring`'s switch). */
+const CATZ_PURRS: Record<number, [number, number]> = {
+  0x9c: [0x9d, 0x9c],
+  0x9d: [0x9e, 0x9c],
+  0x9e: [0x99, 0x9d],
+  0x99: [0x9a, 0x9e],
+  0x9a: [0x9b, 0x99],
+  0x9b: [0x99, 0x9a],
+};
+
+/**
+ * Purring (`HandlePurring`, seg23:3496, the cat's slot `0x140`), as asked
+ * (`+0x3572`): 0, nothing; 4, the purr playing (`+0x3570`) stopped with
+ * 0xe4 and none (-1), still asked; else the sound stopped and -- none
+ * playing, asked 1, 0xe6 and 0x9c, else nothing -- 1 the next purr, 2 the
+ * one before (`CATZ_PURRS`), 3 the same, queued (its slot `0x174`) and
+ * asked no more (0). It draws nothing.
+ */
+export function catzPurring(
+  x3570: number,
+  x3572: number
+): { x3570: number; x3572: number; sound?: number } {
+  if (x3572 === 0) {
+    return { x3570, x3572 };
+  }
+
+  if (x3572 === 4) {
+    return { x3570: -1, x3572, ...(x3570 !== -1 ? { sound: 0xe4 } : {}) };
+  }
+
+  if (x3570 === -1) {
+    return x3572 === 1 ? { x3570: 0x9c, x3572: 0, sound: 0xe6 } : { x3570, x3572 };
+  }
+
+  const next = CATZ_PURRS[x3570];
+  const purr = x3572 === 1 ? next?.[0] : x3572 === 2 ? next?.[1] : x3570;
+  return { x3570: purr ?? x3570, x3572: 0 };
+}

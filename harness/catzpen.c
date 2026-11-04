@@ -1472,6 +1472,24 @@ static void __cdecl __far __loadds scruffing(void __far *sprite, void __far *par
     scruff(sprite, params);
 }
 
+/* And its reflex `HandlePurring` (slot `0x140`), each call kept where
+ * something is asked of it (`+0x3572` not 0): `+0x3570` and `+0x3572`,
+ * before and after (`purr`). */
+static REFLEX purr;
+
+static void __cdecl __far __loadds purring(void __far *sprite, void __far *params)
+{
+    unsigned char __far *cat = sprite;
+    int was = *(int __far *)(cat + 0x3570), asked = *(int __far *)(cat + 0x3572);
+
+    purr(sprite, params);
+
+    if (asked) {
+        say("purr %d %d %d %d\r\n", was, asked, *(int __far *)(cat + 0x3570),
+            *(int __far *)(cat + 0x3572));
+    }
+}
+
 static void install(unsigned char __far *cat)
 {
     unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
@@ -1508,6 +1526,8 @@ static void install(unsigned char __far *cat)
     *(REFLEX *)(table + 0x134) = seeing;
     scruff = *(REFLEX *)(table + 0x120);
     *(REFLEX *)(table + 0x120) = scruffing;
+    purr = *(REFLEX *)(table + 0x140);
+    *(REFLEX *)(table + 0x140) = purring;
     *(void __far *__far *)cat = table;
 
     _fmemcpy(globalTable, *(void __far *__far *)global, sizeof globalTable);
