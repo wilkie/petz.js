@@ -33,6 +33,7 @@ export const CATZ_STATE = {
   snagPouncing: 8,
   snagging: 9,
   postSnagging: 10,
+  dangling: 33,
   postDangling: 34,
   sniffMouseHole: 11,
   alignToEat: 38,
@@ -112,6 +113,10 @@ export interface CatzStateWorld {
   point?: { x: number; y: number };
   kin?: CatzBox;
   cursor?: CatzBox;
+
+  /** Dangling: the button pressed and held (`PetParams` `+0xa`, `+0xc`), and the mouse's (kin 0x1b) state. */
+  buttons?: { left: number; right: number };
+  mouseState?: number;
 
   /** Whether the state is being entered. */
   enter?: boolean;
@@ -883,6 +888,8 @@ export function catzStateTick(
         moment: catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random),
         global: 8,
       });
+    case CATZ_STATE.dangling:
+      return catzDangling(mind, world, random);
     case CATZ_STATE.postDangling:
       return catzPostDangling(mind, world, random);
     case CATZ_STATE.lazyWatch: {
@@ -4174,4 +4181,91 @@ function catzSprayed(
   tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random);
   tick.global = 8;
   return tick;
+}
+
+/**
+ * Dangling (33; `DoDangling`, seg23:4129), picked up by the scruff. Entering,
+ * it lets go (its slot `0x9c` 2), the cursor jumps to it and turns neutral,
+ * a sound (9), 0x2a, its words (0x753d, 0x17, 0x756f), its fudger
+ * (`+0x1516`) a speed of 1 or 2 one time in two, else -3 or -2, its head let
+ * go, its count (`+0x3502`) 0 and `+0x9e` 5000. Each tick, the button neither
+ * pressed nor held (`PetParams` `+0xa`, `+0xc`): no longer held (`+0xfc` 0), it lets go, and
+ * -- in the Adoption Kit (`+0xc4`), over its basket (within 20 across, 0 to
+ * 150 above, by its slot `0x3cc`) in pose 0x5c, it drops in (global 22,
+ * `+0x33be` 4, `+0x35fc` 1) -- falls (34). Else its script done: afraid
+ * (behaviour 17) nine times in ten; independent (brain 2, 50 or more) nine
+ * times in ten; inclined to behaviour 26 under half what its energy leaves
+ * of 100, 0x2a6; then afraid, independent past 10 counted, or the mouse in
+ * its state 6, one time in two a sound (11), 0xdc and 0x89; else independent
+ * or past 10, three times in ten a sound (11), 0xdf and 0x88; else 0x2b --
+ * its count up one each way. And each tick, it is drawn hung from the
+ * cursor, ball 0x24 under it.
+ */
+function catzDangling(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number
+): CatzStateTick {
+  const percent = () => random(101);
+  const tick: CatzStateTick = { energy: mind.brains[CATZ_BRAIN.energy], count: world.count };
+  const push = (...actions: number[]) => {
+    tick.pushes = actions;
+    tick.pushed = actions[0];
+    return tick;
+  };
+
+  if (world.enter) {
+    tick.sound = catzSound(mind, 9, random);
+    percent();
+    random(2);
+    tick.count = 0;
+    return push(0x2a);
+  }
+
+  if (!world.buttons) {
+    tick.unread = true;
+    return tick;
+  }
+
+  if (!world.buttons.left && !world.buttons.right) {
+    if (world.c4) {
+      tick.unread = true;
+      return tick;
+    }
+
+    tick.state = CATZ_STATE.postDangling;
+    return tick;
+  }
+
+  const afraid = catzBehavior(mind, 17, random) !== 0 && percent() < 90;
+  const independent = mind.brains[CATZ_BRAIN.independence] >= 50 && percent() < 90;
+  const pushes: number[] = [];
+
+  if (
+    catzBehavior(mind, 26, random) !== 0 &&
+    percent() < Math.trunc((100 - mind.brains[CATZ_BRAIN.energy]) / 2)
+  ) {
+    pushes.push(0x2a6);
+  }
+
+  const count = world.count ?? 0;
+  tick.count = count + 1;
+
+  if (afraid || (independent && count > 10) || world.mouseState === 6) {
+    if (percent() < 50) {
+      tick.sound = catzSound(mind, 11, random);
+    }
+
+    return push(...pushes, 0xdc, 0x89);
+  }
+
+  if (independent || count > 10) {
+    if (percent() < 30) {
+      tick.sound = catzSound(mind, 11, random);
+    }
+
+    return push(...pushes, 0xdf, 0x88);
+  }
+
+  return push(...pushes, 0x2b);
 }

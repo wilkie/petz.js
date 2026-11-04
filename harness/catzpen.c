@@ -1158,6 +1158,9 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         say(" %d %d %d", *(int __far *)(cat + 0x35b4), *(int __far *)(cat + 0x358c),
             *(int __far *)(cat + 0x3574));
 
+        /* And the buttons (`PetParams` `+0xa`, `+0xc`), which dangling asks. */
+        say(" %d %d", *(int *)(params + 0xa), *(int *)(params + 0xc));
+
         say("\r\n");
         outside = outsideGlobal = 0;
     }
@@ -2484,8 +2487,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         /* Or, where it asks (524288), the user picking it up by the
          * scruff, each 400 frames: its first the cursor put on the cat's
-         * target point and the button pressed (`+0xa`); held 80 frames, the
-         * cursor lifted 2 a frame from where it was; then let go. */
+         * target point and the button pressed (`+0xa`, the press); held
+         * (`+0xc`) 80 frames, the cursor lifted 2 a frame from where it was;
+         * then let go. */
         if (forcing & 524288L && cat) {
             static int grabX, grabY;
             int t = n % 400;
@@ -2499,7 +2503,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
             *(int *)(params + 0x46) = 0;
             *(int *)(params + 0x1e) = 0;
-            *(int *)(params + 0xa) = t < 80;
+            *(int *)(params + 0xa) = t == 0;
+            *(int *)(params + 0xc) = t > 0 && t < 80;
             *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = grabX;
             *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) =
                 grabY - (t < 80 ? 2 * t : 160);

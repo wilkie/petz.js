@@ -1590,17 +1590,17 @@ function double(words: number[]): number {
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
   38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55, 44, 45, 46,
-  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69, 70, 71, 81, 63, 64,
+  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69, 70, 71, 81, 63, 64, 33,
 ]);
 
 /** The states whose entering is reimplemented, and those of them whose entered ticks are held only by what they push, their scripts popped at once. */
 const ENTERED = new Set([
   3, 4, 8, 22, 24, 31, 32, 42, 44, 45, 46, 48, 49, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65,
-  67, 69, 70, 71, 81, 63, 64, 61, 55, 26,
+  67, 69, 70, 71, 81, 63, 64, 61, 55, 26, 33,
 ]);
 const ENTERED_PUSHES = new Set([
   3, 4, 8, 24, 31, 42, 44, 45, 48, 52, 54, 58, 59, 60, 72, 76, 80, 77, 78, 79, 65, 67, 69, 70, 71,
-  81, 55, 26,
+  81, 55, 26, 33,
 ]);
 
 /**
@@ -1875,6 +1875,8 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           released: b[117] === undefined ? undefined : b[117] !== 0,
           x35b6: b[118],
           x35b4: b[260],
+          buttons: b[263] === undefined ? undefined : { left: b[263], right: b[264] },
+          mouseState: b[240],
           cursorAt: b[119] === undefined ? undefined : { x: b[119], y: b[120] },
           x35d4: b[121],
           ball7: b[160] === undefined ? undefined : { x: b[160], y: b[161] },

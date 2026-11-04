@@ -291,7 +291,7 @@ export function catzSeesMouse(
 
 /** What picking the cat up by the scruff asks (`HandleScruff`). */
 export interface CatzScruff {
-  /** The buttons (`PetParams` `+0xa`, `+0xc`), and whether the user holds anything already (the apt root's slot `0x20`). */
+  /** The button pressed and held (`PetParams` `+0xa`, `+0xc`), and whether the user holds anything already (the apt root's slot `0x20`). */
   left: boolean;
   right: boolean;
   holding: boolean;
@@ -319,7 +319,7 @@ function within(box: CatzBox, at: { x: number; y: number }) {
 
 /**
  * Picked up by the scruff (`HandleScruff`, seg23:3e6e, the cat's slot
- * `0x120`): the left button down (`PetParams` `+0xa`), not the right
+ * `0x120`): the button pressed (`PetParams` `+0xa`), not held already
  * (`+0xc`), nothing held, and the cursor strictly within 100 of ball 2 where
  * it is drawn (its ballz' slot `0x38`): not hiding (`+0x9e` 0xb1e0) within
  * kin 0x22; in the Adoption Kit (global 22) not jumping or dropping in (77,
