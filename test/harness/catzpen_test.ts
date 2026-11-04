@@ -32,6 +32,7 @@ import {
   catzBehaviorChange,
   catzCursorWiggling,
   catzExtremeSituations,
+  catzScruff,
   catzSeesMouse,
 } from '../../src/behaviour/catz-reflexes.ts';
 
@@ -110,6 +111,8 @@ const TRACE_DIET = process.env.TRACE_DIET === '1';
 const TRACE_WIGGLE = process.env.TRACE_WIGGLE === '1';
 /** `TRACE_MOUSE=1`: every 30 frames `+0x33bc` cleared, that the cat may see the mouse again. */
 const TRACE_MOUSE = process.env.TRACE_MOUSE === '1';
+/** `TRACE_SCRUFF=1`: each 400 frames the cat picked up by the scruff -- the button down on its target point, the cursor lifted 80 frames, and let go. */
+const TRACE_SCRUFF = process.env.TRACE_SCRUFF === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
@@ -1171,7 +1174,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1202,7 +1205,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_FOND_LACKING ? 32768 : 0) |
           (TRACE_DIET ? 65536 : 0) |
           (TRACE_WIGGLE ? 131072 : 0) |
-          (TRACE_MOUSE ? 262144 : 0)
+          (TRACE_MOUSE ? 262144 : 0) |
+          (TRACE_SCRUFF ? 524288 : 0)
         }\r\n`
       );
       const { runProbe } = await import(WINBOX);
@@ -1266,6 +1270,12 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       `seeing the mouse: ${mice.calls} calls, ${mice.out} with it out on the stage, ${mice.reacted} reacted to (${mice.how.join(' ')})`
     );
     expect(mice.wrong).toEqual([]);
+
+    const scruffs = followScruffs(lines);
+    console.log(
+      `scruffed: ${scruffs.calls} calls with a button down, ${scruffs.dangled} picked up`
+    );
+    expect(scruffs.wrong).toEqual([]);
   }, 28800000);
 });
 
@@ -1510,6 +1520,63 @@ function followMice(lines: string[]) {
   }
 
   return { wrong, calls, out, reacted, how };
+}
+
+/**
+ * Picked up by the scruff, held call by call (`catzScruff`): each `scruff`
+ * line the driver wrote before the cat's reflex, a button down -- the
+ * buttons, ball 2 where it is drawn, the cursor's point, `+0x9e`, its target
+ * point, kin 0x22's draw rectangle, its state, global state, `+0x35fc`,
+ * `+0x35fa`, `+0x35f6`, `+0x35f8` and `+0xfc` -- and the `scruffed` line
+ * after it: its state, `+0xfc` and `+0x35f6`. Nothing held, as in the pen.
+ */
+function followScruffs(lines: string[]) {
+  const wrong: string[] = [];
+  let calls = 0;
+  let dangled = 0;
+  let v: number[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('scruff ')) {
+      v = line.split(' ').slice(1).map(Number);
+      continue;
+    }
+
+    if (!line.startsWith('scruffed ')) {
+      continue;
+    }
+
+    const after = line.split(' ').slice(1).map(Number);
+    const [left, right, bx, by, cx, cy, x9e, px, py, hl, ht, hr, hb] = v;
+    const [state, global, x35fc, x35fa, x35f6, x35f8, xfc] = v.slice(13);
+    const ours = catzScruff(
+      { brains: [], state, global, target: 0, count: 0 },
+      {
+        left: left !== 0,
+        right: right !== 0,
+        holding: false,
+        ball: { x: bx, y: by },
+        cursor: { x: cx, y: cy },
+        point: { x: px, y: py },
+        x9e,
+        hidden: { left: hl, top: ht, right: hr, bottom: hb },
+        x35fc,
+        x35fa,
+        x35f6,
+        x35f8,
+      }
+    );
+    const said = [ours.dangles ? 33 : state, ours.dangles ? 1 : xfc, ours.x35f6 ?? x35f6];
+
+    if (said.join(' ') !== after.join(' ')) {
+      wrong.push(`scruff ${v.join(' ')}: ${said.join(' ')} not ${after.join(' ')}`);
+    }
+
+    calls++;
+    dangled += Number(ours.dangles);
+  }
+
+  return { wrong, calls, dangled };
 }
 
 /** A double, from its four words, low first, as the trace writes them. */

@@ -1421,6 +1421,54 @@ static void __cdecl __far __loadds seeing(void __far *sprite, void __far *params
     keeping = 0;
 }
 
+/* And its reflex `HandleScruff` (slot `0x120`), each call kept whole --
+ * only where the button is down (`PetParams` `+0xa` or `+0xc`), to keep the
+ * trace short: `+0xa`, `+0xc`; ball 2 where it is drawn (its ballz' slot
+ * `0x38` on its draw rectangle and frame, `+0x678`, as the reflex asks);
+ * the cursor's point (`+0x5a`); `+0x9e`; its target point; kin 0x22's draw
+ * rectangle; its state, global state, `+0x35fc`, `+0x35fa`, `+0x35f6`,
+ * `+0x35f8` and `+0xfc`. After (`scruffed`): its state, `+0xfc` and
+ * `+0x35f6`. */
+typedef void(__cdecl __far *BALLAT)(void __far *ballz, int __far *at, void __far *frame,
+                                    int __far *rect, int ball);
+static REFLEX scruff;
+
+static void __cdecl __far __loadds scruffing(void __far *sprite, void __far *params)
+{
+    unsigned char __far *cat = sprite;
+    unsigned char __far *p = params;
+
+    if (*(int __far *)(p + 0xa) || *(int __far *)(p + 0xc)) {
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+        unsigned char __far *ballz = *(unsigned char __far *__far *)(cat + 0x242);
+        unsigned char __far *hide = ((GETKIN)ordinal(18))(cat, 0x22);
+        long point = ((TARGETPT)ordinal(10))(cat, 0);
+        int rect[4], hidden[4] = {0, 0, 0, 0}, at[2] = {0, 0};
+
+        ((DRAWRECT)ordinal(15))(rect, cat, 0);
+        (*(BALLAT __far *)(*(unsigned char __far *__far *)ballz + 0x38))(ballz, at, cat + 0x678,
+                                                                          rect, 2);
+
+        if (hide) {
+            ((DRAWRECT)ordinal(15))(hidden, hide, 0);
+        }
+
+        say("scruff %d %d %d %d %d %d %d %d %d", *(int __far *)(p + 0xa), *(int __far *)(p + 0xc),
+            at[0], at[1], *(int __far *)(p + 0x5a), *(int __far *)(p + 0x5c),
+            *(unsigned __far *)(cat + 0x9e), (int)point, (int)(point >> 16));
+        say(" %d %d %d %d %d %d %d %d %d %d %d\r\n", hidden[0], hidden[1], hidden[2], hidden[3],
+            *(int __far *)(cat + 0x2552), *(int __far *)(global + 0x3a),
+            *(int __far *)(cat + 0x35fc), *(int __far *)(cat + 0x35fa),
+            *(int __far *)(cat + 0x35f6), *(int __far *)(cat + 0x35f8), *(int __far *)(cat + 0xfc));
+        scruff(sprite, params);
+        say("scruffed %d %d %d\r\n", *(int __far *)(cat + 0x2552), *(int __far *)(cat + 0xfc),
+            *(int __far *)(cat + 0x35f6));
+        return;
+    }
+
+    scruff(sprite, params);
+}
+
 static void install(unsigned char __far *cat)
 {
     unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
@@ -1455,6 +1503,8 @@ static void install(unsigned char __far *cat)
     *(REFLEX *)(table + 0x130) = extremes;
     seeMouse = *(REFLEX *)(table + 0x134);
     *(REFLEX *)(table + 0x134) = seeing;
+    scruff = *(REFLEX *)(table + 0x120);
+    *(REFLEX *)(table + 0x120) = scruffing;
     *(void __far *__far *)cat = table;
 
     _fmemcpy(globalTable, *(void __far *__far *)global, sizeof globalTable);
@@ -2430,6 +2480,29 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * (`HandleCatSeesMouse`). */
         if (forcing & 262144L && cat && n % 30 == 0) {
             *(int __far *)(cat + 0x33bc) = 0;
+        }
+
+        /* Or, where it asks (524288), the user picking it up by the
+         * scruff, each 400 frames: its first the cursor put on the cat's
+         * target point and the button pressed (`+0xa`); held 80 frames, the
+         * cursor lifted 2 a frame from where it was; then let go. */
+        if (forcing & 524288L && cat) {
+            static int grabX, grabY;
+            int t = n % 400;
+
+            if (t == 0) {
+                long point = ((TARGETPT)ordinal(10))(cat, 0);
+
+                grabX = (int)point;
+                grabY = (int)(point >> 16);
+            }
+
+            *(int *)(params + 0x46) = 0;
+            *(int *)(params + 0x1e) = 0;
+            *(int *)(params + 0xa) = t < 80;
+            *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = grabX;
+            *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) =
+                grabY - (t < 80 ? 2 * t : 160);
         }
 
         /* Or, where `TRACE.TXT` asks (16), the user petting it, 300 frames

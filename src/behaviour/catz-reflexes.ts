@@ -288,3 +288,80 @@ export function catzSeesMouse(
 
   return {};
 }
+
+/** What picking the cat up by the scruff asks (`HandleScruff`). */
+export interface CatzScruff {
+  /** The buttons (`PetParams` `+0xa`, `+0xc`), and whether the user holds anything already (the apt root's slot `0x20`). */
+  left: boolean;
+  right: boolean;
+  holding: boolean;
+
+  /** Ball 2 where it is drawn, the cursor's point (`PetParams` `+0x5a`), and its own target point. */
+  ball: { x: number; y: number };
+  cursor: { x: number; y: number };
+  point: { x: number; y: number };
+
+  /** Hiding (`+0x9e` 0xb1e0) and kin 0x22's draw rectangle. */
+  x9e: number;
+  hidden: CatzBox;
+
+  /** In the Adoption Kit: `+0x35fc`, `+0x35fa`, its basket (`+0x35f6`) and `+0x35f8`. */
+  x35fc: number;
+  x35fa: number;
+  x35f6: number;
+  x35f8: number;
+}
+
+/** Strictly within a rectangle, its edges out (`XPointInXRect`, seg48:1272). */
+function within(box: CatzBox, at: { x: number; y: number }) {
+  return box.left < at.x && at.x < box.right && box.top < at.y && at.y < box.bottom;
+}
+
+/**
+ * Picked up by the scruff (`HandleScruff`, seg23:3e6e, the cat's slot
+ * `0x120`): the left button down (`PetParams` `+0xa`), not the right
+ * (`+0xc`), nothing held, and the cursor strictly within 100 of ball 2 where
+ * it is drawn (its ballz' slot `0x38`): not hiding (`+0x9e` 0xb1e0) within
+ * kin 0x22; in the Adoption Kit (global 22) not jumping or dropping in (77,
+ * 78), `+0x35fc` clear, and `+0x35fa` clear unless climbing out (76) -- its
+ * basket (`+0x35f6`) `+0x35f8` where none, out of it (slot `0x3d8`) from 73
+ * to 76, `+0x35fe` 0, its slot `0xfc`, the basket marked (`+0x3614`) and the
+ * root's apt 0x18 shown so (`SetCond` 2) -- it lets go (slot `0x9c` 2), is
+ * held (`+0xfc` 1) and dangles (33). It draws nothing.
+ */
+export function catzScruff(
+  mind: CatzMind,
+  scruff: CatzScruff
+): { dangles: boolean; x35f6?: number; outOfBasket?: boolean } {
+  const { ball } = scruff;
+
+  if (!scruff.left || scruff.right || scruff.holding) {
+    return { dangles: false };
+  }
+
+  const box = { left: ball.x - 100, top: ball.y - 100, right: ball.x + 100, bottom: ball.y + 100 };
+
+  if (!within(box, scruff.cursor)) {
+    return { dangles: false };
+  }
+
+  if (scruff.x9e === 0xb1e0 && within(scruff.hidden, scruff.point)) {
+    return { dangles: false };
+  }
+
+  if (mind.global !== 22) {
+    return { dangles: true };
+  }
+
+  const { state } = mind;
+
+  if (state === 77 || state === 78 || scruff.x35fc !== 0 || (scruff.x35fa !== 0 && state !== 76)) {
+    return { dangles: false };
+  }
+
+  return {
+    dangles: true,
+    x35f6: scruff.x35f6 === -1 ? scruff.x35f8 : scruff.x35f6,
+    outOfBasket: state >= 73 && state <= 76,
+  };
+}
