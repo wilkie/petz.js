@@ -1161,6 +1161,10 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         /* And the buttons (`PetParams` `+0xa`, `+0xc`), which dangling asks. */
         say(" %d %d", *(int *)(params + 0xa), *(int *)(params + 0xc));
 
+        /* And where the Adoption Kit is (`PetParams` `+0xdc`, `+0xde`), from
+         * which its baskets lie (`GetBasketLocation`). */
+        say(" %d %d", *(int *)(params + 0xdc), *(int *)(params + 0xde));
+
         say("\r\n");
         outside = outsideGlobal = 0;
     }
@@ -1555,9 +1559,22 @@ static void __cdecl __far __loadds messaging(void __far *sprite, void __far *par
         long sprayAt = spray ? ((TARGETPT)ordinal(10))(spray, 0) : 0;
         long fleaAt = flea ? ((TARGETPT)ordinal(10))(flea, 0) : 0;
 
+        unsigned shelf = 0;
+
         ((DRAWRECT)ordinal(15))(rect, cat, 0);
-        say(" %d %d %d %d %d %d %d %d\r\n", rect[0], rect[1], rect[2], rect[3], (int)sprayAt,
+        say(" %d %d %d %d %d %d %d %d", rect[0], rect[1], rect[2], rect[3], (int)sprayAt,
             (int)(sprayAt >> 16), (int)fleaAt, (int)(fleaAt >> 16));
+
+        /* And, for the Adoption Kit, which kinds of sprite (0 to 15) are on
+         * the shelf, by bits, `+0x35fa`, `+0x35f6` and `+0x35f8`. */
+        for (b = 0; b < 16; b++) {
+            if (((INSHELF)ordinal(38))(cat, b)) {
+                shelf |= 1u << b;
+            }
+        }
+
+        say(" %u %d %d %d\r\n", shelf, *(int __far *)(cat + 0x35fa), *(int __far *)(cat + 0x35f6),
+            *(int __far *)(cat + 0x35f8));
     }
 
     keeping = 1;
@@ -2553,6 +2570,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) = 250;
         }
 
+        /* And where it asks (8388608), `PetParams` `+0xc4` set, as the
+         * Adoption Kit's program has it, for its messages and baskets. */
+        if (forcing & 8388608L) {
+            *(int *)(params + 0xc4) = 1;
+        }
+
         /* And where it asks (2097152), its fear (brain 7) held at 70, and
          * (4194304) its age (brain 11) at 0 -- afraid, and as a cat of the
          * Adoption Kit is, for the branches they take. */
@@ -2621,8 +2644,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int *)(params + 0xa) = t == 0;
             *(int *)(params + 0xc) = t > 0 && t < 80;
             *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = grabX;
-            *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) =
-                grabY - (t < 80 ? 2 * t : 160);
+            /* In the Adoption Kit, lifted 1 a frame, to be let go over its
+             * basket, within 150. */
+            {
+                int lift = *(int *)(params + 0xc4) ? 1 : 2;
+
+                *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) =
+                    grabY - lift * (t < 80 ? t : 80);
+            }
         }
 
         /* And where it asks (1048576), every 50 frames a message left for
@@ -2634,7 +2663,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         if (forcing & 1048576L && cat && n % 50 == 25) {
             static const int sent[] = {1,  2,  3,  4,  5,  6,  7,  8,  9, 10,
                                        11, 12, 13, 15, 16, 17, 18, 19, 21};
+            static const int kit[] = {28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42};
             int message = sent[n / 50 % (sizeof sent / sizeof sent[0])];
+
+            /* In the Adoption Kit, every other time one of its own (28 to
+             * 42) instead. */
+            if (*(int *)(params + 0xc4) && n / 50 % 2) {
+                message = kit[n / 100 % (sizeof kit / sizeof kit[0])];
+            }
 
             /* The spray (16, kin 2) and flea spray (17, kin 3), where there
              * is one, first taken into the pen and put just to the cat's

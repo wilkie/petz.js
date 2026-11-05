@@ -32,6 +32,7 @@ import {
   catzBehaviorChange,
   catzCursorWiggling,
   catzExtremeSituations,
+  catzKitMessage,
   catzMessage,
   catzPurring,
   catzScruff,
@@ -121,6 +122,8 @@ const TRACE_MESSAGES = process.env.TRACE_MESSAGES === '1';
 const TRACE_FEARFUL = process.env.TRACE_FEARFUL === '1';
 /** `TRACE_AGELESS=1`: the cat's age held at 0, as an Adoption Kit cat's. */
 const TRACE_AGELESS = process.env.TRACE_AGELESS === '1';
+/** `TRACE_KIT_PARAMS=1`: `PetParams` `+0xc4` set, as the Adoption Kit's program has it. */
+const TRACE_KIT_PARAMS = process.env.TRACE_KIT_PARAMS === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
@@ -1182,7 +1185,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FEARFUL ? '-FEARFUL' : ''}${TRACE_AGELESS ? '-AGELESS' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FEARFUL ? '-FEARFUL' : ''}${TRACE_AGELESS ? '-AGELESS' : ''}${TRACE_KIT_PARAMS ? '-C4' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1217,7 +1220,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_SCRUFF ? 524288 : 0) |
           (TRACE_MESSAGES ? 1048576 : 0) |
           (TRACE_FEARFUL ? 2097152 : 0) |
-          (TRACE_AGELESS ? 4194304 : 0)
+          (TRACE_AGELESS ? 4194304 : 0) |
+          (TRACE_KIT_PARAMS ? 8388608 : 0)
         }\r\n`
       );
       const { runProbe } = await import(WINBOX);
@@ -1619,7 +1623,8 @@ function followScruffs(lines: string[]) {
  * `PetParams` `+0xc4`, its state, global state, `+0x35a4`, `+0x35a6`,
  * `+0x35d6`, `+0x35fc`, `+0x35b2`, where it is placed, the mouse's state,
  * its brains and centres by pairs, whether the treat is shelved, its draw
- * rectangle and the spray's and flea spray's points -- and the `messaged` line after: the
+ * rectangle and the spray's and flea spray's points, and, for the Adoption
+ * Kit, the shelf by bits, `+0x35fa`, `+0x35f6` and `+0x35f8` -- and the `messaged` line after: the
  * global state it asked and the seed as it did (else its global state and
  * the seed after), its state, `+0x35a4`, `+0x35d6`, `+0x35b0`, `+0x35b2`,
  * `+0x35b4`, and its head's turns and pushes. A new global state's entering
@@ -1662,11 +1667,11 @@ function followMessages(lines: string[]) {
       return Number((at >> 16n) & 0x7fffn) % n;
     };
 
-    if (c4 !== 0 || x35fc !== 0) {
+    if (x35fc !== 0) {
       continue;
     }
 
-    const ours = catzMessage(
+    const ours = (c4 !== 0 ? catzKitMessage : catzMessage)(
       mind,
       message,
       {
@@ -1683,6 +1688,14 @@ function followMessages(lines: string[]) {
               rect: { left: v[37], top: v[38], right: v[39], bottom: v[40] },
               spray: v[41] || v[42] ? { x: v[41], y: v[42] } : undefined,
               flea: v[43] || v[44] ? { x: v[43], y: v[44] } : undefined,
+            }),
+        ...(v[48] === undefined
+          ? {}
+          : {
+              shelved: [...Array(16).keys()].map((k) => ((v[45] >> k) & 1) !== 0),
+              x35fa: v[46],
+              x35f6: v[47],
+              x35f8: v[48],
             }),
       },
       random
@@ -2040,6 +2053,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
                   ca: b[238],
                   rootCount: b[239],
                   mouseState: b[240],
+                  origin: b[266] === undefined ? undefined : { x: b[265], y: b[266] },
                 },
           cursorAbout: b[90] !== 0,
           dream:

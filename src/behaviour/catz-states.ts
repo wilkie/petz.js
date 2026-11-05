@@ -241,7 +241,19 @@ export interface CatzKit {
   ca: number;
   rootCount: number;
   mouseState: number;
+
+  /** Where the Kit is (`PetParams` `+0xdc`, `+0xde`), from which its baskets lie. */
+  origin?: { x: number; y: number };
 }
+
+/** Where each basket of the Adoption Kit lies from the Kit (`GetBasketLocation`, seg13:113b, a jump table at seg13:12b5). */
+export const CATZ_BASKETS = [
+  { x: 0xe0, y: 0x113 },
+  { x: 0x138, y: 0x11f },
+  { x: 0x191, y: 0x124 },
+  { x: 0x1e9, y: 0x11a },
+  { x: 0x242, y: 0x119 },
+];
 
 /** The cat's bottle (kin 0xf), as the tick begins. */
 export interface CatzBottle {
@@ -4242,8 +4254,21 @@ function catzDangling(
 
   if (!world.buttons.left && !world.buttons.right) {
     if (world.c4) {
-      tick.unread = true;
-      return tick;
+      const basket = CATZ_BASKETS[world.kit?.basket ?? -1];
+      const origin = world.kit?.origin;
+
+      if (!basket || !origin || !world.point) {
+        tick.unread = true;
+        return tick;
+      }
+
+      const dx = basket.x + origin.x - world.point.x;
+      const dy = basket.y + origin.y - world.point.y;
+
+      if (Math.abs(dx) < 20 && dy > 0 && dy < 150 && world.x1500 === 0x5c) {
+        tick.global = 22;
+        return tick;
+      }
     }
 
     tick.state = CATZ_STATE.postDangling;

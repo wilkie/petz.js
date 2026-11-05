@@ -420,6 +420,12 @@ export interface CatzMessaged {
   /** Whether the treat (kin 0xb) is on the shelf (`isSpriteInShelf`). */
   treatShelved?: boolean;
 
+  /** In the Adoption Kit: whether each kind of sprite (0 to 15) is on the shelf, `+0x35fa`, and its basket (`+0x35f6`) and `+0x35f8`. */
+  shelved?: boolean[];
+  x35fa?: number;
+  x35f6?: number;
+  x35f8?: number;
+
   /** Its draw rectangle, and the spray's (kin 2) and flea spray's (kin 3) target points. */
   rect?: CatzBox;
   spray?: { x: number; y: number };
@@ -790,4 +796,71 @@ export function catzMessage(
     default:
       return undefined;
   }
+}
+
+/** The Adoption Kit's own messages (28 to 42), each the kind of sprite it asks of the shelf and the pen's message it is, off it. */
+const CATZ_KIT_MESSAGES: Record<number, [number, number]> = {
+  29: [2, 15],
+  31: [4, 7],
+  32: [5, 12],
+  33: [9, 11],
+  34: [6, 10],
+  35: [7, 9],
+  36: [8, 14],
+  38: [0xb, 5],
+  39: [0xc, 1],
+  40: [0xd, 3],
+  41: [0xf, 13],
+};
+
+/**
+ * A message in the Adoption Kit (`HandleCatAptMessages` with `PetParams`
+ * `+0xc4` set, seg23:1431 on). 19, the kit just maximized: `+0x361e`, the
+ * stage 640 by 400 or more, and in its baskets (73 to 75), the kit begun
+ * again (`+0x33be` 1, global 22). Else nothing while `+0x35fa`. Its own (28
+ * to 42) show their words (its slot `0x158`, by `PetParams` `+0xc6` and
+ * `+0xc8`), and some, their sprite off the shelf, go on as the pen's
+ * (`CATZ_KIT_MESSAGES`); 28, 30, 37 and 42 only show them. Then, in its
+ * baskets, only 22 to 26 -- a basket chosen: a sound (0xe7), it lets go,
+ * `+0x35fa` 1, its basket `+0x35f8` where none, the same cat coming out or
+ * another -- and else as the pen's (`catzMessage`). Its words, and the
+ * baskets' answers, are not reimplemented.
+ */
+export function catzKitMessage(
+  mind: CatzMind,
+  message: number,
+  seen: CatzMessaged,
+  random: (n: number) => number
+): CatzMessageDone | undefined {
+  if (message === 19 || !seen.shelved || seen.x35fa === undefined) {
+    return undefined;
+  }
+
+  if (seen.x35fa !== 0) {
+    return {};
+  }
+
+  let asked = message;
+
+  if (message >= 28 && message <= 42) {
+    const goes = CATZ_KIT_MESSAGES[message];
+
+    if (!goes || seen.shelved[goes[0]]) {
+      return {};
+    }
+
+    asked = goes[1];
+  }
+
+  const { state } = mind;
+
+  if (state === 73 || state === 74 || state === 75) {
+    return asked >= 22 && asked <= 26
+      ? undefined
+      : asked === 14
+        ? catzMessage(mind, asked, seen, random)
+        : {};
+  }
+
+  return asked >= 22 && asked <= 26 ? undefined : catzMessage(mind, asked, seen, random);
 }
