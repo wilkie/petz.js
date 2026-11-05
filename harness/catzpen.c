@@ -1490,6 +1490,64 @@ static void __cdecl __far __loadds purring(void __far *sprite, void __far *param
     }
 }
 
+/* And its reflex `HandleCatAptMessages` (slot `0x138`), each call kept
+ * where a message waits (`+0x33c0`): the seed, the message, `PetParams`
+ * `+0xc4`, its state, global state, `+0x35a4`, `+0x35a6`, `+0x35d6`,
+ * `+0x35fc`, `+0x35b2`, where it is placed (its slot `0x234` of 0x1d, asked
+ * of the slot itself, not the tick's recorder), the mouse's state (-1
+ * without one), its brains and centres by pairs, and whether the treat
+ * (kin 0xb) is on the shelf. After (`messaged`):
+ * the global state it asked and the seed as it did, where it did (else its
+ * global state and the seed after), its state, `+0x35a4`, `+0x35d6`,
+ * `+0x35b0`, `+0x35b2`, `+0x35b4`, and the head turns and pushes made. */
+static REFLEX messages;
+
+static void __cdecl __far __loadds messaging(void __far *sprite, void __far *params)
+{
+    unsigned char __far *cat = sprite;
+    unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+    unsigned char __far *mouse = ((GETKIN)ordinal(18))(cat, 0x1b);
+    int message = *(int __far *)(cat + 0x33c0);
+    int heads = looked, pushed = pushes;
+    int mouseState = -1;
+    int b;
+
+    if (!message) {
+        messages(sprite, params);
+        return;
+    }
+
+    if (mouse) {
+        unsigned char __far *machine = mouse + 0x2518;
+
+        mouseState = (*(CURSTATE __far *)(*(unsigned char __far *__far *)machine + 8))(machine);
+    }
+
+    say("message %lu %d %d %d %d %d %d %d %d %d %d %d", *(unsigned long __far *)MK_FP(traceData, 0x28ba),
+        message, *(int __far *)((unsigned char __far *)params + 0xc4),
+        *(int __far *)(cat + 0x2552), *(int __far *)(global + 0x3a),
+        *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35a6),
+        *(int __far *)(cat + 0x35d6), *(int __far *)(cat + 0x35fc),
+        *(int __far *)(cat + 0x35b2), area(cat, 0x1d), mouseState);
+
+    for (b = 0; b < 12; b++) {
+        say(" %d %d", *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a),
+            *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42));
+    }
+
+    say(" %d\r\n", ((INSHELF)ordinal(38))(cat, 0xb));
+    keeping = 1;
+    messages(sprite, params);
+    global = *(unsigned char __far *__far *)(cat + 0x2fba);
+    say("messaged %d %lu %d %d %d %d %d %d %d %d\r\n",
+        keeping == 2 ? keptGlobal : *(int __far *)(global + 0x3a),
+        keeping == 2 ? keptSeed : *(unsigned long __far *)MK_FP(traceData, 0x28ba),
+        *(int __far *)(cat + 0x2552), *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35d6),
+        *(int __far *)(cat + 0x35b0), *(int __far *)(cat + 0x35b2), *(int __far *)(cat + 0x35b4),
+        looked - heads, pushes - pushed);
+    keeping = 0;
+}
+
 static void install(unsigned char __far *cat)
 {
     unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
@@ -1528,6 +1586,8 @@ static void install(unsigned char __far *cat)
     *(REFLEX *)(table + 0x120) = scruffing;
     purr = *(REFLEX *)(table + 0x140);
     *(REFLEX *)(table + 0x140) = purring;
+    messages = *(REFLEX *)(table + 0x138);
+    *(REFLEX *)(table + 0x138) = messaging;
     *(void __far *__far *)cat = table;
 
     _fmemcpy(globalTable, *(void __far *__far *)global, sizeof globalTable);
@@ -2528,6 +2588,18 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = grabX;
             *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) =
                 grabY - (t < 80 ? 2 * t : 160);
+        }
+
+        /* And where it asks (1048576), every 50 frames a message left for
+         * it (`+0x33c0`), as the playpen leaves one where the user puts
+         * something by it: food (1, 2), water (3, 4), a treat (5, 6), catnip
+         * (7, 8), a toy (9 to 12), the milk bottle (13), the spray bottle
+         * (15), 18, the window resized (19) and the camera (21), in turn. */
+        if (forcing & 1048576L && cat && n % 50 == 25) {
+            static const int sent[] = {1, 2,  3,  4,  5,  6,  7,  8, 9,
+                                       10, 11, 12, 13, 15, 18, 19, 21};
+
+            *(int __far *)(cat + 0x33c0) = sent[n / 50 % (sizeof sent / sizeof sent[0])];
         }
 
         /* Or, where `TRACE.TXT` asks (16), the user petting it, 300 frames

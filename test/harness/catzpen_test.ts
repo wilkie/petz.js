@@ -32,6 +32,7 @@ import {
   catzBehaviorChange,
   catzCursorWiggling,
   catzExtremeSituations,
+  catzMessage,
   catzPurring,
   catzScruff,
   catzSeesMouse,
@@ -114,6 +115,8 @@ const TRACE_WIGGLE = process.env.TRACE_WIGGLE === '1';
 const TRACE_MOUSE = process.env.TRACE_MOUSE === '1';
 /** `TRACE_SCRUFF=1`: each 400 frames the cat picked up by the scruff -- the button down on its target point, the cursor lifted 80 frames, and let go. */
 const TRACE_SCRUFF = process.env.TRACE_SCRUFF === '1';
+/** `TRACE_MESSAGES=1`: every 50 frames a message left for the cat (`+0x33c0`), as the playpen leaves one: food, water, a treat, catnip, a toy, the milk bottle, the spray bottle, 18, the window resized and the camera, in turn. */
+const TRACE_MESSAGES = process.env.TRACE_MESSAGES === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
@@ -1175,7 +1178,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1207,7 +1210,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_DIET ? 65536 : 0) |
           (TRACE_WIGGLE ? 131072 : 0) |
           (TRACE_MOUSE ? 262144 : 0) |
-          (TRACE_SCRUFF ? 524288 : 0)
+          (TRACE_SCRUFF ? 524288 : 0) |
+          (TRACE_MESSAGES ? 1048576 : 0)
         }\r\n`
       );
       const { runProbe } = await import(WINBOX);
@@ -1290,6 +1294,14 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       `purring: ${purrs.length} asked (${[1, 2, 3, 4].map((k) => purrs.filter((line) => line.split(' ')[2] === String(k)).length).join(' ')} of 1 to 4)`
     );
     expect(purrsWrong).toEqual([]);
+
+    const messages = followMessages(lines);
+    console.log(
+      `messages: ${messages.calls} left, ${messages.held} held (${Object.entries(messages.how)
+        .map(([how, n]) => `${how} ${n}`)
+        .join(', ')})`
+    );
+    expect(messages.wrong).toEqual([]);
   }, 28800000);
 });
 
@@ -1591,6 +1603,104 @@ function followScruffs(lines: string[]) {
   }
 
   return { wrong, calls, dangled };
+}
+
+/**
+ * The playpen's messages, held call by call (`catzMessage`): each `message`
+ * line the driver wrote before the cat's reflex -- the seed, the message,
+ * `PetParams` `+0xc4`, its state, global state, `+0x35a4`, `+0x35a6`,
+ * `+0x35d6`, `+0x35fc`, `+0x35b2`, where it is placed, the mouse's state,
+ * its brains and centres by pairs, and whether the treat is shelved -- and the `messaged` line after: the
+ * global state it asked and the seed as it did (else its global state and
+ * the seed after), its state, `+0x35a4`, `+0x35d6`, `+0x35b0`, `+0x35b2`,
+ * `+0x35b4`, and its head's turns and pushes. A new global state's entering
+ * may set what it plays with, push and turn its head too: those are held
+ * only as the message itself sets them, or where it asks no global state.
+ */
+function followMessages(lines: string[]) {
+  const wrong: string[] = [];
+  const how: Record<string, number> = {};
+  let calls = 0;
+  let held = 0;
+  let v: number[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('message ')) {
+      v = line.split(' ').slice(1).map(Number);
+      continue;
+    }
+
+    if (!line.startsWith('messaged ')) {
+      continue;
+    }
+
+    calls++;
+    const after = line.split(' ').slice(1).map(Number);
+    const [seed, message, c4, state, global, x35a4, x35a6, x35d6, x35fc, x35b2, area, mouseState] =
+      v;
+    const pairs = v.slice(12, 36);
+    const mind: CatzMind = {
+      brains: pairs.filter((_, k) => k % 2 === 0),
+      centres: pairs.filter((_, k) => k % 2 === 1),
+      state,
+      global,
+      target: x35a4,
+      count: x35d6,
+    };
+    let at = BigInt(seed);
+    const random = (n: number) => {
+      at = (at * 22695477n + 1n) & 0xffffffffn;
+      return Number((at >> 16n) & 0x7fffn) % n;
+    };
+
+    if (c4 !== 0 || x35fc !== 0) {
+      continue;
+    }
+
+    const ours = catzMessage(
+      mind,
+      message,
+      {
+        x35a4,
+        x35a6,
+        x35d6,
+        x35b2,
+        area,
+        mouseState,
+        treatShelved: v[36] === undefined ? undefined : v[36] !== 0,
+      },
+      random
+    );
+
+    if (!ours) {
+      continue;
+    }
+
+    const [aGlobal, aSeed, , aX35a4, aX35d6, aX35b0, aX35b2, aX35b4, heads, pushes] = after;
+    const quiet = ours.global === undefined;
+    const said = [
+      ours.global ?? global,
+      Number(at),
+      ours.x35a4 ?? (quiet ? x35a4 : aX35a4),
+      ours.x35d6 ?? x35d6,
+      ours.ignored ? ours.ignored.kin : aX35b0,
+      ours.ignored ? ours.ignored.kin : x35b2,
+      ours.ignored?.x35b4 ?? aX35b4,
+      quiet ? Number(ours.head ?? false) : heads,
+      quiet ? (ours.pushes ?? []).length : pushes,
+    ];
+    const theirs = [aGlobal, aSeed, aX35a4, aX35d6, aX35b0, aX35b2, aX35b4, heads, pushes];
+
+    if (said.join(' ') !== theirs.join(' ')) {
+      wrong.push(`message ${message} seed ${seed}: ${said.join(' ')} not ${theirs.join(' ')}`);
+    }
+
+    held++;
+    const key = `${message}:${ours.ignored ? 'ignored' : (ours.global ?? 'none')}`;
+    how[key] = (how[key] ?? 0) + 1;
+  }
+
+  return { wrong, calls, held, how };
 }
 
 /** A double, from its four words, low first, as the trace writes them. */

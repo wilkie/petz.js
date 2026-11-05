@@ -4,7 +4,7 @@
  * after its brains move on and before its state machines.
  */
 
-import { type CatzMind, catzBehavior } from './catz-behavior.ts';
+import { type CatzMind, catzBehavior, catzSound } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 import { type CatzBox, catzDist } from './catz-states.ts';
 
@@ -403,4 +403,351 @@ export function catzPurring(
   const next = CATZ_PURRS[x3570];
   const purr = x3572 === 1 ? next?.[0] : x3572 === 2 ? next?.[1] : x3570;
   return { x3570: purr ?? x3570, x3572: 0 };
+}
+
+/** What the cat's messages ask of it and of where it is (`HandleCatAptMessages`). */
+export interface CatzMessaged {
+  /** What it plays with and walks to (`+0x35a4`, `+0x35a6`), and `+0x35d6`, a count. */
+  x35a4: number;
+  x35a6: number;
+  x35d6: number;
+
+  /** What it ignored last (`+0x35b2`), where it is placed (its slot `0x234`, 0x1d), and the mouse's state (-1 none). */
+  x35b2: number;
+  area: number;
+  mouseState: number;
+
+  /** Whether the treat (kin 0xb) is on the shelf (`isSpriteInShelf`). */
+  treatShelved?: boolean;
+}
+
+/** What a message did: the global state it asked, `+0x35a4` and `+0x35d6` where set, its pushes, and what it ignored. */
+export interface CatzMessageDone {
+  global?: number;
+  x35a4?: number;
+  x35d6?: number;
+  pushes?: number[];
+  head?: boolean;
+  ignored?: { kin: number; x35b4?: number };
+}
+
+/**
+ * Noticing something and ignoring it (`ShouldNoticeAndIgnore`, seg30:1ab9,
+ * the cat's slot `0x274`): not asleep (28), not what it plays with already,
+ * not scared (global 17), not after the mouse (`+0x35a4` 0x1b) unless the
+ * mouse is in its hole (state 1), not placed 3, and not what it ignored
+ * last (`+0x35b2`): it keeps it (`+0x35b2`, `+0x35b0`), and, not ignoring
+ * already (12), its global state (`+0x35b4`), lets go (its slot `0x9c` 1)
+ * and ignores it (12). It draws nothing.
+ */
+export function catzNoticeAndIgnore(
+  mind: CatzMind,
+  seen: CatzMessaged,
+  kin: number
+): CatzMessageDone | undefined {
+  if (mind.state === 0x1c || seen.x35a4 === kin || mind.global === 17) {
+    return undefined;
+  }
+
+  if (seen.x35a4 === 0x1b && seen.mouseState !== 1) {
+    return undefined;
+  }
+
+  if (seen.area === 3 || seen.x35b2 === kin) {
+    return undefined;
+  }
+
+  return {
+    global: 12,
+    ignored: { kin, ...(mind.global !== 12 ? { x35b4: mind.global } : {}) },
+  };
+}
+
+/**
+ * A message the playpen left (`HandleCatAptMessages`, seg23:13db, the cat's
+ * slot `0x138`; `+0x33c0`, taken as it is read), out of the Adoption Kit
+ * (`PetParams` `+0xc4` clear) and not on its way to its basket (`+0x35fc`):
+ *
+ * - 2, food (kin 0xc; seg23:1ea7; 1 first its slot `0x17c` 0xc): without an
+ *   age, playing (15) with it unless at it already; walking to it (23) on
+ *   its way, nothing; inclined to behaviour 18 (hungry) -- asleep, only under
+ *   its liveliness -- one time in four not at the water (`+0x35a4` 0xd),
+ *   `+0x35d6` one more, it lets go and, asleep, turns its head to it (3000)
+ *   and pushes 0x22b, and eats (3); else inclined to 15 one time in two and
+ *   awake, playing with it (15); else noticing and ignoring it.
+ * - 3 and 4, water (kin 0xd; seg23:20fe): as food, but at the food already
+ *   it goes on so, without a draw; drinking sets `+0x35ce` 3; and else it
+ *   ignores it outright.
+ * - 5 and 6, a treat (kin 0xb; seg23:2346, 2317): 6 not after snagging (9)
+ *   nor with the treat on the shelf, `+0x35ac` 1 and on as 5; without an
+ *   age, playing with it; asleep, only under its liveliness; else `+0x35d6`
+ *   one more, it lets go and, asleep, turns its head to it and pushes 0x22b,
+ *   and eats (3).
+ * - 7 and 8, catnip (kin 4; seg23:2482, 2498): as food, 7 first its catnip
+ *   left full (`SetupSpriteJustBroughtOut`, `+0x35d4` 100; for food, 1,
+ *   `+0x35d2`), inclined to behaviour 20, and to it (4); else noticing and
+ *   ignoring it.
+ * - 13, the milk bottle (kin 0xf; seg23:2635): `+0x35d6` one more;
+ *   inclined to behaviours 19 and 18 (asleep, only under its liveliness),
+ *   or without an age, it lets go (asleep, its head to it and 0x22b) and
+ *   suckles (5); else inclined to 24, or one time in ten, not snubbing
+ *   already, snubbing it (11); else noticing and ignoring it.
+ * - 9 to 12, a toy (7, 6, 9 and 5; seg23:27f6 on, then 2dd8): asked whether
+ *   inclined to behaviours 15 and 14; asleep, only under its liveliness; at
+ *   it already playing (15) or attacking (1), nothing; inclined to 15, or
+ *   one time in two not to 14 and under 75 fear: playing already one time
+ *   in ten it plays on elsewhere, else it is what it plays with, it lets go
+ *   (asleep, its head to it and 0x22b), and plays (15) eight times in ten,
+ *   else attacks (1); else inclined to 14: attacking or eating already
+ *   three times in four it goes on so, else attacks it so; else noticing and
+ *   ignoring it.
+ * - 15, the spray bottle (kin 2; seg23:282a): afraid (fear 50 or more), with
+ *   an age, not placed 3, asleep only under its liveliness, it lets go
+ *   (asleep, its head to it and 0x22b) and the spray is what it plays with;
+ *   over 80 fear, scared (17); else its head on it (3000) and one time in
+ *   two 0x272, else a sound (1) and 0x271, and idling (6).
+ * - 18 (seg23:2b56): not flea-sprayed already (19), awake one time in two
+ *   or else under its liveliness, it lets go and is flea-sprayed (19), the
+ *   user (kin 1) what it plays with.
+ * - 19, its window resized (seg23:2bd3): placed 3, awake, or asleep under
+ *   its liveliness, it lets go and has a window event (20).
+ * - 21, the camera (seg23:2c44): awake, with an age, not placed 3, and
+ *   `rand() % 101` under its energy, it lets go and, inclined to behaviour
+ *   24, 0x276; to 27, 0x277; to 28, looking at the user, 0x243; to 26,
+ *   looking at the user, 0x93 -- and idles (6); else nothing more.
+ *
+ * Not reimplemented: 14 (the mouse told so, its slot `0x114`), and 16 and
+ * 17 (the spray and flea spray, by where they lie against its draw
+ * rectangle).
+ */
+export function catzMessage(
+  mind: CatzMind,
+  message: number,
+  seen: CatzMessaged,
+  random: (n: number) => number
+): CatzMessageDone | undefined {
+  const percent = () => random(101);
+  const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
+  const { state, global } = mind;
+  const asleep = state === 0x1c;
+  const age = mind.brains[CATZ_BRAIN.age];
+  const liveliness = mind.brains[CATZ_BRAIN.liveliness];
+
+  switch (message) {
+    case 2: {
+      if (age === 0) {
+        return global === 15 && seen.x35a4 === 0xc ? {} : { global: 15, x35a4: 0xc };
+      }
+
+      if (seen.x35a6 === 0xc && state === 0x17) {
+        return {};
+      }
+
+      if (behave(18) && (!asleep || percent() < liveliness)) {
+        if (seen.x35a4 === 0xd && percent() < 75) {
+          return {};
+        }
+
+        return {
+          global: 3,
+          x35d6: seen.x35d6 + 1,
+          ...(asleep ? { head: true, pushes: [0x22b] } : {}),
+        };
+      }
+
+      if (behave(15) && percent() < 50 && !asleep) {
+        return { global: 15, x35a4: 0xc };
+      }
+
+      return catzNoticeAndIgnore(mind, seen, 0xc) ?? {};
+    }
+    case 3:
+    case 4: {
+      if (age === 0) {
+        return global === 15 && seen.x35a4 === 0xd ? {} : { global: 15, x35a4: 0xd };
+      }
+
+      if (seen.x35a6 === 0xd && state === 0x17) {
+        return {};
+      }
+
+      if (behave(18) && (!asleep || percent() < liveliness)) {
+        if (seen.x35a4 === 0xc) {
+          return {};
+        }
+
+        return {
+          global: 3,
+          x35d6: seen.x35d6 + 1,
+          ...(asleep ? { head: true, pushes: [0x22b] } : {}),
+        };
+      }
+
+      if (behave(15) && percent() < 50 && !asleep) {
+        return { global: 15, x35a4: 0xd };
+      }
+
+      return {};
+    }
+    case 6:
+      if (seen.treatShelved === undefined) {
+        return undefined;
+      }
+
+      /* `+0x35ac` 1, and on as 5. */
+      return state === 9 || seen.treatShelved ? {} : catzMessage(mind, 5, seen, random);
+    case 5:
+      if (age === 0) {
+        return global === 15 && seen.x35a4 === 0xb ? {} : { global: 15, x35a4: 0xb };
+      }
+
+      if (asleep && percent() >= liveliness) {
+        return {};
+      }
+
+      return {
+        global: 3,
+        x35d6: seen.x35d6 + 1,
+        ...(asleep ? { head: true, pushes: [0x22b] } : {}),
+      };
+    case 1:
+    case 7:
+    case 8: {
+      const kin = message === 1 ? 0xc : 4;
+
+      if (message === 1) {
+        return catzMessage(mind, 2, seen, random);
+      }
+
+      if (age === 0) {
+        return global === 15 && seen.x35a4 === kin ? {} : { global: 15, x35a4: kin };
+      }
+
+      if (behave(20) && (!asleep || percent() < liveliness)) {
+        return {
+          global: 4,
+          x35d6: seen.x35d6 + 1,
+          ...(asleep ? { head: true, pushes: [0x22b] } : {}),
+        };
+      }
+
+      return catzNoticeAndIgnore(mind, seen, kin) ?? {};
+    }
+    case 13: {
+      const x35d6 = seen.x35d6 + 1;
+      const suckle = () => ({
+        global: 5,
+        x35d6,
+        ...(asleep ? { head: true, pushes: [0x22b] } : {}),
+      });
+
+      if (behave(19) && behave(18) && (!asleep || percent() < liveliness)) {
+        return suckle();
+      }
+
+      if (age === 0) {
+        return suckle();
+      }
+
+      if ((behave(24) || percent() < 10) && global !== 11) {
+        return { global: 11, x35a4: 0xf, x35d6 };
+      }
+
+      return { x35d6, ...catzNoticeAndIgnore(mind, seen, 0xf) };
+    }
+    case 9:
+    case 10:
+    case 11:
+    case 12: {
+      const toy = { 9: 7, 10: 6, 11: 9, 12: 5 }[message]!;
+      const play = behave(15);
+      const attack = behave(14);
+      const goes = (to: number) => ({
+        global: to,
+        x35a4: toy,
+        ...(asleep ? { head: true, pushes: [0x22b] } : {}),
+      });
+
+      if (asleep && percent() >= liveliness) {
+        return {};
+      }
+
+      if (seen.x35a4 === toy && (global === 15 || global === 1)) {
+        return {};
+      }
+
+      if (play || (percent() < 50 && !attack && mind.brains[CATZ_BRAIN.fear] < 75)) {
+        if (global === 15 && percent() < 10) {
+          return {};
+        }
+
+        return goes(percent() < 80 ? 15 : 1);
+      }
+
+      if (attack) {
+        if ((global === 1 || global === 3) && percent() < 75) {
+          return {};
+        }
+
+        return goes(1);
+      }
+
+      return catzNoticeAndIgnore(mind, seen, toy) ?? {};
+    }
+    case 15: {
+      const fear = mind.brains[CATZ_BRAIN.fear];
+
+      if (fear < 50 || age <= 0 || seen.area === 3 || (asleep && percent() >= liveliness)) {
+        return {};
+      }
+
+      if (fear > 80) {
+        return { global: 17, x35a4: 2, ...(asleep ? { head: true, pushes: [0x22b] } : {}) };
+      }
+
+      if (percent() < 50) {
+        return { global: 6, x35a4: 2, head: true, pushes: [...(asleep ? [0x22b] : []), 0x272] };
+      }
+
+      catzSound(mind, 1, random);
+      return { global: 6, x35a4: 2, head: true, pushes: [...(asleep ? [0x22b] : []), 0x271] };
+    }
+    case 18:
+      if (global === 19) {
+        return {};
+      }
+
+      return (!asleep && percent() < 50) || percent() < liveliness ? { global: 19, x35a4: 1 } : {};
+    case 19:
+      return seen.area === 3 || !asleep || percent() < liveliness ? { global: 20 } : {};
+    case 21: {
+      if (asleep || age === 0 || seen.area === 3) {
+        return {};
+      }
+
+      if (percent() >= mind.brains[CATZ_BRAIN.energy]) {
+        return {};
+      }
+
+      if (behave(24)) {
+        return { global: 6, pushes: [0x276] };
+      }
+
+      if (behave(27)) {
+        return { global: 6, pushes: [0x277] };
+      }
+
+      if (behave(28)) {
+        return { global: 6, head: true, pushes: [0x243] };
+      }
+
+      if (behave(26)) {
+        return { global: 6, head: true, pushes: [0x93] };
+      }
+
+      return {};
+    }
+    default:
+      return undefined;
+  }
 }
