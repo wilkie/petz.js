@@ -1495,8 +1495,9 @@ static void __cdecl __far __loadds purring(void __far *sprite, void __far *param
  * `+0xc4`, its state, global state, `+0x35a4`, `+0x35a6`, `+0x35d6`,
  * `+0x35fc`, `+0x35b2`, where it is placed (its slot `0x234` of 0x1d, asked
  * of the slot itself, not the tick's recorder), the mouse's state (-1
- * without one), its brains and centres by pairs, and whether the treat
- * (kin 0xb) is on the shelf. After (`messaged`):
+ * without one), its brains and centres by pairs, whether the treat (kin
+ * 0xb) is on the shelf, its draw rectangle, and the spray's and flea spray's
+ * target points. After (`messaged`):
  * the global state it asked and the seed as it did, where it did (else its
  * global state and the seed after), its state, `+0x35a4`, `+0x35d6`,
  * `+0x35b0`, `+0x35b2`, `+0x35b4`, and the head turns and pushes made. */
@@ -1535,7 +1536,22 @@ static void __cdecl __far __loadds messaging(void __far *sprite, void __far *par
             *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42));
     }
 
-    say(" %d\r\n", ((INSHELF)ordinal(38))(cat, 0xb));
+    say(" %d", ((INSHELF)ordinal(38))(cat, 0xb));
+
+    /* And its draw rectangle, and the spray's (kin 2) and the flea spray's
+     * (kin 3) target points (0 without one), which 16 and 17 ask. */
+    {
+        int rect[4];
+        unsigned char __far *spray = ((GETKIN)ordinal(18))(cat, 2);
+        unsigned char __far *flea = ((GETKIN)ordinal(18))(cat, 3);
+        long sprayAt = spray ? ((TARGETPT)ordinal(10))(spray, 0) : 0;
+        long fleaAt = flea ? ((TARGETPT)ordinal(10))(flea, 0) : 0;
+
+        ((DRAWRECT)ordinal(15))(rect, cat, 0);
+        say(" %d %d %d %d %d %d %d %d\r\n", rect[0], rect[1], rect[2], rect[3], (int)sprayAt,
+            (int)(sprayAt >> 16), (int)fleaAt, (int)(fleaAt >> 16));
+    }
+
     keeping = 1;
     messages(sprite, params);
     global = *(unsigned char __far *__far *)(cat + 0x2fba);
@@ -2594,12 +2610,36 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * it (`+0x33c0`), as the playpen leaves one where the user puts
          * something by it: food (1, 2), water (3, 4), a treat (5, 6), catnip
          * (7, 8), a toy (9 to 12), the milk bottle (13), the spray bottle
-         * (15), 18, the window resized (19) and the camera (21), in turn. */
+         * (15), the spray and flea spray on it (16, 17), 18, the window
+         * resized (19) and the camera (21), in turn. */
         if (forcing & 1048576L && cat && n % 50 == 25) {
-            static const int sent[] = {1, 2,  3,  4,  5,  6,  7,  8, 9,
-                                       10, 11, 12, 13, 15, 18, 19, 21};
+            static const int sent[] = {1,  2,  3,  4,  5,  6,  7,  8,  9, 10,
+                                       11, 12, 13, 15, 16, 17, 18, 19, 21};
+            int message = sent[n / 50 % (sizeof sent / sizeof sent[0])];
 
-            *(int __far *)(cat + 0x33c0) = sent[n / 50 % (sizeof sent / sizeof sent[0])];
+            /* The spray (16, kin 2) and flea spray (17, kin 3), where there
+             * is one, first taken into the pen and put just to the cat's
+             * right, as the user would spray it. */
+            if (message == 16 || message == 17) {
+                void __far *spray = ((GETKIN)ordinal(18))(cat, message == 16 ? 2 : 3);
+
+                if (spray) {
+                    long point = ((TARGETPT)ordinal(10))(cat, 0);
+                    int at[2];
+
+                    if (((INSHELF)ordinal(38))(cat, message == 16 ? 2 : 3)) {
+                        ((TOPEN)ordinal(151))(spray, params);
+                    }
+
+                    at[0] = (int)point + *(int __far *)((unsigned char __far *)cat + 0x33c4) * 3 / 5;
+                    at[1] = (int)(point >> 16);
+                    ((MOVEPT)ordinal(17))(spray, 0, at);
+                } else {
+                    message = 0;
+                }
+            }
+
+            *(int __far *)(cat + 0x33c0) = message;
         }
 
         /* Or, where `TRACE.TXT` asks (16), the user petting it, 300 frames

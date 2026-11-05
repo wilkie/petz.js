@@ -419,6 +419,19 @@ export interface CatzMessaged {
 
   /** Whether the treat (kin 0xb) is on the shelf (`isSpriteInShelf`). */
   treatShelved?: boolean;
+
+  /** Its draw rectangle, and the spray's (kin 2) and flea spray's (kin 3) target points. */
+  rect?: CatzBox;
+  spray?: { x: number; y: number };
+  flea?: { x: number; y: number };
+}
+
+/** Whether two rectangles meet (`XDoRectsSect`, seg48:11c7): the greater left under the lesser right, and so down. */
+function meet(a: CatzBox, b: CatzBox) {
+  return (
+    Math.max(a.left, b.left) < Math.min(a.right, b.right) &&
+    Math.max(a.top, b.top) < Math.min(a.bottom, b.bottom)
+  );
 }
 
 /** What a message did: the global state it asked, `+0x35a4` and `+0x35d6` where set, its pushes, and what it ignored. */
@@ -516,9 +529,15 @@ export function catzNoticeAndIgnore(
  *   24, 0x276; to 27, 0x277; to 28, looking at the user, 0x243; to 26,
  *   looking at the user, 0x93 -- and idles (6); else nothing more.
  *
- * Not reimplemented: 14 (the mouse told so, its slot `0x114`), and 16 and
- * 17 (the spray and flea spray, by where they lie against its draw
- * rectangle).
+ * - 16 and 17, the spray (kin 2) and flea spray (kin 3; seg23:29be, 2a9f):
+ *   where a box from its target point (100 left for the spray, 75 for the
+ *   flea spray, to it; 50 above to 10 below) meets the cat's draw rectangle
+ *   -- the spray: it lets go (its slot `0x9c` 2), its behaviour changes (2),
+ *   its fear up 25 where its centre is 50 or more, and it is sprayed (18);
+ *   the flea spray, asleep only under its liveliness: it lets go and is
+ *   flea-sprayed (19), the flea spray what it plays with.
+ *
+ * Not reimplemented: 14 (the mouse told so, its slot `0x114`).
  */
 export function catzMessage(
   mind: CatzMind,
@@ -711,6 +730,27 @@ export function catzMessage(
 
       catzSound(mind, 1, random);
       return { global: 6, x35a4: 2, head: true, pushes: [...(asleep ? [0x22b] : []), 0x271] };
+    }
+    case 16:
+    case 17: {
+      const at = message === 16 ? seen.spray : seen.flea;
+
+      if (!seen.rect || !at) {
+        return undefined;
+      }
+
+      const reach = message === 16 ? 100 : 75;
+      const box = { left: at.x - reach, top: at.y - 50, right: at.x, bottom: at.y + 10 };
+
+      if (!meet(box, seen.rect)) {
+        return {};
+      }
+
+      if (message === 16) {
+        return { global: 18 };
+      }
+
+      return asleep && percent() >= liveliness ? {} : { global: 19, x35a4: 3 };
     }
     case 18:
       if (global === 19) {

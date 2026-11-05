@@ -115,7 +115,7 @@ const TRACE_WIGGLE = process.env.TRACE_WIGGLE === '1';
 const TRACE_MOUSE = process.env.TRACE_MOUSE === '1';
 /** `TRACE_SCRUFF=1`: each 400 frames the cat picked up by the scruff -- the button down on its target point, the cursor lifted 80 frames, and let go. */
 const TRACE_SCRUFF = process.env.TRACE_SCRUFF === '1';
-/** `TRACE_MESSAGES=1`: every 50 frames a message left for the cat (`+0x33c0`), as the playpen leaves one: food, water, a treat, catnip, a toy, the milk bottle, the spray bottle, 18, the window resized and the camera, in turn. */
+/** `TRACE_MESSAGES=1`: every 50 frames a message left for the cat (`+0x33c0`), as the playpen leaves one: food, water, a treat, catnip, a toy, the milk bottle, the spray bottle, the spray and flea spray on it, 18, the window resized and the camera, in turn. */
 const TRACE_MESSAGES = process.env.TRACE_MESSAGES === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
@@ -1610,7 +1610,8 @@ function followScruffs(lines: string[]) {
  * line the driver wrote before the cat's reflex -- the seed, the message,
  * `PetParams` `+0xc4`, its state, global state, `+0x35a4`, `+0x35a6`,
  * `+0x35d6`, `+0x35fc`, `+0x35b2`, where it is placed, the mouse's state,
- * its brains and centres by pairs, and whether the treat is shelved -- and the `messaged` line after: the
+ * its brains and centres by pairs, whether the treat is shelved, its draw
+ * rectangle and the spray's and flea spray's points -- and the `messaged` line after: the
  * global state it asked and the seed as it did (else its global state and
  * the seed after), its state, `+0x35a4`, `+0x35d6`, `+0x35b0`, `+0x35b2`,
  * `+0x35b4`, and its head's turns and pushes. A new global state's entering
@@ -1668,6 +1669,13 @@ function followMessages(lines: string[]) {
         area,
         mouseState,
         treatShelved: v[36] === undefined ? undefined : v[36] !== 0,
+        ...(v[44] === undefined
+          ? {}
+          : {
+              rect: { left: v[37], top: v[38], right: v[39], bottom: v[40] },
+              spray: v[41] || v[42] ? { x: v[41], y: v[42] } : undefined,
+              flea: v[43] || v[44] ? { x: v[43], y: v[44] } : undefined,
+            }),
       },
       random
     );
