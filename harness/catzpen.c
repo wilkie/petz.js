@@ -1280,6 +1280,14 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         say(" %lu %d", b < draws ? drawnSeed[b] : 0ul, b < draws ? drawnBy[b] : -1);
     }
 
+    /* And its target point after its handler, its script popped: popping
+     * may move it, and some handlers measure from it after. */
+    {
+        long point = ((TARGETPT)ordinal(10))(cat, 0);
+
+        say(" %d %d", (int)point, (int)(point >> 16));
+    }
+
     say("\r\n");
     depth--;
 }
@@ -2543,6 +2551,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) =
                 forcing & 2048 && n / 200 % 2 ? -5 : 235;
             *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) = 250;
+        }
+
+        /* And where it asks (2097152), its fear (brain 7) held at 70, and
+         * (4194304) its age (brain 11) at 0 -- afraid, and as a cat of the
+         * Adoption Kit is, for the branches they take. */
+        if (forcing & 2097152L && cat) {
+            *(int __far *)(cat + 0x2fda + 0x52 * 7 + 0x3a) = 70;
+        }
+
+        if (forcing & 4194304L && cat) {
+            *(int __far *)(cat + 0x2fda + 0x52 * 11 + 0x3a) = 0;
         }
 
         /* And where it asks (65536), its diet extreme, for its reflexes:

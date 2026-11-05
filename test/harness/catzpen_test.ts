@@ -117,6 +117,10 @@ const TRACE_MOUSE = process.env.TRACE_MOUSE === '1';
 const TRACE_SCRUFF = process.env.TRACE_SCRUFF === '1';
 /** `TRACE_MESSAGES=1`: every 50 frames a message left for the cat (`+0x33c0`), as the playpen leaves one: food, water, a treat, catnip, a toy, the milk bottle, the spray bottle, the spray and flea spray on it, 18, the window resized and the camera, in turn. */
 const TRACE_MESSAGES = process.env.TRACE_MESSAGES === '1';
+/** `TRACE_FEARFUL=1`: the cat's fear held at 70. */
+const TRACE_FEARFUL = process.env.TRACE_FEARFUL === '1';
+/** `TRACE_AGELESS=1`: the cat's age held at 0, as an Adoption Kit cat's. */
+const TRACE_AGELESS = process.env.TRACE_AGELESS === '1';
 
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
@@ -1178,7 +1182,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FEARFUL ? '-FEARFUL' : ''}${TRACE_AGELESS ? '-AGELESS' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1211,7 +1215,9 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_WIGGLE ? 131072 : 0) |
           (TRACE_MOUSE ? 262144 : 0) |
           (TRACE_SCRUFF ? 524288 : 0) |
-          (TRACE_MESSAGES ? 1048576 : 0)
+          (TRACE_MESSAGES ? 1048576 : 0) |
+          (TRACE_FEARFUL ? 2097152 : 0) |
+          (TRACE_AGELESS ? 4194304 : 0)
         }\r\n`
       );
       const { runProbe } = await import(WINBOX);
@@ -1463,8 +1469,10 @@ function followWiggles(lines: string[]) {
  * state, `+0x35a4`, `+0x35d6` and `+0x35b6`, its brains and centres by
  * pairs -- and the `saw` line after it: the global state it asked and the
  * seed as it did (else its global state and the seed after), `+0x35a4`,
- * `+0x35b6`, `+0x33bc` and how often it turned its head. Its head is held
- * only where it did not react, for its new state may turn it too.
+ * `+0x35b6`, `+0x33bc` and how often it turned its head. Its head, and
+ * what it plays with, are held only where it did not react, for its new
+ * global state's entering may turn it and set what it plays with (scared,
+ * kin 0x22 to hide by).
  */
 function followMice(lines: string[]) {
   const wrong: string[] = [];
@@ -1516,7 +1524,7 @@ function followMice(lines: string[]) {
     const said = [
       ours.global ?? global,
       Number(at),
-      reacting ? 0x1b : x35a4,
+      reacting ? after[2] : x35a4,
       ours.x35b6 ?? x35b6,
       reacting ? 1 : x33bc,
       reacting ? after[5] : Number(ours.head ?? false),
@@ -1957,7 +1965,13 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           cursor: box(59),
           stage: box(63),
           size: { width: b[67], height: b[68] },
-          point: { x: b[69], y: b[70] },
+          /* Going after the bottle measures from where it is after its script
+           * was popped, which may move it: where the trace has that, after its
+           * handler, else as the tick began. */
+          point:
+            state === 46 && values[200] !== undefined
+              ? { x: values[199], y: values[200] }
+              : { x: b[69], y: b[70] },
           kin: box(71),
           rect: box(75),
           area1: area === 1,
