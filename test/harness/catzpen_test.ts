@@ -1714,7 +1714,7 @@ function double(words: number[]): number {
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
   38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55, 44, 45, 46,
-  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69, 70, 71, 81, 63, 64, 33,
+  47, 48, 36, 37, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69, 70, 71, 81, 63, 64, 33, 20,
 ]);
 
 /** The states whose entering is reimplemented, and those of them whose entered ticks are held only by what they push, their scripts popped at once. */

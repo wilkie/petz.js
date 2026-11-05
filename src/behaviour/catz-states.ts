@@ -33,6 +33,7 @@ export const CATZ_STATE = {
   snagPouncing: 8,
   snagging: 9,
   postSnagging: 10,
+  windowResized: 20,
   dangling: 33,
   postDangling: 34,
   sniffMouseHole: 11,
@@ -888,6 +889,18 @@ export function catzStateTick(
         moment: catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random),
         global: 8,
       });
+    case CATZ_STATE.windowResized: {
+      /* `DoCatWindowResized`, seg24:1ce6 (global 20, `DoGSWindowEvent`, seg24:1b12, begins it or walking on): entering, nothing looked at yet (`+0x34ca` 0). Its script done: having looked, one time in two it idles (6); else it has looked (`+0x34ca` 1), lets go (its slot `0x238` 0), and looks to its marker (kin 0x16; `+0x35a6` 0x16, its point the goal, `+0x34cc`, by the marker's slot `0x44`), its head on it (2500), and pushes 0xd7. */
+      if (world.enter) {
+        return done({ passed: 0 });
+      }
+
+      if (world.passed && percent() < 50) {
+        return done({ global: 6 });
+      }
+
+      return done({ passed: 1, x35a6: 0x16, head: ['track'], pushed: 0xd7, pushes: [0xd7] });
+    }
     case CATZ_STATE.dangling:
       return catzDangling(mind, world, random);
     case CATZ_STATE.postDangling:
