@@ -1705,11 +1705,12 @@ function followMessages(lines: string[]) {
       continue;
     }
 
-    const [aGlobal, aSeed, , aX35a4, aX35d6, aX35b0, aX35b2, aX35b4, heads, pushes] = after;
+    const [aGlobal, aSeed, aState, aX35a4, aX35d6, aX35b0, aX35b2, aX35b4, heads, pushes] = after;
     const quiet = ours.global === undefined;
     const said = [
       ours.global ?? global,
       Number(at),
+      ours.state ?? aState,
       ours.x35a4 ?? (quiet ? x35a4 : aX35a4),
       ours.x35d6 ?? x35d6,
       ours.ignored ? ours.ignored.kin : aX35b0,
@@ -1718,7 +1719,7 @@ function followMessages(lines: string[]) {
       quiet ? Number(ours.head ?? false) : heads,
       quiet ? (ours.pushes ?? []).length : pushes,
     ];
-    const theirs = [aGlobal, aSeed, aX35a4, aX35d6, aX35b0, aX35b2, aX35b4, heads, pushes];
+    const theirs = [aGlobal, aSeed, aState, aX35a4, aX35d6, aX35b0, aX35b2, aX35b4, heads, pushes];
 
     if (said.join(' ') !== theirs.join(' ')) {
       wrong.push(`message ${message} seed ${seed}: ${said.join(' ')} not ${theirs.join(' ')}`);

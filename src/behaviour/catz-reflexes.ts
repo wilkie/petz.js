@@ -443,6 +443,10 @@ function meet(a: CatzBox, b: CatzBox) {
 /** What a message did: the global state it asked, `+0x35a4` and `+0x35d6` where set, its pushes, and what it ignored. */
 export interface CatzMessageDone {
   global?: number;
+
+  /** The state of its own it was put in, where the message put it in one (the Kit's baskets). */
+  state?: number;
+
   x35a4?: number;
   x35d6?: number;
   pushes?: number[];
@@ -758,6 +762,17 @@ export function catzMessage(
 
       return asleep && percent() >= liveliness ? {} : { global: 19, x35a4: 3 };
     }
+    case 22:
+    case 23:
+    case 24:
+    case 25:
+    case 26:
+      /* A basket (seg23:1cbd): its own, a sound (0xe7) and back to it (`MakeCatReturnToBasket`, seg23:5838: it lets go, its slot `0x168`, `+0x33be` 2, `+0x35fc` 1, the Kit, 22); another, a sound (0x9f) and the words to put the kitten away (`GivePutAwayKittenMessage`, its slot `0x164`), and nothing more. */
+      if (seen.x35f6 === undefined) {
+        return undefined;
+      }
+
+      return seen.x35f6 === message - 22 ? { global: 22 } : {};
     case 18:
       if (global === 19) {
         return {};
@@ -855,12 +870,14 @@ export function catzKitMessage(
   const { state } = mind;
 
   if (state === 73 || state === 74 || state === 75) {
-    return asked >= 22 && asked <= 26
-      ? undefined
-      : asked === 14
-        ? catzMessage(mind, asked, seen, random)
-        : {};
+    if (asked >= 22 && asked <= 26) {
+      /* A basket chosen (seg23:1b1d): its own, the same cat coming out (76); another, it its basket, a different one (75). */
+      const basket = seen.x35f6 === -1 ? seen.x35f8 : seen.x35f6;
+      return { state: basket === asked - 22 ? 76 : 75 };
+    }
+
+    return asked === 14 ? catzMessage(mind, asked, seen, random) : {};
   }
 
-  return asked >= 22 && asked <= 26 ? undefined : catzMessage(mind, asked, seen, random);
+  return catzMessage(mind, asked, seen, random);
 }

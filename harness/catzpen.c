@@ -2659,11 +2659,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * something by it: food (1, 2), water (3, 4), a treat (5, 6), catnip
          * (7, 8), a toy (9 to 12), the milk bottle (13), the spray bottle
          * (15), the spray and flea spray on it (16, 17), 18, the window
-         * resized (19) and the camera (21), in turn. */
+         * resized (19), the camera (21) and a basket (22 to 26), in turn. */
         if (forcing & 1048576L && cat && n % 50 == 25) {
-            static const int sent[] = {1,  2,  3,  4,  5,  6,  7,  8,  9, 10,
-                                       11, 12, 13, 15, 16, 17, 18, 19, 21};
-            static const int kit[] = {28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42};
+            static const int sent[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,
+                                       13, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26};
+            static const int kit[] = {28, 29, 30, 31, 32, 33, 34, 35, 36, 37,
+                                      38, 39, 40, 41, 42, 22, 23, 24, 25, 26};
             int message = sent[n / 50 % (sizeof sent / sizeof sent[0])];
 
             /* In the Adoption Kit, every other time one of its own (28 to
