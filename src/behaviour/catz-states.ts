@@ -4334,16 +4334,14 @@ function catzDangling(
  * - looking at things (12; seg24:0465): turning its head to look, its count
  *   on one.
  *
- *
- * Walking on (23; seg25:0a81 on) counts a stride where its script is done
- * and it walks on, pushing nothing: that tick is not known from the trace
- * (nothing of its script left after its handler is not it), and is not
- * carried.
+ * - walking on (23; seg25:0a81 on): its script done (as `PopScript` first
+ *   answered, which the trace keeps), it has gone a stride (`+0x34ca` 1)
+ *   and counts it.
  */
 export function catzStateBetween(
   state: number,
   tick: CatzStateTick,
-  seen: { cues: number[]; looked: number; x35d8?: number }
+  seen: { cues: number[]; looked: number; x35d8?: number; popped?: number }
 ): Partial<CatzStateTick> {
   switch (state) {
     case CATZ_STATE.sleep:
@@ -4365,6 +4363,10 @@ export function catzStateBetween(
       return seen.cues.includes(0) ? { passed: 1 } : {};
     case CATZ_STATE.lookAtObjects:
       return seen.looked > 0 ? { count: tick.count + 1 } : {};
+    case CATZ_STATE.performLocomote:
+      return seen.popped !== undefined && seen.popped & 1
+        ? { passed: 1, count: tick.count + 1 }
+        : {};
     default:
       return {};
   }

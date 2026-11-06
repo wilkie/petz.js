@@ -1280,11 +1280,17 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         .map(([key, k]) => `  ${key}: ${k.same} same, ${k.other} not (${k.examples.join('; ')})`)
         .join('\n')}\n  ${Object.values(books).reduce((n, k) => n + k.same, 0)} same in all`
     );
-    /* Walking on's strides are not carried (`catzStateBetween`), nor yet
-     * one petting tick in 3,000. */
+    /* Walking on's strides are carried only where the trace keeps what
+     * `PopScript` answered (newer traces); nor yet one petting tick in 3,000. */
+    const popsKept = lines.some(
+      (line) => line.startsWith('ticked ') && line.split(' ').length > 204
+    );
     expect(
       Object.entries(books)
-        .filter(([key, k]) => k.other && key !== '23:count' && !(key === '50:count' && k.other < 2))
+        .filter(
+          ([key, k]) =>
+            k.other && !(key === '23:count' && !popsKept) && !(key === '50:count' && k.other < 2)
+        )
         .map(([key, k]) => `${key}: ${k.examples.join('; ')}`)
     ).toEqual([]);
 
@@ -2004,6 +2010,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
               cues: cues ?? [],
               looked: values[13] ?? 0,
               x35d8: b[243],
+              popped: values[201] > 0 ? values[202] : undefined,
             }),
           },
         };

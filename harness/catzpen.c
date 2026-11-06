@@ -575,6 +575,61 @@ static void hookCued(void)
     FreeSelector(alias);
 }
 
+/* And `ScriptSprite::PopScript` (992, seg41:0052), which every state's
+ * handler calls to play its script on: a far jump over its start to this,
+ * which puts its first bytes back, calls it, jumps over it again, and keeps,
+ * for the cat's tick, how many times it was popped and what the first pop
+ * answered (bit 1: its script done). The code is written by an alias kept
+ * for the day. */
+typedef int(__cdecl __far *POP)(void __far *sprite, void __far *params);
+static unsigned char popWas[5];
+static unsigned char __far *popCode;
+static int popped, pop;
+
+static void popJump(void);
+
+static int __cdecl __far __loadds popping(void __far *sprite, void __far *params)
+{
+    int k, answer;
+
+    for (k = 0; k < 5; k++) {
+        popCode[k] = popWas[k];
+    }
+
+    answer = ((POP)ordinal(992))(sprite, params);
+    popJump();
+
+    if (sprite == traced && !popped++) {
+        pop = answer;
+    }
+
+    return answer;
+}
+
+static void popJump(void)
+{
+    int (__cdecl __far *to)(void __far *, void __far *) = popping;
+
+    popCode[0] = 0xea;
+    *(unsigned __far *)(popCode + 1) = FP_OFF(to);
+    *(unsigned __far *)(popCode + 3) = FP_SEG(to);
+}
+
+static void hookPop(void)
+{
+    CSTODS alias16 = (CSTODS)GetProcAddress(GetModuleHandle("KERNEL"), MAKEINTRESOURCE(170));
+    void __far *at = ordinal(992);
+    int k;
+
+    popCode = (unsigned char __far *)MK_FP(alias16(FP_SEG(at)), FP_OFF(at));
+
+    for (k = 0; k < 5; k++) {
+        popWas[k] = popCode[k];
+    }
+
+    popJump();
+}
+
 /* The next number of a file, or -1 at its end. */
 static long number(HFILE file)
 {
@@ -1169,6 +1224,7 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         outside = outsideGlobal = 0;
     }
 
+    popped = 0;
     pushes = globalled = localled = looked = wordings = oriented = missed = finished = draws =
         asked = placed = balled = stopped = moved = proximated = mouthed = 0;
     {
@@ -1291,6 +1347,10 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
         say(" %d %d", (int)point, (int)(point >> 16));
     }
+
+    /* And how many times its script was popped, and what the first pop
+     * answered (`PopScript`; bit 1, its script done), -1 for none. */
+    say(" %d %d", popped, popped ? pop : -1);
 
     say("\r\n");
     depth--;
@@ -1722,6 +1782,7 @@ static void install(unsigned char __far *cat)
 
     hookCued();
     hookProximity();
+    hookPop();
 
     /* And the DLL's code segments' selectors, by number, to name return
      * addresses by. */
