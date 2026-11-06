@@ -1442,8 +1442,8 @@ static void __cdecl __far __loadds seeing(void __far *sprite, void __far *params
  * `0x38` on its draw rectangle and frame, `+0x678`, as the reflex asks);
  * the cursor's point (`+0x5a`); `+0x9e`; its target point; kin 0x22's draw
  * rectangle; its state, global state, `+0x35fc`, `+0x35fa`, `+0x35f6`,
- * `+0x35f8` and `+0xfc`. After (`scruffed`): its state, `+0xfc` and
- * `+0x35f6`. */
+ * `+0x35f8`, `+0xfc`, and whether the user holds anything (the apt root's
+ * slot `0x20`). After (`scruffed`): its state, `+0xfc` and `+0x35f6`. */
 typedef void(__cdecl __far *BALLAT)(void __far *ballz, int __far *at, void __far *frame,
                                     int __far *rect, int ball);
 static REFLEX scruff;
@@ -1471,10 +1471,18 @@ static void __cdecl __far __loadds scruffing(void __far *sprite, void __far *par
         say("scruff %d %d %d %d %d %d %d %d %d", *(int __far *)(p + 0xa), *(int __far *)(p + 0xc),
             at[0], at[1], *(int __far *)(p + 0x5a), *(int __far *)(p + 0x5c),
             *(unsigned __far *)(cat + 0x9e), (int)point, (int)(point >> 16));
-        say(" %d %d %d %d %d %d %d %d %d %d %d\r\n", hidden[0], hidden[1], hidden[2], hidden[3],
+        say(" %d %d %d %d %d %d %d %d %d %d %d", hidden[0], hidden[1], hidden[2], hidden[3],
             *(int __far *)(cat + 0x2552), *(int __far *)(global + 0x3a),
             *(int __far *)(cat + 0x35fc), *(int __far *)(cat + 0x35fa),
             *(int __far *)(cat + 0x35f6), *(int __far *)(cat + 0x35f8), *(int __far *)(cat + 0xfc));
+
+        /* And whether the user holds anything (the apt root's slot `0x20`). */
+        {
+            unsigned char __far *root = *(unsigned char __far *__far *)ordinal(70);
+
+            say(" %d\r\n", root ? (*(MOVED __far *)(*(unsigned char __far *__far *)root + 0x20))(root)
+                                : 0);
+        }
         scruff(sprite, params);
         say("scruffed %d %d %d\r\n", *(int __far *)(cat + 0x2552), *(int __far *)(cat + 0xfc),
             *(int __far *)(cat + 0x35f6));

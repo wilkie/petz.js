@@ -1566,7 +1566,8 @@ function followMice(lines: string[]) {
  * buttons, ball 2 where it is drawn, the cursor's point, `+0x9e`, its target
  * point, kin 0x22's draw rectangle, its state, global state, `+0x35fc`,
  * `+0x35fa`, `+0x35f6`, `+0x35f8` and `+0xfc` -- and the `scruffed` line
- * after it: its state, `+0xfc` and `+0x35f6`. Nothing held, as in the pen.
+ * after it: its state, `+0xfc` and `+0x35f6`; and whether the user holds
+ * anything (older traces: nothing held).
  */
 function followScruffs(lines: string[]) {
   const wrong: string[] = [];
@@ -1592,7 +1593,7 @@ function followScruffs(lines: string[]) {
       {
         left: left !== 0,
         right: right !== 0,
-        holding: false,
+        holding: v[20] !== undefined && v[20] !== 0,
         ball: { x: bx, y: by },
         cursor: { x: cx, y: cy },
         point: { x: px, y: py },
