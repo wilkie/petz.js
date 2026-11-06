@@ -718,8 +718,11 @@ export function catzStateTick(
       return catzPouncing(mind, world, random);
     case CATZ_STATE.diving:
       return catzDiving(mind, world, random);
-    case CATZ_STATE.petting:
-      return catzPetting(mind, world, random);
+    case CATZ_STATE.petting: {
+      /* Its script done, its count goes on (`+0x3502`), whatever it did. */
+      const petted = catzPetting(mind, world, random);
+      return world.enter ? petted : { ...petted, count: world.count + 1 };
+    }
     case CATZ_STATE.initKit:
     case CATZ_STATE.inBaskets:
     case CATZ_STATE.peekFromBasket:
@@ -3523,9 +3526,12 @@ function catzTreat(
   const percent = () => random(101);
   const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
   const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+  /* Waiting, each push ends with its script popped again and its count on
+   * one (seg22:104d); nibbling counts its own. */
   const push = (action: number) => {
     tick.pushes = [action];
     tick.pushed = action;
+    tick.count = world.count + 1;
     return tick;
   };
   const treat = world.prey!;
@@ -4131,8 +4137,11 @@ function catzSprayed(
   const age = mind.brains[CATZ_BRAIN.age];
 
   if (state === CATZ_STATE.sprayReaction) {
+    /* Entering runs on into the tick: its first nine ticks, the count (0
+     * entering) tints it and counts on one; at nine, set back. */
+    tick.count = Math.min((world.enter ? 0 : world.count) + 1, 9);
+
     if (world.enter) {
-      tick.count = 0;
       tick.x35a4 = 2;
       tick.head = ['track'];
       tick.sound = catzSound(mind, 8, random);

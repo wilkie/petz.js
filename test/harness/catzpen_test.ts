@@ -19,7 +19,11 @@ import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
 import { catzGlobalBegin } from '../../src/behaviour/catz-global.ts';
-import { catzCuriosities, catzStateTick } from '../../src/behaviour/catz-states.ts';
+import {
+  catzCuriosities,
+  catzStateTick,
+  type CatzStateTick,
+} from '../../src/behaviour/catz-states.ts';
 import {
   catzMomentBegin,
   catzMomentChoice,
@@ -1254,7 +1258,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       ?.split(' ')
       .slice(1)
       .map(Number);
-    const { held, unread, unknown, wrong, tally } = followTrace(lines, (kind) =>
+    const { held, unread, unknown, wrong, tally, books } = followTrace(lines, (kind) =>
       shelf ? shelf[kind] !== 0 : false
     );
 
@@ -1268,6 +1272,18 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     );
     expect(held).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
+
+    console.log(
+      `bookkeeping:\n${Object.entries(books)
+        .filter(([, k]) => k.other)
+        .map(([key, k]) => `  ${key}: ${k.same} same, ${k.other} not (${k.examples.join('; ')})`)
+        .join('\n')}\n  ${Object.values(books).reduce((n, k) => n + k.same, 0)} same in all`
+    );
+    expect(
+      Object.entries(books)
+        .filter(([, k]) => k.other)
+        .map(([key, k]) => `${key}: ${k.examples.join('; ')}`)
+    ).toEqual([]);
 
     /* And its reflexes, between one tick and the next. */
     const reflexes = followReflexes(lines);
@@ -1832,13 +1848,70 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
   let unread = 0;
   let unknown = 0;
   let before: number[] | null = null;
+  let pending: { state: number; global: number; tick: CatzStateTick } | null = null;
+  const books: Record<string, { same: number; other: number; examples: string[] }> = {};
+
+  let frames = 0;
 
   for (const line of lines) {
     const [kind, ...rest] = line.split(' ');
     const values = rest.map(Number);
 
+    /* A frame without a tick of its own (the driver forcing one, which
+     * writes none) breaks what is carried. */
+    if (kind === 'frame' && ++frames > 1) {
+      pending = null;
+    }
+
     if (kind === 'tick') {
       before = values;
+
+      /* The bookkeeping: what the model said the tick before wrote, against
+       * what the engine holds as this one begins, its state and global
+       * state the same (a reflex may begin another in its `Update`), neither
+       * entered anew nor left (what puts it in another may have written
+       * first). */
+      if (
+        pending &&
+        values[5] === pending.state &&
+        values[4] === pending.global &&
+        values[1] === 0 &&
+        values[2] === 0
+      ) {
+        const field = (n: number) => values[5 + n];
+        const t = pending.tick;
+        const pairs: [string, number | undefined, number][] = [
+          ['count', t.count, field(1)],
+          ['passed', t.passed, field(2)],
+          ['mode', t.mode, field(5)],
+          ['x35a6', t.x35a6, field(7)],
+          ['x35ac', t.x35ac, field(9)],
+          ['x35ee', t.x35ee, field(16)],
+          ['x35a4', t.x35a4, field(17)],
+          ['x33be', t.x33be, field(21)],
+        ];
+
+        for (const [name, ours, theirs] of pairs) {
+          if (ours === undefined) {
+            continue;
+          }
+
+          const key = `${pending.state}:${name}`;
+          const k = (books[key] ??= { same: 0, other: 0, examples: [] });
+
+          if (ours === theirs) {
+            k.same++;
+          } else {
+            k.other++;
+
+            if (k.examples.length < 3) {
+              k.examples.push(`seed ${values[0]}: ${ours} not ${theirs}`);
+            }
+          }
+        }
+      }
+
+      pending = null;
       continue;
     }
 
@@ -2183,10 +2256,11 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           globalHeld ? asked.global : '',
           pushHeld ? pushedFirst : '',
         ].join(' '),
-      ];
+        ours,
+      ] as const;
     };
     const ways = (state === 23 ? [said(false), said(true)] : [said(false)]).filter(
-      (way): way is string[] => way !== null
+      (way) => way !== null
     );
 
     if (!ways.length) {
@@ -2197,12 +2271,22 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     counts[2]++;
     held++;
 
-    if (!ways.some(([ours, engine]) => ours === engine)) {
+    const matched = ways.find(([ours, engine]) => ours === engine);
+
+    if (!matched) {
       wrong.push(
         `seed ${seedValue} state ${state} global ${global}: ${ways.map(([ours, engine]) => `${ours} not ${engine}`).join(' or ')}`
       );
     }
+
+    /* What it said it wrote, kept for the next tick of the same state. */
+    const tick = matched?.[2];
+    pending =
+      tick && tick.state === undefined && tick.global === undefined && !leave
+        ? { state, global, tick }
+        : null;
+    frames = 0;
   }
 
-  return { held, unread, unknown, wrong, tally };
+  return { held, unread, unknown, wrong, tally, books };
 }
