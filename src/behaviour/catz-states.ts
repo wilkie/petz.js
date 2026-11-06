@@ -4316,3 +4316,56 @@ function catzDangling(
 
   return push(...pushes, 0x2b);
 }
+
+/**
+ * What a tick of the cat's own state writes whether or not its script is
+ * done, from what the tick before left (its count, `+0x34ca` and the rest
+ * as `catzStateTick` has them): carried through the ticks it does not act
+ * in.
+ *
+ * - asleep (28; `DoCatSleep`, seg30:0426): after its script is popped, past
+ *   100 its count (`+0x3502`) is 0 again and its energy one more, else
+ *   counts on;
+ * - sprayed (63): its tint counts on to 9;
+ * - dreaming badly (67; seg18:0fd9 on): cued 7, its words loaded and its
+ *   count 1; its count over 0 and under 100, it morphs (`MorphCat`: up by
+ *   the count over `+0x35d8`, and one, to 100);
+ * - suckling the user (44; seg33:0e94): cued 0, it has nursed (`+0x34ca` 1);
+ * - looking at things (12; seg24:0465): turning its head to look, its count
+ *   on one.
+ *
+ *
+ * Walking on (23; seg25:0a81 on) counts a stride where its script is done
+ * and it walks on, pushing nothing: that tick is not known from the trace
+ * (nothing of its script left after its handler is not it), and is not
+ * carried.
+ */
+export function catzStateBetween(
+  state: number,
+  tick: CatzStateTick,
+  seen: { cues: number[]; looked: number; x35d8?: number }
+): Partial<CatzStateTick> {
+  switch (state) {
+    case CATZ_STATE.sleep:
+      return tick.count > 100
+        ? { count: 0, energy: Math.min(100, tick.energy + 1) }
+        : { count: tick.count + 1 };
+    case CATZ_STATE.sprayReaction:
+      return { count: Math.min(tick.count + 1, 9) };
+    case CATZ_STATE.badDream: {
+      let count = seen.cues.includes(7) ? 1 : tick.count;
+
+      if (count > 0 && count < 100 && seen.x35d8) {
+        count = Math.min(100, count + Math.trunc(count / seen.x35d8) + 1);
+      }
+
+      return { count };
+    }
+    case CATZ_STATE.sucklingUser:
+      return seen.cues.includes(0) ? { passed: 1 } : {};
+    case CATZ_STATE.lookAtObjects:
+      return seen.looked > 0 ? { count: tick.count + 1 } : {};
+    default:
+      return {};
+  }
+}
