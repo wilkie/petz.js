@@ -422,6 +422,8 @@ export interface CatzMessaged {
 
   /** In the Adoption Kit: whether each kind of sprite (0 to 15) is on the shelf, `+0x35fa`, and its basket (`+0x35f6`) and `+0x35f8`. */
   shelved?: boolean[];
+  x361e?: number;
+  stage?: CatzBox;
   x35fa?: number;
   x35f6?: number;
   x35f8?: number;
@@ -847,8 +849,20 @@ export function catzKitMessage(
   seen: CatzMessaged,
   random: (n: number) => number
 ): CatzMessageDone | undefined {
-  if (message === 19 || !seen.shelved || seen.x35fa === undefined) {
+  if (!seen.shelved || seen.x35fa === undefined) {
     return undefined;
+  }
+
+  if (message === 19) {
+    const stage = seen.stage;
+
+    if (seen.x361e === undefined || !stage) {
+      return undefined;
+    }
+
+    const big = stage.right - stage.left >= 0x280 || stage.bottom - stage.top >= 0x190;
+    const inBaskets = mind.state === 73 || mind.state === 74 || mind.state === 75;
+    return seen.x361e !== 0 && big && inBaskets ? { global: 22 } : {};
   }
 
   if (seen.x35fa !== 0) {
@@ -880,4 +894,72 @@ export function catzKitMessage(
   }
 
   return catzMessage(mind, asked, seen, random);
+}
+
+/** Its eyes for blinking: ticks to its next (`+0x3584`), whether shut (`+0x3586`), the lid kept (`+0x3588`), and its eyelids (`+0x6a2`, `+0x6a4`). */
+export interface CatzBlink {
+  due: number;
+  shut: number;
+  kept: number;
+  lids: [number, number];
+}
+
+/**
+ * Blinking (`HandleBlinking`, seg23:0825, the cat's slot `0x12c`): `+0x3584`
+ * counts down a tick at a time; at 0 or under, shut, its eyelids open again
+ * as kept and it blinks next in `rand() % 100 + 30`; else it keeps the
+ * second lid, shuts both (100), and opens in `rand() % 2 + 2`.
+ */
+export function catzBlinking(eyes: CatzBlink, random: (n: number) => number): CatzBlink {
+  if (eyes.due > 0) {
+    return { ...eyes, due: eyes.due - 1 };
+  }
+
+  if (eyes.shut) {
+    return { due: random(100) + 30, shut: 0, kept: eyes.kept, lids: [eyes.kept, eyes.kept] };
+  }
+
+  return { due: random(2) + 2, shut: 1, kept: eyes.lids[1], lids: [100, 100] };
+}
+
+/**
+ * Layering (`HandleMiscLayering`, seg23:3270, the cat's slot `0x13c`): what
+ * it plays over itself (its slot `0xc0`), every so often. `+0x358a` counts
+ * down a tick at a time; at 0 or under, no layer playing (its slot `0xa8`):
+ * `rand() % 101` under its catnip (brain 10), not eating, resting nor in
+ * CatNapz (3, 9, 21), 0x27c; else awake one time in four with an age, one of
+ * 0x2ff to 0x302 by `rand() % 4` (seg48:1b86); else over 98 full one time in
+ * ten with an age, 0x324; else in its moment, lazy or affectionate (8, 10,
+ * 14) or dangling (33), `+0x696` clear, 0x1da -- and either way, next in
+ * `rand() % 200 + 60`. The layer played is not reimplemented: answered,
+ * the next.
+ */
+export function catzLayering(
+  mind: CatzMind,
+  x358a: number,
+  playing: boolean,
+  random: (n: number) => number
+): { x358a: number; layer?: number } {
+  if (x358a > 0) {
+    return { x358a: x358a - 1 };
+  }
+
+  const percent = () => random(101);
+  const age = mind.brains[CATZ_BRAIN.age];
+  const { state, global } = mind;
+  let layer: number | undefined;
+
+  if (!playing) {
+    if (percent() < mind.brains[CATZ_BRAIN.catnipped]) {
+      layer = global === 3 || global === 9 || global === 21 ? undefined : 0x27c;
+    } else if (state !== 0x1c && percent() < 25 && age !== 0) {
+      layer = [0x2ff, 0x300, 0x301, 0x302][random(4)];
+    } else if (mind.brains[CATZ_BRAIN.fullness] > 98 && percent() < 10 && age !== 0) {
+      layer = 0x324;
+    } else if (global === 8 || global === 10 || global === 14 || state === 0x21) {
+      layer = 0x1da;
+    }
+  }
+
+  return { x358a: random(200) + 60, layer };
 }

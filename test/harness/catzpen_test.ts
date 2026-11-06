@@ -30,9 +30,11 @@ import {
 } from '../../src/behaviour/catz-moment.ts';
 import {
   catzBehaviorChange,
+  catzBlinking,
   catzCursorWiggling,
   catzExtremeSituations,
   catzKitMessage,
+  catzLayering,
   catzMessage,
   catzPurring,
   catzScruff,
@@ -1305,6 +1307,46 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     );
     expect(purrsWrong).toEqual([]);
 
+    const blinks = lines.filter((line) => line.startsWith('blink '));
+    const blinksWrong = blinks.flatMap((line) => {
+      const [seed, due, shut, kept, lid, lid2, ...after] = line.split(' ').slice(1).map(Number);
+      let at = BigInt(seed);
+      const random = (n: number) => {
+        at = (at * 22695477n + 1n) & 0xffffffffn;
+        return Number((at >> 16n) & 0x7fffn) % n;
+      };
+      const ours = catzBlinking({ due, shut, kept, lids: [lid, lid2] }, random);
+      const said = [ours.due, ours.shut, ours.kept, ...ours.lids, Number(at)].join(' ');
+      return said === after.join(' ') ? [] : [`blink seed ${seed}: ${said} not ${after.join(' ')}`];
+    });
+    console.log(`blinking: ${blinks.length} blinks`);
+    expect(blinksWrong).toEqual([]);
+
+    /* Layering, each look (`catzLayering`): the seed, whether a layer plays,
+     * its state, global state, `+0x696` and brains; then `+0x358a` and the
+     * seed after. */
+    const layers = lines.filter((line) => line.startsWith('layer '));
+    const layersWrong = layers.flatMap((line) => {
+      const v = line.split(' ').slice(1).map(Number);
+      const [seed, playing, state, global] = v;
+      let at = BigInt(seed);
+      const random = (n: number) => {
+        at = (at * 22695477n + 1n) & 0xffffffffn;
+        return Number((at >> 16n) & 0x7fffn) % n;
+      };
+      const ours = catzLayering(
+        { brains: v.slice(5, 17), state, global, target: 0, count: 0 },
+        0,
+        playing !== 0,
+        random
+      );
+      const said = `${ours.x358a} ${at}`;
+      const theirs = `${v[17]} ${v[18]}`;
+      return said === theirs ? [] : [`layer seed ${seed}: ${said} not ${theirs}`];
+    });
+    console.log(`layering: ${layers.length} looks`);
+    expect(layersWrong).toEqual([]);
+
     const messages = followMessages(lines);
     console.log(
       `messages: ${messages.calls} left, ${messages.held} held (${Object.entries(messages.how)
@@ -1628,9 +1670,10 @@ function followScruffs(lines: string[]) {
  * Kit, the shelf by bits, `+0x35fa`, `+0x35f6` and `+0x35f8` -- and the `messaged` line after: the
  * global state it asked and the seed as it did (else its global state and
  * the seed after), its state, `+0x35a4`, `+0x35d6`, `+0x35b0`, `+0x35b2`,
- * `+0x35b4`, and its head's turns and pushes. A new global state's entering
- * may set what it plays with, push and turn its head too: those are held
- * only as the message itself sets them, or where it asks no global state.
+ * `+0x35b4`, and its head's turns and pushes. A new global state's entering,
+ * or a new state of its own's, may set what it plays with, push and turn its
+ * head too: those are held only as the message itself sets them, or where it
+ * asks neither.
  */
 function followMessages(lines: string[]) {
   const wrong: string[] = [];
@@ -1698,6 +1741,12 @@ function followMessages(lines: string[]) {
               x35f6: v[47],
               x35f8: v[48],
             }),
+        ...(v[53] === undefined
+          ? {}
+          : {
+              x361e: v[49],
+              stage: { left: v[50], top: v[51], right: v[52], bottom: v[53] },
+            }),
       },
       random
     );
@@ -1707,7 +1756,7 @@ function followMessages(lines: string[]) {
     }
 
     const [aGlobal, aSeed, aState, aX35a4, aX35d6, aX35b0, aX35b2, aX35b4, heads, pushes] = after;
-    const quiet = ours.global === undefined;
+    const quiet = ours.global === undefined && ours.state === undefined;
     const said = [
       ours.global ?? global,
       Number(at),

@@ -1581,8 +1581,14 @@ static void __cdecl __far __loadds messaging(void __far *sprite, void __far *par
             }
         }
 
-        say(" %u %d %d %d\r\n", shelf, *(int __far *)(cat + 0x35fa), *(int __far *)(cat + 0x35f6),
+        say(" %u %d %d %d", shelf, *(int __far *)(cat + 0x35fa), *(int __far *)(cat + 0x35f6),
             *(int __far *)(cat + 0x35f8));
+
+        /* And `+0x361e` and the stage (`ds:2ba6` on), which the Kit just
+         * maximized (19) asks. */
+        say(" %d %d %d %d %d\r\n", *(int __far *)(cat + 0x361e),
+            *(int __far *)MK_FP(traceData, 0x2ba6), *(int __far *)MK_FP(traceData, 0x2ba8),
+            *(int __far *)MK_FP(traceData, 0x2baa), *(int __far *)MK_FP(traceData, 0x2bac));
     }
 
     keeping = 1;
@@ -1595,6 +1601,63 @@ static void __cdecl __far __loadds messaging(void __far *sprite, void __far *par
         *(int __far *)(cat + 0x35b0), *(int __far *)(cat + 0x35b2), *(int __far *)(cat + 0x35b4),
         looked - heads, pushes - pushed);
     keeping = 0;
+}
+
+/* And its reflex `HandleBlinking` (slot `0x12c`), each call where it
+ * blinks (`+0x3584` 0 or under): the seed, `+0x3586`, `+0x3588`, its
+ * eyelids (`+0x6a2`, `+0x6a4`), and after, `+0x3584`, `+0x3586`, `+0x3588`,
+ * the eyelids and the seed (`blink`). */
+static REFLEX blink;
+
+static void __cdecl __far __loadds blinking(void __far *sprite, void __far *params)
+{
+    unsigned char __far *cat = sprite;
+    unsigned long seed = *(unsigned long __far *)MK_FP(traceData, 0x28ba);
+    int due = *(int __far *)(cat + 0x3584), shut = *(int __far *)(cat + 0x3586);
+    int kept = *(int __far *)(cat + 0x3588), lid = *(int __far *)(cat + 0x6a2),
+        lid2 = *(int __far *)(cat + 0x6a4);
+
+    blink(sprite, params);
+
+    if (due <= 0) {
+        say("blink %lu %d %d %d %d %d %d %d %d %d %d %lu\r\n", seed, due, shut, kept, lid, lid2,
+            *(int __far *)(cat + 0x3584), *(int __far *)(cat + 0x3586),
+            *(int __far *)(cat + 0x3588), *(int __far *)(cat + 0x6a2),
+            *(int __far *)(cat + 0x6a4), *(unsigned long __far *)MK_FP(traceData, 0x28ba));
+    }
+}
+
+/* And its reflex `HandleMiscLayering` (slot `0x13c`), each call where it
+ * looks (`+0x358a` 0 or under): the seed, whether a layer plays (its slot
+ * `0xa8`, as the reflex asks first), its state, global state, `+0x696` and
+ * its brains; and after, `+0x358a` and the seed (`layer`). */
+typedef int(__cdecl __far *BUSY)(void __far *cat);
+static REFLEX layer;
+
+static void __cdecl __far __loadds layering(void __far *sprite, void __far *params)
+{
+    unsigned char __far *cat = sprite;
+
+    if (*(int __far *)(cat + 0x358a) <= 0) {
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+        int b;
+
+        say("layer %lu %d %d %d %d", *(unsigned long __far *)MK_FP(traceData, 0x28ba),
+            (*(BUSY __far *)(*(unsigned char __far *__far *)cat + 0xa8))(cat),
+            *(int __far *)(cat + 0x2552), *(int __far *)(global + 0x3a),
+            *(int __far *)(cat + 0x696));
+
+        for (b = 0; b < 12; b++) {
+            say(" %d", *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a));
+        }
+
+        layer(sprite, params);
+        say(" %d %lu\r\n", *(int __far *)(cat + 0x358a),
+            *(unsigned long __far *)MK_FP(traceData, 0x28ba));
+        return;
+    }
+
+    layer(sprite, params);
 }
 
 static void install(unsigned char __far *cat)
@@ -1637,6 +1700,10 @@ static void install(unsigned char __far *cat)
     *(REFLEX *)(table + 0x140) = purring;
     messages = *(REFLEX *)(table + 0x138);
     *(REFLEX *)(table + 0x138) = messaging;
+    blink = *(REFLEX *)(table + 0x12c);
+    *(REFLEX *)(table + 0x12c) = blinking;
+    layer = *(REFLEX *)(table + 0x13c);
+    *(REFLEX *)(table + 0x13c) = layering;
     *(void __far *__far *)cat = table;
 
     _fmemcpy(globalTable, *(void __far *__far *)global, sizeof globalTable);
@@ -2671,7 +2738,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         if (forcing & 1048576L && cat && n % 50 == 25) {
             static const int sent[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,
                                        13, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26};
-            static const int kit[] = {28, 29, 30, 31, 32, 33, 34, 35, 36, 37,
+            static const int kit[] = {19, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37,
                                       38, 39, 40, 41, 42, 22, 23, 24, 25, 26};
             int message = sent[n / 50 % (sizeof sent / sizeof sent[0])];
 
