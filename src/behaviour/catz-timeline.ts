@@ -164,6 +164,13 @@ export interface CatzTimelineOptions {
   shown?: number;
 
   /**
+   * Whether an action pushed with it, before it, ended aligned to it
+   * (`alignScripts0 actionDone0`), so its first frame is a reference frame,
+   * as it is where the two are pushed together.
+   */
+  aligned?: boolean;
+
+  /**
    * The cat's fudgers as they stand (`makeCatzFudgers`), to play the
    * scripts' settings on and update a tick at a time; changed as they play.
    * Without, they are not played.
@@ -189,6 +196,13 @@ export interface CatzTimelineOptions {
    * stand; none to leave it. With `fudgers`.
    */
   aim?: (step: CatzStep, rotation: number, fields: number[]) => number | undefined;
+
+  /**
+   * Each step as it is done, in turn: a reference frame as it is popped, a
+   * shown one once its tick is done (its fudgers moved on) -- so whoever
+   * places the cat can place each before the next is aimed.
+   */
+  done?: (step: CatzStep) => void;
 }
 
 /**
@@ -311,6 +325,8 @@ export function catzTimeline(
     shown: earlier,
     blink,
     aim,
+    done,
+    aligned = false,
   }: CatzTimelineOptions
 ): CatzStep[] {
   const steps: CatzStep[] = [];
@@ -321,7 +337,7 @@ export function catzTimeline(
   let actual = end;
   let pending: Omit<CatzStep, 'frame' | 'action'> = {};
   let glue = false;
-  let reference = false;
+  let reference = aligned;
 
   const value = (operand: Operand, from: 'table' | 'rand' = 'rand') =>
     typeof operand === 'number'
@@ -444,6 +460,7 @@ export function catzTimeline(
       tick(step);
     }
 
+    done?.(step);
     pending = {};
     reference = false;
     glue = false;
@@ -786,6 +803,7 @@ export function catzTimeline(
 
   if (last?.reference) {
     tick(last);
+    done?.(last);
   }
 
   return steps;

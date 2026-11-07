@@ -34,8 +34,12 @@ export interface CatzPetOptions {
   brains: number[];
   centres: number[];
   stage: CatzBox;
-  /** How many ticks an action plays, and the pose (`+0x1500`) it leaves the cat in, where known (its script's `to`). */
-  play: (action: number) => number | { ticks: number; pose?: number };
+  /**
+   * How many ticks an action plays, and the pose (`+0x1500`) it leaves the
+   * cat in, where known (its script's `to`); walking on, with what steers it
+   * (`targetSprite4`).
+   */
+  play: (action: number, steer?: CatzSteer) => number | { ticks: number; pose?: number };
   random: (n: number) => number;
 
   /** Its width and height (`+0x33c4`, `+0x33c6`); a cat's, by default. */
@@ -47,9 +51,29 @@ export interface CatzPetOptions {
   /** How near what it walks to it is found (standing in for its focus box, `PopScript` answering 2): 8 by default. */
   foundWithin?: number;
 
+  /** A state entered, what was left of the last script dropped: whoever plays its scripts drops its frames still to come. */
+  dropped?: () => void;
+
+  /** Whether `PopScript` found what it walks to in its box this tick (answering 2), where whoever plays its scripts knows; else `foundWithin` stands in. */
+  found?: () => boolean;
+
   /** Where the cursor (kin 0x17) is, by the ticks gone: by default still at the stage's lower middle. */
   cursor?: (tick: number) => { x: number; y: number };
 }
+
+/**
+ * What an action is steered by. A walk, at what it walks to
+ * (`targetSprite4`, seg41:0e8d): where that is, as it is each tick, and the
+ * box it is looked for in -- the cat's width and height or more, and the
+ * share of their diagonal it lies ahead of the head. A stalk's creep, its
+ * rotation's fudger aimed at an angle, at a rate of 100, and reset after.
+ */
+export type CatzSteer =
+  | {
+      to: () => { x: number; y: number } | undefined;
+      box: { width: number; height: number; share: number };
+    }
+  | { rotation: number };
 
 /** What a tick did, for a viewer or a test to follow. */
 export interface CatzPetTicked {
@@ -90,6 +114,9 @@ export class CatzPet {
   /** Where it is, and where it walks to. */
   point: { x: number; y: number };
 
+  /** Its draw rectangle, where whoever places it says; else about its point, by its size. */
+  rect?: CatzBox;
+
   /** The moment, while it has one, and as its readying left it. */
   moment?: CatzMomentState;
   private readied?: NonNullable<CatzStateTick['moment']>;
@@ -127,7 +154,17 @@ export class CatzPet {
       x: Math.trunc((stage.left + stage.right) / 2),
       y: Math.trunc((stage.top + stage.bottom) / 2),
     };
-    this.fields = { count: 0, passed: 0, x1500: 0, mode: 0, x35a4: 0, x35a6: 0, x688: 0 };
+    /* `+0x35b8`, the stalk's creep, -1 for none: nothing sets it in an empty pen. */
+    this.fields = {
+      count: 0,
+      passed: 0,
+      x1500: 0,
+      mode: 0,
+      x35a4: 0,
+      x35a6: 0,
+      x688: 0,
+      x35b8: -1,
+    };
     this.beginGlobal(6, 0);
   }
 
@@ -311,9 +348,9 @@ export class CatzPet {
     if (playing) {
       /* Nothing more pushed while it plays. */
     } else if (ticked.pushes?.length) {
-      this.push(ticked.pushes);
+      this.push(ticked.pushes, this.steering(ticked));
     } else if (ticked.pushed !== undefined) {
-      this.push([ticked.pushed]);
+      this.push([ticked.pushed], this.steering(ticked));
     }
 
     /* Entered, and pushing: what comes after waits for that script to be
@@ -455,6 +492,11 @@ export class CatzPet {
 
     this.state = state;
     this.mind.state = state;
+
+    if (this.left > 0) {
+      this.options.dropped?.();
+    }
+
     this.left = 0;
 
     if (state === 21) {
@@ -504,6 +546,7 @@ export class CatzPet {
     if (ticked.x35ee !== undefined) f.x35ee = ticked.x35ee;
     if (ticked.x35f4 !== undefined) f.x35f4 = ticked.x35f4;
     if (ticked.x688 !== undefined) f.x688 = ticked.x688;
+    if (ticked.x35b8 !== undefined) f.x35b8 = ticked.x35b8;
     if (ticked.x35aa !== undefined) f.x35aa = ticked.x35aa;
     if (ticked.ticks !== undefined) f.ticks = ticked.ticks;
     if (ticked.goal !== undefined) f.goal = ticked.goal;
@@ -512,10 +555,26 @@ export class CatzPet {
     if (ticked.energy !== undefined) this.mind.brains[CATZ_BRAIN.energy] = ticked.energy;
   }
 
+  /** Walking on, what it is steered at: what it walks to, in the box its words give; none where its steering stopped. Creeping, the angle to its prey. */
+  private steering(ticked: CatzStateTick): CatzSteer | undefined {
+    if (ticked.creepAim !== undefined) {
+      return { rotation: ticked.creepAim };
+    }
+
+    const words = ticked.steer;
+
+    if (!words || ticked.steerStopped) {
+      return undefined;
+    }
+
+    const [width, height, share] = words.slice(2, 5);
+    return { to: () => this.walkedToAt(), box: { width, height, share } };
+  }
+
   /** Actions pushed: played for as long as each is given to. */
-  private push(actions: number[]) {
+  private push(actions: number[], steer?: CatzSteer) {
     for (const action of actions) {
-      const played = this.options.play(action);
+      const played = this.options.play(action, steer);
       const { ticks, pose } =
         typeof played === 'number' ? { ticks: played, pose: undefined } : played;
       this.pushed.push(action);
@@ -559,7 +618,7 @@ export class CatzPet {
       stage: this.options.stage,
       size,
       point: this.point,
-      rect: {
+      rect: this.rect ?? {
         left: x - Math.trunc(size.width / 2),
         top: y - size.height,
         right: x + Math.trunc(size.width / 2),
@@ -595,6 +654,10 @@ export class CatzPet {
       walkedToAt: this.walkedToAt(),
       /* Found where it walks to: within 8 of it, standing in for its box (`PopScript` answering 2). */
       found: (() => {
+        if (this.options.found) {
+          return this.options.found();
+        }
+
         const at = this.walkedToAt();
         return !!at && Math.hypot(at.x - x, at.y - y) <= (this.options.foundWithin ?? 8);
       })(),

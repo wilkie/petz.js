@@ -543,6 +543,19 @@ export interface CatzStateTick {
 
   /** Walking on: the words that set its steering (`targetSprite4`, 0x756d: what to, the box's width and height, and its share), the layered action begun, the sound made, `+0x688` (before the steering moves it on) and `+0x35aa` where set, and its fullness after. */
   steer?: number[];
+
+  /** Walking on, found but not there: its steering stopped (`targetSprite4` all 0), the stride after it walked straight on. */
+  steerStopped?: boolean;
+
+  /**
+   * Stalking, creeping: the angle it is turned to as it creeps, at its prey
+   * -- the words pushed before the creep, its rotation's fudger's rate 100
+   * and its target (`setFudgerRate 0 100`, `setFudgerTarget 0`), and after,
+   * the fudger reset (`resetFudger 0`; seg14:0a61 to 0abe) -- and its creep
+   * kept (`+0x35b8`), or -1 where it turned instead.
+   */
+  creepAim?: number;
+  x35b8?: number;
   layered?: number;
   x688?: number;
   x35aa?: number;
@@ -1361,6 +1374,7 @@ function catzWalkOn(
 
   /* Found but not there: its steering stopped (`targetSprite4` all 0), 0x254. */
   if (world.found && G !== 21) {
+    tick.steerStopped = true;
     push(0x254);
     return tick;
   }
@@ -2070,8 +2084,11 @@ function catzStalking(
   if (percent() < 75) {
     if (percent() < 70) {
       const creep = world.x35b8 === -1 ? [0x6a, 0x151][random(2)] : world.x35b8!;
+      tick.x35b8 = creep;
+      tick.creepAim = angle;
       push(creep);
     } else {
+      tick.x35b8 = -1;
       push(off < 0 ? 0xb1 : 0xb0);
       push(0x15);
     }

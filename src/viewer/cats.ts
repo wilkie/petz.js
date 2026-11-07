@@ -34,7 +34,6 @@ import {
   type CatzPose,
   CatzPlacer,
   placeCatzTick,
-  catzAimAt,
 } from '../behaviour/catz-stage.ts';
 import {
   catzFrameAngle,
@@ -50,6 +49,7 @@ import {
   SCRIPTS,
 } from '../formats/script.ts';
 import { initCatzBrains, updateCatzBrain } from '../behaviour/catz-brain.ts';
+import { CatzBody } from '../behaviour/catz-body.ts';
 import { CatzPet } from '../behaviour/catz-pet.ts';
 import { borlandRand } from '../behaviour/random.ts';
 
@@ -282,25 +282,21 @@ function goLive() {
   const fudgers = makeCatzFudgers();
   resetCatzEyelids(fudgers);
   [fudgers[6].value, fudgers[7].value] = [20, 20];
-  /* Each frame to show, placed: its rectangle once it is shown, and its pose. */
-  const queue: { step: CatzStep; rect: CatzPlaced['rect']; pose: CatzPose }[] = [];
-  let shown: (typeof queue)[number] | undefined;
-  /* Where the last frame queued leaves it, which the next is placed from. */
-  let tail: CatzPlaced | null = null;
-  let held: CatzStep | undefined;
-  let position = positions.neutral;
   let ticks = 0;
-  const poseOf = (step: CatzStep, fields = step.fudged): CatzPose => {
-    const [rotation = 0, roll = 0, tilt = 0, turn = 0, up = 0, cock = 0] = fields ?? [];
-    return {
-      frame: step.frame,
-      rotation,
-      tilt,
-      roll,
-      head: { rotation: turn, tilt: up, cock },
-      layer: step.layer,
-    };
-  };
+  /* Its body: each action played out by its script and placed as
+   * `PopScript` places it, a walk steered each tick and what it walks to
+   * looked for in its focus box. */
+  const body = new CatzBody({
+    scripts,
+    positions,
+    flags: (frame) => frames[frame]?.tag ?? 3,
+    shaped,
+    placer,
+    angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
+    stage: LIVE_STAGE,
+    fudgers,
+    random,
+  });
   /* Its brains as the engine makes them for its breed (`InitBrain`), its age by the slider. */
   const brains = cat.catz?.factors
     ? initCatzBrains(cat.catz.factors, random, { age: Number(kittenInput.value) })
@@ -314,61 +310,9 @@ function goLive() {
     random,
     /* Placed by its frames, as `PopScript` places it: the pet's straight walk off. */
     moves: false,
-    foundWithin: 40,
-    play: (action) => {
-      const steps = scripts[action]
-        ? catzTimeline(scripts, positions, action, {
-            flags: (frame) => frames[frame]?.tag ?? 3,
-            random,
-            limit: 600,
-            from: position,
-            fudgers,
-            angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
-            blink: { wait: random(100) + 30, shut: false, kept: 20 },
-            /* Steered at what it walks to or stalks, from where the action
-             * began (the engine aims from where each tick leaves it). */
-            aim: (step, rotation, fields) => {
-              const target = pet.target();
-              return target && tail
-                ? catzAimAt(placer, tail.rect, poseOf(step, [rotation, ...fields.slice(1)]), target)
-                : undefined;
-            },
-          }).filter((step) => step.frame < frames.length)
-        : [];
-      let shownSteps = 0;
-
-      for (const step of steps) {
-        if (step.reference) {
-          held = step;
-          continue;
-        }
-
-        const pose = poseOf(step);
-        tail = tail
-          ? placeCatzTick(placer, tail, pose, {
-              reference: held,
-              glued: !!step.glue,
-              area: LIVE_STAGE,
-            })
-          : (() => {
-              const bounds = placer.bounds(pose);
-              const [dx, dy] = [320 - (bounds.left + bounds.right) / 2, 300 - bounds.bottom];
-              const rect = {
-                left: Math.round(bounds.left + dx),
-                top: Math.round(bounds.top + dy),
-                right: Math.round(bounds.right + dx),
-                bottom: Math.round(bounds.bottom + dy),
-              };
-              return { rect, before: pose, current: pose };
-            })();
-        held = undefined;
-        queue.push({ step, rect: tail.rect, pose });
-        shownSteps++;
-      }
-
-      position = scripts[action]?.to || position;
-      return { ticks: shownSteps, pose: position };
-    },
+    play: (action, steer) => body.play(action, steer),
+    dropped: () => body.drop(),
+    found: () => !!body.shown?.there,
   });
 
   liveButton.textContent = 'Stop';
@@ -382,28 +326,25 @@ function goLive() {
       pet.mind.brains[n] = brain.value;
     });
 
-    const { state, global } = pet.tick();
-    shown = queue.shift() ?? shown;
+    /* The frame this tick shows, as `PopScript` pops it before the state's own tick. */
+    const shown = body.next();
 
-    /* A new state drops what was left of the old: as many frames kept as it has left to play. */
-    if (queue.length > pet.playing) {
-      queue.splice(0, queue.length - pet.playing);
-    }
-
-    /* Where it is, for its states: its target point, the middle of its rectangle. */
+    /* Where it is, for its states: its rectangle, its target point the
+     * middle of it, and which way it faces (`+0x688`). */
     if (shown) {
       const { rect } = shown;
+      pet.rect = rect;
       pet.point = {
         x: Math.trunc((rect.left + rect.right) / 2),
         y: Math.trunc((rect.top + rect.bottom) / 2),
       };
-      /* And which way it faces (`+0x688`): its rotation as drawn, -128 to 127. */
-      pet.fields.x688 = ((((shown.pose.rotation + 128) % 256) + 256) % 256) - 128;
+      pet.fields.x688 = body.facing;
       drawLive(cat, shaped, placer, shown);
     }
 
+    const { state, global } = pet.tick();
     ticks++;
-    status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}, at ${pet.point.x}, ${pet.point.y}${queue.length ? `, ${queue.length} frames to play` : ''}.`;
+    status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}, at ${pet.point.x}, ${pet.point.y}${body.queue.length ? `, ${body.queue.length} frames to play` : ''}.`;
   }, 100);
 }
 
