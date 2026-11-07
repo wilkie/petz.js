@@ -313,8 +313,8 @@ const penPictures = new Map<number, { dib: Dib; colours: number[]; green: number
  * (`catzToyTick`), its friction and rebound the engine's -- the cheese 50,
  * the squeaky toy 70, the yarn ball 100 and 100 (its own `Init`), the rest
  * their definitions' -- the jingle ball by its own (`catzJingleTick`), the
- * Cat Dancer's own standing in so; kept from the stage's edges by half
- * their pictures; their sounds drawing the cat's own `rand`.
+ * Cat Dancer not at all; kept from the stage's edges by half their
+ * pictures; their sounds drawing the cat's own `rand`.
  */
 const liveToys = new Map<number, CatzToy | CatzJingleBall>();
 const FRICTION: Record<number, [number, number]> = { 6: [100, 100], 9: [70, -1] };
@@ -326,7 +326,8 @@ const JINGLE = { x138: 13, x140: 64 };
 function strikeToy({ kind, v }: { kind: number; v: { x: number; y: number } }) {
   const at = livePen.get(kind);
 
-  if (!at) {
+  /* The Cat Dancer is not sent rolling: its speed only kept (`CatDancerSprite::SetSpeed`), its spring its own (`Update`). */
+  if (!at || kind === 5) {
     return;
   }
 
