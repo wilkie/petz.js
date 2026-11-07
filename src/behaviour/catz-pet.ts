@@ -57,6 +57,9 @@ export interface CatzPetOptions {
   /** Whether `PopScript` found what it walks to in its box this tick (answering 2), where whoever plays its scripts knows; else `foundWithin` stands in. */
   found?: () => boolean;
 
+  /** Where a thing on the shelf is (its target point), by its kind: standing in, by default, along the stage's top. */
+  shelfAt?: (kind: number) => { x: number; y: number };
+
   /** Where the cursor (kin 0x17) is, by the ticks gone: by default still at the stage's lower middle. */
   cursor?: (tick: number) => { x: number; y: number };
 }
@@ -85,7 +88,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([6, 8, 9]);
+const BEGUN = new Set([3, 6, 8, 9]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -109,7 +112,7 @@ export class CatzPet {
   global = 0;
 
   /** The cat's own fields, as its states read and write them. */
-  readonly fields: Partial<CatzStateWorld> & { count: number; passed: number };
+  readonly fields: Partial<CatzStateWorld> & { count: number; passed: number; x35ce?: number };
 
   /** Where it is, and where it walks to. */
   point: { x: number; y: number };
@@ -235,14 +238,27 @@ export class CatzPet {
     return this.state === 2 && this.fields.x35a4 === 0x17 ? this.cursorAt() : this.walkedToAt();
   }
 
-  /** Where what it walks to is (`+0x35a6`): the cursor, its marker (kin 0x16) where it put one, else its goal. */
+  /** Where what it walks to is (`+0x35a6`): the cursor, its marker (kin 0x16) where it put one, a thing on the shelf, else its goal. */
   private walkedToAt() {
-    const kind = this.fields.x35a6;
+    const kind = this.fields.x35a6 ?? 0;
     return kind === 0x17
       ? this.cursorAt()
       : kind === 0x16 && this.marker
         ? this.marker
-        : this.fields.goal;
+        : kind > 0 && shelved(kind)
+          ? this.shelfAt(kind)
+          : this.fields.goal;
+  }
+
+  /** Where a thing on the shelf is: as given, else standing in, the shelf along the stage's top, each kind in its place along it. */
+  private shelfAt(kind: number) {
+    const { stage, shelfAt } = this.options;
+    return (
+      shelfAt?.(kind) ?? {
+        x: stage.left + Math.trunc(((stage.right - stage.left) * (kind + 1)) / 17),
+        y: stage.top + 30,
+      }
+    );
   }
 
   /** Its marker (kin 0x16), where walking put it. */
@@ -395,7 +411,15 @@ export class CatzPet {
     const begun = catzGlobalBegin(
       global,
       this.mind,
-      { cursorMoved: false, area3: false, screenSaver: false, sleepy: false },
+      {
+        cursorMoved: false,
+        area3: false,
+        screenSaver: false,
+        sleepy: false,
+        inShelf: shelved,
+        x35ce: this.fields.x35ce ?? 0,
+        x35d2: this.fields.x35d2 ?? 0,
+      },
       this.options.random
     );
 
@@ -403,7 +427,36 @@ export class CatzPet {
       this.fields.mode = begun.mode;
     }
 
+    /* Eating: what it goes to, the bowl, and what sent it spent. */
+    if (global === 3) {
+      this.fields.x35ce = 0;
+    }
+
+    if (begun.kind !== undefined) {
+      this.fields.x35a4 = begun.kind;
+      this.fields.x35a6 = begun.kind;
+    }
+
+    if (begun.x35d2 !== undefined) {
+      this.fields.x35d2 = begun.x35d2;
+    }
+
+    if (begun.pushes) {
+      this.push(begun.pushes);
+    }
+
+    /* Another global state asked after it, begun in turn where it is not begun here. */
+    const last = begun.globals.at(-1)!;
+
+    if (begun.state === undefined && last !== global) {
+      this.beginGlobal(last, depth + 1);
+      return;
+    }
+
     if (begun.state !== undefined) {
+      /* Eating going on to idle begins idling's state in idling. */
+      this.global = last;
+      this.mind.global = last;
       this.enter(begun.state, depth + 1);
     }
   }

@@ -281,15 +281,37 @@ const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
   n % 3 === 0 ? 1 : 0,
 ]);
 
-/** Cases of a global state begun: a seed, the brains' values and centres, the state, whether the cursor moved, and `+0x3574`. */
-const GLOBAL_CASES = Array.from({ length: 90 }, (_, n) => [
-  (n * 134775813 + 1) % 2147483648,
-  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 7 + b * 9 + ((n * b) % 4)) % LEVELS.length]),
-  ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 3) % LEVELS.length]),
-  [6, 8, 9][n % 3],
-  Math.floor(n / 3) % 2,
-  Math.floor(n / 6) % 2,
-]);
+/**
+ * Cases of a global state begun: a seed, the brains' values and centres,
+ * the state, whether the cursor moved, `+0x3574`, and `+0x35ce` and
+ * `+0x35d2`. The first 90 idle, have their moment and rest; the 80 after
+ * eat -- sent by hunger three times in four, else by each other way, with
+ * the food bowl empty, low, full or -1 -- some without an age.
+ */
+const GLOBAL_CASES = Array.from({ length: 170 }, (_, n) => {
+  const eating = n >= 90;
+  const k = n - 90;
+  const brains = Array.from(
+    { length: 12 },
+    (_, b) => LEVELS[(n * 7 + b * 9 + ((n * b) % 4)) % LEVELS.length]
+  );
+
+  /* A third of those eating without an age, to be had by the bottle. */
+  if (eating && k % 3 === 0) {
+    brains[11] = 0;
+  }
+
+  return [
+    (n * 134775813 + 1) % 2147483648,
+    ...brains,
+    ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 3) % LEVELS.length]),
+    eating ? 3 : [6, 8, 9][n % 3],
+    Math.floor(n / 3) % 2,
+    Math.floor(n / 6) % 2,
+    eating ? [0, 0, 0, 1, 0, 0, 2, 0, 0, 3][k % 10] : 0,
+    eating ? [0, 5, 30, -1][Math.floor(k / 2) % 4] : 0,
+  ];
+});
 
 /** The global states a walk's end is reimplemented for: all but 1, 4, 13, 17 and 14 with an age, and 3 only at the marker, the playpen's food being on its shelf. */
 const ARRIVALS = [2, 5, 6, 8, 9, 7, 10, 11, 16, 20, 21, 22, 14, 12, 18, 19, 3];
@@ -907,6 +929,12 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 
     /* And each global state begun: the global states it was put in, in
      * turn, the first state of its own, its mode and its brains' effects. */
+    /* What the shelf holds, by kind of sprite. */
+    const shelf = lines
+      .find((line) => line.startsWith('shelf '))!
+      .split(' ')
+      .slice(1)
+      .map(Number);
     let globalCase: number[] = [];
     let begun = 0;
 
@@ -919,7 +947,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       } else if (kind === 'globaled') {
         const [globalSeed, area] = globalCase;
         const c = GLOBAL_CASES.find(([s]) => s === globalSeed)!;
-        const [global, moved, sleepy] = c.slice(25);
+        const [global, moved, sleepy, x35ce, x35d2] = c.slice(25);
         let state = BigInt(globalSeed);
         const random = (n: number) => {
           state = (state * 22695477n + 1n) & 0xffffffffn;
@@ -935,24 +963,49 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             target: 0,
             count: 0,
           },
-          { cursorMoved: moved !== 0, area3: area === 3, screenSaver: false, sleepy: sleepy !== 0 },
+          {
+            cursorMoved: moved !== 0,
+            area3: area === 3,
+            screenSaver: false,
+            sleepy: sleepy !== 0,
+            /* The playpen's shelf, as the driver says it holds them. */
+            inShelf: (kind) => shelf[kind] !== 0,
+            x35ce,
+            x35d2,
+          },
           random
         );
         const added = (history: number[]) =>
           history.slice(0, history.indexOf(-2) < 0 ? 10 : history.indexOf(-2)).reverse();
         const locals = added(values.slice(0, 10));
         const globals = added(values.slice(10, 20));
-        const [mode, ...effects] = values.slice(20);
-        const said = [ours.globals.join(','), ours.state, ours.mode ?? mode, ours.effects].join(
-          ' '
-        );
+        const [mode, ...effects] = values.slice(20, 25);
+        /* Eating: what it goes to, the bowl, and the actions it pushed, oldest first. */
+        const [x35a4, x35a6, bowl] = values.slice(25, 28);
+        const pushed = added(values.slice(28, 38));
+        const eating = global === 3;
+        /* Eating's effects stand where nothing after sets its own: walking
+         * to its food, or idling; playing, attacking and eating from the bowl
+         * or at hand, entered after, set theirs. */
+        const settled = !eating || ours.state === 22 || ours.globals.at(-1) === 6;
+        const said = [
+          ours.globals.join(','),
+          ours.state,
+          ours.mode ?? mode,
+          settled && ours.effects,
+          eating && [ours.kind ?? x35a4, ours.kind ?? x35a6, ours.x35d2 ?? bowl],
+          eating && (ours.pushes ?? []).join(','),
+        ].join(' ');
         /* As far as the model goes: a state of its own begun may put it in
          * another global state again, as exploring does idling. */
         const theirs = [
           globals.slice(0, ours.globals.length).join(','),
-          locals[0],
+          /* Playing and attacking begun after are not: no state of its own of theirs. */
+          ours.state === undefined && eating ? undefined : locals[0],
           mode,
-          effects,
+          settled && effects,
+          eating && [x35a4, x35a6, bowl],
+          eating && pushed.slice(0, (ours.pushes ?? []).length).join(','),
         ].join(' ');
 
         if (said !== theirs) {
@@ -968,12 +1021,6 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     /* And each tick of a state of its own: the state it went to, the global
      * state it was put in, its energy, its count, and, where it stayed, the
      * action it pushed and began. */
-    /* What the shelf holds, by kind of sprite. */
-    const shelf = lines
-      .find((line) => line.startsWith('shelf '))!
-      .split(' ')
-      .slice(1)
-      .map(Number);
     let localSeed = 0;
     let localArea = 0;
     let room: number[] = [];

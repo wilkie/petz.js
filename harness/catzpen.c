@@ -47,7 +47,8 @@
  * * for each case in `GLOBAL.TXT`, `global seed area` (`GetSpriteScreenArea`,
  *   606, of 0x1d), and once put in the global state, `globaled` and the
  *   cat's own machine's history (`+0x2556` on), the global machine's, its
- *   mode and its brains' effects;
+ *   mode, its brains' effects, `+0x35a4`, `+0x35a6`, `+0x35d2` and the last
+ *   ten actions pushed;
  * * for each case in `CURSOR.TXT`, `cursor seed`, and after a tick of the
  *   moment with the cursor about, `cursored` and the cat's state, the global
  *   machine's history, `+0x35a2`, `+0x35a4`, `+0x35a6` and mode, then as
@@ -2208,11 +2209,13 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
     /* Each case in `GLOBAL.TXT`: a line `seed`, the 12 brains' values and
      * their centres, a global state to put the cat in, whether the cursor
-     * has moved (`PetParams` `+0x104` on) and `+0x3574`: the cat with no
+     * has moved (`PetParams` `+0x104` on), `+0x3574`, `+0x35ce` and
+     * `+0x35d2`, the last ten actions pushed marked: the cat with no
      * global state (`+0x3a` of its machine), both its machines' histories
      * marked, put in it (`GlobalCatStateMachine::NewState`, 488); and
-     * `globaled` and the two histories, its mode and the effects set on its
-     * brains (`+0x3622` to `+0x3628`). */
+     * `globaled` and the two histories, its mode, the effects set on its
+     * brains (`+0x3622` to `+0x3628`), `+0x35a4`, `+0x35a6` and `+0x35d2`,
+     * and the last ten actions pushed (`+0x14a8`, newest first). */
     file = _lopen(DIRECTORY "\\GLOBAL.TXT", OF_READ);
 
     if (cat && file != HFILE_ERROR) {
@@ -2237,9 +2240,15 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             state = (int)number(file);
             moved = (int)number(file);
             *(int __far *)(cat + 0x3574) = (int)number(file);
+            *(int __far *)(cat + 0x35ce) = (int)number(file);
+            *(int __far *)(cat + 0x35d2) = (int)number(file);
 
             for (b = 0; b < 4; b++) {
                 *(int *)(params + 0x104 + 2 * b) = b == 0 ? moved : 0;
+            }
+
+            for (b = 0; b < 10; b++) {
+                *(int __far *)(cat + 0x14a8 + 2 * b) = -2;
             }
 
             ((RESETSTACK)ordinal(951))(cat, 2);
@@ -2274,6 +2283,13 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
             for (b = 0; b < 4; b++) {
                 say(" %d", *(int __far *)(cat + 0x3622 + 2 * b));
+            }
+
+            say(" %d %d %d", *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35a6),
+                *(int __far *)(cat + 0x35d2));
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(cat + 0x14a8 + 2 * b));
             }
 
             say("\r\n");
