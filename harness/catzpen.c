@@ -92,6 +92,7 @@ typedef int(__cdecl __far *BOTTLED)(void __far *cat);
 typedef int(__cdecl __far *GETSTATE)(void __far *machine);
 typedef void(__cdecl __far *BOTTLEDO)(void __far *bottle);
 typedef void(__cdecl __far *TOPEN)(void __far *apt, void __far *params);
+typedef void(__cdecl __far *TOSHELF)(void __far *apt, void __far *params, int how);
 typedef void(__cdecl __far *MOVEPT)(void __far *apt, int space, int __far *point);
 typedef void(__cdecl __far *BALLPOINT)(void __far *ballz, int __far *point, void __far *state,
                                        int __far *rect, int ball);
@@ -2221,7 +2222,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
      * line has the target point of what it plays with, the mouse's
      * `+0x26ca` (-1 for none), the stage and the cat's width and height. */
     /* Twice over: first each begun, then -- quiet as each is begun again -- each ticked, so no
-     * tick's moment is left to the next case's beginning. */
+     * tick's moment is left to the next case's beginning. Each line ends with whether the cursor
+     * is about for the tick and a kind of sprite to take off the shelf into the pen first
+     * (`XApt::ShelfToPlaypen`, 151) and put back after (`XApt::PlaypenToShelf`, 152), -1 for
+     * none. */
     for (pass = 0; pass < 2; pass++) {
     file = _lopen(DIRECTORY "\\GLOBAL.TXT", OF_READ);
 
@@ -2230,7 +2234,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         for (;;) {
             long seed = number(file);
-            int state, moved, area, about;
+            int state, moved, area, about, out;
+            void __far *outKin;
 
             quiet = pass == 1;
 
@@ -2259,6 +2264,13 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 }
             }
             about = (int)number(file);
+            out = (int)number(file);
+            outKin = out >= 0 ? ((GETKIN)ordinal(18))(cat, out) : 0;
+
+            /* What the case takes off the shelf into the pen (`XApt::ShelfToPlaypen`, 151). */
+            if (outKin && ((INSHELF)ordinal(38))(cat, out)) {
+                ((TOPEN)ordinal(151))(outKin, params);
+            }
 
             for (b = 0; b < 4; b++) {
                 *(int *)(params + 0x104 + 2 * b) = b == 0 ? moved : 0;
@@ -2366,6 +2378,11 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
             for (b = 0; b < 4; b++) {
                 *(int *)(params + 0x104 + 2 * b) = 0;
+            }
+
+            /* And put back (`XApt::PlaypenToShelf`, 152). */
+            if (outKin && !((INSHELF)ordinal(38))(cat, out)) {
+                ((TOSHELF)ordinal(152))(outKin, params, 0);
             }
         }
 

@@ -289,15 +289,22 @@ const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
  * four, else by each other way, with the food bowl empty, low, full or -1
  * -- some without an age; the 40 after play, with the cursor (lively,
  * to chase it), the mouse, 5, 6, 7, 9, the food bowl and the catnip; and
- * the 24 after chase the same; and the last 36 attack the cursor and the
+ * the 24 after chase the same; the 36 after attack the cursor and the
  * mouse (grown, to make for a corner), the catnip, the food and water
- * bowls, 5, 0x22, 6 and 9.
+ * bowls, 5, 0x22, 6 and 9; and the last 72 with something off the shelf
+ * in the pen: 48 hungry, with the treat, a piece, the food bowl, the water
+ * bowl or the bottle out, and 24 playing and chasing with 6, 7 or 9 out.
  */
-const GLOBAL_CASES = Array.from({ length: 270 }, (_, n) => {
-  const attacking = n >= 234;
-  const chasing = n >= 210 && !attacking;
-  const playing = n >= 170 && !chasing;
-  const eating = n >= 90 && !playing;
+const OUT = [0xb, 0xb, 8, 0xc, 0xc, 0xd, 0xf, 0xb];
+const GLOBAL_CASES = Array.from({ length: 342 }, (_, n) => {
+  const outside = n >= 270;
+  const m = n - 270;
+  /* Off the shelf: hungry with food, or playing or chasing with a toy. */
+  const out = !outside ? -1 : m < 48 ? OUT[m % 8] : [6, 7, 9][m % 3];
+  const attacking = n >= 234 && !outside;
+  const chasing = (n >= 210 && !attacking && !outside) || (outside && m >= 60);
+  const playing = (n >= 170 && n < 210) || (outside && m >= 48 && m < 60);
+  const eating = (n >= 90 && n < 170) || (outside && m < 48);
   const k = n - 90;
   const brains = Array.from(
     { length: 12 },
@@ -314,8 +321,8 @@ const GLOBAL_CASES = Array.from({ length: 270 }, (_, n) => {
     brains[11] = 100;
   }
 
-  /* Those playing with the cursor lively, to chase it. */
-  if (playing && n % 8 === 0) {
+  /* Those playing with the cursor lively, to chase it; and those with a toy out. */
+  if ((playing && n % 8 === 0) || (outside && m >= 48)) {
     brains[0] = 100;
   }
 
@@ -326,15 +333,18 @@ const GLOBAL_CASES = Array.from({ length: 270 }, (_, n) => {
     attacking ? 1 : chasing ? 16 : playing ? 15 : eating ? 3 : [6, 8, 9][n % 3],
     Math.floor(n / 3) % 2,
     Math.floor(n / 6) % 2,
-    eating ? [0, 0, 0, 1, 0, 0, 2, 0, 0, 3][k % 10] : 0,
+    eating && !outside ? [0, 0, 0, 1, 0, 0, 2, 0, 0, 3][k % 10] : 0,
     eating ? [0, 5, 30, -1][Math.floor(k / 2) % 4] : 0,
-    attacking
-      ? [0x17, 0x1b, 0xe, 0xc, 0xd, 5, 0x22, 6, 9][n % 9]
-      : playing || chasing
-        ? [0x17, 0x1b, 5, 6, 7, 9, 0xc, 0xe][n % 8]
-        : -1,
+    outside && !eating
+      ? out
+      : attacking
+        ? [0x17, 0x1b, 0xe, 0xc, 0xd, 5, 0x22, 6, 9][n % 9]
+        : playing || chasing
+          ? [0x17, 0x1b, 5, 6, 7, 9, 0xc, 0xe][n % 8]
+          : -1,
     /* The cursor about for the tick after, every other case. */
     n % 2,
+    out,
   ];
 });
 
@@ -1000,7 +1010,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             screenSaver: false,
             sleepy: sleepy !== 0,
             /* The playpen's shelf, as the driver says it holds them. */
-            inShelf: (kind) => shelf[kind] !== 0,
+            inShelf: (kind) => kind !== c[32] && shelf[kind] !== 0,
             x35ce,
             x35d2,
             x35a4: plays,
@@ -1095,7 +1105,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             area1: place === 1,
             screenSaver: false,
             sleepy: c[27] !== 0,
-            inShelf: (kind) => shelf[kind] !== 0,
+            inShelf: (kind) => kind !== c[32] && shelf[kind] !== 0,
             x35a4,
             x35a6,
             x34ca,
