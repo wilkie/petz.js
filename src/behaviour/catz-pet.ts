@@ -713,8 +713,11 @@ export class CatzPet {
     for (const look of ticked.head ?? []) {
       if (look === 'track') {
         const walking = this.state === 22 || this.state === 23;
-        const kind = (walking ? (ticked.x35a6 ?? f.x35a6) : (ticked.x35a4 ?? f.x35a4)) ?? 0;
-        this.options.head?.({ kind, speed: 3000, shelved: this.isShelved(kind) });
+        const { kind, speed } = ticked.headTrack ?? {
+          kind: (walking ? (ticked.x35a6 ?? f.x35a6) : (ticked.x35a4 ?? f.x35a4)) ?? 0,
+          speed: 3000,
+        };
+        this.options.head?.({ kind, speed, shelved: this.isShelved(kind) });
       } else {
         this.options.head?.(look);
       }

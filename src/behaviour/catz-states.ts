@@ -196,6 +196,9 @@ export interface CatzStateWorld {
   x35c2?: { x: number; y: number };
   kept?: CatzBox;
 
+  /** Ignoring: what it ignores (`+0x35b0`), which its head tracks. */
+  x35b0?: number;
+
   /** Its bottle (kin 0xf): see `CatzBottle`. */
   bottle?: CatzBottle;
 
@@ -537,6 +540,12 @@ export interface CatzStateTick {
   mode?: number;
   marker?: { x: number; y: number };
   head?: ('track' | 'user' | 'off')[];
+
+  /**
+   * What its head tracks, and how fast (`SetHeadTracking`'s kind and speed),
+   * where the state's own are not what it plays with at 3000.
+   */
+  headTrack?: { kind: number; speed: number };
 
   /** All the actions it pushed, in turn. */
   pushes?: number[];
@@ -893,12 +902,22 @@ export function catzStateTick(
     case CATZ_STATE.snubObject:
       /* `DoCatSnubObject`, seg30:182e: entering, its slot `0x114` (2, 0xf), it tracks what it plays with with its head (2000) and pushes 0x206; cued (4), a sound (4); its script done, it lets it go (its slot `0x238`) and walks on to nothing (22, `+0x35a6` 0, `+0x35ac`, `+0x35a2` and `+0x1514` 1). */
       return world.enter
-        ? done({ pushed: 0x206, pushes: [0x206], head: ['track'] })
+        ? done({
+            pushed: 0x206,
+            pushes: [0x206],
+            head: ['track'],
+            headTrack: { kind: world.x35a4 ?? 0, speed: 2000 },
+          })
         : done({ state: CATZ_STATE.locomote, x35a6: 0 });
     case CATZ_STATE.ignoreObject:
       /* `DoCatIgnoreObject`, seg30:19a0: entering, its slot `0x114` (2, 0xf), it tracks what it ignores (`+0x35b0`) with its head (2500) and pushes 0x321; cued (4), one time in two a sound (4); its script done, it goes back to the global state it was in (`+0x35b4`). */
       if (world.enter) {
-        return done({ pushed: 0x321, pushes: [0x321], head: ['track'] });
+        return done({
+          pushed: 0x321,
+          pushes: [0x321],
+          head: ['track'],
+          headTrack: { kind: world.x35b0 ?? world.x35a4 ?? 0, speed: 2500 },
+        });
       }
 
       if (world.cues?.includes(4)) {
@@ -927,7 +946,14 @@ export function catzStateTick(
         return done({ global: 6 });
       }
 
-      return done({ passed: 1, x35a6: 0x16, head: ['track'], pushed: 0xd7, pushes: [0xd7] });
+      return done({
+        passed: 1,
+        x35a6: 0x16,
+        head: ['track'],
+        headTrack: { kind: 0x16, speed: 2500 },
+        pushed: 0xd7,
+        pushes: [0xd7],
+      });
     }
     case CATZ_STATE.dangling:
       return catzDangling(mind, world, random);
@@ -2138,6 +2164,7 @@ function catzBegging(
     }
 
     tick.head = [percent() < 80 ? 'track' : 'user'];
+    tick.headTrack = { kind: world.x35a4 ?? 0, speed: 2500 };
   }
 
   const begged = world.passed !== 0;
@@ -2600,6 +2627,7 @@ function catzEatPiece(
 
     if (look) {
       tick.head = [look];
+      tick.headTrack = { kind: 0x17, speed: 2500 };
     }
   }
 
@@ -3137,6 +3165,7 @@ function catzPetting(
       if (percent() >= rate) {
         if (percent() < rate && settled()) {
           tick.head = [percent() < rate * 2 ? 'off' : percent() < rate * 2 ? 'user' : 'track'];
+          tick.headTrack = { kind: 0x17, speed: 2000 };
         } else if (percent() < rate && modes[Math.trunc(catzBehavior(mind, 5, random) / 2)] !== 0) {
           random(1);
           random(1);
@@ -3237,6 +3266,7 @@ function catzPetting(
               tick.pushes = [0xdf, random(2) === 0 ? 0x6d : 0x2bc];
               tick.pushed = 0xdf;
               tick.head = ['track'];
+              tick.headTrack = { kind: 0x17, speed: 2500 };
               return tick;
             case 4:
               tick.sound = catzSound(mind, 4, random);
@@ -3375,6 +3405,7 @@ function catzFond(
     default: {
       if (world.enter) {
         tick.head = ['track'];
+        tick.headTrack = { kind: 0x17, speed: 3000 };
         return push(0xdc, 0xdb);
       }
 
@@ -3596,11 +3627,12 @@ function catzTreat(
   if (world.ticks === 0) {
     random(50);
 
+    /* At the user, or tracking -- one time in two the treat, else the cursor -- at 3000 (seg22:0c46 on). */
     if (percent() < 50) {
       tick.head = ['user'];
     } else {
-      percent();
       tick.head = ['track'];
+      tick.headTrack = { kind: percent() < 50 ? (world.x35a4 ?? 0) : 0x17, speed: 3000 };
     }
 
     if (percent() < 70) {
@@ -3631,6 +3663,7 @@ function catzTreat(
     (percent() < 100 - brain(CATZ_BRAIN.independence) || world.x1500 === 0x40)
   ) {
     tick.head = ['track'];
+    tick.headTrack = { kind: world.x35a4 ?? 0, speed: 2500 };
     return push(percent() < 60 ? 0x28c : 0xd7);
   }
 
@@ -4084,6 +4117,7 @@ function catzDogChase(state: number, mind: CatzMind, world: CatzStateWorld): Cat
       tick.pushes = [0x296];
       tick.pushed = 0x296;
       tick.head = ['track'];
+      tick.headTrack = { kind: 0x1a, speed: 3000 };
       return tick;
     }
 
