@@ -19,6 +19,7 @@ import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
 import { catzGlobalBegin, catzGlobalTick } from '../../src/behaviour/catz-global.ts';
+import { catzToyTick } from '../../src/behaviour/catz-toys.ts';
 import {
   catzCuriosities,
   catzStateBetween,
@@ -348,6 +349,22 @@ const GLOBAL_CASES = Array.from({ length: 342 }, (_, n) => {
   ];
 });
 
+/**
+ * Cases of a toy struck and its physics run: the cheese (8), the squeaky
+ * toy (9) and the yarn ball (6), each struck at full speed each way and
+ * aslant, for 40 ticks.
+ */
+const TOY_CASES = [8, 9, 6].flatMap((kind) =>
+  [
+    [50, 0],
+    [-50, 0],
+    [0, 50],
+    [0, -50],
+    [37, -22],
+    [-12, 45],
+  ].map(([vx, vy]) => [kind, vx, vy, 40])
+);
+
 /** The global states a walk's end is reimplemented for: all but 1, 4, 13, 17 and 14 with an age, and 3 only at the marker, the playpen's food being on its shelf. */
 const ARRIVALS = [2, 5, 6, 8, 9, 7, 10, 11, 16, 20, 21, 22, 14, 12, 18, 19, 3];
 
@@ -603,6 +620,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       writeFileSync(
         join(directory, 'GLOBAL.TXT'),
         GLOBAL_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
+      );
+      writeFileSync(
+        join(directory, 'TOY.TXT'),
+        TOY_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
       );
       writeFileSync(
         join(directory, 'CURSOR.TXT'),
@@ -1158,6 +1179,71 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     }
 
     expect(begun).toBe(GLOBAL_CASES.length);
+
+    /* And each toy struck, a tick of its physics at a time: where it is and its speed. */
+    let toy: Parameters<typeof catzToyTick>[0] | undefined;
+    let area = { left: 0, top: 0, right: 0, bottom: 0 };
+    let toyKind = 0;
+    let toyTick = 0;
+    let toyTicks = 0;
+
+    for (const line of lines) {
+      const [kind, ...rest] = line.split(' ');
+      const values = rest.map(Number);
+
+      if (kind === 'toy') {
+        const [
+          k,
+          left,
+          top,
+          right,
+          bottom,
+          d8,
+          da,
+          gl,
+          gt,
+          gr,
+          gb,
+          x,
+          y,
+          vx,
+          vy,
+          ,
+          ,
+          friction,
+          rebound,
+        ] = values;
+        /* The pen's rectangle: the client rectangle moved by -(+0xd8 + left), -(+0xda + top). */
+        area = { left: -d8, top: -da, right: right - left - d8, bottom: bottom - top - da };
+        const half = (n: number) => Math.trunc(n / 2);
+        toy = {
+          at: { x, y },
+          v: { x: vx, y: vy },
+          friction,
+          rebound,
+          half: { x: half(gr - gl), y: half(gb - gt) },
+        };
+        [toyKind, toyTick] = [k, 0];
+      } else if (kind === 'toyed' && toy) {
+        catzToyTick(toy, area);
+        const ours = [toy.at.x, toy.at.y, toy.v.x, toy.v.y].join(' ');
+        console.log(
+          `TOY ${toyKind} ${toyTick} ours ${ours} theirs ${values.join(' ')} f ${toy.friction}`
+        );
+
+        if (ours !== values.join(' ')) {
+          wrong.push(`toy ${toyKind} tick ${toyTick}: ${ours} not ${values.join(' ')}`);
+          /* Go on from where the engine has it. */
+          toy.at = { x: values[0], y: values[1] };
+          toy.v = { x: values[2], y: values[3] };
+        }
+
+        toyTick++;
+        toyTicks++;
+      }
+    }
+
+    expect(toyTicks).toBe(TOY_CASES.length * 40);
     expect(Object.values(globalTicks).reduce((a, b) => a + b, 0)).toBe(GLOBAL_CASES.length);
 
     /* And each tick of a state of its own: the state it went to, the global

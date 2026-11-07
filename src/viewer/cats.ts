@@ -53,6 +53,7 @@ import {
 import { initCatzBrains, updateCatzBrain } from '../behaviour/catz-brain.ts';
 import { CatzBody } from '../behaviour/catz-body.ts';
 import { CatzPet } from '../behaviour/catz-pet.ts';
+import { type CatzToy, catzToyTick } from '../behaviour/catz-toys.ts';
 import { borlandRand } from '../behaviour/random.ts';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -303,6 +304,55 @@ const livePen = new Map<number, { x: number; y: number }>();
 const penPictures = new Map<number, { dib: Dib; colours: number[]; green: number }>();
 
 /**
+ * The pen's things moving, struck: each by the playpen's physics
+ * (`catzToyTick`), its friction and rebound the engine's -- the cheese 50,
+ * the squeaky toy 70, the yarn ball 100 and 100 (its own `Init`), the rest
+ * their definitions' -- the jingle ball's and the Cat Dancer's own physics
+ * standing in so; kept from the stage's edges by half their pictures.
+ */
+const liveToys = new Map<number, CatzToy>();
+const FRICTION: Record<number, [number, number]> = { 6: [100, 100], 7: [95, -1], 9: [70, -1] };
+
+/** A toy the cat struck, set moving from where it is. */
+function strikeToy({ kind, v }: { kind: number; v: { x: number; y: number } }) {
+  const at = livePen.get(kind);
+
+  if (!at) {
+    return;
+  }
+
+  const picture = penPictures.get(kind)?.dib;
+  const [friction, rebound] = FRICTION[kind] ?? [50, -1];
+  liveToys.set(kind, {
+    at: { ...at },
+    v: { ...v },
+    friction,
+    rebound,
+    half: {
+      x: Math.trunc((picture?.width ?? 32) / 2),
+      y: Math.trunc((picture?.height ?? 32) / 2),
+    },
+  });
+}
+
+/** A tick of the moving toys: each moved, and put where it now is; still, it stops. */
+function moveToys() {
+  for (const [kind, toy] of liveToys) {
+    if (!livePen.has(kind)) {
+      liveToys.delete(kind);
+      continue;
+    }
+
+    catzToyTick(toy, LIVE_STAGE);
+    livePen.set(kind, { ...toy.at });
+
+    if (!toy.v.x && !toy.v.y) {
+      liveToys.delete(kind);
+    }
+  }
+}
+
+/**
  * The cat on its own (`CatzPet`): ten ticks a second, as the engine runs,
  * each action it pushes played out by its script from the pose it is in, a
  * frame a tick, the cat drawn where it stands -- its walk moved straight, as
@@ -364,7 +414,9 @@ function goLive() {
     play: (action, steer) => body.play(action, steer),
     dropped: () => body.drop(),
     head: (look) => body.look(look),
+    strike: strikeToy,
     found: () => !!body.shown?.there,
+    cues: () => body.shown?.step.cues ?? [],
   });
   made.pet = pet;
 
@@ -378,6 +430,9 @@ function goLive() {
       updateCatzBrain(brain, Math.trunc(clock));
       pet.mind.brains[n] = brain.value;
     });
+
+    /* The pen's things struck moving on. */
+    moveToys();
 
     /* The frame this tick shows, as `PopScript` pops it before the state's own tick. */
     const shown = body.next();

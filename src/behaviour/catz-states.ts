@@ -7,6 +7,7 @@
 import { type CatzMind, catzBehavior, catzSound, mapCatzValue } from './catz-behavior.ts';
 import { CATZ_TURN } from '../render/raster.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
+import { catzStrikeSpeed } from './catz-toys.ts';
 
 /** The cat's own states these model, by CATZDLL.DLL's numbers (`eKatState_…`). */
 export const CATZ_STATE = {
@@ -552,6 +553,9 @@ export interface CatzStateTick {
 
   /** Walking on: the words that set its steering (`targetSprite4`, 0x756d: what to, the box's width and height, and its share), the layered action begun, the sound made, `+0x688` (before the steering moves it on) and `+0x35aa` where set, and its fullness after. */
   steer?: number[];
+
+  /** Swatting, struck: the toy of a kind, and the speed it is given (`StrikeToy`). */
+  strike?: { kind: number; v: { x: number; y: number } };
 
   /** Walking on, found but not there: its steering stopped (`targetSprite4` all 0), the stride after it walked straight on. */
   steerStopped?: boolean;
@@ -2239,11 +2243,12 @@ function catzBegging(
  * after all. Then, `+0x35ac` 1, three times in four it walks off (22), else
  * plays (15). Otherwise, facing another way, it swings as it was not cued.
  */
-function catzStrike(
+export function catzStrike(
   mind: CatzMind,
   world: CatzStateWorld,
   random: (n: number) => number
-): { tick: CatzStateTick } | { swat: CatzSwat; before: number[] } {
+):
+  { tick: CatzStateTick } | { swat: CatzSwat; before: number[]; strike?: CatzStateTick['strike'] } {
   const brain = (n: number) => mind.brains[n];
   const percent = () => random(101);
   const swat = world.swat!;
@@ -2305,8 +2310,21 @@ function catzStrike(
     return swing([]);
   }
 
-  /* Its angle off `+0x688`, by up to 49 (`rand() % 50`), for where the toy goes. */
-  random(50);
+  /* Its angle off `+0x688`, by up to 49 (`rand() % 50`) one way or the
+   * other by its side (`+0x358e`), for where the toy goes; the shelf's way
+   * turned about. Struck (`StrikeToy`, seg29:1002), all but the cursor and
+   * what is on the closed shelf, 100 that way. */
+  const off = random(50);
+  const x688 = world.x688 ?? 0;
+  let angle = catzShortestAngle(swat.side === 0 ? x688 + off : x688 - off);
+
+  if (shelved) {
+    angle = -angle;
+  }
+
+  if (world.x35a4 !== 0x17 && !(shelved && swat.shelfClosed)) {
+    tick.strike = { kind: world.x35a4 ?? 0, v: catzStrikeSpeed(angle) };
+  }
 
   if (world.x35a4 !== 0x17 && open) {
     /* `ShelfToPen` answers the cat's slot `0x14c` where the toy's `+0x1d0` is 0: not reimplemented. */
@@ -2321,7 +2339,7 @@ function catzStrike(
   }
 
   if (world.x35a4 === 5 && percent() < 90 && !shelved) {
-    return swing([]);
+    return { ...swing([]), strike: tick.strike };
   }
 
   return leave();

@@ -208,6 +208,13 @@ export class CatzBody {
         }
 
         const pose = catzPoseOf(step);
+
+        /* A layered action whose frames these files lack (the demo's) not layered. */
+        if (pose.layer && (!shaped[pose.layer.first] || !shaped[pose.layer.frame])) {
+          pose.layer = undefined;
+          step.layer = undefined;
+        }
+
         this.tail = this.tail
           ? placeCatzTick(placer, this.tail, pose, {
               reference: this.held,

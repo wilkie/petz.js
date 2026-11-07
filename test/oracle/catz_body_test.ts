@@ -30,6 +30,8 @@ const PEN = new Map([
   [0xc, { x: 520, y: 400 }],
   [0xd, { x: 120, y: 410 }],
   [5, { x: 330, y: 300 }],
+  [6, { x: 220, y: 330 }],
+  [8, { x: 420, y: 330 }],
 ]);
 const NONE = new Map<number, { x: number; y: number }>();
 
@@ -62,6 +64,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
 
     /* The pet, made after its body: where what its head tracks is, once there is one. */
     const made: { pet?: CatzPet } = {};
+    const struck: unknown[] = [];
     const body = new CatzBody({
       scripts,
       positions,
@@ -92,7 +95,11 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       play: (action, steer) => body.play(action, steer),
       dropped: () => body.drop(),
       head: (look) => body.look(look),
+      strike: (strike) => {
+        struck.push(strike);
+      },
       found: () => !!body.shown?.there,
+      cues: () => body.shown?.step.cues ?? [],
     });
     made.pet = pet;
 
@@ -152,7 +159,9 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
           ({ ticks, moved, left, found, there }) =>
             `${ticks} ticks, ${moved} px, ${left} from it, found ${found} ticks${there ? ', there' : ''}`
         )
-        .join('\n')}\nstood in ${JSON.stringify(pet.stoodIn)}`
+        .join(
+          '\n'
+        )}\nstood in ${JSON.stringify(pet.stoodIn)}\nstruck ${struck.length} ${JSON.stringify(struck.slice(0, 3))}`
     );
     expect(pet.stoodIn.errors).toBe(0);
     expect(pet.stoodIn.deep).toBe(0);

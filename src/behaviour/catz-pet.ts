@@ -25,6 +25,7 @@ import {
   catzPtToPtAngle,
   catzStateBetween,
   catzStateTick,
+  catzStrike,
   type CatzStateTick,
   type CatzStateWorld,
 } from './catz-states.ts';
@@ -54,6 +55,9 @@ export interface CatzPetOptions {
   /** A state entered, what was left of the last script dropped: whoever plays its scripts drops its frames still to come. */
   dropped?: () => void;
 
+  /** The cues its script gave as this tick's frame was popped (`IsCued`), where whoever plays its scripts knows. */
+  cues?: () => number[];
+
   /** Whether `PopScript` found what it walks to in its box this tick (answering 2), where whoever plays its scripts knows; else `foundWithin` stands in. */
   found?: () => boolean;
 
@@ -76,6 +80,9 @@ export interface CatzPetOptions {
   head?: (
     look: { kind: number; speed: number; shelved: boolean } | 'user' | 'off' | 'lids'
   ) => void;
+
+  /** A toy it swatted struck (`StrikeToy`): the kind, and the speed it is given. For whoever moves the pen's things. */
+  strike?: (strike: { kind: number; v: { x: number; y: number } }) => void;
 
   /** Where the cursor (kin 0x17) is, by the ticks gone: by default still at the stage's lower middle. */
   cursor?: (tick: number) => { x: number; y: number };
@@ -217,6 +224,13 @@ export class CatzPet {
       if (this.state === 12) {
         this.run(false, 0, true);
       }
+
+      /* Swatting, cued to strike (cue 5) as its frame was popped: the
+       * strike, as the handler does it then (`DoCatSwatting`, seg29:0cee),
+       * its script played on but where the strike asks for another state. */
+      if (this.state === 0x38 && this.cues().includes(5)) {
+        this.strikes();
+      }
     } else {
       this.act();
     }
@@ -296,6 +310,25 @@ export class CatzPet {
     this.take(now);
   }
 
+  /** The cues its script gave as this tick's frame was popped (`IsCued`): as whoever plays its scripts says; none without. */
+  private cues() {
+    return this.options.cues?.() ?? [];
+  }
+
+  /** A swat's strike mid-script (`catzStrike`): the toy struck, and any state it asks for. */
+  private strikes() {
+    const world = { ...this.world(false), cued: true, cues: this.cues() };
+    const struck = catzStrike(this.mind, world, this.options.random);
+
+    if ('tick' in struck) {
+      this.take(struck.tick);
+      this.change(struck.tick.global, struck.tick.state, 0);
+    } else if (struck.strike) {
+      /* Struck, and swinging on after all: the toy given its speed all the same. */
+      this.options.strike?.(struck.strike);
+    }
+  }
+
   /** Where a kind of sprite is (its target point), for its head to track: the cursor, its marker, or one of the pen's things, on the shelf or off; none else. */
   kinAt(kind: number) {
     return kind === 0x17
@@ -307,12 +340,12 @@ export class CatzPet {
           : undefined;
   }
 
-  /** Where what it plays with (`+0x35a4`) is: the cursor, or one of the pen's things off the shelf. */
+  /** Where what it plays with (`+0x35a4`) is: the cursor, or one of the pen's things, in the pen or on the shelf. */
   private preyAt() {
     const kind = this.fields.x35a4 ?? 0;
     return kind === 0x17
       ? this.cursorAt()
-      : kind > 0 && kind < 0x10 && !this.isShelved(kind)
+      : kind > 0 && kind < 0x10
         ? this.thingAt(kind)
         : undefined;
   }
@@ -709,6 +742,10 @@ export class CatzPet {
   private take(ticked: Partial<CatzStateTick>) {
     const f = this.fields;
 
+    if (ticked.strike) {
+      this.options.strike?.(ticked.strike);
+    }
+
     /* Its head, as the tick turned it: walking, at what it walks to; else at what it plays with. */
     for (const look of ticked.head ?? []) {
       if (look === 'track') {
@@ -825,13 +862,17 @@ export class CatzPet {
         facing: 0,
         dx: (this.preyAt() ?? this.cursorAt()).x - x,
         dy: (this.preyAt() ?? this.cursorAt()).y - y,
-        /* Its paw missing it by how far what it plays with is from it, standing in for `GetSwatMissDistance`. */
-        miss: Math.trunc(
-          Math.hypot(
-            (this.preyAt() ?? this.cursorAt()).x - x,
-            (this.preyAt() ?? this.cursorAt()).y - y
-          )
-        ),
+        /* Its paw missing it by how far what it plays with is from it,
+         * standing in for `GetSwatMissDistance` -- on the shelf, out of its
+         * paw's reach but by jumping (not reimplemented), far. */
+        miss: this.isShelved(this.fields.x35a4 ?? 0)
+          ? 1000
+          : Math.trunc(
+              Math.hypot(
+                (this.preyAt() ?? this.cursorAt()).x - x,
+                (this.preyAt() ?? this.cursorAt()).y - y
+              )
+            ),
         x3592: 0,
         shelved: this.isShelved(this.fields.x35a4 ?? 0),
         shelfClosed: false,
