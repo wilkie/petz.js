@@ -48,6 +48,8 @@ import {
   type Script,
   SCRIPTS,
 } from '../formats/script.ts';
+import { CatzPet } from '../behaviour/catz-pet.ts';
+import { borlandRand } from '../behaviour/random.ts';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = element<HTMLParagraphElement>('status');
@@ -63,6 +65,7 @@ const frameInput = element<HTMLInputElement>('frame');
 const frameNumber = element<HTMLOutputElement>('frame-number');
 const yawInput = element<HTMLInputElement>('yaw');
 const playButton = element<HTMLButtonElement>('play');
+const liveButton = element<HTMLButtonElement>('live');
 const canvas = element<HTMLCanvasElement>('stage');
 const context = canvas.getContext('2d')!;
 
@@ -241,6 +244,93 @@ function placed(index: number) {
   return steps;
 }
 
+/** The stage the cat lives on, and how it maps onto the canvas (320 by 240, drawn from 160, 150). */
+const LIVE_STAGE = { left: 0, top: 0, right: 470, bottom: 370 };
+
+/** The brains and centres of the playpen's cat as the harness found it. */
+const LIVE_BRAINS = [12, 49, 96, 86, 69, 88, 1, 30, 0, 49, 0, 7];
+const LIVE_CENTRES = [12, 7, 96, 86, 13, 88, 16, 30, 0, 0, 0, 0];
+
+let live = 0;
+let liveCursor = { x: 235, y: 300 };
+
+/**
+ * The cat on its own (`CatzPet`): ten ticks a second, as the engine runs,
+ * each action it pushes played out by its script from the pose it is in, a
+ * frame a tick, the cat drawn where it stands -- its walk moved straight, as
+ * the pet stands in for its steering, not yet by its frames -- and the
+ * mouse over the stage its cursor.
+ */
+function goLive() {
+  if (live) {
+    clearInterval(live);
+    live = 0;
+    liveButton.textContent = 'Live';
+    return;
+  }
+
+  const rand = borlandRand(Date.now() >>> 0);
+  const random = (n: number) => rand() % n;
+  const cat = breed();
+  const shaped = extendFrames(frames, cat);
+  const { neck, butt } = skeletonOf(cat);
+  const fudgers = makeCatzFudgers();
+  resetCatzEyelids(fudgers);
+  [fudgers[6].value, fudgers[7].value] = [20, 20];
+  const queue: CatzStep[] = [];
+  let pose = positions.neutral;
+  let shown: CatzStep | undefined;
+  let ticks = 0;
+  const pet = new CatzPet({
+    brains: LIVE_BRAINS,
+    centres: LIVE_CENTRES,
+    stage: LIVE_STAGE,
+    cursor: () => liveCursor,
+    random,
+    play: (action) => {
+      const steps = scripts[action]
+        ? catzTimeline(scripts, positions, action, {
+            flags: (frame) => frames[frame]?.tag ?? 3,
+            random,
+            limit: 600,
+            from: pose,
+            fudgers,
+            angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
+            blink: { wait: random(100) + 30, shut: false, kept: 20 },
+          }).filter((step) => !step.reference && step.frame < frames.length)
+        : [];
+      queue.push(...steps);
+      pose = scripts[action]?.to || pose;
+      return { ticks: steps.length, pose };
+    },
+  });
+
+  liveButton.textContent = 'Stop';
+  live = window.setInterval(() => {
+    const { state, global } = pet.tick();
+    shown = queue.shift() ?? shown;
+
+    /* A new state drops what was left of the old: as many frames kept as it has left to play. */
+    if (queue.length > pet.playing) {
+      queue.splice(0, queue.length - pet.playing);
+    }
+    const scale = { x: 320 / LIVE_STAGE.right, y: 240 / LIVE_STAGE.bottom };
+    sequence = [
+      {
+        frame: shown?.frame ?? 0,
+        x: Math.round(pet.point.x * scale.x) - 160,
+        y: Math.round(pet.point.y * scale.y) - 150,
+        pose: shown?.fudged,
+        layer: shown?.layer,
+      },
+    ];
+    frameInput.value = '0';
+    draw();
+    ticks++;
+    status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}${queue.length ? `, ${queue.length} frames to play` : ''}.`;
+  }, 100);
+}
+
 function chooseAnimation() {
   if (scriptSelect.value === '') {
     const { start, end } = header.animations[Number(animationSelect.value)];
@@ -368,6 +458,14 @@ timesInput.addEventListener('change', () => {
   }
 });
 playButton.addEventListener('click', play);
+liveButton.addEventListener('click', goLive);
+canvas.addEventListener('mousemove', (event) => {
+  const box = canvas.getBoundingClientRect();
+  liveCursor = {
+    x: Math.round(((event.clientX - box.left) / box.width) * LIVE_STAGE.right),
+    y: Math.round(((event.clientY - box.top) / box.height) * LIVE_STAGE.bottom),
+  };
+});
 
 picker.addEventListener('change', () => {
   if (picker.files?.length) {

@@ -125,6 +125,11 @@ export class CatzPet {
     this.beginGlobal(6, 0);
   }
 
+  /** How many ticks are left of what it plays: a viewer keeps as many frames, a new state having dropped what was left. */
+  get playing() {
+    return this.left;
+  }
+
   /** A tick: its reflexes, then its state's own -- its script playing on, or done. */
   tick(): CatzPetTicked {
     this.ticks++;
