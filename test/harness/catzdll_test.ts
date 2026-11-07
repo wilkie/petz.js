@@ -25,6 +25,7 @@ import {
   type CatzPose,
   catzAimAt,
   catzFocusRect,
+  catzHeadTarget,
   catzInside,
   CatzPlacer,
   placeCatzTick,
@@ -676,7 +677,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     /* Nor, for the head's and eyes' fudgers, one that may look at a point:
      * where the head turns to depends on where the cat is drawn, which a
      * bare sprite has nowhere (`SetHeadTarget`, seg40:5a47). */
-    const points = (action: number, seen = new Set<number>()): boolean => {
+    const uses = (action: number, names: string[], seen = new Set<number>()): boolean => {
       if (seen.has(action) || !scripts[action]) {
         return false;
       }
@@ -687,15 +688,19 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
           const name = 'op' in element ? opcodes.get(element.op)?.name : undefined;
           const [nested] = 'op' in element ? element.operands : [];
           return (
-            name === 'lookAtLocation2' ||
-            name === 'lookAtRandomPt0' ||
+            names.includes(name ?? '') ||
             (/^play(Layered)?Action/.test(name ?? '') &&
               typeof nested === 'number' &&
-              points(nested, seen))
+              uses(nested, names, seen))
           );
         })
       );
     };
+    /* A point at random is looked at from where the engine has the cat as
+     * the script is popped (`catzHeadTarget`, below); what it tracks the
+     * driver does not say, so an action that may look at a sprite is not
+     * held for its head and eyes. */
+    const points = (action: number) => uses(action, ['lookAtLocation2']);
 
     /* Every other action, its variants in turn, from the neutral position
      * one time in three and from the end of some other action otherwise. */
@@ -820,6 +825,8 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       eyes: tick.slice(30, 39),
     });
     let placedCount = 0;
+    /* How the head looks, as the scripts set it, kept from each action to the next on the one sprite. */
+    const head = { divisor: 4, shelved: false, away: false };
 
     let targeted = 0;
 
@@ -876,6 +883,37 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
               return angle;
             }
           : undefined,
+        /* A point at random in the stage, looked at from where the engine has
+         * the cat as the script is popped: the tick before's rectangle and
+         * state (or, first, the snapshot's), its rotation as it now is. */
+        area: STAGE,
+        head,
+        look: (point, ticked, rotation, how) => {
+          const before = ticked ? ticks[ticked - 1] : undefined;
+          const [left, top, right, bottom] = before?.slice(21, 25) ?? place!.slice(0, 4);
+          const pose: CatzPose = before
+            ? {
+                frame: before[0],
+                rotation: before[1],
+                tilt: before[25],
+                roll: before[26],
+                head: { rotation: before[27], tilt: before[28], cock: before[29] },
+                layer: before[19] >= 0 ? { first: before[19], frame: before[20] } : undefined,
+              }
+            : {
+                frame: place![4],
+                rotation: place![5],
+                tilt: place![6],
+                roll: place![7],
+                head: { rotation: place![8], tilt: place![9], cock: place![10] },
+              };
+          return catzHeadTarget(placer, { left, top, right, bottom }, pose, point, {
+            rotation,
+            ...how,
+            lower: fudgers[3].lower,
+            upper: fudgers[3].upper,
+          });
+        },
       });
       earlier = ticks.at(-1)?.[0];
 

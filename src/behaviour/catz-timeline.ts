@@ -40,6 +40,10 @@ export const CATZ_OP = {
   disableFudgeAim: 30010,
   enableFudgeAim: 30012,
   lookAtRandomPt: 30021,
+  lookAtLocation: 30022,
+  setHeadDivisor: 30038,
+  setHeadShelved: 30039,
+  setHeadAway: 30040,
   lookAtUser: 30023,
   lookFoward: 30024,
   endLoop: 30014,
@@ -125,6 +129,18 @@ export interface CatzStep {
   cues?: number[];
 }
 
+/**
+ * How the head looks at a point, as scripts set it: the distance over
+ * which it reaches its furthest (`+0x150e`, 30038; 4, the default
+ * `+0x1510`, for none or less), whether what it tracks is on the shelf
+ * (`+0x1512`, 30039), and whether it looks away (`+0x1514`, 30040).
+ */
+export interface CatzHeadState {
+  divisor: number;
+  shelved: boolean;
+  away: boolean;
+}
+
 /** What the file says of its positions, its preamble's first two words. */
 export interface CatzPositions {
   /** How many positions there are: 123 for the cat. */
@@ -196,6 +212,45 @@ export interface CatzTimelineOptions {
    * stand; none to leave it. With `fudgers`.
    */
   aim?: (step: CatzStep, rotation: number, fields: number[]) => number | undefined;
+
+  /**
+   * Where the head and eyes are to be aimed to look at a point -- the
+   * head's turn and tilt, the eyes' across and down (`SetHeadTarget`,
+   * `catzHeadTarget`), from where the cat is as the script is popped (the
+   * shown ticks so far, and its rotation then) -- for `lookAtRandomPt`;
+   * none to leave them. With `fudgers`.
+   */
+  look?: (
+    point: { x: number; y: number },
+    ticked: number,
+    rotation: number,
+    head: CatzHeadState
+  ) => number[] | undefined;
+
+  /**
+   * How the head looks, as scripts set it, kept from one action to the next
+   * (`+0x150e`, `+0x1512`, `+0x1514`); changed as they play. Without, a
+   * cat's as made.
+   */
+  head?: CatzHeadState;
+
+  /** The area a random point is drawn in (`PetParams` `+0xac` to `+0xb2`); 1 by 1 without. */
+  area?: { left: number; top: number; right: number; bottom: number };
+
+  /**
+   * A script's looking changing what the head tracks (`+0x1508`): a kind
+   * of sprite (`lookAtLocation`, 0 for none), or nothing, looking at a
+   * point, at the user or ahead.
+   */
+  tracking?: (kind: number) => void;
+
+  /**
+   * Each shown tick, after `aim`: where to aim the head and eyes at what it
+   * tracks (`PopScript`, seg41:1391, `SetHeadTarget` at its target point),
+   * given the step and its rotation and fields; none where it tracks
+   * nothing. With `fudgers`.
+   */
+  track?: (step: CatzStep, rotation: number, fields: number[]) => number[] | undefined;
 
   /**
    * Each step as it is done, in turn: a reference frame as it is popped, a
@@ -327,6 +382,11 @@ export function catzTimeline(
     aim,
     done,
     aligned = false,
+    look,
+    area,
+    tracking,
+    track,
+    head = { divisor: 4, shelved: false, away: false },
   }: CatzTimelineOptions
 ): CatzStep[] {
   const steps: CatzStep[] = [];
@@ -374,6 +434,13 @@ export function catzTimeline(
       aimCatzFudger(fudgers![0], aimed);
     }
 
+    /* And what it tracks, its head and eyes aimed at it. */
+    const tracked = fudgers ? track?.(step, wrapCatzAngle(fields[0] + turned), fields) : undefined;
+
+    if (tracked) {
+      headAt(tracked);
+    }
+
     layerTick(step);
 
     if (fudgers) {
@@ -388,6 +455,11 @@ export function catzTimeline(
 
     turned = 0;
     startTick();
+  };
+
+  /** The head's turn and tilt and the eyes' across and down aimed (fudgers 3, 4, 10 and 11). */
+  const headAt = (targets: number[]) => {
+    [3, 4, 10, 11].forEach((n, k) => aimCatzFudger(fudgers![n], targets[k]));
   };
 
   /** A script's setting of the fudgers it names, as `PopScript` does it (seg41:0052). */
@@ -765,22 +837,54 @@ export function catzTimeline(
           reference = true;
           break;
         case CATZ_OP.lookFoward:
-          /* Head and eyes straight ahead (`SetHeadTarget` with no point, seg40:5a47). */
+          /* Head and eyes straight ahead (`SetHeadTarget` with no point, seg40:5a47), tracking nothing. */
           for (const n of fudgers ? [3, 4, 10, 11] : []) {
             aimCatzFudger(fudgers![n], 0);
           }
+          tracking?.(0);
           break;
         case CATZ_OP.lookAtUser:
-          /* The head turned against the cat's own rotation, so to face out, and level (seg41:0052). */
+          /* The head turned against the cat's own rotation, so to face out, and level (seg41:0d25), tracking nothing. */
           if (fudgers) {
             aimCatzFudger(fudgers[3], -wrapCatzAngle(fields[0] + turned));
             aimCatzFudger(fudgers[4], 0);
           }
+          tracking?.(0);
           break;
-        case CATZ_OP.lookAtRandomPt:
-          /* A point on the stage, across then down (`PopScript`, seg41:0052). */
-          random(1, 'rand');
-          random(1, 'rand');
+        case CATZ_OP.lookAtRandomPt: {
+          /* A point in the area, across then down (`rand() %` its width,
+           * its height, from its left and top; seg41:0c72), looked at
+           * (`SetHeadTarget`), tracking nothing. */
+          const { left = 0, top = 0, right = 1, bottom = 1 } = area ?? {};
+          const x = random(right - left, 'rand') + left;
+          const y = random(bottom - top, 'rand') + top;
+          const shown = steps.filter((step) => !step.reference).length;
+          const targets = fudgers
+            ? look?.({ x, y }, shown, wrapCatzAngle(fields[0] + turned), head)
+            : undefined;
+
+          if (targets) {
+            headAt(targets);
+          }
+
+          tracking?.(0);
+          break;
+        }
+        case CATZ_OP.setHeadDivisor: {
+          /* The head's reach's divisor; none or less, its default (seg41:0e45). */
+          const divisor = value(a);
+          head.divisor = divisor > 0 ? divisor : 4;
+          break;
+        }
+        case CATZ_OP.setHeadShelved:
+          head.shelved = value(a) !== 0;
+          break;
+        case CATZ_OP.setHeadAway:
+          head.away = value(a) !== 0;
+          break;
+        case CATZ_OP.lookAtLocation:
+          /* What it tracks: a kind of sprite, the cursor where there is none of it, 0 none (seg41:0dba). */
+          tracking?.(value(a));
           break;
         default: {
           /* Popped, a random operand drawn as any other (`Stack::Pop`,

@@ -360,3 +360,92 @@ export function catzInside(rect: CatzRect, { x, y }: CatzPoint) {
 export function catzGlueBall(breed: Breed) {
   return Number(breed.sections.get('Default Glue Ball')?.[0]?.values[0] ?? 0);
 }
+
+/** How the head is aimed at a point: away from it, whether what it tracks is on the shelf, its reach's divisor, and the head's turn's limits. */
+export interface CatzHeadAim {
+  /** The cat's rotation (`+0x688`). */
+  rotation: number;
+
+  /** `+0x150e`: the distance over which the head reaches its furthest, 4 unless a script set it (`setHeadDivisor`, 30038). */
+  divisor?: number;
+
+  /** `+0x1514`: looking away from the point, as snubbing. */
+  away?: boolean;
+
+  /** `+0x1512`: what it tracks on the shelf. */
+  shelved?: boolean;
+
+  /** The head's turn's fudger's limits (its slots `0x38`, `0x3c`). */
+  lower: number;
+  upper: number;
+}
+
+/**
+ * Where the head and eyes are aimed to look at a point (`SetHeadTarget`,
+ * seg40:5a47): its turn and tilt (fudgers 3 and 4) and the eyes' across
+ * and down (10 and 11); with no point, all 0. From the neck -- the lines'
+ * key ball 2 (`+0xd93`), on the stage as the cat's state is -- less the
+ * point (turned about where it looks away): the eyes at a tenth of that,
+ * the other way; the head by its angle (`atan2`) and its length over the
+ * divisor, within 64 either way, the turn its cosine's share and the tilt
+ * its sine's, rounded toward 0. The turn is then less the cat's rotation --
+ * for what it tracks on the shelf, facing away (beyond 64 either way), a
+ * half turn less the rotation and the turn -- made shortest; and, off the
+ * shelf, beyond 0x82 past its upper limit where the limit is more than a
+ * quarter turn behind the rotation, the limit; and below -0x82 and its
+ * upper limit where the lower is more than a quarter turn ahead, the lower.
+ */
+export function catzHeadTarget(
+  placer: CatzPlacer,
+  rect: CatzRect,
+  pose: CatzPose,
+  point: CatzPoint | null,
+  { rotation, divisor = 4, away = false, shelved = false, lower, upper }: CatzHeadAim
+): [turn: number, tilt: number, eyeX: number, eyeY: number] {
+  if (!point) {
+    return [0, 0, 0, 0];
+  }
+
+  const i16 = (n: number) => (n << 16) >> 16;
+  const neck = placer.ballOnStage(rect, pose, skeletonOf(placer.breed).neck);
+  let dx = i16(Math.trunc(neck.x) - point.x);
+  let dy = i16(Math.trunc(neck.y) - point.y);
+
+  if (away) {
+    [dx, dy] = [-dx, -dy];
+  }
+
+  const eyeX = Math.trunc(-dx / 10);
+  const eyeY = Math.trunc(-dy / 10);
+  let turn = 0;
+  let tilt = 0;
+
+  if (dx || dy) {
+    const angle = Math.atan2(dy, dx);
+    let reach = Math.trunc(Math.trunc(Math.sqrt(dx * dx + dy * dy)) / divisor);
+    reach = Math.max(-64, Math.min(64, reach));
+    turn = Math.trunc(Math.cos(angle) * reach);
+    tilt = Math.trunc(Math.sin(angle) * reach);
+
+    if (shelved) {
+      turn =
+        rotation < -64 || rotation > 64
+          ? wrapCatzAngle(0x80 - rotation - turn)
+          : wrapCatzAngle(turn - rotation);
+    } else {
+      turn = i16(turn - rotation);
+    }
+  }
+
+  if (!shelved) {
+    if (turn > upper && turn > 0x82 && wrapCatzAngle(upper - rotation) < -0x40) {
+      turn = upper;
+    }
+
+    if (turn < upper && turn < -0x82 && wrapCatzAngle(lower - rotation) > 0x40) {
+      turn = lower;
+    }
+  }
+
+  return [wrapCatzAngle(turn), tilt, eyeX, eyeY];
+}
