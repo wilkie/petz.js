@@ -698,7 +698,26 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
     int b;
 
     if (depth++) {
-        handle(machine, p, enter, leave);
+        /* A state entered within the handler that asked for it, at a depth
+         * whose ticks are not written: its fields as it is entered -- what
+         * the tick before wrote -- and after (`entered`, `enteredafter`). */
+        if (enter && !leave && traceData) {
+            int entering = *(int __far *)(cat + 0x2552);
+
+            say("entered %d", entering);
+            traceFields(cat);
+            say("\r\n");
+            handle(machine, p, enter, leave);
+
+            /* Its entering may enter another, written between: after is a
+             * line of its own. */
+            say("enteredafter %d", entering);
+            traceFields(cat);
+            say("\r\n");
+        } else {
+            handle(machine, p, enter, leave);
+        }
+
         depth--;
         return;
     }

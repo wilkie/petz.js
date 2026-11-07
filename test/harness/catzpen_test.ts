@@ -1278,7 +1278,13 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       `bookkeeping:\n${Object.entries(books)
         .filter(([, k]) => k.other)
         .map(([key, k]) => `  ${key}: ${k.same} same, ${k.other} not (${k.examples.join('; ')})`)
-        .join('\n')}\n  ${Object.values(books).reduce((n, k) => n + k.same, 0)} same in all`
+        .join(
+          '\n'
+        )}\n  ${Object.values(books).reduce((n, k) => n + k.same, 0)} same in all, ${Object.entries(
+        books
+      )
+        .filter(([key]) => key.startsWith('>'))
+        .reduce((n, [, k]) => n + k.same, 0)} across into another state`
     );
     /* Walking on's strides are carried only where the trace keeps what
      * `PopScript` answered (newer traces); nor yet one petting tick in 3,000. */
@@ -1862,6 +1868,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
   const books: Record<string, { same: number; other: number; examples: string[] }> = {};
 
   let frames = 0;
+  let enteredNow: { as: number[]; after?: number[] }[] = [];
 
   for (const line of lines) {
     const [kind, ...rest] = line.split(' ');
@@ -1873,8 +1880,26 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       pending = null;
     }
 
+    /* A state entered within its handler: its fields as it was entered,
+     * and after, kept for the tick's own line. */
+    if (kind === 'entered') {
+      enteredNow.push({ as: values });
+      continue;
+    }
+
+    if (kind === 'enteredafter') {
+      const it = [...enteredNow].reverse().find(({ as, after }) => as[0] === values[0] && !after);
+
+      if (it) {
+        it.after = values;
+      }
+
+      continue;
+    }
+
     if (kind === 'tick') {
       before = values;
+      enteredNow = [];
 
       /* The bookkeeping: what the model said the tick before wrote, against
        * what the engine holds as this one begins, its state and global
@@ -2322,6 +2347,44 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     /* What it said it wrote, kept for the next tick of the same state. */
     const tick = matched?.[2];
+
+    /* Or, putting itself in another state of its own, held against that
+     * state's fields as it was entered (`entered`). */
+    const entered =
+      tick && tick.state !== undefined && tick.global === undefined
+        ? enteredNow.find(({ as }) => as[0] === tick.state)
+        : undefined;
+
+    if (tick && entered) {
+      const field = (n: number) => entered.as[2 + n];
+      const pairs: [string, number | undefined, number][] = [
+        ['mode', tick.mode, field(5)],
+        ['x35a6', tick.x35a6, field(7)],
+        ['x35ac', tick.x35ac, field(9)],
+        ['x35ee', tick.x35ee, field(16)],
+        ['x35a4', tick.x35a4, field(17)],
+        ['x33be', tick.x33be, field(21)],
+      ];
+
+      for (const [name, ours, theirs] of pairs) {
+        if (ours === undefined) {
+          continue;
+        }
+
+        const key = `>${tick.state}:${name}`;
+        const k = (books[key] ??= { same: 0, other: 0, examples: [] });
+
+        if (ours === theirs) {
+          k.same++;
+        } else {
+          k.other++;
+
+          if (k.examples.length < 3) {
+            k.examples.push(`seed ${seedValue}: ${ours} not ${theirs}`);
+          }
+        }
+      }
+    }
     pending =
       tick && tick.state === undefined && tick.global === undefined && !leave
         ? { state, global, tick }
