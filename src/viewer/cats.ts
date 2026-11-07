@@ -34,6 +34,7 @@ import {
   type CatzPose,
   CatzPlacer,
   placeCatzTick,
+  catzAimAt,
 } from '../behaviour/catz-stage.ts';
 import {
   catzFrameAngle,
@@ -245,8 +246,8 @@ function placed(index: number) {
   return steps;
 }
 
-/** The stage the cat lives on, and how it maps onto the canvas (320 by 240, drawn from 160, 150). */
-const LIVE_STAGE = { left: 0, top: 0, right: 470, bottom: 370 };
+/** The stage the cat lives on, in the engine's pixels, drawn whole on the canvas. */
+const LIVE_STAGE = { left: 0, top: 0, right: 640, bottom: 480 };
 
 /** The brains and centres of the playpen's cat as the harness found it: where a breed has no factors. */
 const LIVE_BRAINS = [12, 49, 96, 86, 69, 88, 1, 30, 0, 49, 0, 7];
@@ -277,13 +278,29 @@ function goLive() {
   const cat = breed();
   const shaped = extendFrames(frames, cat);
   const { neck, butt } = skeletonOf(cat);
+  const placer = new CatzPlacer(cat, header, shaped, { age: 100 });
   const fudgers = makeCatzFudgers();
   resetCatzEyelids(fudgers);
   [fudgers[6].value, fudgers[7].value] = [20, 20];
-  const queue: CatzStep[] = [];
-  let pose = positions.neutral;
-  let shown: CatzStep | undefined;
+  /* Each frame to show, placed: its rectangle once it is shown, and its pose. */
+  const queue: { step: CatzStep; rect: CatzPlaced['rect']; pose: CatzPose }[] = [];
+  let shown: (typeof queue)[number] | undefined;
+  /* Where the last frame queued leaves it, which the next is placed from. */
+  let tail: CatzPlaced | null = null;
+  let held: CatzStep | undefined;
+  let position = positions.neutral;
   let ticks = 0;
+  const poseOf = (step: CatzStep, fields = step.fudged): CatzPose => {
+    const [rotation = 0, roll = 0, tilt = 0, turn = 0, up = 0, cock = 0] = fields ?? [];
+    return {
+      frame: step.frame,
+      rotation,
+      tilt,
+      roll,
+      head: { rotation: turn, tilt: up, cock },
+      layer: step.layer,
+    };
+  };
   /* Its brains as the engine makes them for its breed (`InitBrain`), its age by the slider. */
   const brains = cat.catz?.factors
     ? initCatzBrains(cat.catz.factors, random, { age: Number(kittenInput.value) })
@@ -295,21 +312,62 @@ function goLive() {
     stage: LIVE_STAGE,
     cursor: () => liveCursor,
     random,
+    /* Placed by its frames, as `PopScript` places it: the pet's straight walk off. */
+    moves: false,
+    foundWithin: 40,
     play: (action) => {
       const steps = scripts[action]
         ? catzTimeline(scripts, positions, action, {
             flags: (frame) => frames[frame]?.tag ?? 3,
             random,
             limit: 600,
-            from: pose,
+            from: position,
             fudgers,
             angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
             blink: { wait: random(100) + 30, shut: false, kept: 20 },
-          }).filter((step) => !step.reference && step.frame < frames.length)
+            /* Steered at what it walks to or stalks, from where the action
+             * began (the engine aims from where each tick leaves it). */
+            aim: (step, rotation, fields) => {
+              const target = pet.target();
+              return target && tail
+                ? catzAimAt(placer, tail.rect, poseOf(step, [rotation, ...fields.slice(1)]), target)
+                : undefined;
+            },
+          }).filter((step) => step.frame < frames.length)
         : [];
-      queue.push(...steps);
-      pose = scripts[action]?.to || pose;
-      return { ticks: steps.length, pose };
+      let shownSteps = 0;
+
+      for (const step of steps) {
+        if (step.reference) {
+          held = step;
+          continue;
+        }
+
+        const pose = poseOf(step);
+        tail = tail
+          ? placeCatzTick(placer, tail, pose, {
+              reference: held,
+              glued: !!step.glue,
+              area: LIVE_STAGE,
+            })
+          : (() => {
+              const bounds = placer.bounds(pose);
+              const [dx, dy] = [320 - (bounds.left + bounds.right) / 2, 300 - bounds.bottom];
+              const rect = {
+                left: Math.round(bounds.left + dx),
+                top: Math.round(bounds.top + dy),
+                right: Math.round(bounds.right + dx),
+                bottom: Math.round(bounds.bottom + dy),
+              };
+              return { rect, before: pose, current: pose };
+            })();
+        held = undefined;
+        queue.push({ step, rect: tail.rect, pose });
+        shownSteps++;
+      }
+
+      position = scripts[action]?.to || position;
+      return { ticks: shownSteps, pose: position };
     },
   });
 
@@ -331,21 +389,59 @@ function goLive() {
     if (queue.length > pet.playing) {
       queue.splice(0, queue.length - pet.playing);
     }
-    const scale = { x: 320 / LIVE_STAGE.right, y: 240 / LIVE_STAGE.bottom };
-    sequence = [
-      {
-        frame: shown?.frame ?? 0,
-        x: Math.round(pet.point.x * scale.x) - 160,
-        y: Math.round(pet.point.y * scale.y) - 150,
-        pose: shown?.fudged,
-        layer: shown?.layer,
-      },
-    ];
-    frameInput.value = '0';
-    draw();
+
+    /* Where it is, for its states: its target point, the middle of its rectangle. */
+    if (shown) {
+      const { rect } = shown;
+      pet.point = {
+        x: Math.trunc((rect.left + rect.right) / 2),
+        y: Math.trunc((rect.top + rect.bottom) / 2),
+      };
+      /* And which way it faces (`+0x688`): its rotation as drawn, -128 to 127. */
+      pet.fields.x688 = ((((shown.pose.rotation + 128) % 256) + 256) % 256) - 128;
+      drawLive(cat, shaped, placer, shown);
+    }
+
     ticks++;
-    status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}${queue.length ? `, ${queue.length} frames to play` : ''}.`;
+    status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}, at ${pet.point.x}, ${pet.point.y}${queue.length ? `, ${queue.length} frames to play` : ''}.`;
   }, 100);
+}
+
+/** A frame of the live cat, drawn at its placed rectangle on the whole stage. */
+function drawLive(
+  cat: Breed,
+  shaped: Frame[],
+  placer: CatzPlacer,
+  { step, rect, pose }: { step: CatzStep; rect: CatzPlaced['rect']; pose: CatzPose }
+) {
+  const frame =
+    step.layer && shaped[step.layer.first] && shaped[step.layer.frame]
+      ? layeredCatzFrame(
+          shaped[step.frame],
+          shaped[step.layer.first],
+          shaped[step.layer.frame],
+          cat
+        )
+      : shaped[step.frame];
+  const bounds = placer.bounds(pose);
+  const bitmap = new IndexedBitmap(LIVE_STAGE.right, LIVE_STAGE.bottom);
+
+  drawPet(bitmap, cat, header, frame, {
+    colours: 256,
+    originX: rect.left - bounds.left,
+    originY: rect.top - bounds.top,
+    age: 100,
+    order,
+    translate,
+    ...poseOf(step.fudged),
+  });
+
+  const pixels = new ImageData(bitmap.toRgba(palette), bitmap.width, bitmap.height);
+  const small = new OffscreenCanvas(bitmap.width, bitmap.height);
+  small.getContext('2d')!.putImageData(pixels, 0, 0);
+  context.imageSmoothingEnabled = false;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(small, 0, 0, canvas.width, canvas.height);
 }
 
 function chooseAnimation() {

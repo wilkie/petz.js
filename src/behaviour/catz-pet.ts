@@ -41,6 +41,12 @@ export interface CatzPetOptions {
   /** Its width and height (`+0x33c4`, `+0x33c6`); a cat's, by default. */
   size?: { width: number; height: number };
 
+  /** Whether it moves itself, straight to what it walks to (the default); else whoever places it sets `point`, as its frames carry it. */
+  moves?: boolean;
+
+  /** How near what it walks to it is found (standing in for its focus box, `PopScript` answering 2): 8 by default. */
+  foundWithin?: number;
+
   /** Where the cursor (kin 0x17) is, by the ticks gone: by default still at the stage's lower middle. */
   cursor?: (tick: number) => { x: number; y: number };
 }
@@ -187,6 +193,11 @@ export class CatzPet {
   /** The ticks gone. */
   private ticks = 0;
 
+  /** Where what it walks to is (`+0x35a6`): the cursor, its marker (kin 0x16) where it put one, else its goal -- and, stalking, its prey. */
+  target() {
+    return this.state === 2 && this.fields.x35a4 === 0x17 ? this.cursorAt() : this.walkedToAt();
+  }
+
   /** Where what it walks to is (`+0x35a6`): the cursor, its marker (kin 0x16) where it put one, else its goal. */
   private walkedToAt() {
     const kind = this.fields.x35a6;
@@ -202,6 +213,10 @@ export class CatzPet {
 
   /** Walking on, toward what it walks to, and stalking, toward its prey: straight there, four a tick, facing it (`+0x688`) -- standing in for its steering, turns and creeping. */
   private walk() {
+    if (this.options.moves === false) {
+      return;
+    }
+
     const goal =
       this.state === 23
         ? this.walkedToAt()
@@ -581,7 +596,7 @@ export class CatzPet {
       /* Found where it walks to: within 8 of it, standing in for its box (`PopScript` answering 2). */
       found: (() => {
         const at = this.walkedToAt();
-        return !!at && Math.hypot(at.x - x, at.y - y) <= 8;
+        return !!at && Math.hypot(at.x - x, at.y - y) <= (this.options.foundWithin ?? 8);
       })(),
     } as CatzStateWorld;
   }
