@@ -33,12 +33,20 @@ static FARPROC ordinal(int number)
     return GetProcAddress(catz, MAKEINTRESOURCE(number));
 }
 
+/* Whether the output is held back for a while: what is said then is not written. */
+static int quiet;
+
 /* A line of the output, as wsprintf makes it. */
 static void say(LPCSTR format, ...)
 {
     char text[128];
-    int length = wvsprintf(text, format, (LPSTR)(&format + 1));
+    int length;
 
+    if (quiet) {
+        return;
+    }
+
+    length = wvsprintf(text, format, (LPSTR)(&format + 1));
     _lwrite(output, text, length);
 }
 

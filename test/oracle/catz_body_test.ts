@@ -72,6 +72,8 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
         x: 60 + ((Math.trunc(tick / 300) * 137) % 520),
         y: 100 + ((Math.trunc(tick / 300) * 89) % 340),
       }),
+      /* And about the pen every other minute. */
+      cursorAbout: (tick) => Math.trunc(tick / 600) % 2 === 1,
       random,
       moves: false,
       play: (action, steer) => body.play(action, steer),

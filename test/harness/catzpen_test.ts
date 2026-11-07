@@ -18,7 +18,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
-import { catzGlobalBegin } from '../../src/behaviour/catz-global.ts';
+import { catzGlobalBegin, catzGlobalTick } from '../../src/behaviour/catz-global.ts';
 import {
   catzCuriosities,
   catzStateBetween,
@@ -333,6 +333,8 @@ const GLOBAL_CASES = Array.from({ length: 270 }, (_, n) => {
       : playing || chasing
         ? [0x17, 0x1b, 5, 6, 7, 9, 0xc, 0xe][n % 8]
         : -1,
+    /* The cursor about for the tick after, every other case. */
+    n % 2,
   ];
 });
 
@@ -960,7 +962,11 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       .slice(1)
       .map(Number);
     let globalCase: number[] = [];
+    let tickCase: number[] = [];
+    let tickSeed = 0;
+    const globalLines = new Map<number, number[]>();
     let begun = 0;
+    const globalTicks = { moment: 0, state: 0, nothing: 0 };
 
     for (const line of lines) {
       const [kind, ...rest] = line.split(' ');
@@ -968,6 +974,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 
       if (kind === 'global') {
         globalCase = values;
+        globalLines.set(values[0], values);
       } else if (kind === 'globaled') {
         const [globalSeed, area, preyX, preyY, mouseWay, ...room] = globalCase;
         const c = GLOBAL_CASES.find(([s]) => s === globalSeed)!;
@@ -1055,10 +1062,93 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         }
 
         begun++;
+      } else if (kind === 'globaltick') {
+        tickCase = values.slice(1);
+        tickSeed = values[0];
+      } else if (kind === 'globalticked') {
+        /* And a tick of the global state it is in, C's `rand` from the seed again: the cases
+         * ticked after all are begun, each begun again first. */
+        const [globalSeed, area, preyX, preyY, mouseWay, ...room] = globalLines.get(tickSeed)!;
+        const c = GLOBAL_CASES.find(([s]) => s === globalSeed)!;
+        const about = c[31];
+        const [global, x35a4, x35a6, x34ca, place, mouseState] = tickCase;
+        let state = BigInt(globalSeed);
+        const random = (n: number) => {
+          state = (state * 22695477n + 1n) & 0xffffffffn;
+          return Number((state >> 16n) & 0x7fffn) % n;
+        };
+        const ours = catzGlobalTick(
+          global,
+          {
+            brains: c.slice(1, 13),
+            centres: c.slice(13, 25),
+            state: 0,
+            global,
+            target: 0,
+            count: 0,
+          },
+          {
+            cursorAbout: about !== 0,
+            /* (The case's cursor, moved or not, still so as it ticks.) */
+            cursorMoved: c[26] !== 0,
+            area3: place === 3,
+            area1: place === 1,
+            screenSaver: false,
+            sleepy: c[27] !== 0,
+            inShelf: (kind) => shelf[kind] !== 0,
+            x35a4,
+            x35a6,
+            x34ca,
+            mouseState,
+            preyAt: { x: preyX, y: preyY },
+            mouseAfterCursor: mouseWay === 0x17,
+            stage: { left: room[0], top: room[1], right: room[2], bottom: room[3] },
+            size: { width: room[4], height: room[5] },
+          },
+          random
+        );
+        void area;
+        const added = (history: number[]) =>
+          history.slice(0, history.indexOf(-2) < 0 ? 10 : history.indexOf(-2)).reverse();
+        const locals = added(values.slice(0, 10));
+        const globals = added(values.slice(10, 20));
+        const [after, idle, looks, a4, a6, , a2] = values.slice(20);
+        const oursGlobals = ours.begun?.globals ?? [];
+        const oursState = ours.state ?? ours.begun?.state;
+        const said = [
+          oursGlobals.join(','),
+          oursState,
+          ours.moment && [ours.moment.after, ours.moment.idle, ours.moment.looksBeforeGoing],
+          /* (`+0x35ac` walking's entering reads and clears.) */
+          ours.kind !== undefined && [ours.kind, ours.kind, ours.x35a2],
+        ].join(' ');
+        const theirs = [
+          globals.slice(0, oursGlobals.length).join(','),
+          oursState === undefined ? undefined : locals[0],
+          /* (Its moment entered, 21, takes what it plays after, leaving 0; and where its chain
+           * went on past ours, readied again, what was readied is not ours.) */
+          ours.moment &&
+            (globals.length > oursGlobals.length
+              ? [ours.moment.after, ours.moment.idle, ours.moment.looksBeforeGoing]
+              : [locals.includes(21) ? ours.moment.after : after, idle, looks]),
+          ours.kind !== undefined && [a4, a6, a2],
+        ].join(' ');
+        /* A tick that did nothing changed no state. */
+        const still =
+          oursState !== undefined || oursGlobals.length || !(globals.length || locals.length);
+
+        if (said !== theirs || !still) {
+          wrong.push(
+            `global tick seed ${globalSeed} state ${global} about ${about}: ${said} not ${theirs} (${globals} / ${locals})`
+          );
+        }
+
+        globalTicks[ours.moment ? 'moment' : oursState !== undefined ? 'state' : 'nothing']++;
       }
     }
 
     expect(begun).toBe(GLOBAL_CASES.length);
+    expect(Object.values(globalTicks).reduce((a, b) => a + b, 0)).toBe(GLOBAL_CASES.length);
 
     /* And each tick of a state of its own: the state it went to, the global
      * state it was put in, its energy, its count, and, where it stayed, the

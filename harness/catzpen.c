@@ -1848,7 +1848,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     unsigned dgroup;
     unsigned char __far *module;
     unsigned char __far *cat;
-    int answer, n, b, frames = FRAMES;
+    int answer, n, b, pass, frames = FRAMES;
 
     (void)previous, (void)command, (void)show;
 
@@ -2220,6 +2220,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
      * `+0x35a2`, `+0x34cc`, `+0x34ce`, `+0x35ae` and `+0x33c2`; the `global`
      * line has the target point of what it plays with, the mouse's
      * `+0x26ca` (-1 for none), the stage and the cat's width and height. */
+    /* Twice over: first each begun, then -- quiet as each is begun again -- each ticked, so no
+     * tick's moment is left to the next case's beginning. */
+    for (pass = 0; pass < 2; pass++) {
     file = _lopen(DIRECTORY "\\GLOBAL.TXT", OF_READ);
 
     if (cat && file != HFILE_ERROR) {
@@ -2227,7 +2230,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         for (;;) {
             long seed = number(file);
-            int state, moved, area;
+            int state, moved, area, about;
+
+            quiet = pass == 1;
 
             if (seed < 0) {
                 break;
@@ -2253,6 +2258,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                     *(int __far *)(cat + 0x35a4) = plays;
                 }
             }
+            about = (int)number(file);
 
             for (b = 0; b < 4; b++) {
                 *(int *)(params + 0x104 + 2 * b) = b == 0 ? moved : 0;
@@ -2318,6 +2324,46 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(cat + 0x34cc), *(int __far *)(cat + 0x34ce), *(int __far *)(cat + 0x35ae),
                 *(int __far *)(cat + 0x33c2));
 
+            quiet = 0;
+
+            /* And a tick of the global state it is in (`GlobalCatStateMachine::Dispatch`, 491), C's
+             * `rand` from the seed again, the cursor about (`PetParams` `+0x46`) as the case says:
+             * `globaltick` and what it reads -- its global state, `+0x35a4`, `+0x35a6`, `+0x34ca`,
+             * its place (0x1d) and the mouse's own state -- and `globalticked`, the two histories
+             * marked again, what `PreMoment` readies (`+0x3516`, `+0x350a`, `+0x3506`), and
+             * `+0x35a4`, `+0x35a6`, `+0x35ac` and `+0x35a2`. */
+            if (pass == 1) {
+                unsigned char __far *mouse = ((GETKIN)ordinal(18))(cat, 0x1b);
+
+                for (b = 0; b < 10; b++) {
+                    *(int __far *)(global + 0x3e + 2 * b) = -2;
+                    *(int __far *)(cat + 0x2556 + 2 * b) = -2;
+                }
+
+                say("globaltick %ld %d %d %d %d %d %d\r\n", seed, *(int __far *)(global + 0x3a),
+                    *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35a6),
+                    *(int __far *)(cat + 0x34ca), ((AREA)ordinal(606))(cat, 0x1d),
+                    mouse ? *(int __far *)(mouse + 0x2518 + 0x3a) : -1);
+                *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
+                *(int *)(params + 0x46) = about;
+                ((DISPATCH)ordinal(491))(global, params, 0, 0);
+                *(int *)(params + 0x46) = 0;
+                say("globalticked");
+
+                for (b = 0; b < 10; b++) {
+                    say(" %d", *(int __far *)(cat + 0x2556 + 2 * b));
+                }
+
+                for (b = 0; b < 10; b++) {
+                    say(" %d", *(int __far *)(global + 0x3e + 2 * b));
+                }
+
+                say(" %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x3516),
+                    *(int __far *)(cat + 0x350a), *(int __far *)(cat + 0x3506),
+                    *(int __far *)(cat + 0x35a4), *(int __far *)(cat + 0x35a6),
+                    *(int __far *)(cat + 0x35ac), *(int __far *)(cat + 0x35a2));
+            }
+
             for (b = 0; b < 4; b++) {
                 *(int *)(params + 0x104 + 2 * b) = 0;
             }
@@ -2325,6 +2371,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         _lclose(file);
     }
+    }
+
+    quiet = 0;
 
     /* Each case in `CURIOUS.TXT`, a line `seed`, the 12 brains' values and
      * their centres: the cat looking at things (12) and idling (6), what it

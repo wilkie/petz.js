@@ -256,6 +256,9 @@ const LIVE_CENTRES = [12, 7, 96, 86, 13, 88, 16, 30, 0, 0, 0, 0];
 let live = 0;
 let liveCursor = { x: 235, y: 300 };
 
+/** Whether the cursor is about the pen (`PetParams` `+0x46`): the mouse over the stage. */
+let liveCursorAbout = false;
+
 /**
  * The cat on its own (`CatzPet`): ten ticks a second, as the engine runs,
  * each action it pushes played out by its script from the pose it is in, a
@@ -307,6 +310,7 @@ function goLive() {
     centres: brains?.map((brain) => brain.centre) ?? LIVE_CENTRES,
     stage: LIVE_STAGE,
     cursor: () => liveCursor,
+    cursorAbout: () => liveCursorAbout,
     random,
     /* Placed by its frames, as `PopScript` places it: the pet's straight walk off. */
     moves: false,
@@ -513,7 +517,10 @@ timesInput.addEventListener('change', () => {
 });
 playButton.addEventListener('click', play);
 liveButton.addEventListener('click', goLive);
+canvas.addEventListener('mouseenter', () => (liveCursorAbout = true));
+canvas.addEventListener('mouseleave', () => (liveCursorAbout = false));
 canvas.addEventListener('mousemove', (event) => {
+  liveCursorAbout = true;
   const box = canvas.getBoundingClientRect();
   liveCursor = {
     x: Math.round(((event.clientX - box.left) / box.width) * LIVE_STAGE.right),

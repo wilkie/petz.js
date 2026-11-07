@@ -7,6 +7,7 @@
 
 import { catzBehavior, type CatzMind, catzSound } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
+import { catzPreMoment, type CatzPreMoment } from './catz-states.ts';
 
 /** What a global state begun reads of the game. */
 export interface CatzGlobalWorld {
@@ -457,4 +458,119 @@ export function catzCornerToAvoid(
   const x33c2 = [0, one ? 0 : -0x40, one ? 0 : 0x40, one ? 0x80 : -0x40, one ? 0x80 : 0x40][x35ae];
 
   return { goal: { x, y }, x35ae, x33c2 };
+}
+
+/** What a tick of a global state reads, beyond what its beginning does. */
+export interface CatzGlobalTickWorld extends CatzGlobalWorld {
+  /** Whether the cursor is about (`PetParams` `+0x46`). */
+  cursorAbout: boolean;
+
+  /** `+0x35a6`, `+0x34ca` (minding the cursor), whether it is placed so (`GetSpriteScreenArea` of 0x1d, 1), and the mouse's own state (its machine's `+0x3a`). */
+  x35a6?: number;
+  x34ca?: number;
+  area1?: boolean;
+  mouseState?: number;
+}
+
+/** What a tick of a global state did: its moment readied, and the global states begun after, as their beginning goes; or, attacking, the catnip run to. */
+export interface CatzGlobalTicked {
+  moment?: CatzPreMoment;
+
+  /** What the state left pushed, where it pushed anything. */
+  pushes?: number[];
+
+  /** Not begun here (`begin` false): the global state to begin. */
+  global?: number;
+  begun?: CatzGlobalBegun;
+  kind?: number;
+  x35ac?: number;
+  x35a2?: number;
+  state?: number;
+}
+
+/**
+ * A tick of a global state, its handler neither entering nor leaving: for
+ * most, the cursor about (`PetParams` `+0x46`), its moment readied
+ * (`PreMoment` 6, 0x93, watching) and had (8, begun as its beginning goes):
+ *
+ * - idling (6, seg24:01d7), resting (9, seg30:00b5), affectionate (14,
+ *   seg30:0fb4), eating (3, seg22:0621): so;
+ * - playing (15, seg29:0b16) and chasing (16, seg19:00c5): so, not after
+ *   the mouse (0x1b);
+ * - the moment (8, seg25:012f): so, placed so (1), not walking to the
+ *   cursor (`+0x35a6` 0x17) and minding it (`+0x34ca`);
+ * - attacking (1, seg14:024e): after the mouse, the mouse's own state 1,
+ *   inclined to behaviour 7 and under its age, it runs to the catnip
+ *   (`+0x35a4`, `+0x35a6` 0xe, `+0x35ac` 1, `+0x35a2` 0, 22), else its
+ *   moment readied not watching; after anything else, the cursor about and
+ *   not inclined to behaviour 14, its moment.
+ *
+ * Others are not reimplemented: nothing. Where whoever ticks it begins the
+ * global state asked itself (`begin` false), it is given as `global`.
+ */
+export function catzGlobalTick(
+  global: number,
+  mind: CatzMind,
+  world: CatzGlobalTickWorld,
+  random: (n: number) => number,
+  { begin = true }: { begin?: boolean } = {}
+): CatzGlobalTicked {
+  const moment = (watching: boolean): CatzGlobalTicked => {
+    const ready = catzPreMoment(mind, world.area3, 6, 0x93, watching, random);
+    /* The state left as the moment begins: playing asks behaviour 9 for what it pushes. */
+    const pushes = global === 15 ? catzGlobalLeave(global, mind, random) : undefined;
+    return begin
+      ? { moment: ready, pushes, begun: catzGlobalBegin(8, mind, world, random) }
+      : { moment: ready, pushes, global: 8 };
+  };
+  const about = world.cursorAbout;
+
+  switch (global) {
+    case 6:
+    case 9:
+    case 14:
+    case 3:
+      return about ? moment(true) : {};
+    case 15:
+    case 16:
+      return about && world.x35a4 !== 0x1b ? moment(true) : {};
+    case 8:
+      return about && world.area1 && world.x35a6 !== 0x17 && world.x34ca ? moment(true) : {};
+    case 1: {
+      if (world.x35a4 === 0x1b) {
+        if (world.mouseState !== 1) {
+          return {};
+        }
+
+        if (catzBehavior(mind, 7, random) !== 0 && random(101) < mind.brains[CATZ_BRAIN.age]) {
+          return { kind: 0xe, x35ac: 1, x35a2: 0, state: 22 };
+        }
+
+        return moment(false);
+      }
+
+      return about && catzBehavior(mind, 0xe, random) === 0 ? moment(true) : {};
+    }
+    default:
+      return {};
+  }
+}
+
+/**
+ * A global state left (its handler leaving), as far as it draws or pushes:
+ * playing (15, seg29:0aa4), inclined to behaviour 9, pushes 0x141, else its
+ * slot `0x1fc`; and turns its head (slot `0xe0`, 2500). Idling, resting and
+ * attacking call their slot `0x1fc` and the moment its `+0x1996`'s slot
+ * `0x30`, drawing nothing.
+ */
+export function catzGlobalLeave(
+  global: number,
+  mind: CatzMind,
+  random: (n: number) => number
+): number[] | undefined {
+  if (global === 15) {
+    return catzBehavior(mind, 9, random) !== 0 ? [0x141] : [];
+  }
+
+  return undefined;
 }

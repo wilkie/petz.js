@@ -16,7 +16,7 @@
 
 import { type CatzMind, catzBehavior } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
-import { catzGlobalBegin } from './catz-global.ts';
+import { catzGlobalBegin, catzGlobalTick } from './catz-global.ts';
 import { catzMomentBegin, type CatzMomentState, catzMomentTick } from './catz-moment.ts';
 import { catzBehaviorChange, catzExtremeSituations } from './catz-reflexes.ts';
 import {
@@ -59,6 +59,9 @@ export interface CatzPetOptions {
 
   /** Where a thing on the shelf is (its target point), by its kind: standing in, by default, along the stage's top. */
   shelfAt?: (kind: number) => { x: number; y: number };
+
+  /** Whether the cursor is about (`PetParams` `+0x46`), by the ticks gone: by default never. */
+  cursorAbout?: (tick: number) => boolean;
 
   /** Where the cursor (kin 0x17) is, by the ticks gone: by default still at the stage's lower middle. */
   cursor?: (tick: number) => { x: number; y: number };
@@ -124,6 +127,9 @@ export class CatzPet {
   moment?: CatzMomentState;
   private readied?: NonNullable<CatzStateTick['moment']>;
 
+  /** In its moment, whether it minds the cursor (`+0x34ca`), once its first script is done. */
+  private minded = false;
+
   /** Ticks left of what it plays, and what it pushed this tick. */
   private left = 0;
   private pushed: number[] = [];
@@ -182,6 +188,11 @@ export class CatzPet {
     this.pushed = [];
     this.reflexes();
 
+    /* Its global state's handler, before its own state's. */
+    if (this.globalTick()) {
+      return { state: this.state, global: this.global, pushes: this.pushed };
+    }
+
     if (this.left > 0) {
       this.left--;
       this.between();
@@ -197,6 +208,58 @@ export class CatzPet {
     }
 
     return { state: this.state, global: this.global, pushes: this.pushed };
+  }
+
+  /**
+   * A tick of its global state (`catzGlobalTick`): the cursor about, most
+   * ready its moment and have it; attacking after the mouse may run to the
+   * catnip. Whether it went on to another state, so this tick is done.
+   */
+  private globalTick() {
+    const ticked = catzGlobalTick(
+      this.global,
+      this.mind,
+      {
+        cursorAbout: this.options.cursorAbout?.(this.ticks) ?? false,
+        cursorMoved: false,
+        area3: false,
+        area1: true,
+        screenSaver: false,
+        sleepy: false,
+        x35a4: this.fields.x35a4 ?? 0,
+        x35a6: this.fields.x35a6 ?? 0,
+        /* `+0x34ca`: in its moment, whether it minds the cursor; else passing the time's. */
+        x34ca: this.state === 21 ? Number(this.minded) : this.fields.passed,
+        /* The mouse in its hole in an empty pen. */
+        mouseState: 0,
+      },
+      this.options.random,
+      { begin: false }
+    );
+
+    if (ticked.moment) {
+      this.readied = ticked.moment;
+    }
+
+    if (ticked.pushes?.length) {
+      this.push(ticked.pushes);
+    }
+
+    if (ticked.global !== undefined) {
+      this.beginGlobal(ticked.global, 0);
+      return true;
+    }
+
+    if (ticked.state !== undefined) {
+      this.fields.x35a4 = ticked.kind;
+      this.fields.x35a6 = ticked.kind;
+      this.fields.x35ac = ticked.x35ac;
+      this.fields.x35a2 = ticked.x35a2;
+      this.enter(ticked.state, 0);
+      return true;
+    }
+
+    return false;
   }
 
   /** Extreme situations: its behaviour changed by its diet every 281 ticks. */
@@ -314,12 +377,14 @@ export class CatzPet {
           x35d2: 0,
           x3516: this.readied?.after ?? 0,
           area3: false,
-          cursorAbout: false,
-          minded: false,
+          cursorAbout: this.options.cursorAbout?.(this.ticks) ?? false,
+          minded: this.minded,
           soundPlaying: false,
         },
         this.options.random
       );
+      /* Minding the cursor (`+0x34ca`) once its first script is done. */
+      this.minded = true;
 
       if (done.pushed !== undefined) {
         this.push([done.pushed]);
@@ -572,6 +637,8 @@ export class CatzPet {
       };
       catzMomentBegin(this.mind, this.moment, this.options.stage, this.options.random);
       this.act(depth);
+      /* Its first script only now begun: not minding the cursor yet. */
+      this.minded = this.state === 21 ? false : this.minded;
       return;
     }
 
