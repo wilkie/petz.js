@@ -31,6 +31,16 @@ export interface CatzGlobalWorld {
 
   /** Playing: what it plays with (`+0x35a4`). */
   x35a4?: number;
+
+  /**
+   * Attacking: the stage (`ds:2ba6` to `2bac`), the cat's width and height
+   * (`+0x33c4`, `+0x33c6`), where what it attacks is (its target point),
+   * and, for the mouse, whether it is after the cursor (its `+0x26ca` 0x17).
+   */
+  stage?: { left: number; top: number; right: number; bottom: number };
+  size?: { width: number; height: number };
+  preyAt?: { x: number; y: number };
+  mouseAfterCursor?: boolean;
 }
 
 /** What a global state begun did: the global states the cat was put in, in turn, and the state of its own it began in. */
@@ -50,6 +60,12 @@ export interface CatzGlobalBegun {
 
   /** Chasing: `+0x35ac` set, so it runs. */
   x35ac?: number;
+
+  /** Attacking: `+0x35a2` (walking to a point), and the corner it makes for (`+0x34cc`), which (`+0x35ae`, 1 to 4) and the way it is to face there (`+0x33c2`). */
+  x35a2?: number;
+  goal?: { x: number; y: number };
+  x35ae?: number;
+  x33c2?: number;
   sound?: number;
   pushes?: number[];
 }
@@ -112,6 +128,8 @@ export function catzGlobalBegin(
       return catzEatingBegin(mind, world, random, begun);
     case 15:
       return catzPlayingBegin(mind, world, random, begun);
+    case 1:
+      return catzAttackingBegin(mind, world, random, begun);
     case 16: {
       /* Chasing (`DoGSChasing`, seg19:0000), entering: idling's effects;
        * what it chases (`+0x35a4`) on the shelf, it plays (15) instead; else
@@ -329,4 +347,114 @@ function catzPlayingBegin(
   begun.kind = kind;
   begun.state = 22;
   return begun;
+}
+
+/**
+ * Attacking begun (`DoGSAttacking`, seg14:0057), entering: idling's
+ * effects; then by what it attacks (`+0x35a4`): the food or water bowl
+ * (0xc, 0xd), it eats (global 3); 5 or 0x22, it plays (15); the catnip
+ * (0xe), it walks to it (22, `+0x35a6` 0xe, `+0x35a2` 0). Else, `+0x35a2` 0,
+ * inclined to behaviour 7 and under its age, 0xdf, and then, nine times in
+ * ten, after the cursor (0x17) -- or the mouse (0x1b) while it is not after
+ * the cursor -- it makes for a corner away from it (`+0x35a2` 1,
+ * `TargetACornerToAvoidSprite`, its slot `0x238`); and walks (22,
+ * `+0x35a6` made `+0x35a4`), to the corner where it made for one.
+ *
+ * Each tick after, after the mouse, by the mouse's state (its `+0x2518`'s
+ * slot 8): not 1, three things by behaviour 7 and its age -- the catnip run
+ * to (0xe, `+0x35ac` 1, 22), or its moment readied (`PreMoment` 6, 0x93, 0)
+ * and had (8); else, the machine's `+0x46` set and not inclined to
+ * behaviour 14, its moment (`PreMoment` 6, 0x93, 1, and 8). Leaving, its
+ * slot `0x1fc` and its head turned (slot `0xe0`, 2500). Not reimplemented.
+ */
+function catzAttackingBegin(
+  mind: CatzMind,
+  world: CatzGlobalWorld,
+  random: (n: number) => number,
+  begun: CatzGlobalBegun
+): CatzGlobalBegun {
+  const percent = () => random(101);
+  const kind = world.x35a4 ?? 0;
+  /* Another global state asked instead, begun after it. */
+  const then = (global: number) => {
+    const after = catzGlobalBegin(global, mind, world, random);
+    return { ...after, globals: [1, ...after.globals] };
+  };
+
+  if (kind === 0xc || kind === 0xd) {
+    return then(3);
+  }
+
+  if (kind === 5 || kind === 0x22) {
+    return then(15);
+  }
+
+  begun.x35a2 = 0;
+  begun.kind = kind;
+  begun.state = 22;
+
+  if (kind === 0xe) {
+    return begun;
+  }
+
+  if (catzBehavior(mind, 7, random) === 0 || percent() >= mind.brains[CATZ_BRAIN.age]) {
+    return begun;
+  }
+
+  begun.pushes = [0xdf];
+  const avoids = kind === 0x1b ? !world.mouseAfterCursor : kind === 0x17;
+
+  if (percent() < 90 && avoids) {
+    begun.x35a2 = 1;
+    Object.assign(begun, catzCornerToAvoid(world, kind, random));
+  }
+
+  return begun;
+}
+
+/**
+ * The corner of the stage away from what it avoids
+ * (`TargetACornerToAvoidSprite`, seg24:1f25): by which side of the stage's
+ * middle that lies on, across and down -- each one time in two where it
+ * avoids nothing (kind 0) -- the corner across from it, half the cat's
+ * width in from the side and its height (as twice half of it) in from the
+ * top or bottom; which corner (`+0x35ae`: 1 top left, 2 top right, 3 bottom
+ * left, 4 bottom right); and which way it is to face there (`+0x33c2`), one
+ * time in two each: 0x80 or 0x40 for 4, 0 or 0x40 for 2, 0x80 or -0x40 for
+ * 3, 0 or -0x40 for 1.
+ */
+export function catzCornerToAvoid(
+  world: CatzGlobalWorld,
+  kind: number,
+  random: (n: number) => number
+): { goal: { x: number; y: number }; x35ae: number; x33c2: number } {
+  const percent = () => random(101);
+  const stage = world.stage ?? { left: 0, top: 0, right: 640, bottom: 480 };
+  const size = world.size ?? { width: 137, height: 104 };
+  const half = (n: number) => Math.trunc(n / 2);
+  const middle = {
+    x: half(stage.right - stage.left) + stage.left,
+    y: half(stage.bottom - stage.top) + stage.top,
+  };
+  let left: boolean;
+  let above: boolean;
+
+  if (kind === 0) {
+    left = percent() < 50;
+    above = percent() < 50;
+  } else {
+    const at = world.preyAt ?? middle;
+    left = at.x < middle.x;
+    above = at.y < middle.y;
+  }
+
+  const across = half(size.width);
+  const down = half(size.height) * 2;
+  const x = left ? stage.right - across : stage.left + across;
+  const y = above ? stage.bottom - down : stage.top + down;
+  const x35ae = left ? (above ? 4 : 2) : above ? 3 : 1;
+  const one = percent() < 50;
+  const x33c2 = [0, one ? 0 : -0x40, one ? 0 : 0x40, one ? 0x80 : -0x40, one ? 0x80 : 0x40][x35ae];
+
+  return { goal: { x, y }, x35ae, x33c2 };
 }

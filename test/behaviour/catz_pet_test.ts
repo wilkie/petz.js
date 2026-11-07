@@ -6,7 +6,7 @@ const BRAINS = [12, 49, 96, 86, 69, 88, 1, 30, 0, 49, 0, 7];
 const CENTRES = [12, 7, 96, 86, 13, 88, 16, 30, 0, 0, 0, 0];
 
 describe('a Catz cat on its own', () => {
-  it('lives 5,000 ticks in an empty pen, idling, having its moments and playing with the cursor, without fault', () => {
+  it('lives 5,000 ticks in an empty pen, idling, having its moments, playing and attacking, without fault', () => {
     const rand = borlandRand(1);
     const pet = new CatzPet({
       brains: BRAINS,
@@ -35,14 +35,13 @@ describe('a Catz cat on its own', () => {
     );
     /* It runs without fault, idling -- looking at things and passing the
      * time -- and has its moments; the global states it asks whose
-     * beginning is not reimplemented (playing, eating, grooming ...) it idles
-     * instead, counted. */
+     * beginning is not reimplemented it idles instead, counted. */
     expect(pet.stoodIn.errors).toBe(0);
     expect(pet.stoodIn.deep).toBe(0);
     expect(states[12]).toBeGreaterThan(0);
     expect(states[21]).toBeGreaterThan(0);
-    /* And plays with the cursor, stalking and pouncing on it. */
-    expect(states[2]).toBeGreaterThan(0);
-    expect(states[3]).toBeGreaterThan(0);
+    /* And plays and attacks, as the engine begins them. */
+    expect(globals[15]).toBeGreaterThan(0);
+    expect(globals[1]).toBeGreaterThan(0);
   });
 });

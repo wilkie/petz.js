@@ -88,7 +88,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([3, 6, 8, 9, 15, 16]);
+const BEGUN = new Set([1, 3, 6, 8, 9, 15, 16]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -420,6 +420,11 @@ export class CatzPet {
         x35ce: this.fields.x35ce ?? 0,
         x35d2: this.fields.x35d2 ?? 0,
         x35a4: this.fields.x35a4 ?? 0,
+        stage: this.options.stage,
+        size: this.options.size ?? { width: 137, height: 104 },
+        preyAt: this.fields.x35a4 === 0x17 ? this.cursorAt() : this.walkedToAt(),
+        /* The mouse in its hole in an empty pen, after nothing. */
+        mouseAfterCursor: false,
       },
       this.options.random
     );
@@ -444,6 +449,15 @@ export class CatzPet {
 
     if (begun.x35ac !== undefined) {
       this.fields.x35ac = begun.x35ac;
+    }
+
+    /* Attacking: walking to a point, the corner it made for. */
+    if (begun.x35a2 !== undefined) {
+      this.fields.x35a2 = begun.x35a2;
+    }
+
+    if (begun.goal) {
+      this.fields.goal = begun.goal;
     }
 
     if (begun.pushes) {
@@ -478,11 +492,11 @@ export class CatzPet {
    *   `+0x35a8`), its goal -- by that way, beside it, along an edge or by
    *   its hiding place -- standing in at random on the stage;
    * - affectionate (14; `DoGSAffectionate`): no sound of its own
-   *   (`+0x3570`), and it walks to the cursor (22, `+0x35a6` 0x17);
-   * - attacking (1), standing in: after the cursor (`+0x35a4` 0x17) -- the
-   *   mouse never out in an empty pen -- it begins to stalk (1); else it
-   *   idles. Playing (15) and chasing (16) begin as the engine begins them
-   *   (`catzGlobalBegin`): walking to what it plays with, or running to it.
+   *   (`+0x3570`), and it walks to the cursor (22, `+0x35a6` 0x17).
+   *
+   * Attacking (1), playing (15) and chasing (16) begin as the engine begins
+   * them (`catzGlobalBegin`): walking to what it attacks or plays with, or
+   * making for a corner away from it first, or running to it.
    */
   private beginOwn(global: number, depth: number) {
     const { random } = this.options;
@@ -516,19 +530,6 @@ export class CatzPet {
         this.fields.x35a6 = 0x17;
         this.enter(22, depth + 1);
         return true;
-      case 1: {
-        const kind = this.fields.x35a4;
-
-        /* The mouse never out of its hole in an empty pen: the cursor only. */
-        if (kind !== 0x17) {
-          return false;
-        }
-
-        set(global);
-        this.stoodIn.globals[global] = (this.stoodIn.globals[global] ?? 0) + 1;
-        this.enter(1, depth + 1);
-        return true;
-      }
       default:
         return false;
     }

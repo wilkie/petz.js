@@ -2216,7 +2216,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
      * marked, put in it (`GlobalCatStateMachine::NewState`, 488); and
      * `globaled` and the two histories, its mode, the effects set on its
      * brains (`+0x3622` to `+0x3628`), `+0x35a4`, `+0x35a6` and `+0x35d2`,
-     * the last ten actions pushed (`+0x14a8`, newest first), and `+0x35ac`. */
+     * the last ten actions pushed (`+0x14a8`, newest first), `+0x35ac`,
+     * `+0x35a2`, `+0x34cc`, `+0x34ce`, `+0x35ae` and `+0x33c2`; the `global`
+     * line has the target point of what it plays with, the mouse's
+     * `+0x26ca` (-1 for none), the stage and the cat's width and height. */
     file = _lopen(DIRECTORY "\\GLOBAL.TXT", OF_READ);
 
     if (cat && file != HFILE_ERROR) {
@@ -2273,7 +2276,18 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             }
 
             area = ((AREA)ordinal(606))(cat, 0x1d);
-            say("global %ld %d\r\n", seed, area);
+            {
+                /* What it plays with: its target point, and the mouse's `+0x26ca`. */
+                unsigned char __far *prey = ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4));
+                unsigned char __far *mouse = ((GETKIN)ordinal(18))(cat, 0x1b);
+                long at = prey ? ((TARGETPT)ordinal(10))(prey, 0) : 0;
+
+                say("global %ld %d %d %d %d %d %d %d %d %d %d\r\n", seed, area, (int)at,
+                    (int)(at >> 16), mouse ? *(int __far *)(mouse + 0x26ca) : -1,
+                    *(int __far *)MK_FP(dgroup, 0x2ba6), *(int __far *)MK_FP(dgroup, 0x2ba8),
+                    *(int __far *)MK_FP(dgroup, 0x2baa), *(int __far *)MK_FP(dgroup, 0x2bac),
+                    *(int __far *)(cat + 0x33c4), *(int __far *)(cat + 0x33c6));
+            }
             *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
             ((GLOBALSTATE)ordinal(488))(global, state, params);
 
@@ -2300,7 +2314,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 say(" %d", *(int __far *)(cat + 0x14a8 + 2 * b));
             }
 
-            say(" %d\r\n", *(int __far *)(cat + 0x35ac));
+            say(" %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x35ac), *(int __far *)(cat + 0x35a2),
+                *(int __far *)(cat + 0x34cc), *(int __far *)(cat + 0x34ce), *(int __far *)(cat + 0x35ae),
+                *(int __far *)(cat + 0x33c2));
 
             for (b = 0; b < 4; b++) {
                 *(int *)(params + 0x104 + 2 * b) = 0;
