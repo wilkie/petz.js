@@ -674,33 +674,9 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       );
     };
 
-    /* Nor, for the head's and eyes' fudgers, one that may look at a point:
-     * where the head turns to depends on where the cat is drawn, which a
-     * bare sprite has nowhere (`SetHeadTarget`, seg40:5a47). */
-    const uses = (action: number, names: string[], seen = new Set<number>()): boolean => {
-      if (seen.has(action) || !scripts[action]) {
-        return false;
-      }
-
-      seen.add(action);
-      return scripts[action].variants.some((variant) =>
-        variant.some((element) => {
-          const name = 'op' in element ? opcodes.get(element.op)?.name : undefined;
-          const [nested] = 'op' in element ? element.operands : [];
-          return (
-            names.includes(name ?? '') ||
-            (/^play(Layered)?Action/.test(name ?? '') &&
-              typeof nested === 'number' &&
-              uses(nested, names, seen))
-          );
-        })
-      );
-    };
-    /* A point at random is looked at from where the engine has the cat as
-     * the script is popped (`catzHeadTarget`, below); what it tracks the
-     * driver does not say, so an action that may look at a sprite is not
-     * held for its head and eyes. */
-    const points = (action: number) => uses(action, ['lookAtLocation2']);
+    /* The rest are held for their head's and eyes' fudgers too: a point
+     * at random looked at from where the engine has the cat as the script
+     * is popped (`catzHeadTarget`, below). */
 
     /* Every other action, its variants in turn, from the neutral position
      * one time in three and from the end of some other action otherwise. */
@@ -937,11 +913,9 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       }
 
       /* Each tick's rotation and fudgers (the tick's fields from the sixth). */
-      const compared = (n: number) => !points(action) || ![3, 4, 10, 11].includes(n);
       const off = ticked.findIndex(
         ({ fudged }, tick) =>
-          fudged?.some((value, n) => compared(n) && value !== shown[tick][5 + n]) ||
-          fudged?.[0] !== shown[tick][1]
+          fudged?.some((value, n) => value !== shown[tick][5 + n]) || fudged?.[0] !== shown[tick][1]
       );
 
       if (off >= 0) {

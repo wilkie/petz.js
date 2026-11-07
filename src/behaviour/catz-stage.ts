@@ -366,7 +366,7 @@ export interface CatzHeadAim {
   /** The cat's rotation (`+0x688`). */
   rotation: number;
 
-  /** `+0x150e`: the distance over which the head reaches its furthest, 4 unless a script set it (`setHeadDivisor`, 30038). */
+  /** `+0x150e`: the distance over which the head reaches its furthest, 4 unless a script set it (`setHeadTrackAcuteness`, 30038). */
   divisor?: number;
 
   /** `+0x1514`: looking away from the point, as snubbing. */

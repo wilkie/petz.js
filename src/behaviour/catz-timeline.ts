@@ -39,11 +39,12 @@ export const CATZ_OP = {
   cueCode: 30008,
   disableFudgeAim: 30010,
   enableFudgeAim: 30012,
+  lookAtLocation: 30020,
   lookAtRandomPt: 30021,
-  lookAtLocation: 30022,
-  setHeadDivisor: 30038,
-  setHeadShelved: 30039,
-  setHeadAway: 30040,
+  lookAtSprite: 30022,
+  setHeadTrackAcuteness: 30038,
+  setHeadTrackMode: 30039,
+  setReverseHeadTrack: 30040,
   lookAtUser: 30023,
   lookFoward: 30024,
   endLoop: 30014,
@@ -131,9 +132,10 @@ export interface CatzStep {
 
 /**
  * How the head looks at a point, as scripts set it: the distance over
- * which it reaches its furthest (`+0x150e`, 30038; 4, the default
+ * which it reaches its furthest (`+0x150e`, `setHeadTrackAcuteness`, 30038; 4, the default
  * `+0x1510`, for none or less), whether what it tracks is on the shelf
- * (`+0x1512`, 30039), and whether it looks away (`+0x1514`, 30040).
+ * (`+0x1512`, `setHeadTrackMode`, 30039), and whether it looks away (`+0x1514`,
+ * `setReverseHeadTrack`, 30040).
  */
 export interface CatzHeadState {
   divisor: number;
@@ -217,8 +219,8 @@ export interface CatzTimelineOptions {
    * Where the head and eyes are to be aimed to look at a point -- the
    * head's turn and tilt, the eyes' across and down (`SetHeadTarget`,
    * `catzHeadTarget`), from where the cat is as the script is popped (the
-   * shown ticks so far, and its rotation then) -- for `lookAtRandomPt`;
-   * none to leave them. With `fudgers`.
+   * shown ticks so far, and its rotation then) -- for `lookAtLocation`
+   * and `lookAtRandomPt`; none to leave them. With `fudgers`.
    */
   look?: (
     point: { x: number; y: number },
@@ -239,7 +241,7 @@ export interface CatzTimelineOptions {
 
   /**
    * A script's looking changing what the head tracks (`+0x1508`): a kind
-   * of sprite (`lookAtLocation`, 0 for none), or nothing, looking at a
+   * of sprite (`lookAtSprite`, 0 for none), or nothing, looking at a
    * point, at the user or ahead.
    */
   tracking?: (kind: number) => void;
@@ -870,19 +872,34 @@ export function catzTimeline(
           tracking?.(0);
           break;
         }
-        case CATZ_OP.setHeadDivisor: {
+        case CATZ_OP.setHeadTrackAcuteness: {
           /* The head's reach's divisor; none or less, its default (seg41:0e45). */
           const divisor = value(a);
           head.divisor = divisor > 0 ? divisor : 4;
           break;
         }
-        case CATZ_OP.setHeadShelved:
+        case CATZ_OP.setHeadTrackMode:
           head.shelved = value(a) !== 0;
           break;
-        case CATZ_OP.setHeadAway:
+        case CATZ_OP.setReverseHeadTrack:
           head.away = value(a) !== 0;
           break;
-        case CATZ_OP.lookAtLocation:
+        case CATZ_OP.lookAtLocation: {
+          /* A point given, across then down, looked at (`SetHeadTarget`), tracking nothing (seg41:0c0b). */
+          const [x, y] = [value(a), value(operands[1])];
+          const shown = steps.filter((step) => !step.reference).length;
+          const targets = fudgers
+            ? look?.({ x, y }, shown, wrapCatzAngle(fields[0] + turned), head)
+            : undefined;
+
+          if (targets) {
+            headAt(targets);
+          }
+
+          tracking?.(0);
+          break;
+        }
+        case CATZ_OP.lookAtSprite:
           /* What it tracks: a kind of sprite, the cursor where there is none of it, 0 none (seg41:0dba). */
           tracking?.(value(a));
           break;

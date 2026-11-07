@@ -186,7 +186,7 @@ export class CatzBody {
       area: this.options.area ?? stage,
       head: this.head,
       tracking: (kind) => {
-        /* (`lookAtLocation`: the cursor where there is none of the kind.) */
+        /* (`lookAtSprite`: the cursor where there is none of the kind.) */
         this.tracked = kind && !this.options.trackAt?.(kind) ? 0x17 : kind;
       },
       /* A point at random, and what it tracks each tick, looked at from where the frame before left it. */
