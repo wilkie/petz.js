@@ -34,14 +34,15 @@ export interface CatzPetOptions {
   brains: number[];
   centres: number[];
   stage: CatzBox;
-  play: (action: number) => number;
+  /** How many ticks an action plays, and the pose (`+0x1500`) it leaves the cat in, where known (its script's `to`). */
+  play: (action: number) => number | { ticks: number; pose?: number };
   random: (n: number) => number;
 
   /** Its width and height (`+0x33c4`, `+0x33c6`); a cat's, by default. */
   size?: { width: number; height: number };
 
-  /** Where the cursor (kin 0x17) rests, still: by default the stage's lower middle. */
-  cursor?: { x: number; y: number };
+  /** Where the cursor (kin 0x17) is, by the ticks gone: by default still at the stage's lower middle. */
+  cursor?: (tick: number) => { x: number; y: number };
 }
 
 /** What a tick did, for a viewer or a test to follow. */
@@ -126,6 +127,7 @@ export class CatzPet {
 
   /** A tick: its reflexes, then its state's own -- its script playing on, or done. */
   tick(): CatzPetTicked {
+    this.ticks++;
     this.pushed = [];
     this.reflexes();
 
@@ -166,11 +168,19 @@ export class CatzPet {
     this.take(now);
   }
 
-  /** Where the cursor rests. */
+  /** Where the cursor is. */
   private cursorAt() {
     const { stage, cursor } = this.options;
-    return cursor ?? { x: Math.trunc((stage.left + stage.right) / 2), y: stage.bottom - 20 };
+    return (
+      cursor?.(this.ticks) ?? {
+        x: Math.trunc((stage.left + stage.right) / 2),
+        y: stage.bottom - 20,
+      }
+    );
   }
+
+  /** The ticks gone. */
+  private ticks = 0;
 
   /** Where what it walks to is (`+0x35a6`): the cursor, its marker (kin 0x16) where it put one, else its goal. */
   private walkedToAt() {
@@ -485,10 +495,21 @@ export class CatzPet {
   /** Actions pushed: played for as long as each is given to. */
   private push(actions: number[]) {
     for (const action of actions) {
+      const played = this.options.play(action);
+      const { ticks, pose } =
+        typeof played === 'number' ? { ticks: played, pose: undefined } : played;
       this.pushed.push(action);
-      this.left += Math.max(1, this.options.play(action));
+      this.left += Math.max(1, ticks);
+
+      if (pose !== undefined) {
+        this.fields.x1500 = pose;
+        this.posed = true;
+      }
     }
   }
+
+  /** Whether its poses are given (by its scripts), or stood in for. */
+  private posed = false;
 
   /** Its fields as a tick of its state reads them. */
   private asTick(): CatzStateTick {
@@ -507,10 +528,9 @@ export class CatzPet {
 
     return {
       ...this.fields,
-      /* Its pose (`+0x1500`), which the script player leaves it in: stalking,
-       * crouched (0x14) as its creep leaves it -- standing in for the frames
-       * played; else as last kept. */
-      x1500: this.state === 2 || this.state === 3 ? 0x14 : this.fields.x1500,
+      /* Its pose (`+0x1500`), as its scripts leave it where they are given;
+       * else, stalking, crouched (0x14) as its creep leaves it, standing in. */
+      x1500: !this.posed && (this.state === 2 || this.state === 3) ? 0x14 : this.fields.x1500,
       global: this.global,
       enter,
       curiosities: this.fields.curiosities ?? [],
@@ -535,12 +555,13 @@ export class CatzPet {
       /* What it plays with, where it is: the cursor, still. */
       prey: this.fields.x35a4 === 0x17 ? this.cursorAt() : undefined,
       /* Swatting: how the cursor lies to its paw, standing in -- its offset
-       * from the cat, nothing missed, its first side, nothing shelved. */
+       * from the cat, its first side, nothing shelved. */
       swat: {
         facing: 0,
         dx: this.cursorAt().x - x,
         dy: this.cursorAt().y - y,
-        miss: 0,
+        /* Its paw missing it by how far the cursor is from it, standing in for `GetSwatMissDistance`. */
+        miss: Math.trunc(Math.hypot(this.cursorAt().x - x, this.cursorAt().y - y)),
         x3592: 0,
         shelved: false,
         shelfClosed: false,

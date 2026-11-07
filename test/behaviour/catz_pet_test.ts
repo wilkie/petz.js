@@ -12,6 +12,11 @@ describe('a Catz cat on its own', () => {
       brains: BRAINS,
       centres: CENTRES,
       stage: { left: 0, top: 0, right: 470, bottom: 370 },
+      /* The user moving the cursor somewhere else every 300 ticks. */
+      cursor: (tick) => ({
+        x: 60 + ((Math.trunc(tick / 300) * 137) % 350),
+        y: 100 + ((Math.trunc(tick / 300) * 89) % 250),
+      }),
       /* Each action played some ten ticks, standing in for the script player. */
       play: () => 10,
       random: (n) => rand() % n,
