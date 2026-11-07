@@ -365,6 +365,51 @@ const TOY_CASES = [8, 9, 6, 7].flatMap((kind) =>
   ].map(([vx, vy]) => [kind, vx, vy, 40])
 );
 
+/**
+ * A case of exploring up the stage's edges and onto the shelf (14 to 18):
+ * entering or its script done, by each way (1 to 5, 8, 9), facing about,
+ * having climbed or crossed (`+0x34ca`) or not.
+ */
+function jumpCase(n: number) {
+  const k = n - 1095;
+  const state = 14 + (k % 5);
+  const brains = Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 7 + k) % LEVELS.length]);
+  const way = [1, 2, 3, 4, 5, 8, 9][Math.floor(k / 5) % 7];
+  const x688 = [-100, -50, -20, 0, 20, 50, 100][(k * 3) % 7];
+
+  return [
+    (n * 1103515245 + 12345) % 2147483648,
+    ...brains,
+    ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 7) % LEVELS.length]),
+    state,
+    6,
+    0,
+    k % 3 === 0 ? 1 : 0,
+    0,
+    0,
+    ...Array.from({ length: 8 }, () => 0),
+    230,
+    100,
+    240,
+    110,
+    Math.floor(k / 35) % 2 ? 0 : 1,
+    1,
+    0,
+    0x16,
+    0,
+    0,
+    300,
+    100,
+    x688,
+    0,
+    way,
+    0,
+    0,
+    0,
+    0,
+  ];
+}
+
 /** The global states a walk's end is reimplemented for: all but 1, 4, 13, 17 and 14 with an age, and 3 only at the marker, the playpen's food being on its shelf. */
 const ARRIVALS = [2, 5, 6, 8, 9, 7, 10, 11, 16, 20, 21, 22, 14, 12, 18, 19, 3];
 
@@ -385,7 +430,12 @@ const ARRIVALS = [2, 5, 6, 8, 9, 7, 10, 11, 16, 20, 21, 22, 14, 12, 18, 19, 3];
  * having begged or not, about to eat or idle; and the last 16 are about to
  * stalk, entering or not.
  */
-const LOCAL_CASES = Array.from({ length: 1095 }, (_, n) => {
+const LOCAL_CASES = Array.from({ length: 1165 }, (_, n) => {
+  /* The last 70 explore up the stage's edges and onto the shelf: might it jump, jumping to the edge, crawling up it and along the ceiling, and jumping to the shelf. */
+  if (n >= 1095) {
+    return jumpCase(n);
+  }
+
   const preStalking = n >= 1079;
   const begging = n >= 1015 && !preStalking;
   const arriving = n >= 862 && n < 1015;
@@ -1377,6 +1427,14 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         const [theirPassed, after, idle, looks, theirMode, x35a6, x35a4] = values.slice(76);
         const walkingOn = state === 23;
         const walking = state === 22;
+        /* Exploring up the edges and onto the shelf (14 to 18): `+0x34ca` as the engine left it,
+         * but where it went on to another state, whose own entering and tick ran in the same call,
+         * and jumping to the shelf entering, whose first frame, popped at once, may be cued (4)
+         * to say it is on it. And crawling up the edge, its script done, its climb (`+0x35ba`) is
+         * what an earlier case left it, which the case does not set. */
+        const jumping = state >= 14 && state <= 18;
+        const climbLeft =
+          state === 16 && !enter && (ours.pushed === 0x132 || ours.pushed === 0x215);
         /* The handler's own pushes: its scripts may go on to more in the tick. */
         const pushedAll = values.slice(38, 38 + Math.min(pushes, 8, ours.pushes?.length || 8));
         const looking = state === 12;
@@ -1427,8 +1485,18 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           ours.state === undefined ? theirGlobal : undefined,
           energy,
           changed ? '' : theirCount,
-          changed || (walkingOn && !ours.pushes) ? undefined : pushes ? values[38] : undefined,
-          state === 19 || state === 35 ? theirPassed : passed,
+          changed || (walkingOn && !ours.pushes)
+            ? undefined
+            : climbLeft
+              ? ours.pushed
+              : pushes
+                ? values[38]
+                : undefined,
+          state === 19 || state === 35 || (jumping && !changed && !(state === 18 && enter))
+            ? theirPassed
+            : jumping
+              ? (ours.passed ?? passed)
+              : passed,
           ours.moment && [after, idle, looks, pushes ? values[38] : undefined],
           ours.x35a6 !== undefined && [x35a6, ours.x35a4 === undefined ? undefined : x35a4],
           /* `+0x35a4` as the tick set it, where it did; else as the case before left it. */

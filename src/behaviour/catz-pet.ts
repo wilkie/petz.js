@@ -116,15 +116,16 @@ const BEGUN = new Set([1, 3, 6, 8, 9, 15, 16]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29, 30, 31, 32, 33,
-  34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
-  58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26, 27, 28,
+  29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52,
+  53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
+  77, 78, 79, 80, 81,
 ]);
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  3, 4, 8, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65,
-  67, 69, 70, 71, 72, 76, 77, 78, 79, 80, 81,
+  3, 4, 8, 14, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 52, 54, 55, 58, 59,
+  60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -769,6 +770,7 @@ export class CatzPet {
     if (ticked.x35ee !== undefined) f.x35ee = ticked.x35ee;
     if (ticked.x35f4 !== undefined) f.x35f4 = ticked.x35f4;
     if (ticked.x688 !== undefined) f.x688 = ticked.x688;
+    if (ticked.x35ba !== undefined) f.x35ba = ticked.x35ba;
     if (ticked.x35b8 !== undefined) f.x35b8 = ticked.x35b8;
     if (ticked.x35aa !== undefined) f.x35aa = ticked.x35aa;
     if (ticked.ticks !== undefined) f.ticks = ticked.ticks;

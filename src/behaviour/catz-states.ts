@@ -11,6 +11,11 @@ import { catzStrikeSpeed } from './catz-toys.ts';
 
 /** The cat's own states these model, by CATZDLL.DLL's numbers (`eKatState_…`). */
 export const CATZ_STATE = {
+  mightJump: 14,
+  jumpToEdge: 15,
+  crawlUpEdge: 16,
+  crawlAlongCeiling: 17,
+  jumpToShelf: 18,
   lookAtObjects: 12,
   preExplore: 13,
   passTheTime: 19,
@@ -199,6 +204,9 @@ export interface CatzStateWorld {
 
   /** Ignoring: what it ignores (`+0x35b0`), which its head tracks. */
   x35b0?: number;
+
+  /** Crawling up the edge: its climb (`+0x35ba`). */
+  x35ba?: number;
 
   /** Its bottle (kin 0xf): see `CatzBottle`. */
   bottle?: CatzBottle;
@@ -554,6 +562,9 @@ export interface CatzStateTick {
   /** Walking on: the words that set its steering (`targetSprite4`, 0x756d: what to, the box's width and height, and its share), the layered action begun, the sound made, `+0x688` (before the steering moves it on) and `+0x35aa` where set, and its fullness after. */
   steer?: number[];
 
+  /** Crawling up the edge: its climb (`+0x35ba`), as entering draws it. */
+  x35ba?: number;
+
   /** Swatting, struck: the toy of a kind, and the speed it is given (`StrikeToy`). */
   strike?: { kind: number; v: { x: number; y: number } };
 
@@ -653,6 +664,12 @@ export function catzStateTick(
   const done = (rest: Partial<CatzStateTick>): CatzStateTick => ({ energy, count, ...rest });
 
   switch (state) {
+    case CATZ_STATE.mightJump:
+    case CATZ_STATE.jumpToEdge:
+    case CATZ_STATE.crawlUpEdge:
+    case CATZ_STATE.crawlAlongCeiling:
+    case CATZ_STATE.jumpToShelf:
+      return catzJumping(state, mind, world, random, done);
     case CATZ_STATE.tired:
       /* `DoCatTired`, seg30:0113: entering, 0xb3. */
       if (world.enter) {
@@ -4438,5 +4455,240 @@ export function catzStateBetween(
         : {};
     default:
       return {};
+  }
+}
+
+/**
+ * What to face to jump, by the cat's way (`+0x35a8`), and the state to
+ * jump in (`SetupForJump`, seg24:2197): from and to, the way to face
+ * (`+0x34d0`), and the jump -- to the edge (15) or the shelf (18).
+ */
+const CATZ_JUMPS: Record<number, [number, number, number, number]> = {
+  1: [0xe, 0x72, 0x40, 15],
+  2: [-0x72, -0xe, -0x40, 15],
+  3: [-25, 25, 0, 15],
+  4: [-0x72, -0xe, -0x40, 18],
+  5: [0xe, 0x72, 0x40, 18],
+  8: [-0x72, -0xe, -0x40, 18],
+  9: [0xe, 0x72, 0x40, 18],
+};
+
+/**
+ * Exploring up the stage's edges and onto the shelf (seg24:0a18 to 1896):
+ *
+ * - might it jump (14; `DoCatMightJump`): entering, its head on its marker
+ *   (0x16, 2500); facing (`+0x688`) outside what its way jumps within, it
+ *   turns -- 0x148 for ways 1, 5 and 9, 0x149 for 2, 4 and 8 -- else 0x93;
+ *   then 0x93, and a transition to its neutral position (0x6b, not
+ *   reimplemented). Its script done, facing within, what it walks to is put
+ *   at its goal, its head let go, and it jumps; else it readies its moment,
+ *   not watching, and has it (8).
+ * - jumping to the edge (15; `DoCatJumpToEdge`): entering, its leap to its
+ *   marker at its goal (but way 3) and its rotation aligned (words, not
+ *   kept), 0x22f under what its energy leaves of 100, else 0x132. Its
+ *   script done, it crawls up the edge (16).
+ * - crawling up the edge (16; `DoCatCrawlUpEdge`): entering, not yet
+ *   climbed (`+0x34ca` 0), its climb (`+0x35ba`) 0x215 under its energy,
+ *   else 0x132. Its script done, having climbed, its moment, watching;
+ *   else, its point more than its height but less than three times it
+ *   below the stage's top, not way 3, it makes for the ceiling: its goal
+ *   the stage's top, 1.5 of its widths (`ds:0x36e`) in from the side away
+ *   from it (the right where it is past the middle), and crawls along it
+ *   (17); else one time in five 0x1c7, else its head let go; and, four
+ *   times in five, still below the stage's top, 0x22f under half of what
+ *   its energy leaves of 100, else, one time in four inclined to behaviour
+ *   9, 0x230, else its climb; otherwise it has climbed and pushes 0xd7.
+ * - crawling along the ceiling (17; `DoCatCrawlAlongCeiling`): entering,
+ *   not yet crossed, its leap to its goal (words). Its script done, having
+ *   crossed, its moment, watching; else one time in five 0x1c7, else its
+ *   head let go; four times in five, between the stage's sides, 0x1fe
+ *   under its energy, else, one time in ten on way 1, 0x2fb, else 0x218;
+ *   otherwise it has crossed and pushes 0xd7.
+ * - jumping to the shelf (18; `DoCatJumpToShelf`): entering, its leap and
+ *   rotation (words), 0x120, then 0x273 for as long as `rand() % 10 + 3`
+ *   is over how many it pushed, then 0x14f; what it is on kept (`+0x35c6`,
+ *   its slot `0x244`), not yet on it. Each tick, cued 4 it is on it, and
+ *   cued 4 or 1, what it is on moved, it has its moment; on it, that moved,
+ *   on the cursor (ways 8 and 9) its moment, else it goes with it -- not
+ *   reimplemented; its script done or cued 0, its moment, not watching.
+ */
+function catzJumping(
+  state: number,
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number,
+  done: (rest: Partial<CatzStateTick>) => CatzStateTick
+): CatzStateTick {
+  const percent = () => random(101);
+  const brain = (n: number) => mind.brains[n];
+  const energy = brain(CATZ_BRAIN.energy);
+  const way = world.x35a8 ?? 0;
+  const x688 = world.x688 ?? 0;
+  const moment = (watching: boolean) =>
+    done({
+      moment: catzPreMoment(mind, world.area3 ?? false, 6, 0x93, watching, random),
+      global: 8,
+    });
+  const jump = CATZ_JUMPS[way];
+  /* Tired and hungry by the jump (`CatGetsTiredAndHungry` 2, 1, its slot `0x170`): under what its liveliness leaves of 100, energy down 2; one time in ten, fullness down 1. */
+  const tires: Partial<CatzStateTick> = {};
+  const tire = () => {
+    if (percent() < 100 - brain(CATZ_BRAIN.liveliness)) {
+      tires.energy = Math.max(0, energy - 2);
+    }
+
+    if (percent() < 10) {
+      tires.fullness = Math.max(0, brain(CATZ_BRAIN.fullness) - 1);
+    }
+  };
+  const tired = (rest: Partial<CatzStateTick>) => done({ ...rest, ...tires });
+  /* Its energy as it now is, tired or not. */
+  const now = () => tires.energy ?? energy;
+
+  switch (state) {
+    case CATZ_STATE.mightJump: {
+      const within = !!jump && x688 >= jump[0] && x688 <= jump[1];
+
+      if (world.enter) {
+        const pushes: number[] = [];
+
+        if (!within) {
+          if (way === 1 || way === 5 || way === 9) {
+            pushes.push(0x148);
+          } else if (way === 2 || way === 4 || way === 8) {
+            pushes.push(0x149);
+          }
+        } else {
+          pushes.push(0x93);
+        }
+
+        pushes.push(0x93);
+        return done({
+          pushed: pushes[0],
+          pushes,
+          head: ['track'],
+          headTrack: { kind: 0x16, speed: 2500 },
+        });
+      }
+
+      if (within) {
+        return done({ state: jump[3], head: ['off'], x35a6: world.x35a6 });
+      }
+
+      return moment(false);
+    }
+    case CATZ_STATE.jumpToEdge: {
+      if (!world.enter) {
+        return done({ state: CATZ_STATE.crawlUpEdge });
+      }
+
+      const action = percent() < 100 - energy ? 0x22f : 0x132;
+      tire();
+      return tired({ pushed: action, pushes: [action] });
+    }
+    case CATZ_STATE.crawlUpEdge: {
+      /* Entering, pushing nothing, its tick goes on at once. */
+      let passed = world.passed;
+      let x35ba = world.x35ba;
+
+      if (world.enter) {
+        tire();
+        x35ba = percent() < now() ? 0x215 : 0x132;
+        passed = 0;
+      }
+
+      if (passed) {
+        return moment(true);
+      }
+
+      const { stage, size, point } = world;
+      const below = point!.y - stage!.top;
+
+      if (size!.height < below && size!.height * 3 > below && way !== 3) {
+        const middle = Math.trunc((stage!.right - stage!.left) / 2) + stage!.left;
+        const inset = size!.width * 1.5;
+        return tired({
+          passed,
+          x35ba,
+          state: CATZ_STATE.crawlAlongCeiling,
+          explore: way,
+          goal: {
+            x: Math.trunc(point!.x > middle ? stage!.right - inset : stage!.left + inset),
+            y: stage!.top,
+          },
+        });
+      }
+
+      return crawl(
+        () => {
+          if (percent() < Math.trunc((100 - now()) / 2)) {
+            return 0x22f;
+          }
+
+          return percent() < 25 && catzBehavior(mind, 9, random) !== 0 ? 0x230 : (x35ba ?? 0x132);
+        },
+        point!.y > stage!.top,
+        { x35ba }
+      );
+    }
+    case CATZ_STATE.crawlAlongCeiling: {
+      /* Entering, pushing nothing (but its leap's words), its tick goes on at once. */
+      let passed = world.passed;
+
+      if (world.enter) {
+        passed = 0;
+        tire();
+      }
+
+      if (passed) {
+        return moment(true);
+      }
+
+      const { stage, point } = world;
+      return crawl(
+        () => (percent() < now() ? 0x1fe : percent() < 10 && way === 1 ? 0x2fb : 0x218),
+        point!.x > stage!.left && point!.x < stage!.right,
+        { passed }
+      );
+    }
+    default: {
+      if (!world.enter) {
+        return moment(false);
+      }
+
+      const pushes = [0x120];
+      tire();
+
+      while (random(10) + 3 > pushes.length - 1) {
+        pushes.push(0x273);
+      }
+
+      pushes.push(0x14f);
+      return tired({ pushed: 0x120, pushes, passed: 0 });
+    }
+  }
+
+  /** A stride along an edge: one time in five 0x1c7, else its head let go; four times in five, still on its way, the stride; else there, 0xd7. */
+  function crawl(
+    stride: () => number,
+    going: boolean,
+    rest: Partial<CatzStateTick> = {}
+  ): CatzStateTick {
+    const pushes: number[] = [];
+    const head: CatzStateTick['head'] = [];
+
+    if (percent() < 20) {
+      pushes.push(0x1c7);
+    } else {
+      head.push('off');
+    }
+
+    if (percent() < 80 && going) {
+      pushes.push(stride());
+      return tired({ passed: 0, ...rest, pushed: pushes[0], pushes, head });
+    }
+
+    pushes.push(0xd7);
+    return tired({ ...rest, pushed: pushes[0], pushes, head, passed: 1 });
   }
 }
