@@ -284,12 +284,15 @@ const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
 /**
  * Cases of a global state begun: a seed, the brains' values and centres,
  * the state, whether the cursor moved, `+0x3574`, and `+0x35ce` and
- * `+0x35d2`. The first 90 idle, have their moment and rest; the 80 after
- * eat -- sent by hunger three times in four, else by each other way, with
- * the food bowl empty, low, full or -1 -- some without an age.
+ * `+0x35d2`, and `+0x35a4` (-1 to leave it). The first 90 idle, have
+ * their moment and rest; the 80 after eat -- sent by hunger three times in
+ * four, else by each other way, with the food bowl empty, low, full or -1
+ * -- some without an age; and the last 40 play, with the cursor (lively,
+ * to chase it), the mouse, 5, 6, 7, 9, the food bowl and the catnip.
  */
-const GLOBAL_CASES = Array.from({ length: 170 }, (_, n) => {
-  const eating = n >= 90;
+const GLOBAL_CASES = Array.from({ length: 210 }, (_, n) => {
+  const playing = n >= 170;
+  const eating = n >= 90 && !playing;
   const k = n - 90;
   const brains = Array.from(
     { length: 12 },
@@ -301,15 +304,21 @@ const GLOBAL_CASES = Array.from({ length: 170 }, (_, n) => {
     brains[11] = 0;
   }
 
+  /* Those playing with the cursor lively, to chase it. */
+  if (playing && n % 8 === 0) {
+    brains[0] = 100;
+  }
+
   return [
     (n * 134775813 + 1) % 2147483648,
     ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 3) % LEVELS.length]),
-    eating ? 3 : [6, 8, 9][n % 3],
+    playing ? 15 : eating ? 3 : [6, 8, 9][n % 3],
     Math.floor(n / 3) % 2,
     Math.floor(n / 6) % 2,
     eating ? [0, 0, 0, 1, 0, 0, 2, 0, 0, 3][k % 10] : 0,
     eating ? [0, 5, 30, -1][Math.floor(k / 2) % 4] : 0,
+    playing ? [0x17, 0x1b, 5, 6, 7, 9, 0xc, 0xe][n % 8] : -1,
   ];
 });
 
@@ -669,7 +678,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 
       if (kind === 'moment') {
         moment = values;
-      } else if (kind === 'chose') {
+      } else if (kind === 'chose' && MOMENT_CASES.some(([s]) => s === moment[0])) {
+        /* (A global state's case going on to its moment chooses too: not one of these.) */
         const [caseSeed, global, target, count, x35d2, shelf, saver, c4] = moment;
         const brains = MOMENT_CASES.find(([s]) => s === caseSeed)!.slice(1, 13);
         let state = BigInt(caseSeed);
@@ -947,7 +957,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       } else if (kind === 'globaled') {
         const [globalSeed, area] = globalCase;
         const c = GLOBAL_CASES.find(([s]) => s === globalSeed)!;
-        const [global, moved, sleepy, x35ce, x35d2] = c.slice(25);
+        const [global, moved, sleepy, x35ce, x35d2, plays] = c.slice(25);
         let state = BigInt(globalSeed);
         const random = (n: number) => {
           state = (state * 22695477n + 1n) & 0xffffffffn;
@@ -972,6 +982,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             inShelf: (kind) => shelf[kind] !== 0,
             x35ce,
             x35d2,
+            x35a4: plays,
           },
           random
         );
@@ -983,7 +994,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         /* Eating: what it goes to, the bowl, and the actions it pushed, oldest first. */
         const [x35a4, x35a6, bowl] = values.slice(25, 28);
         const pushed = added(values.slice(28, 38));
-        const eating = global === 3;
+        /* Eating and playing: what it goes to, and what it pushed, held too. */
+        const eating = global === 3 || global === 15;
         /* Eating's effects stand where nothing after sets its own: walking
          * to its food, or idling; playing, attacking and eating from the bowl
          * or at hand, entered after, set theirs. */

@@ -88,7 +88,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([3, 6, 8, 9]);
+const BEGUN = new Set([3, 6, 8, 9, 15]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -419,6 +419,7 @@ export class CatzPet {
         inShelf: shelved,
         x35ce: this.fields.x35ce ?? 0,
         x35d2: this.fields.x35d2 ?? 0,
+        x35a4: this.fields.x35a4 ?? 0,
       },
       this.options.random
     );
@@ -474,9 +475,10 @@ export class CatzPet {
    *   its hiding place -- standing in at random on the stage;
    * - affectionate (14; `DoGSAffectionate`): no sound of its own
    *   (`+0x3570`), and it walks to the cursor (22, `+0x35a6` 0x17);
-   * - playing (15) and attacking (1), standing in: after the cursor or the
+   * - chasing (16) and attacking (1), standing in: after the cursor
    *   (`+0x35a4` 0x17) -- the mouse never out in an empty pen -- it begins to
-   *   stalk (1); else it idles.
+   *   stalk (1); else it idles. Playing (15) begins as the engine begins it
+   *   (`catzGlobalBegin`), walking to what it plays with or chasing it.
    */
   private beginOwn(global: number, depth: number) {
     const { random } = this.options;
@@ -510,7 +512,7 @@ export class CatzPet {
         this.fields.x35a6 = 0x17;
         this.enter(22, depth + 1);
         return true;
-      case 15:
+      case 16:
       case 1: {
         const kind = this.fields.x35a4;
 

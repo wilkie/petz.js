@@ -2209,8 +2209,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
     /* Each case in `GLOBAL.TXT`: a line `seed`, the 12 brains' values and
      * their centres, a global state to put the cat in, whether the cursor
-     * has moved (`PetParams` `+0x104` on), `+0x3574`, `+0x35ce` and
-     * `+0x35d2`, the last ten actions pushed marked: the cat with no
+     * has moved (`PetParams` `+0x104` on), `+0x3574`, `+0x35ce`, `+0x35d2`
+     * and `+0x35a4` (where not -1), the last ten actions pushed marked: the
+     * cat with no
      * global state (`+0x3a` of its machine), both its machines' histories
      * marked, put in it (`GlobalCatStateMachine::NewState`, 488); and
      * `globaled` and the two histories, its mode, the effects set on its
@@ -2242,6 +2243,13 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int __far *)(cat + 0x3574) = (int)number(file);
             *(int __far *)(cat + 0x35ce) = (int)number(file);
             *(int __far *)(cat + 0x35d2) = (int)number(file);
+            {
+                int plays = (int)number(file);
+
+                if (plays >= 0) {
+                    *(int __far *)(cat + 0x35a4) = plays;
+                }
+            }
 
             for (b = 0; b < 4; b++) {
                 *(int *)(params + 0x104 + 2 * b) = b == 0 ? moved : 0;

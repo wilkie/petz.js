@@ -28,6 +28,9 @@ export interface CatzGlobalWorld {
   /** Eating: what sent it to eat (`+0x35ce`: 0 hunger, 1 the bowl, 2 food at hand, 3 water), and what is left in the food bowl (`+0x35d2`). */
   x35ce?: number;
   x35d2?: number;
+
+  /** Playing: what it plays with (`+0x35a4`). */
+  x35a4?: number;
 }
 
 /** What a global state begun did: the global states the cat was put in, in turn, and the state of its own it began in. */
@@ -104,6 +107,8 @@ export function catzGlobalBegin(
       break;
     case 3:
       return catzEatingBegin(mind, world, random, begun);
+    case 15:
+      return catzPlayingBegin(mind, world, random, begun);
   }
 
   return begun;
@@ -250,4 +255,54 @@ function catzEatingBegin(
   }
 
   return walk();
+}
+
+/**
+ * Playing begun (`DoGSPlaying`, seg29:08e4), entering: the effect on
+ * seriousness 15 only; under what its fear leaves of 100, under its energy
+ * and under what its seriousness leaves of 100, and not playing with the
+ * food bowl (0xc), a sound (10) and 0xf1 (0x2aa without an age). Then,
+ * what it plays with (`+0x35a4`) the cursor (0x17), the mouse (0x1b), or 6,
+ * 7 or 9, off the shelf, under half its liveliness, it chases it (global
+ * 16); else it walks to it (22, `+0x35a6` made `+0x35a4`).
+ *
+ * Each tick after, the machine's `+0x46` set and not after the mouse, it
+ * readies its moment (`PreMoment` 6, 0x93, 1) and has it (8); leaving,
+ * inclined to behaviour 9 it pushes 0x141, else its slot `0x1fc`, and
+ * turns its head (slot `0xe0`, 2500): not reimplemented.
+ */
+function catzPlayingBegin(
+  mind: CatzMind,
+  world: CatzGlobalWorld,
+  random: (n: number) => number,
+  begun: CatzGlobalBegun
+): CatzGlobalBegun {
+  const percent = () => random(101);
+  const brain = (n: number) => mind.brains[n];
+  const kind = world.x35a4 ?? 0;
+  const inShelf = world.inShelf ?? (() => true);
+  begun.effects = [0, 0, 15, 0];
+
+  if (
+    percent() < 100 - brain(CATZ_BRAIN.fear) &&
+    percent() < brain(CATZ_BRAIN.energy) &&
+    percent() < 100 - brain(CATZ_BRAIN.seriousness) &&
+    kind !== 0xc
+  ) {
+    begun.sound = catzSound(mind, 10, random);
+    begun.pushes = [brain(CATZ_BRAIN.age) === 0 ? 0x2aa : 0xf1];
+  }
+
+  if (
+    [6, 7, 9, 0x17, 0x1b].includes(kind) &&
+    !inShelf(kind) &&
+    percent() < Math.trunc(brain(CATZ_BRAIN.liveliness) / 2)
+  ) {
+    begun.globals.push(16);
+    return begun;
+  }
+
+  begun.kind = kind;
+  begun.state = 22;
+  return begun;
 }
