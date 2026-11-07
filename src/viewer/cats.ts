@@ -53,7 +53,12 @@ import {
 import { initCatzBrains, updateCatzBrain } from '../behaviour/catz-brain.ts';
 import { CatzBody } from '../behaviour/catz-body.ts';
 import { CatzPet } from '../behaviour/catz-pet.ts';
-import { type CatzToy, catzToyTick } from '../behaviour/catz-toys.ts';
+import {
+  type CatzJingleBall,
+  catzJingleTick,
+  type CatzToy,
+  catzToyTick,
+} from '../behaviour/catz-toys.ts';
 import { borlandRand } from '../behaviour/random.ts';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -307,11 +312,15 @@ const penPictures = new Map<number, { dib: Dib; colours: number[]; green: number
  * The pen's things moving, struck: each by the playpen's physics
  * (`catzToyTick`), its friction and rebound the engine's -- the cheese 50,
  * the squeaky toy 70, the yarn ball 100 and 100 (its own `Init`), the rest
- * their definitions' -- the jingle ball's and the Cat Dancer's own physics
- * standing in so; kept from the stage's edges by half their pictures.
+ * their definitions' -- the jingle ball by its own (`catzJingleTick`), the
+ * Cat Dancer's own standing in so; kept from the stage's edges by half
+ * their pictures; their sounds drawing the cat's own `rand`.
  */
-const liveToys = new Map<number, CatzToy>();
-const FRICTION: Record<number, [number, number]> = { 6: [100, 100], 7: [95, -1], 9: [70, -1] };
+const liveToys = new Map<number, CatzToy | CatzJingleBall>();
+const FRICTION: Record<number, [number, number]> = { 6: [100, 100], 9: [70, -1] };
+
+/** The jingle ball's own physics' parameters, as the playpen's (`PetParams` `+0x138`, `+0x140`, as the harness found them). */
+const JINGLE = { x138: 13, x140: 64 };
 
 /** A toy the cat struck, set moving from where it is. */
 function strikeToy({ kind, v }: { kind: number; v: { x: number; y: number } }) {
@@ -323,27 +332,32 @@ function strikeToy({ kind, v }: { kind: number; v: { x: number; y: number } }) {
 
   const picture = penPictures.get(kind)?.dib;
   const [friction, rebound] = FRICTION[kind] ?? [50, -1];
-  liveToys.set(kind, {
-    at: { ...at },
-    v: { ...v },
-    friction,
-    rebound,
-    half: {
-      x: Math.trunc((picture?.width ?? 32) / 2),
-      y: Math.trunc((picture?.height ?? 32) / 2),
-    },
-  });
+  const half = {
+    x: Math.trunc((picture?.width ?? 32) / 2),
+    y: Math.trunc((picture?.height ?? 32) / 2),
+  };
+  liveToys.set(
+    kind,
+    kind === 7
+      ? { at: { ...at }, v: { ...v }, half }
+      : { at: { ...at }, v: { ...v }, friction, rebound, half }
+  );
 }
 
 /** A tick of the moving toys: each moved, and put where it now is; still, it stops. */
-function moveToys() {
+function moveToys(random: (n: number) => number) {
   for (const [kind, toy] of liveToys) {
     if (!livePen.has(kind)) {
       liveToys.delete(kind);
       continue;
     }
 
-    catzToyTick(toy, LIVE_STAGE);
+    if ('friction' in toy) {
+      catzToyTick(toy, LIVE_STAGE, random);
+    } else {
+      catzJingleTick(toy, LIVE_STAGE, JINGLE, random);
+    }
+
     livePen.set(kind, { ...toy.at });
 
     if (!toy.v.x && !toy.v.y) {
@@ -432,7 +446,7 @@ function goLive() {
     });
 
     /* The pen's things struck moving on. */
-    moveToys();
+    moveToys(random);
 
     /* The frame this tick shows, as `PopScript` pops it before the state's own tick. */
     const shown = body.next();

@@ -19,7 +19,7 @@ import { join } from 'node:path';
 
 import { type CatzMind, catzBehavior, catzSound } from '../../src/behaviour/catz-behavior.ts';
 import { catzGlobalBegin, catzGlobalTick } from '../../src/behaviour/catz-global.ts';
-import { catzToyTick } from '../../src/behaviour/catz-toys.ts';
+import { catzJingleTick, catzToyTick } from '../../src/behaviour/catz-toys.ts';
 import {
   catzCuriosities,
   catzStateBetween,
@@ -351,10 +351,10 @@ const GLOBAL_CASES = Array.from({ length: 342 }, (_, n) => {
 
 /**
  * Cases of a toy struck and its physics run: the cheese (8), the squeaky
- * toy (9) and the yarn ball (6), each struck at full speed each way and
- * aslant, for 40 ticks.
+ * toy (9), the yarn ball (6) and the jingle ball (7, its own), each struck
+ * at full speed each way and aslant, for 40 ticks.
  */
-const TOY_CASES = [8, 9, 6].flatMap((kind) =>
+const TOY_CASES = [8, 9, 6, 7].flatMap((kind) =>
   [
     [50, 0],
     [-50, 0],
@@ -1186,6 +1186,15 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     let toyKind = 0;
     let toyTick = 0;
     let toyTicks = 0;
+    /* The jingle ball's rolling sound's count, kept from case to case on the one ball. */
+    let jingleRolls = 0;
+    let jingle:
+      | {
+          ball: Parameters<typeof catzJingleTick>[0];
+          params: Parameters<typeof catzJingleTick>[2];
+          state: bigint;
+        }
+      | undefined;
 
     for (const line of lines) {
       const [kind, ...rest] = line.split(' ');
@@ -1224,15 +1233,53 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           half: { x: half(gr - gl), y: half(gb - gt) },
         };
         [toyKind, toyTick] = [k, 0];
+        jingle = undefined;
+      } else if (kind === 'toyseed' && toyKind === 7 && toy) {
+        /* The jingle ball, its speed singles, and C's `rand` from where the strike left it. */
+        const single = (hex: string) => {
+          const view = new DataView(new ArrayBuffer(4));
+          view.setUint32(0, parseInt(hex, 16));
+          return view.getFloat32(0);
+        };
+        jingle = {
+          ball: {
+            at: { ...toy.at },
+            v: { x: single(rest[1]), y: single(rest[2]) },
+            half: toy.half,
+            rolls: jingleRolls,
+          },
+          params: { x138: values[3], x140: values[4] },
+          state: BigInt(rest[0]),
+        };
+      } else if (kind === 'toyed' && jingle && toyKind === 7) {
+        const j = jingle;
+        catzJingleTick(j.ball, area, j.params, (n) => {
+          j.state = (j.state * 22695477n + 1n) & 0xffffffffn;
+          return Number((j.state >> 16n) & 0x7fffn) % n;
+        });
+        const bits = (n: number) => {
+          const view = new DataView(new ArrayBuffer(4));
+          view.setFloat32(0, n);
+          return view.getUint32(0).toString(16);
+        };
+        const ours = [j.ball.at.x, j.ball.at.y, bits(j.ball.v.x), bits(j.ball.v.y)].join(' ');
+        const theirs = [values[0], values[1], rest[4], rest[5]].join(' ');
+
+        if (ours !== theirs) {
+          wrong.push(`jingle tick ${toyTick}: ${ours} not ${theirs}`);
+          j.ball.at = { x: values[0], y: values[1] };
+        }
+
+        jingleRolls = j.ball.rolls ?? 0;
+
+        toyTick++;
+        toyTicks++;
       } else if (kind === 'toyed' && toy) {
         catzToyTick(toy, area);
         const ours = [toy.at.x, toy.at.y, toy.v.x, toy.v.y].join(' ');
-        console.log(
-          `TOY ${toyKind} ${toyTick} ours ${ours} theirs ${values.join(' ')} f ${toy.friction}`
-        );
 
-        if (ours !== values.join(' ')) {
-          wrong.push(`toy ${toyKind} tick ${toyTick}: ${ours} not ${values.join(' ')}`);
+        if (ours !== values.slice(0, 4).join(' ')) {
+          wrong.push(`toy ${toyKind} tick ${toyTick}: ${ours} not ${values.slice(0, 4).join(' ')}`);
           /* Go on from where the engine has it. */
           toy.at = { x: values[0], y: values[1] };
           toy.v = { x: values[2], y: values[3] };

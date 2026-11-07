@@ -2397,11 +2397,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     /* Each case in `TOY.TXT`, a line `kind vx vy ticks`: the pen's thing of that kind taken off
      * the shelf into the pen (`XApt::ShelfToPlaypen`, 151), struck so (`XApt::StrikeToy`, 676,
      * with 30, as a swat strikes it), and its physics run so many ticks -- the yarn ball's own
-     * (`YarnBallSprite::ToyPhysics`, 871), else the playpen's (`XApt::ToyPhysics`, 678); then put
+     * (`YarnBallSprite::ToyPhysics`, 871), the jingle ball's (`JingleBallSprite::ToyPhysics`,
+     * 747), else the playpen's (`XApt::ToyPhysics`, 678); then put
      * back (152). `toy kind` and the pen's client rectangle (`GetClientRect` of `PetParams`
      * `+0x396`), `+0xd8` and `+0xda`, its grab rectangle (`GetGrabRect`, 13, space 1), its
      * target point, its speed (`+0x13a`, `+0x13c`), `+0x1da`, `+0x1d8`, `+0x21a`, `+0x21c` and
-     * `+0x220`; and each tick after, `toyed` and its target point and speed. */
+     * `+0x220`; `toyseed` and C's `rand` seed then, the jingle ball's speed as singles' bits
+     * (`+0x242`, `+0x246`) and `PetParams` `+0x138` and `+0x140`; and each tick after, `toyed`
+     * and its target point, speed, and those singles. */
     file = _lopen(DIRECTORY "\\TOY.TXT", OF_READ);
 
     if (cat && file != HFILE_ERROR) {
@@ -2439,12 +2442,16 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(toy + 0x1da), *(int __far *)(toy + 0x1d8),
                 *(int __far *)(toy + 0x21a), *(int __far *)(toy + 0x21c),
                 *(int __far *)(toy + 0x220));
+            say("toyseed %lu %lx %lx %d %d\r\n", *(unsigned long __far *)MK_FP(dgroup, 0x28ba),
+                *(unsigned long __far *)(toy + 0x242), *(unsigned long __far *)(toy + 0x246),
+                *(int *)(params + 0x138), *(int *)(params + 0x140));
 
             for (t = 0; t < ticks; t++) {
-                ((PHYSICS)ordinal(kind == 6 ? 871 : 678))(toy, params);
+                ((PHYSICS)ordinal(kind == 6 ? 871 : kind == 7 ? 747 : 678))(toy, params);
                 at = ((TARGETPT)ordinal(10))(toy, 0);
-                say("toyed %d %d %d %d\r\n", (int)at, (int)(at >> 16), *(int __far *)(toy + 0x13a),
-                    *(int __far *)(toy + 0x13c));
+                say("toyed %d %d %d %d %lx %lx\r\n", (int)at, (int)(at >> 16), *(int __far *)(toy + 0x13a),
+                    *(int __far *)(toy + 0x13c), *(unsigned long __far *)(toy + 0x242),
+                    *(unsigned long __far *)(toy + 0x246));
             }
 
             ((TOSHELF)ordinal(152))(toy, params, 0);
