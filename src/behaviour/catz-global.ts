@@ -47,6 +47,9 @@ export interface CatzGlobalBegun {
   /** Eating: what it goes to (`+0x35a4` and `+0x35a6`), what is left in the bowl (`+0x35d2`), the sound it made and the actions it pushed, where so. */
   kind?: number;
   x35d2?: number;
+
+  /** Chasing: `+0x35ac` set, so it runs. */
+  x35ac?: number;
   sound?: number;
   pushes?: number[];
 }
@@ -109,6 +112,27 @@ export function catzGlobalBegin(
       return catzEatingBegin(mind, world, random, begun);
     case 15:
       return catzPlayingBegin(mind, world, random, begun);
+    case 16: {
+      /* Chasing (`DoGSChasing`, seg19:0000), entering: idling's effects;
+       * what it chases (`+0x35a4`) on the shelf, it plays (15) instead; else
+       * it runs to it (22, `+0x35a6` made `+0x35a4`, `+0x35ac` 1). Each tick
+       * after, the machine's `+0x46` set and not after the mouse, its moment
+       * readied and had (8): not reimplemented. */
+      const kind = world.x35a4 ?? 0;
+
+      if ((world.inShelf ?? (() => true))(kind)) {
+        const playing = catzPlayingBegin(mind, world, random, {
+          globals: [15],
+          effects: [15, 15, 15, 0],
+        });
+        return { ...playing, globals: [16, ...playing.globals] };
+      }
+
+      begun.kind = kind;
+      begun.x35ac = 1;
+      begun.state = 22;
+      break;
+    }
   }
 
   return begun;

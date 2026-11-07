@@ -88,7 +88,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([3, 6, 8, 9, 15]);
+const BEGUN = new Set([3, 6, 8, 9, 15, 16]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -442,6 +442,10 @@ export class CatzPet {
       this.fields.x35d2 = begun.x35d2;
     }
 
+    if (begun.x35ac !== undefined) {
+      this.fields.x35ac = begun.x35ac;
+    }
+
     if (begun.pushes) {
       this.push(begun.pushes);
     }
@@ -475,10 +479,10 @@ export class CatzPet {
    *   its hiding place -- standing in at random on the stage;
    * - affectionate (14; `DoGSAffectionate`): no sound of its own
    *   (`+0x3570`), and it walks to the cursor (22, `+0x35a6` 0x17);
-   * - chasing (16) and attacking (1), standing in: after the cursor
-   *   (`+0x35a4` 0x17) -- the mouse never out in an empty pen -- it begins to
-   *   stalk (1); else it idles. Playing (15) begins as the engine begins it
-   *   (`catzGlobalBegin`), walking to what it plays with or chasing it.
+   * - attacking (1), standing in: after the cursor (`+0x35a4` 0x17) -- the
+   *   mouse never out in an empty pen -- it begins to stalk (1); else it
+   *   idles. Playing (15) and chasing (16) begin as the engine begins them
+   *   (`catzGlobalBegin`): walking to what it plays with, or running to it.
    */
   private beginOwn(global: number, depth: number) {
     const { random } = this.options;
@@ -512,7 +516,6 @@ export class CatzPet {
         this.fields.x35a6 = 0x17;
         this.enter(22, depth + 1);
         return true;
-      case 16:
       case 1: {
         const kind = this.fields.x35a4;
 
@@ -706,6 +709,21 @@ export class CatzPet {
         x3596: 0,
       },
       preyHeld: false,
+      /* The bottle, on the shelf in an empty pen, not held: near it within
+       * the cat's width of its point, standing in for
+       * `IsCatProximateToBottle`; the teat far from its mouth. */
+      bottle: (() => {
+        const at = this.shelfAt(0xf);
+        return {
+          held: false,
+          x1da: 0,
+          shelved: true,
+          at,
+          near: Math.hypot(at.x - x, at.y - y) < size.width,
+          mouth: 1000,
+          reach: 30,
+        };
+      })(),
       walkedToAt: this.walkedToAt(),
       /* Found where it walks to: within 8 of it, standing in for its box (`PopScript` answering 2). */
       found: (() => {

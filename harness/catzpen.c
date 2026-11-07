@@ -2216,7 +2216,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
      * marked, put in it (`GlobalCatStateMachine::NewState`, 488); and
      * `globaled` and the two histories, its mode, the effects set on its
      * brains (`+0x3622` to `+0x3628`), `+0x35a4`, `+0x35a6` and `+0x35d2`,
-     * and the last ten actions pushed (`+0x14a8`, newest first). */
+     * the last ten actions pushed (`+0x14a8`, newest first), and `+0x35ac`. */
     file = _lopen(DIRECTORY "\\GLOBAL.TXT", OF_READ);
 
     if (cat && file != HFILE_ERROR) {
@@ -2300,7 +2300,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 say(" %d", *(int __far *)(cat + 0x14a8 + 2 * b));
             }
 
-            say("\r\n");
+            say(" %d\r\n", *(int __far *)(cat + 0x35ac));
 
             for (b = 0; b < 4; b++) {
                 *(int *)(params + 0x104 + 2 * b) = 0;

@@ -287,11 +287,13 @@ const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
  * `+0x35d2`, and `+0x35a4` (-1 to leave it). The first 90 idle, have
  * their moment and rest; the 80 after eat -- sent by hunger three times in
  * four, else by each other way, with the food bowl empty, low, full or -1
- * -- some without an age; and the last 40 play, with the cursor (lively,
- * to chase it), the mouse, 5, 6, 7, 9, the food bowl and the catnip.
+ * -- some without an age; the 40 after play, with the cursor (lively,
+ * to chase it), the mouse, 5, 6, 7, 9, the food bowl and the catnip; and
+ * the last 24 chase the same.
  */
-const GLOBAL_CASES = Array.from({ length: 210 }, (_, n) => {
-  const playing = n >= 170;
+const GLOBAL_CASES = Array.from({ length: 234 }, (_, n) => {
+  const chasing = n >= 210;
+  const playing = n >= 170 && !chasing;
   const eating = n >= 90 && !playing;
   const k = n - 90;
   const brains = Array.from(
@@ -313,12 +315,12 @@ const GLOBAL_CASES = Array.from({ length: 210 }, (_, n) => {
     (n * 134775813 + 1) % 2147483648,
     ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 3) % LEVELS.length]),
-    playing ? 15 : eating ? 3 : [6, 8, 9][n % 3],
+    chasing ? 16 : playing ? 15 : eating ? 3 : [6, 8, 9][n % 3],
     Math.floor(n / 3) % 2,
     Math.floor(n / 6) % 2,
     eating ? [0, 0, 0, 1, 0, 0, 2, 0, 0, 3][k % 10] : 0,
     eating ? [0, 5, 30, -1][Math.floor(k / 2) % 4] : 0,
-    playing ? [0x17, 0x1b, 5, 6, 7, 9, 0xc, 0xe][n % 8] : -1,
+    playing || chasing ? [0x17, 0x1b, 5, 6, 7, 9, 0xc, 0xe][n % 8] : -1,
   ];
 });
 
@@ -993,9 +995,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         const [mode, ...effects] = values.slice(20, 25);
         /* Eating: what it goes to, the bowl, and the actions it pushed, oldest first. */
         const [x35a4, x35a6, bowl] = values.slice(25, 28);
+        /* (`+0x35ac` the driver writes after too, but walking's entering, 22, reads it and clears it.) */
         const pushed = added(values.slice(28, 38));
         /* Eating and playing: what it goes to, and what it pushed, held too. */
-        const eating = global === 3 || global === 15;
+        const eating = global === 3 || global === 15 || global === 16;
         /* Eating's effects stand where nothing after sets its own: walking
          * to its food, or idling; playing, attacking and eating from the bowl
          * or at hand, entered after, set theirs. */
