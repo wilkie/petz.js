@@ -60,6 +60,8 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     resetCatzEyelids(fudgers);
     [fudgers[6].value, fudgers[7].value] = [20, 20];
 
+    /* The pet, made after its body: where what its head tracks is, once there is one. */
+    const made: { pet?: CatzPet } = {};
     const body = new CatzBody({
       scripts,
       positions,
@@ -70,6 +72,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       stage: STAGE,
       fudgers,
       random,
+      trackAt: (kind) => made.pet?.kinAt(kind),
     });
     const pet = new CatzPet({
       brains: BRAINS,
@@ -88,8 +91,10 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       moves: false,
       play: (action, steer) => body.play(action, steer),
       dropped: () => body.drop(),
+      head: (look) => body.look(look),
       found: () => !!body.shown?.there,
     });
+    made.pet = pet;
 
     const states: Record<number, number> = {};
     /* Each walk: how long, how far it went, how far from what it walked to at its end. */

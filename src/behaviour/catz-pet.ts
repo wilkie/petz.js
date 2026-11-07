@@ -66,6 +66,17 @@ export interface CatzPetOptions {
   /** Whether the cursor is about (`PetParams` `+0x46`), by the ticks gone: by default never. */
   cursorAbout?: (tick: number) => boolean;
 
+  /**
+   * Where its head looks, as its states turn it (`SetHeadTracking`, the
+   * cat's slot `0xe0`; `LookAtUser`): tracking a kind of sprite at a speed,
+   * its shelf's or not; at the user; or nothing (0), its head's turn and
+   * tilt reset. And, leaving a global state, its eyelids reset
+   * (`ResetEyelids`, slot `0x1fc`). For whoever plays its scripts.
+   */
+  head?: (
+    look: { kind: number; speed: number; shelved: boolean } | 'user' | 'off' | 'lids'
+  ) => void;
+
   /** Where the cursor (kin 0x17) is, by the ticks gone: by default still at the stage's lower middle. */
   cursor?: (tick: number) => { x: number; y: number };
 }
@@ -285,6 +296,17 @@ export class CatzPet {
     this.take(now);
   }
 
+  /** Where a kind of sprite is (its target point), for its head to track: the cursor, its marker, or one of the pen's things, on the shelf or off; none else. */
+  kinAt(kind: number) {
+    return kind === 0x17
+      ? this.cursorAt()
+      : kind === 0x16
+        ? this.marker
+        : kind > 0 && kind < 0x10
+          ? this.thingAt(kind)
+          : undefined;
+  }
+
   /** Where what it plays with (`+0x35a4`) is: the cursor, or one of the pen's things off the shelf. */
   private preyAt() {
     const kind = this.fields.x35a4 ?? 0;
@@ -492,6 +514,9 @@ export class CatzPet {
       global = 6;
     }
 
+    /* The global state left: most reset its eyelids and turn its head's tracking off. */
+    this.options.head?.('lids');
+    this.options.head?.('off');
     this.global = global;
     this.mind.global = global;
     const begun = catzGlobalBegin(
@@ -683,6 +708,17 @@ export class CatzPet {
   /** What a tick wrote, kept. */
   private take(ticked: Partial<CatzStateTick>) {
     const f = this.fields;
+
+    /* Its head, as the tick turned it: walking, at what it walks to; else at what it plays with. */
+    for (const look of ticked.head ?? []) {
+      if (look === 'track') {
+        const walking = this.state === 22 || this.state === 23;
+        const kind = (walking ? (ticked.x35a6 ?? f.x35a6) : (ticked.x35a4 ?? f.x35a4)) ?? 0;
+        this.options.head?.({ kind, speed: 3000, shelved: this.isShelved(kind) });
+      } else {
+        this.options.head?.(look);
+      }
+    }
 
     if (ticked.count !== undefined) f.count = ticked.count;
     if (ticked.passed !== undefined) f.passed = ticked.passed;

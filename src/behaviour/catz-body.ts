@@ -17,6 +17,7 @@ import {
   type CatzBlink,
   type CatzFudger,
   rateCatzFudger,
+  resetCatzEyelids,
   resetCatzFudger,
   wrapCatzAngle,
 } from './catz-fudger.ts';
@@ -24,6 +25,7 @@ import { type CatzSteer } from './catz-pet.ts';
 import {
   catzAimAt,
   catzFocusRect,
+  catzHeadTarget,
   catzInside,
   type CatzPlaced,
   type CatzPlacer,
@@ -32,7 +34,12 @@ import {
   type CatzRect,
   placeCatzTick,
 } from './catz-stage.ts';
-import { type CatzPositions, type CatzStep, catzTimeline } from './catz-timeline.ts';
+import {
+  type CatzHeadState,
+  type CatzPositions,
+  type CatzStep,
+  catzTimeline,
+} from './catz-timeline.ts';
 
 /** A frame to show, placed: its step, its rectangle, its pose, and whether its steering found what it walks to. */
 export interface CatzShown {
@@ -69,6 +76,12 @@ export interface CatzBodyOptions {
   random: (n: number) => number;
   /** Where its feet are first: the stage's lower middle by default. */
   start?: CatzPoint;
+
+  /** Where a kind of sprite its head may track is (its target point); none where there is none. */
+  trackAt?: (kind: number) => CatzPoint | undefined;
+
+  /** The area a point at random is looked at in (`PetParams` `+0xac` to `+0xb2`): the stage by default. */
+  area?: CatzRect;
 }
 
 /** A pose from a step and its fudgers' fields: rotation, roll, tilt, the head's rotation, tilt and cock. */
@@ -98,6 +111,10 @@ export class CatzBody {
   private tailLayer?: CatzStep['layer'];
   private held?: CatzStep;
   private position: number;
+
+  /** What its head tracks (`+0x1508`: a kind of sprite, 0 none), and how it looks, as its scripts set it. */
+  tracked = 0;
+  private readonly head: CatzHeadState = { divisor: 4, shelved: false, away: false };
 
   /**
    * Whether the next frame popped is a reference frame (`+0x1462`): set as
@@ -166,6 +183,19 @@ export class CatzBody {
             return catzAimAt(placer, this.tail.rect, pose, target);
           }
         : undefined,
+      area: this.options.area ?? stage,
+      head: this.head,
+      tracking: (kind) => {
+        /* (`lookAtLocation`: the cursor where there is none of the kind.) */
+        this.tracked = kind && !this.options.trackAt?.(kind) ? 0x17 : kind;
+      },
+      /* A point at random, and what it tracks each tick, looked at from where the frame before left it. */
+      look: (point, _ticked, rotation, how) =>
+        this.tail ? this.lookAt(point, rotation, how) : undefined,
+      track: (_step, rotation) => {
+        const at = this.tracked ? this.options.trackAt?.(this.tracked) : undefined;
+        return at && this.tail ? this.lookAt(at, rotation, this.head) : undefined;
+      },
       done: (step) => {
         if (!shaped[step.frame]) {
           return;
@@ -213,6 +243,45 @@ export class CatzBody {
     }
 
     return { ticks: this.queue.length - before, pose: position };
+  }
+
+  /** The head and eyes aimed at a point (`catzHeadTarget`) from where the last frame queued leaves it. */
+  private lookAt(point: CatzPoint, rotation: number, how: CatzHeadState) {
+    const { placer, fudgers } = this.options;
+    return catzHeadTarget(placer, this.tail!.rect, this.tail!.current, point, {
+      rotation,
+      ...how,
+      lower: fudgers[3].lower,
+      upper: fudgers[3].upper,
+    });
+  }
+
+  /**
+   * Where its states turn its head (`SetHeadTracking`, `LookAtUser`): to
+   * track a kind at a speed, its head's turn and tilt aimed so fast, and
+   * whether it is on the shelf; at the user, the head turned against the
+   * cat's rotation and level, tracking nothing; off, tracking nothing and
+   * the turn and tilt reset. Or its eyelids reset (`ResetEyelids`).
+   */
+  look(look: { kind: number; speed: number; shelved: boolean } | 'user' | 'off' | 'lids') {
+    const { fudgers } = this.options;
+
+    if (look === 'lids') {
+      resetCatzEyelids(fudgers);
+    } else if (look === 'off') {
+      this.tracked = 0;
+      resetCatzFudger(fudgers[3]);
+      resetCatzFudger(fudgers[4]);
+    } else if (look === 'user') {
+      this.tracked = 0;
+      aimCatzFudger(fudgers[3], -wrapCatzAngle(fudgers[0].value));
+      aimCatzFudger(fudgers[4], 0);
+    } else {
+      this.tracked = look.kind;
+      this.head.shelved = look.shelved;
+      rateCatzFudger(fudgers[3], look.speed);
+      rateCatzFudger(fudgers[4], look.speed);
+    }
   }
 
   /** The next frame shown, where there is one; else the last stays. */

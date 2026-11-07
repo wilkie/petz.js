@@ -316,6 +316,8 @@ function goLive() {
   /* Its body: each action played out by its script and placed as
    * `PopScript` places it, a walk steered each tick and what it walks to
    * looked for in its focus box. */
+  /* The pet, made after its body: where what its head tracks is, once there is one. */
+  const made: { pet?: CatzPet } = {};
   const body = new CatzBody({
     scripts,
     positions,
@@ -326,6 +328,7 @@ function goLive() {
     stage: LIVE_STAGE,
     fudgers,
     random,
+    trackAt: (kind) => made.pet?.kinAt(kind),
   });
   /* Its brains as the engine makes them for its breed (`InitBrain`), its age by the slider. */
   const brains = cat.catz?.factors
@@ -344,8 +347,10 @@ function goLive() {
     moves: false,
     play: (action, steer) => body.play(action, steer),
     dropped: () => body.drop(),
+    head: (look) => body.look(look),
     found: () => !!body.shown?.there,
   });
+  made.pet = pet;
 
   liveButton.textContent = 'Stop';
   live = window.setInterval(() => {
