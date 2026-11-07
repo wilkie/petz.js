@@ -60,6 +60,9 @@ export interface CatzPetOptions {
   /** Where a thing on the shelf is (its target point), by its kind: standing in, by default, along the stage's top. */
   shelfAt?: (kind: number) => { x: number; y: number };
 
+  /** The things off the shelf in the pen, by kind, and where each is (its target point): none by default. */
+  pen?: () => ReadonlyMap<number, { x: number; y: number }>;
+
   /** Whether the cursor is about (`PetParams` `+0x46`), by the ticks gone: by default never. */
   cursorAbout?: (tick: number) => boolean;
 
@@ -282,6 +285,16 @@ export class CatzPet {
     this.take(now);
   }
 
+  /** Where what it plays with (`+0x35a4`) is: the cursor, or one of the pen's things off the shelf. */
+  private preyAt() {
+    const kind = this.fields.x35a4 ?? 0;
+    return kind === 0x17
+      ? this.cursorAt()
+      : kind > 0 && kind < 0x10 && !this.isShelved(kind)
+        ? this.thingAt(kind)
+        : undefined;
+  }
+
   /** Where the cursor is. */
   private cursorAt() {
     const { stage, cursor } = this.options;
@@ -308,9 +321,17 @@ export class CatzPet {
       ? this.cursorAt()
       : kind === 0x16 && this.marker
         ? this.marker
-        : kind > 0 && shelved(kind)
-          ? this.shelfAt(kind)
+        : kind > 0 && kind < 0x10
+          ? this.thingAt(kind)
           : this.fields.goal;
+  }
+
+  /** Whether a kind of the pen's things is on the shelf (`isSpriteInShelf`): the cursor, its marker and the rest of the cast never are; the others but those put in the pen. */
+  private readonly isShelved = (kind: number) => kind < 0x10 && !this.options.pen?.().has(kind);
+
+  /** Where one of the pen's things is: in the pen where it was put, else on the shelf. */
+  private thingAt(kind: number) {
+    return this.options.pen?.().get(kind) ?? this.shelfAt(kind);
   }
 
   /** Where a thing on the shelf is: as given, else standing in, the shelf along the stage's top, each kind in its place along it. */
@@ -481,7 +502,7 @@ export class CatzPet {
         area3: false,
         screenSaver: false,
         sleepy: false,
-        inShelf: shelved,
+        inShelf: this.isShelved,
         x35ce: this.fields.x35ce ?? 0,
         x35d2: this.fields.x35d2 ?? 0,
         x35a4: this.fields.x35a4 ?? 0,
@@ -647,7 +668,7 @@ export class CatzPet {
     /* Looking at things: what it is curious about, filled as it is entered
      * (`GetCuriosities`), its looks and ticks to its next none. */
     if (state === 12) {
-      this.fields.curiosities = catzCuriosities(this.mind, shelved, this.options.random);
+      this.fields.curiosities = catzCuriosities(this.mind, this.isShelved, this.options.random);
       this.fields.count = 0;
       this.fields.ticks = 0;
     }
@@ -753,22 +774,27 @@ export class CatzPet {
       /* On the pen's floor, as the cat mostly is (`GetSpriteScreenArea`, 1). */
       area1: true,
       area3: false,
-      inShelf: shelved,
+      inShelf: this.isShelved,
       c4: 0,
       goal: this.fields.goal ?? this.point,
       cursorAt: this.cursorAt(),
-      /* What it plays with, where it is: the cursor, still. */
-      prey: this.fields.x35a4 === 0x17 ? this.cursorAt() : undefined,
+      /* What it plays with, where it is: the cursor, or a thing in the pen. */
+      prey: this.preyAt(),
       /* Swatting: how the cursor lies to its paw, standing in -- its offset
        * from the cat, its first side, nothing shelved. */
       swat: {
         facing: 0,
-        dx: this.cursorAt().x - x,
-        dy: this.cursorAt().y - y,
-        /* Its paw missing it by how far the cursor is from it, standing in for `GetSwatMissDistance`. */
-        miss: Math.trunc(Math.hypot(this.cursorAt().x - x, this.cursorAt().y - y)),
+        dx: (this.preyAt() ?? this.cursorAt()).x - x,
+        dy: (this.preyAt() ?? this.cursorAt()).y - y,
+        /* Its paw missing it by how far what it plays with is from it, standing in for `GetSwatMissDistance`. */
+        miss: Math.trunc(
+          Math.hypot(
+            (this.preyAt() ?? this.cursorAt()).x - x,
+            (this.preyAt() ?? this.cursorAt()).y - y
+          )
+        ),
         x3592: 0,
-        shelved: false,
+        shelved: this.isShelved(this.fields.x35a4 ?? 0),
         shelfClosed: false,
         x1d0: 0,
         mouseRunning: false,
@@ -777,15 +803,15 @@ export class CatzPet {
         x3596: 0,
       },
       preyHeld: false,
-      /* The bottle, on the shelf in an empty pen, not held: near it within
+      /* The bottle, on the shelf or in the pen, not held: near it within
        * the cat's width of its point, standing in for
        * `IsCatProximateToBottle`; the teat far from its mouth. */
       bottle: (() => {
-        const at = this.shelfAt(0xf);
+        const at = this.thingAt(0xf);
         return {
           held: false,
           x1da: 0,
-          shelved: true,
+          shelved: this.isShelved(0xf),
           at,
           near: Math.hypot(at.x - x, at.y - y) < size.width,
           mouth: 1000,
@@ -804,11 +830,6 @@ export class CatzPet {
       })(),
     } as CatzStateWorld;
   }
-}
-
-/** The pen's things on the shelf; the cursor, its marker and the rest of the cast never are. */
-function shelved(kind: number) {
-  return kind < 0x10;
 }
 
 /** The state a tick of the cat is in. */

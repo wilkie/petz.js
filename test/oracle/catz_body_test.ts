@@ -25,6 +25,14 @@ const BRAINS = [12, 49, 96, 86, 69, 88, 1, 30, 0, 49, 0, 7];
 const CENTRES = [12, 7, 96, 86, 13, 88, 16, 30, 0, 0, 0, 0];
 const STAGE = { left: 0, top: 0, right: 640, bottom: 480 };
 
+/** The food bowl (0xc), the water bowl (0xd) and the ball (5) in the pen, and nothing. */
+const PEN = new Map([
+  [0xc, { x: 520, y: 400 }],
+  [0xd, { x: 120, y: 410 }],
+  [5, { x: 330, y: 300 }],
+]);
+const NONE = new Map<number, { x: number; y: number }>();
+
 describe('a Catz cat on its own, placed and steered by its own frames', () => {
   /* Some days of its, each 6,000 ticks -- ten minutes -- by C's `rand` from a seed. */
   it.each([1, 2, 3, 6])('walks where it means to and gets there, on day %i', (seed) => {
@@ -74,6 +82,8 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       }),
       /* And about the pen every other minute. */
       cursorAbout: (tick) => Math.trunc(tick / 600) % 2 === 1,
+      /* And, on two days, the food bowl, the water bowl and the ball off the shelf in the pen. */
+      pen: () => (seed % 2 ? PEN : NONE),
       random,
       moves: false,
       play: (action, steer) => body.play(action, steer),
@@ -89,6 +99,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       left: number;
       found: number;
       there?: boolean;
+      to: number;
     }[] = [];
     let walk: (typeof walks)[number] | undefined;
 
@@ -115,7 +126,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       states[state] = (states[state] ?? 0) + 1;
 
       if (state === 23) {
-        walk ??= { ticks: 0, moved: 0, left: 0, found: 0 };
+        walk ??= { ticks: 0, moved: 0, left: 0, found: 0, to: pet.fields.x35a6 ?? 0 };
         walk.ticks++;
       } else if (walk) {
         const at = pet.target();
@@ -140,8 +151,11 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     );
     expect(pet.stoodIn.errors).toBe(0);
     expect(pet.stoodIn.deep).toBe(0);
-    /* It walks, and its walks end where it found what it walked to. */
+    /* It walks, and its walks end where it found what it walked to -- but
+     * after the cursor in its moment, which may end one time in five where
+     * it is near and faces it, found or not. */
+    const sought = walks.filter(({ to }) => to !== 0x17);
     expect(walks.length).toBeGreaterThan(0);
-    expect(walks.filter(({ there }) => there).length).toBeGreaterThan(walks.length / 2);
+    expect(sought.filter(({ there }) => there).length).toBeGreaterThan(sought.length / 2);
   });
 });

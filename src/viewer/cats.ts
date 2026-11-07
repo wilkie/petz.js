@@ -68,6 +68,7 @@ const frameNumber = element<HTMLOutputElement>('frame-number');
 const yawInput = element<HTMLInputElement>('yaw');
 const playButton = element<HTMLButtonElement>('play');
 const liveButton = element<HTMLButtonElement>('live');
+const thingSelect = element<HTMLSelectElement>('thing');
 const canvas = element<HTMLCanvasElement>('stage');
 const context = canvas.getContext('2d')!;
 
@@ -150,6 +151,29 @@ function draw() {
   context.imageSmoothingEnabled = false;
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.drawImage(small, 0, 0, canvas.width, canvas.height);
+}
+
+/** The things in the pen, each a marker where it is and its name: their own art not yet drawn. */
+function drawPen() {
+  const scale = canvas.width / LIVE_STAGE.right;
+  context.save();
+  context.font = `${12 * scale}px sans-serif`;
+  context.textAlign = 'center';
+
+  for (const [kind, { x, y }] of livePen) {
+    context.fillStyle = '#c84';
+    context.beginPath();
+    context.arc(x * scale, y * scale, 8 * scale, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = '#333';
+    context.fillText(
+      thingSelect.querySelector(`option[value="${kind}"]`)?.textContent ?? `kind ${kind}`,
+      x * scale,
+      (y + 22) * scale
+    );
+  }
+
+  context.restore();
 }
 
 /**
@@ -259,6 +283,9 @@ let liveCursor = { x: 235, y: 300 };
 /** Whether the cursor is about the pen (`PetParams` `+0x46`): the mouse over the stage. */
 let liveCursorAbout = false;
 
+/** The pen's things put off the shelf into the pen, by kind, and where each is. */
+const livePen = new Map<number, { x: number; y: number }>();
+
 /**
  * The cat on its own (`CatzPet`): ten ticks a second, as the engine runs,
  * each action it pushes played out by its script from the pose it is in, a
@@ -311,6 +338,7 @@ function goLive() {
     stage: LIVE_STAGE,
     cursor: () => liveCursor,
     cursorAbout: () => liveCursorAbout,
+    pen: () => livePen,
     random,
     /* Placed by its frames, as `PopScript` places it: the pet's straight walk off. */
     moves: false,
@@ -387,6 +415,8 @@ function drawLive(
   context.imageSmoothingEnabled = false;
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.drawImage(small, 0, 0, canvas.width, canvas.height);
+  /* (Over it: the stage's bitmap is drawn whole, its ground and all.) */
+  drawPen();
 }
 
 function chooseAnimation() {
@@ -517,6 +547,25 @@ timesInput.addEventListener('change', () => {
 });
 playButton.addEventListener('click', play);
 liveButton.addEventListener('click', goLive);
+/* Living, a click puts the thing chosen in the pen there -- or, on one there, back on the shelf. */
+canvas.addEventListener('click', (event) => {
+  if (!live) {
+    return;
+  }
+
+  const box = canvas.getBoundingClientRect();
+  const at = {
+    x: Math.round(((event.clientX - box.left) / box.width) * LIVE_STAGE.right),
+    y: Math.round(((event.clientY - box.top) / box.height) * LIVE_STAGE.bottom),
+  };
+  const near = [...livePen].find(([, p]) => Math.hypot(p.x - at.x, p.y - at.y) < 16);
+
+  if (near) {
+    livePen.delete(near[0]);
+  } else {
+    livePen.set(Number(thingSelect.value), at);
+  }
+});
 canvas.addEventListener('mouseenter', () => (liveCursorAbout = true));
 canvas.addEventListener('mouseleave', () => (liveCursorAbout = false));
 canvas.addEventListener('mousemove', (event) => {
