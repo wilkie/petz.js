@@ -6,7 +6,7 @@ const BRAINS = [12, 49, 96, 86, 69, 88, 1, 30, 0, 49, 0, 7];
 const CENTRES = [12, 7, 96, 86, 13, 88, 16, 30, 0, 0, 0, 0];
 
 describe('a Catz cat on its own', () => {
-  it('lives 5,000 ticks in an empty pen, idling and having its moments, without fault', () => {
+  it('lives 5,000 ticks in an empty pen, idling, having its moments and playing with the cursor, without fault', () => {
     const rand = borlandRand(1);
     const pet = new CatzPet({
       brains: BRAINS,
@@ -36,5 +36,8 @@ describe('a Catz cat on its own', () => {
     expect(pet.stoodIn.deep).toBe(0);
     expect(states[12]).toBeGreaterThan(0);
     expect(states[21]).toBeGreaterThan(0);
+    /* And plays with the cursor, stalking and pouncing on it. */
+    expect(states[2]).toBeGreaterThan(0);
+    expect(states[3]).toBeGreaterThan(0);
   });
 });

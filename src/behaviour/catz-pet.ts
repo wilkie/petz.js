@@ -14,7 +14,7 @@
  * beginning is not reimplemented is idled instead, and counted.
  */
 
-import { type CatzMind } from './catz-behavior.ts';
+import { type CatzMind, catzBehavior } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 import { catzGlobalBegin } from './catz-global.ts';
 import { catzMomentBegin, type CatzMomentState, catzMomentTick } from './catz-moment.ts';
@@ -22,6 +22,7 @@ import { catzBehaviorChange, catzExtremeSituations } from './catz-reflexes.ts';
 import {
   type CatzBox,
   catzCuriosities,
+  catzPtToPtAngle,
   catzStateBetween,
   catzStateTick,
   type CatzStateTick,
@@ -55,6 +56,19 @@ export interface CatzPetTicked {
 /** The global states whose beginning is reimplemented. */
 const BEGUN = new Set([6, 8, 9]);
 
+/** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
+const REIMPLEMENTED = new Set([
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29, 30, 31, 32, 33,
+  34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+  58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+]);
+
+/** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
+const ENTERED = new Set([
+  3, 4, 8, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65,
+  67, 69, 70, 71, 72, 76, 77, 78, 79, 80, 81,
+]);
+
 /** How deep entering may go on into entering, before it is cut short (and counted). */
 const DEPTH = 8;
 
@@ -79,7 +93,15 @@ export class CatzPet {
   private x358c = 0;
 
   /** What stood in for the engine, counted: global states idled instead, states it could not read, and errors. */
-  readonly stoodIn = { globals: {} as Record<number, number>, unread: 0, errors: 0, deep: 0 };
+  readonly stoodIn = {
+    globals: {} as Record<number, number>,
+    states: {} as Record<number, number>,
+    unread: 0,
+    errors: 0,
+    deep: 0,
+    firstError: undefined as string | undefined,
+    deepAt: undefined as string | undefined,
+  };
 
   private readonly options: CatzPetOptions;
 
@@ -111,6 +133,12 @@ export class CatzPet {
       this.left--;
       this.between();
       this.walk();
+
+      /* Looking at things counts down to its next look, and looks, every
+       * tick, its idle action playing on (the trace's `+0x3504`). */
+      if (this.state === 12) {
+        this.run(false, 0, true);
+      }
     } else {
       this.act();
     }
@@ -157,19 +185,32 @@ export class CatzPet {
   /** Its marker (kin 0x16), where walking put it. */
   private marker?: { x: number; y: number };
 
-  /** Walking on: straight toward what it walks to, four a tick -- standing in for its steering. */
+  /** Walking on, toward what it walks to, and stalking, toward its prey: straight there, four a tick, facing it (`+0x688`) -- standing in for its steering, turns and creeping. */
   private walk() {
-    const goal = this.walkedToAt();
+    const goal =
+      this.state === 23
+        ? this.walkedToAt()
+        : this.state === 2 && this.fields.x35a4 === 0x17
+          ? this.cursorAt()
+          : undefined;
 
-    if (this.state !== 23 || !goal) {
+    if (!goal) {
       return;
+    }
+
+    const facing = catzPtToPtAngle(this.point, goal);
+
+    if (facing !== 0x81) {
+      this.fields.x688 = facing;
     }
 
     const dx = goal.x - this.point.x;
     const dy = goal.y - this.point.y;
     const far = Math.hypot(dx, dy);
+    /* Stalking creeps only so near, to leap the rest. */
+    const short = this.state === 2 ? 120 : 4;
 
-    if (far > 4) {
+    if (far > short) {
       this.point = {
         x: this.point.x + Math.round((dx / far) * 4),
         y: this.point.y + Math.round((dy / far) * 4),
@@ -212,14 +253,15 @@ export class CatzPet {
     this.run(false, depth);
   }
 
-  /** Its state's tick, entering or not, and what it asks. */
-  private run(enter: boolean, depth: number) {
+  /** Its state's tick, entering or not, and what it asks -- `playing`, its script still playing, pushing nothing more. */
+  private run(enter: boolean, depth: number, playing = false) {
     let ticked: CatzStateTick;
 
     try {
       ticked = catzStateTick(this.state, this.mind, this.world(enter), this.options.random);
-    } catch {
+    } catch (error) {
       this.stoodIn.errors++;
+      this.stoodIn.firstError ??= `${this.state}: ${String(error)}`;
       this.beginGlobal(6, depth + 1);
       return;
     }
@@ -234,10 +276,22 @@ export class CatzPet {
       this.readied = ticked.moment;
     }
 
-    if (ticked.pushes?.length) {
+    const before = this.left;
+
+    if (playing) {
+      /* Nothing more pushed while it plays. */
+    } else if (ticked.pushes?.length) {
       this.push(ticked.pushes);
     } else if (ticked.pushed !== undefined) {
       this.push([ticked.pushed]);
+    }
+
+    /* Entered, and pushing: what comes after waits for that script to be
+     * done, as a pounce's leap -- the model has some states' entering go on
+     * as though their script were popped at once (the trace holds them by
+     * their pushes only). */
+    if (enter && this.left > before) {
+      return;
     }
 
     this.change(ticked.global, ticked.state, depth);
@@ -256,6 +310,11 @@ export class CatzPet {
   private beginGlobal(global: number, depth: number) {
     if (depth > DEPTH) {
       this.stoodIn.deep++;
+      this.stoodIn.deepAt ??= `global ${global} from state ${this.state}`;
+      return;
+    }
+
+    if (this.beginOwn(global, depth)) {
       return;
     }
 
@@ -282,10 +341,85 @@ export class CatzPet {
     }
   }
 
+  /**
+   * The global states the pet begins itself, as far as they are read out --
+   * and where not, standing in, counted:
+   *
+   * - grooming (13; `DoGSGrooming`, seg30:07d3): with fleas over what
+   *   behaviour 13 answers, or one time in two, or playing with the user
+   *   (`+0x35a4` 1), it grooms where it is (31; facing the user first where
+   *   it has no fleas, not reimplemented); else it walks somewhere to groom,
+   *   its way drawn as the engine draws it (`rand() % 5` of 1, 2, 3, 6 and 7,
+   *   `+0x35a8`), its goal -- by that way, beside it, along an edge or by
+   *   its hiding place -- standing in at random on the stage;
+   * - affectionate (14; `DoGSAffectionate`): no sound of its own
+   *   (`+0x3570`), and it walks to the cursor (22, `+0x35a6` 0x17);
+   * - playing (15) and attacking (1), standing in: after the cursor or the
+   *   (`+0x35a4` 0x17) -- the mouse never out in an empty pen -- it begins to
+   *   stalk (1); else it idles.
+   */
+  private beginOwn(global: number, depth: number) {
+    const { random } = this.options;
+    const set = (to: number) => {
+      this.global = to;
+      this.mind.global = to;
+    };
+
+    switch (global) {
+      case 13: {
+        const fleas = this.mind.brains[CATZ_BRAIN.fleas] > catzBehavior(this.mind, 13, random);
+        set(13);
+
+        if (random(101) < 50 || this.fields.x35a4 === 1 || fleas) {
+          this.enter(31, depth + 1);
+          return true;
+        }
+
+        this.fields.x35a8 = [1, 2, 3, 6, 7][random(5)];
+        const { stage } = this.options;
+        this.fields.goal = {
+          x: stage.left + random(Math.max(1, stage.right - stage.left)),
+          y: stage.top + random(Math.max(1, stage.bottom - stage.top)),
+        };
+        this.fields.x35a6 = 0;
+        this.enter(22, depth + 1);
+        return true;
+      }
+      case 14:
+        set(14);
+        this.fields.x35a6 = 0x17;
+        this.enter(22, depth + 1);
+        return true;
+      case 15:
+      case 1: {
+        const kind = this.fields.x35a4;
+
+        /* The mouse never out of its hole in an empty pen: the cursor only. */
+        if (kind !== 0x17) {
+          return false;
+        }
+
+        set(global);
+        this.stoodIn.globals[global] = (this.stoodIn.globals[global] ?? 0) + 1;
+        this.enter(1, depth + 1);
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
   /** A state of its own entered (`CatSprite::NewState`): its entering run at once. */
   private enter(state: number, depth: number) {
     if (depth > DEPTH) {
       this.stoodIn.deep++;
+      this.stoodIn.deepAt ??= `state ${state} from state ${this.state}, global ${this.global}`;
+      return;
+    }
+
+    if (!REIMPLEMENTED.has(state)) {
+      this.stoodIn.states[state] = (this.stoodIn.states[state] ?? 0) + 1;
+      this.beginGlobal(6, depth + 1);
       return;
     }
 
@@ -318,6 +452,10 @@ export class CatzPet {
       this.fields.curiosities = catzCuriosities(this.mind, shelved, this.options.random);
       this.fields.count = 0;
       this.fields.ticks = 0;
+    }
+
+    if (!ENTERED.has(state)) {
+      return;
     }
 
     this.run(true, depth);
@@ -369,6 +507,10 @@ export class CatzPet {
 
     return {
       ...this.fields,
+      /* Its pose (`+0x1500`), which the script player leaves it in: stalking,
+       * crouched (0x14) as its creep leaves it -- standing in for the frames
+       * played; else as last kept. */
+      x1500: this.state === 2 || this.state === 3 ? 0x14 : this.fields.x1500,
       global: this.global,
       enter,
       curiosities: this.fields.curiosities ?? [],
@@ -390,6 +532,25 @@ export class CatzPet {
       c4: 0,
       goal: this.fields.goal ?? this.point,
       cursorAt: this.cursorAt(),
+      /* What it plays with, where it is: the cursor, still. */
+      prey: this.fields.x35a4 === 0x17 ? this.cursorAt() : undefined,
+      /* Swatting: how the cursor lies to its paw, standing in -- its offset
+       * from the cat, nothing missed, its first side, nothing shelved. */
+      swat: {
+        facing: 0,
+        dx: this.cursorAt().x - x,
+        dy: this.cursorAt().y - y,
+        miss: 0,
+        x3592: 0,
+        shelved: false,
+        shelfClosed: false,
+        x1d0: 0,
+        mouseRunning: false,
+        side: 0,
+        zone: 0,
+        x3596: 0,
+      },
+      preyHeld: false,
       walkedToAt: this.walkedToAt(),
       /* Found where it walks to: within 8 of it, standing in for its box (`PopScript` answering 2). */
       found: (() => {
