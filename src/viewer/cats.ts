@@ -48,6 +48,7 @@ import {
   type Script,
   SCRIPTS,
 } from '../formats/script.ts';
+import { initCatzBrains, updateCatzBrain } from '../behaviour/catz-brain.ts';
 import { CatzPet } from '../behaviour/catz-pet.ts';
 import { borlandRand } from '../behaviour/random.ts';
 
@@ -247,7 +248,7 @@ function placed(index: number) {
 /** The stage the cat lives on, and how it maps onto the canvas (320 by 240, drawn from 160, 150). */
 const LIVE_STAGE = { left: 0, top: 0, right: 470, bottom: 370 };
 
-/** The brains and centres of the playpen's cat as the harness found it. */
+/** The brains and centres of the playpen's cat as the harness found it: where a breed has no factors. */
 const LIVE_BRAINS = [12, 49, 96, 86, 69, 88, 1, 30, 0, 49, 0, 7];
 const LIVE_CENTRES = [12, 7, 96, 86, 13, 88, 16, 30, 0, 0, 0, 0];
 
@@ -259,7 +260,9 @@ let liveCursor = { x: 235, y: 300 };
  * each action it pushes played out by its script from the pose it is in, a
  * frame a tick, the cat drawn where it stands -- its walk moved straight, as
  * the pet stands in for its steering, not yet by its frames -- and the
- * mouse over the stage its cursor.
+ * mouse over the stage its cursor. Its brains are its breed's, made as the
+ * engine makes them (`initCatzBrains`, its age the slider's) and drawn back
+ * toward their centres by the engine's clock.
  */
 function goLive() {
   if (live) {
@@ -281,9 +284,14 @@ function goLive() {
   let pose = positions.neutral;
   let shown: CatzStep | undefined;
   let ticks = 0;
+  /* Its brains as the engine makes them for its breed (`InitBrain`), its age by the slider. */
+  const brains = cat.catz?.factors
+    ? initCatzBrains(cat.catz.factors, random, { age: Number(kittenInput.value) })
+    : undefined;
+  let clock = 0;
   const pet = new CatzPet({
-    brains: LIVE_BRAINS,
-    centres: LIVE_CENTRES,
+    brains: brains?.map((brain) => brain.value) ?? LIVE_BRAINS,
+    centres: brains?.map((brain) => brain.centre) ?? LIVE_CENTRES,
     stage: LIVE_STAGE,
     cursor: () => liveCursor,
     random,
@@ -307,6 +315,15 @@ function goLive() {
 
   liveButton.textContent = 'Stop';
   live = window.setInterval(() => {
+    /* Its brains drawn back toward their centres by the engine's clock
+     * (milliseconds over 17), as the pet left them. */
+    clock += 100 / 17;
+    brains?.forEach((brain, n) => {
+      brain.value = pet.mind.brains[n];
+      updateCatzBrain(brain, Math.trunc(clock));
+      pet.mind.brains[n] = brain.value;
+    });
+
     const { state, global } = pet.tick();
     shown = queue.shift() ?? shown;
 
