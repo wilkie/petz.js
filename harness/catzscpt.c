@@ -30,10 +30,14 @@
  *   roll and head's rotation, tilt and cock (`+0x68a`, `+0x68c`, `+0x694`
  *   to `+0x698`), and its eyelids and eyes (`+0x69a` to `+0x6aa`);
  * * where the case names a target (`action variant from x y width height
- *   share`, x -1 for none), `target`, before `case`: the point and box it
+ *   share track`, x -1 for none; width 0 for no steering), `target`, before
+ *   `case`: the point and box it
  *   is given, and the point `GetTargetPt` answers; and after each tick's
  *   fields, what `PopScript` answered (2: the target is in the box) and the
- *   rotation's fudger's target (`Fudger` `+0xc0`);
+ *   rotation's fudger's target (`Fudger` `+0xc0`); and where `track` is
+ *   set (1), the head tracks the target each tick (`+0x1508`), looking away
+ *   with 2 (`+0x1514`) and as on the shelf with 4 (`+0x1512`), the last
+ *   number of `case`;
  * * before its first tick, `place`: its rectangle, and the state it was
  *   last placed in (`+0x246`), its frame, rotation, tilt, roll, head,
  *   layered frames and scale; and `eyes`, that state's eyelids and eyes.
@@ -197,7 +201,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     for (;;) {
         int action = number(cases), variant = number(cases), from = number(cases);
         int x = number(cases), y = number(cases), width = number(cases), height = number(cases);
-        int share = number(cases);
+        int share = number(cases), track = number(cases);
+        int x1512 = *(int __far *)(sprite + 0x1512), x1514 = *(int __far *)(sprite + 0x1514);
 
         if (from < 0) {
             break;
@@ -246,7 +251,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(target + 0x1c4 + 2 * n) = 0;
             }
 
-            *(void __far *__far *)(sprite + 0x1504) = (void __far *)target;
+            *(void __far *__far *)(sprite + 0x1504) = width > 0 ? (void __far *)target : 0;
             *(int __far *)(sprite + 0x250e) = width;
             *(int __far *)(sprite + 0x2510) = height;
             *(int __far *)(sprite + 0x2512) = share;
@@ -260,8 +265,19 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(void __far *__far *)(sprite + 0x1504) = 0;
         }
 
-        keep("case %d %d %d %d %lu\r\n", action, variant, from, *(int __far *)(sprite + 0x146c),
-             *(unsigned long __far *)MK_FP(dgroup, 0x28ba));
+        /* What its head tracks each tick (`+0x1508`, `PopScript` seg41:1391): where the case
+         * says, the target, with whether it is on the shelf and whether the head looks away
+         * (`+0x1512`, `+0x1514`; as they were again after); else nothing. */
+        if (track && x >= 0) {
+            *(void __far *__far *)(sprite + 0x1508) = (void __far *)target;
+            *(int __far *)(sprite + 0x1512) = (track & 4) != 0;
+            *(int __far *)(sprite + 0x1514) = (track & 2) != 0;
+        } else {
+            *(void __far *__far *)(sprite + 0x1508) = 0;
+        }
+
+        keep("case %d %d %d %d %lu %d\r\n", action, variant, from, *(int __far *)(sprite + 0x146c),
+             *(unsigned long __far *)MK_FP(dgroup, 0x28ba), track);
         keep("start");
 
         for (n = 0; n < FUDGERS; n++) {
@@ -360,6 +376,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         _lwrite(output, kept, keptLength);
         keptLength = 0;
+
+        if (track) {
+            *(void __far *__far *)(sprite + 0x1508) = 0;
+            *(int __far *)(sprite + 0x1512) = x1512;
+            *(int __far *)(sprite + 0x1514) = x1514;
+        }
     }
 
     _lclose(cases);

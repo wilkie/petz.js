@@ -690,6 +690,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
               action % script.variants.length,
               action % 3 ? ends[(action * 37) % ends.length] : positions.neutral,
               ...NO_TARGET,
+              0,
             ],
           ]
     );
@@ -710,10 +711,28 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
           [60, 40, 3],
           [120, 80, 4],
         ]) {
-          cases.push([walk, 0, scripts[walk].from, x, y, width, height, share]);
+          cases.push([walk, 0, scripts[walk].from, x, y, width, height, share, 0]);
         }
       }
     }
+    /* And the head tracking a sprite each tick (`+0x1508`): the target put
+     * about the cat, not steered to, as it stands, sits idle, turns and
+     * walks -- tracked plainly, looking away (2) and as on the shelf (4). */
+    for (const action of [0x15, 0x93, 0x104, 0xb7]) {
+      for (const [x, y] of [
+        [470, 240],
+        [170, 240],
+        [320, 60],
+        [320, 420],
+        [330, 245],
+        [200, 120],
+      ]) {
+        for (const track of [1, 3, 5]) {
+          cases.push([action, 0, scripts[action].from || positions.neutral, x, y, 0, 0, 0, track]);
+        }
+      }
+    }
+
     const lines = await run('CATZSCPT', 'CATZSCPT.OUT', files, {
       display: 'vga256',
       frames: 1e9,
@@ -805,9 +824,14 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     const head = { divisor: 4, shelved: false, away: false };
 
     let targeted = 0;
+    let trackedCases = 0;
 
     for (const { values, ticks, fudgers, blink, place, eyes, target } of played) {
-      const [action, variant, from, index, seed] = values;
+      const [action, variant, from, index, seed, track = 0] = values;
+      /* Its head tracking the target each tick, where the case says. */
+      const tracked = (track & 1) !== 0 && !!target;
+      let trackedTicks = 0;
+      trackedCases += tracked ? 1 : 0;
       /* Whether the target was in the box ahead, each tick, as aimed. */
       const aimed: boolean[] = [];
       const aims: number[] = [];
@@ -831,12 +855,46 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
         fudgers,
         shown: earlier,
         blink,
-        aim: target
+        aim:
+          target && target[2] > 0
+            ? (step, rotation, fields) => {
+                /* Where the engine has the cat as it aims: in the rectangle the
+                 * tick before left, its new frame turned as it was, its layered
+                 * action not yet moved on (tick fields 21 to 24, 19 and 20). */
+                const before = aimed.length ? ticks[aimed.length - 1] : undefined;
+                const [left, top, right, bottom] = before?.slice(21, 25) ?? place!.slice(0, 4);
+                const pose: CatzPose = {
+                  frame: step.frame,
+                  rotation,
+                  tilt: fields[2],
+                  roll: fields[1],
+                  head: { rotation: fields[3], tilt: fields[4], cock: fields[5] },
+                  layer: before ? { first: before[19], frame: before[20] } : undefined,
+                };
+                const rect = { left, top, right, bottom };
+                /* The point as `GetTargetPt` answers it, x in the low word (the line's last). */
+                const point = { x: (target[5] << 16) >> 16, y: target[5] >> 16 };
+                const [width, height, share] = target.slice(2, 5);
+
+                aimed.push(
+                  catzInside(catzFocusRect(placer, rect, pose, { width, height, share }), point)
+                );
+                const angle = catzAimAt(placer, rect, pose, point);
+                aims.push(angle ?? NaN);
+                return angle;
+              }
+            : undefined,
+        /* A point at random in the stage, looked at from where the engine has
+         * the cat as the script is popped: the tick before's rectangle and
+         * state (or, first, the snapshot's), its rotation as it now is. */
+        area: STAGE,
+        head: tracked ? { ...head, shelved: (track & 4) !== 0, away: (track & 2) !== 0 } : head,
+        /* Tracking the target each tick, aimed as steering aims: from the
+         * rectangle the tick before left, its new frame as it now is. */
+        track: tracked
           ? (step, rotation, fields) => {
-              /* Where the engine has the cat as it aims: in the rectangle the
-               * tick before left, its new frame turned as it was, its layered
-               * action not yet moved on (tick fields 21 to 24, 19 and 20). */
-              const before = aimed.length ? ticks[aimed.length - 1] : undefined;
+              const before = trackedTicks ? ticks[trackedTicks - 1] : undefined;
+              trackedTicks++;
               const [left, top, right, bottom] = before?.slice(21, 25) ?? place!.slice(0, 4);
               const pose: CatzPose = {
                 frame: step.frame,
@@ -846,24 +904,17 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
                 head: { rotation: fields[3], tilt: fields[4], cock: fields[5] },
                 layer: before ? { first: before[19], frame: before[20] } : undefined,
               };
-              const rect = { left, top, right, bottom };
-              /* The point as `GetTargetPt` answers it, x in the low word (the line's last). */
-              const point = { x: (target[5] << 16) >> 16, y: target[5] >> 16 };
-              const [width, height, share] = target.slice(2, 5);
-
-              aimed.push(
-                catzInside(catzFocusRect(placer, rect, pose, { width, height, share }), point)
-              );
-              const angle = catzAimAt(placer, rect, pose, point);
-              aims.push(angle ?? NaN);
-              return angle;
+              const point = { x: (target![5] << 16) >> 16, y: target![5] >> 16 };
+              return catzHeadTarget(placer, { left, top, right, bottom }, pose, point, {
+                rotation,
+                divisor: head.divisor,
+                shelved: (track & 4) !== 0,
+                away: (track & 2) !== 0,
+                lower: fudgers[3].lower,
+                upper: fudgers[3].upper,
+              });
             }
           : undefined,
-        /* A point at random in the stage, looked at from where the engine has
-         * the cat as the script is popped: the tick before's rectangle and
-         * state (or, first, the snapshot's), its rotation as it now is. */
-        area: STAGE,
-        head,
         look: (point, ticked, rotation, how) => {
           const before = ticked ? ticks[ticked - 1] : undefined;
           const [left, top, right, bottom] = before?.slice(21, 25) ?? place!.slice(0, 4);
@@ -935,7 +986,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
       }
 
       /* And, walking to a target, whether it is there (`PopScript`'s 2, the tick's field 39). */
-      if (target) {
+      if (target && target[2] > 0) {
         const there = shown.findIndex((tick, n) => ((tick[39] & 2) !== 0) !== aimed[n]);
 
         if (there >= 0) {
@@ -1025,6 +1076,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(played).toHaveLength(cases.length);
     expect(placedCount).toBeGreaterThan(0);
     expect(targeted).toBe(40);
+    expect(trackedCases).toBe(72);
     expect(wrong).toEqual([]);
   }, 2700000);
 
