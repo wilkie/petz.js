@@ -38,6 +38,9 @@ export function mapColours(picture: Dib, palette: readonly Colour[]) {
 /**
  * Draws a picture with its top left at a point, its transparent colour left
  * out; mirrored, left for right, as `XDrawPicture`'s last argument asks.
+ * The transparent colour is the picture's index 10, as Dogz's sixteen
+ * colours have bright green, unless another is given (Catz's pictures, of
+ * 256 colours, have it at 11).
  */
 export function drawPicture(
   bitmap: IndexedBitmap,
@@ -45,14 +48,15 @@ export function drawPicture(
   colours: readonly number[],
   left: number,
   top: number,
-  mirrored = false
+  mirrored = false,
+  transparent = TRANSPARENT
 ) {
   for (let y = 0; y < picture.height; y++) {
     for (let x = 0; x < picture.width; x++) {
       const from = mirrored ? picture.width - 1 - x : x;
       const index = picture.pixels[y * picture.width + from];
 
-      if (index !== TRANSPARENT) {
+      if (index !== transparent) {
         bitmap.set(left + x, top + y, colours[index]);
       }
     }

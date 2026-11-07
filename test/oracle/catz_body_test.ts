@@ -25,7 +25,7 @@ const BRAINS = [12, 49, 96, 86, 69, 88, 1, 30, 0, 49, 0, 7];
 const CENTRES = [12, 7, 96, 86, 13, 88, 16, 30, 0, 0, 0, 0];
 const STAGE = { left: 0, top: 0, right: 640, bottom: 480 };
 
-/** The food bowl (0xc), the water bowl (0xd) and the ball (5) in the pen, and nothing. */
+/** The food bowl (0xc), the water bowl (0xd) and the Cat Dancer (5) in the pen, and nothing. */
 const PEN = new Map([
   [0xc, { x: 520, y: 400 }],
   [0xd, { x: 120, y: 410 }],
@@ -85,7 +85,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       }),
       /* And about the pen every other minute. */
       cursorAbout: (tick) => Math.trunc(tick / 600) % 2 === 1,
-      /* And, on two days, the food bowl, the water bowl and the ball off the shelf in the pen. */
+      /* And, on two days, the food bowl, the water bowl and the Cat Dancer off the shelf in the pen. */
       pen: () => (seed % 2 ? PEN : NONE),
       random,
       moves: false,

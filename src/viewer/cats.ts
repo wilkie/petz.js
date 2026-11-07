@@ -13,6 +13,7 @@ import {
   parseBhd,
 } from '../formats/animation.ts';
 import { averageBreed, type Breed, parseLnz } from '../formats/lnz.ts';
+import { type Dib, parseDib } from '../formats/dib.ts';
 import { parseNe } from '../formats/ne.ts';
 import {
   CATZ_PALETTE_TYPE,
@@ -25,6 +26,7 @@ import {
 import { ballAt, drawPet } from '../render/ballz.ts';
 import { extendFrames, layeredCatzFrame } from '../render/extend.ts';
 import { FIDELITY } from '../render/fidelity.ts';
+import { drawPicture, mapColours } from '../render/picture.ts';
 import { IndexedBitmap } from '../render/raster.ts';
 import { skeletonOf } from '../render/skeleton.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
@@ -153,7 +155,7 @@ function draw() {
   context.drawImage(small, 0, 0, canvas.width, canvas.height);
 }
 
-/** The things in the pen, each a marker where it is and its name: their own art not yet drawn. */
+/** The things in the pen the demo has no picture of: each a marker where it is, and its name. */
 function drawPen() {
   const scale = canvas.width / LIVE_STAGE.right;
   context.save();
@@ -161,6 +163,10 @@ function drawPen() {
   context.textAlign = 'center';
 
   for (const [kind, { x, y }] of livePen) {
+    if (penPictures.has(kind)) {
+      continue;
+    }
+
     context.fillStyle = '#c84';
     context.beginPath();
     context.arc(x * scale, y * scale, 8 * scale, 0, Math.PI * 2);
@@ -287,6 +293,16 @@ let liveCursorAbout = false;
 const livePen = new Map<number, { x: number; y: number }>();
 
 /**
+ * Each kind's picture in the pen, where the engine has one: its bitmap
+ * `kind × 1000 + 200` of CATZDLL.DLL (the shelf's own at `kind × 1000`), as
+ * the shelf's sprites' definitions name them (resource type 32513, 1000),
+ * its colours into the palette drawn with. The demo has the paint bucket's,
+ * the spray bottle's, the Cat Dancer's, the yarn ball's, the jingle ball's,
+ * the cheese's and the squeaky toy's.
+ */
+const penPictures = new Map<number, { dib: Dib; colours: number[]; green: number }>();
+
+/**
  * The cat on its own (`CatzPet`): ten ticks a second, as the engine runs,
  * each action it pushes played out by its script from the pose it is in, a
  * frame a tick, the cat drawn where it stands -- its walk moved straight, as
@@ -404,6 +420,24 @@ function drawLive(
   const bounds = placer.bounds(pose);
   const bitmap = new IndexedBitmap(LIVE_STAGE.right, LIVE_STAGE.bottom);
 
+  /* The pen's things with pictures first, the cat in front: each about its point. */
+  for (const [kind, { x, y }] of livePen) {
+    const picture = penPictures.get(kind);
+
+    if (picture) {
+      const { dib, colours, green } = picture;
+      drawPicture(
+        bitmap,
+        dib,
+        colours,
+        x - Math.trunc(dib.width / 2),
+        y - Math.trunc(dib.height / 2),
+        false,
+        green
+      );
+    }
+  }
+
   drawPet(bitmap, cat, header, frame, {
     colours: 256,
     originX: rect.left - bounds.left,
@@ -506,6 +540,17 @@ async function start(game: GameFiles) {
   }
 
   const engine = parseNe(await game.read('WINDOWS/SYSTEM/CATZDLL.DLL'));
+  penPictures.clear();
+
+  for (const { type, id, data } of engine.resources()) {
+    if (type === 2 && typeof id === 'number' && id % 1000 === 200 && id < 16000) {
+      const dib = parseDib(data);
+      /* Transparent where bright green, as the engine's pictures are made. */
+      const green = dib.colours.findIndex(([r, g, b]) => r === 0 && g === 255 && b === 0);
+      penPictures.set((id - 200) / 1000, { dib, colours: mapColours(dib, palette), green });
+    }
+  }
+
   const data = await game.read(`${RESOURCE}/CAT.SCP`);
   scripts = parseScripts(data, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz);
   const preamble = new DataView(data.buffer, data.byteOffset + data.indexOf(0) + 1);

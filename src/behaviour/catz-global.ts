@@ -173,7 +173,7 @@ export function catzGlobalBegin(
  *   where it is out; under 50 of age, under what its age leaves of 100 and
  *   the bottle out -- or inclined to 16 and the bowl on the shelf -- the
  *   bottle; inclined to 14 and the bowl on the shelf, one time in four the
- *   catnip (0xe) to attack (global 1), else, one time in four, the water
+ *   mouse hole (0xe) to attack (global 1), else, one time in four, the water
  *   bowl on the shelf, to play (global 15); inclined to 15, under a third
  *   of its fullness and the bowl out, playing (global 15). The food bowl
  *   empty (`+0x35d2` 0), one time in two it is made 1, else it idles (6);
@@ -362,7 +362,7 @@ function catzPlayingBegin(
  * `+0x35a6` made `+0x35a4`), to the corner where it made for one.
  *
  * Each tick after, after the mouse, by the mouse's state (its `+0x2518`'s
- * slot 8): not 1, three things by behaviour 7 and its age -- the catnip run
+ * slot 8): not 1, three things by behaviour 7 and its age -- the mouse hole run
  * to (0xe, `+0x35ac` 1, 22), or its moment readied (`PreMoment` 6, 0x93, 0)
  * and had (8); else, the machine's `+0x46` set and not inclined to
  * behaviour 14, its moment (`PreMoment` 6, 0x93, 1, and 8). Leaving, its
@@ -472,7 +472,7 @@ export interface CatzGlobalTickWorld extends CatzGlobalWorld {
   mouseState?: number;
 }
 
-/** What a tick of a global state did: its moment readied, and the global states begun after, as their beginning goes; or, attacking, the catnip run to. */
+/** What a tick of a global state did: its moment readied, and the global states begun after, as their beginning goes; or, attacking, the mouse hole run to. */
 export interface CatzGlobalTicked {
   moment?: CatzPreMoment;
 
@@ -500,7 +500,7 @@ export interface CatzGlobalTicked {
  * - the moment (8, seg25:012f): so, placed so (1), not walking to the
  *   cursor (`+0x35a6` 0x17) and minding it (`+0x34ca`);
  * - attacking (1, seg14:024e): after the mouse, the mouse's own state 1,
- *   inclined to behaviour 7 and under its age, it runs to the catnip
+ *   inclined to behaviour 7 and under its age, it runs to the mouse hole
  *   (`+0x35a4`, `+0x35a6` 0xe, `+0x35ac` 1, `+0x35a2` 0, 22), else its
  *   moment readied not watching; after anything else, the cursor about and
  *   not inclined to behaviour 14, its moment.

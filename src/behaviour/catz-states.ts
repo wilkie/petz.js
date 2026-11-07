@@ -2235,7 +2235,7 @@ function catzBegging(
  * off its angle (`+0x688`) by up to 49 one way or the other by its side:
  * the cursor (0x17) it moves; from the open shelf it may take the toy into
  * the pen (`ShelfToPen`), and food (0xc, 0xd, 0xf) so taken has it eat
- * (global 3); the ball (5) off the shelf, nine times in ten, it swings
+ * (global 3); the Cat Dancer (5) off the shelf, nine times in ten, it swings
  * after all. Then, `+0x35ac` 1, three times in four it walks off (22), else
  * plays (15). Otherwise, facing another way, it swings as it was not cued.
  */

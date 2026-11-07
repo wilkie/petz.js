@@ -288,9 +288,9 @@ const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
  * their moment and rest; the 80 after eat -- sent by hunger three times in
  * four, else by each other way, with the food bowl empty, low, full or -1
  * -- some without an age; the 40 after play, with the cursor (lively,
- * to chase it), the mouse, 5, 6, 7, 9, the food bowl and the catnip; and
+ * to chase it), the mouse, 5, 6, 7, 9, the food bowl and the mouse hole; and
  * the 24 after chase the same; the 36 after attack the cursor and the
- * mouse (grown, to make for a corner), the catnip, the food and water
+ * mouse (grown, to make for a corner), the mouse hole, the food and water
  * bowls, 5, 0x22, 6 and 9; and the last 72 with something off the shelf
  * in the pen: 48 hungry, with the treat, a piece, the food bowl, the water
  * bowl or the bottle out, and 24 playing and chasing with 6, 7 or 9 out.
