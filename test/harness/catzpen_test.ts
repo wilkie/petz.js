@@ -2618,6 +2618,8 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
                 ? cues.includes(5) && b[101] === 1
                 : cues.includes(6),
           cues,
+          /* Its script done as popped this tick (the first pop's 1), where the trace keeps it. */
+          done: values[201] > 0 ? (values[202] & 1) !== 0 : undefined,
           caught: b[116] !== 0,
           released: b[117] === undefined ? undefined : b[117] !== 0,
           x35b6: b[118],

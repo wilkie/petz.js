@@ -172,6 +172,9 @@ export interface CatzStateWorld {
   /** Walking on: where what it walks to (`+0x35a6`) is, its target point, where that is not its goal (`+0x34cc`). */
   walkedToAt?: { x: number; y: number };
 
+  /** Whether its script, popped this tick, is done (`PopScript`'s 1); taken as done where not given. */
+  done?: boolean;
+
   /** Begging: whether its script cued it (cue 6) as it was popped. */
   cued?: boolean;
 
@@ -1883,6 +1886,17 @@ function catzSwatting(
     }
 
     ({ swat, before } = struck);
+
+    /* Struck mid-script: only a done script goes on to swat again (seg29:113d). */
+    if (world.done === false) {
+      return {
+        energy: brain(CATZ_BRAIN.energy),
+        fullness: brain(CATZ_BRAIN.fullness),
+        count: world.count,
+        pushes: before,
+        ...(before.length ? { pushed: before[0] } : {}),
+      };
+    }
   }
 
   const width = world.size!.width;
