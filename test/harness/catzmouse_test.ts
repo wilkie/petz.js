@@ -17,15 +17,35 @@ import {
   type CatzMouseWorld,
 } from '../../src/behaviour/catz-mouse.ts';
 
-const TRACE = join('oracle/build/harness', 'CATZTRACE-MICE-1500.OUT');
+/* `TRACE_MICE=2`: the day with the cheese out and the mouse picked up (`CATZTRACE-MICE-HELD-1500.OUT`). */
+const TRACE = join(
+  'oracle/build/harness',
+  process.env.TRACE_MICE === '2' ? 'CATZTRACE-MICE-HELD-1500.OUT' : 'CATZTRACE-MICE-1500.OUT'
+);
 const run = existsSync(TRACE) ? describe : describe.skip;
 
 /** A mouse line's fields, from where its seed is. */
 function fieldsOf(values: number[]) {
   const [seed, global, state, count, target, holder, done, wait, heading, x9e, ...rest] = values;
   const brains = rest.slice(0, 4);
-  const [mx, my, cx, cy, catGlobal, catAge, x33b8, xfe, ux, uy, hx, hy, shelved, layered] =
-    rest.slice(4);
+  const [
+    mx,
+    my,
+    cx,
+    cy,
+    catGlobal,
+    catAge,
+    x33b8,
+    xfe,
+    ux,
+    uy,
+    hx,
+    hy,
+    shelved,
+    layered,
+    xfc,
+    button,
+  ] = rest.slice(4);
   return {
     seed: BigInt(seed),
     fields: { state, global, count, target, holder, done, wait, heading, x9e, brains },
@@ -39,6 +59,9 @@ function fieldsOf(values: number[]) {
     xfe,
     shelved,
     layered,
+    /* Held by the user (`+0xfc`) and the button down, where the trace has them; else taken as held while the cursor holds it. */
+    held: xfc ?? (holder === 0x17 ? 1 : 0),
+    pressed: button === undefined ? holder === 0x17 : button !== 0,
   };
 }
 
@@ -116,6 +139,7 @@ run('the playpen’s mouse, held to CATZDLL.DLL', () => {
         catAge: before.catAge,
         x33b8: before.x33b8,
         holeCovered: before.xfe !== 0,
+        pressed: before.pressed,
         shelved: (kind) => kind < 16 && (before.shelved & (1 << kind)) !== 0,
         layered: () => before.layered,
         collide: (kind) => {
@@ -149,7 +173,7 @@ run('the playpen’s mouse, held to CATZDLL.DLL', () => {
         layer: () => {},
         reset: () => {},
       };
-      const fields: CatzMouseFields = structuredClone(before.fields);
+      const fields: CatzMouseFields = { ...structuredClone(before.fields), held: before.held };
       const mouse = new CatzMouse(fields);
       mouse.dispatch(
         machine === 'o' ? 'own' : 'global',

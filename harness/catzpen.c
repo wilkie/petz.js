@@ -1835,7 +1835,8 @@ static void mouseFields(void)
 
     /* And the cursor's and the cheese's target points (kin 0x17, 8), which
      * kinds 1 to 0xf are on the shelf (`isSpriteInShelf`, bit n for kind n),
-     * and the layered frames it has left (954). */
+     * the layered frames it has left (954), whether the user holds it
+     * (`+0xfc`), and the button down (`PetParams` `+0xa`). */
     {
         void __far *cursor = ((GETKIN)ordinal(18))(mouse, 0x17);
         void __far *cheese = ((GETKIN)ordinal(18))(mouse, 8);
@@ -1849,8 +1850,9 @@ static void mouseFields(void)
             }
         }
 
-        say(" %d %d %d %d %u %d\r\n", (int)c, (int)(c >> 16), (int)h, (int)(h >> 16), shelved,
-            ((REMAINING)ordinal(954))(mouse));
+        say(" %d %d %d %d %u %d %d %d\r\n", (int)c, (int)(c >> 16), (int)h, (int)(h >> 16),
+            shelved, ((REMAINING)ordinal(954))(mouse), *(int __far *)(mouse + 0xfc),
+            *(int *)(params + 0xa));
     }
 }
 
@@ -3122,6 +3124,60 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         /* And where it asks (262144), every 30 frames, `+0x33bc` cleared, as
          * a new global state clears it, that it may see the mouse again
          * (`HandleCatSeesMouse`). */
+        /* And, following the mouse, where it asks (67108864), each 500
+         * frames: first the cheese (kin 8) off the shelf into the pen
+         * (`XApt::ShelfToPlaypen`, 151), at (230, 300), by its hole, that it
+         * smells it and goes for it; then at 300, the mouse out of its hole
+         * (neither waiting nor coming out), the user picks it up by the
+         * scruff -- the cursor on its target point and the button down
+         * (`+0xa`), held (`+0xc`) after the first frame, the cursor lifted
+         * 1 a frame -- for 40 frames, and lets it go (`HandleScruff`). */
+        if (forcing & 67108864L && tracedMouse) {
+            static int grabbing, grabX, grabY;
+            int cycle = n % 500;
+            int own = *(int __far *)(tracedMouse + 0x2552);
+
+            if (cycle == 0) {
+                unsigned char __far *cheese = ((GETKIN)ordinal(18))(tracedMouse, 8);
+
+                if (cheese) {
+                    int at[2];
+
+                    if (((INSHELF)ordinal(38))(tracedMouse, 8)) {
+                        ((TOPEN)ordinal(151))(cheese, params);
+                    }
+
+                    at[0] = 230;
+                    at[1] = 300;
+                    ((MOVEPT)ordinal(17))(cheese, 0, at);
+                }
+            }
+
+            if (cycle == 300 && own != 1 && own != 2) {
+                long point = ((TARGETPT)ordinal(10))(tracedMouse, 0);
+
+                grabbing = 1;
+                grabX = (int)point;
+                grabY = (int)(point >> 16);
+            }
+
+            if (grabbing) {
+                int t = cycle - 300;
+
+                *(int *)(params + 0x46) = 0;
+                *(int *)(params + 0x1e) = 0;
+                *(int *)(params + 0xa) = t < 40;
+                *(int *)(params + 0xc) = t > 0 && t < 40;
+                *(int *)(params + 0x5a) = *(int *)(params + 0x104) = *(int *)(params + 0x108) = grabX;
+                *(int *)(params + 0x5c) = *(int *)(params + 0x106) = *(int *)(params + 0x10a) =
+                    grabY - (t < 40 ? t : 40);
+
+                if (t >= 40) {
+                    grabbing = 0;
+                }
+            }
+        }
+
         /* And, following the mouse (33554432), every 100 frames waiting in
          * its hole (1), its first brain (`+0x257e`, its wish to come out)
          * made 100 and its fear (`+0x25d0`) 20 -- at 50 or more it is always
