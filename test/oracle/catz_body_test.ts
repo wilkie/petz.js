@@ -359,6 +359,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
         cat: pet.point,
         catGlobal: global,
         catAge: pet.mind.brains[11],
+        x33b8: pet.x33b8,
         cursor: { x: 630, y: 20 },
         things: new Map(),
         shelfAt: (kind) => ({ x: 30 * kind, y: 30 }),

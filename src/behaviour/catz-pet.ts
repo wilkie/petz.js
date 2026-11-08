@@ -20,13 +20,16 @@ import { catzGlobalBegin, catzGlobalTick } from './catz-global.ts';
 import { catzMomentBegin, type CatzMomentState, catzMomentTick } from './catz-moment.ts';
 import {
   catzBehaviorChange,
+  catzCursorWiggling,
   catzExtremeSituations,
   catzScruff,
   catzSeesMouse,
+  type CatzWiggle,
 } from './catz-reflexes.ts';
 import {
   type CatzBox,
   catzCuriosities,
+  catzPreMoment,
   catzPtToPtAngle,
   catzStateBetween,
   catzStateTick,
@@ -362,6 +365,12 @@ export class CatzPet {
     return this.options.inReach?.() ?? false;
   }
 
+  /** Where the cursor went, kept for wiggling (`+0x34d2` on); and whether, at its last look, it went one way throughout (`+0x33b8`, which the mouse reads). */
+  private readonly wiggle: CatzWiggle = { index: 0, last: { x: 0, y: 0 }, ways: [], still: 0 };
+  get x33b8() {
+    return this.wiggle.still;
+  }
+
   /** Whether it has reacted to the mouse since its global state last changed (`+0x33bc`). */
   x33bc = 0;
 
@@ -430,6 +439,28 @@ export class CatzPet {
         this.beginGlobal(seen.global, 0);
         this.x33bc = 1;
       }
+    }
+
+    /* The cursor wiggled (`catzCursorWiggling`): scared of it, playing with it or attacking it, or its moment, watching it. */
+    const wiggled = catzCursorWiggling(
+      this.mind,
+      this.wiggle,
+      this.cursorAt(),
+      this.fields.x35a4 ?? 0,
+      0x17,
+      this.options.random
+    );
+
+    if (wiggled.global !== undefined) {
+      if (wiggled.moment) {
+        this.readied = catzPreMoment(this.mind, false, 6, 0x93, true, this.options.random);
+        this.options.head?.({ kind: 0x17, speed: 3000, shelved: false });
+      } else {
+        this.fields.x35a4 = wiggled.x35a4;
+      }
+
+      this.beginGlobal(wiggled.global, 0);
+      return;
     }
 
     const done = catzExtremeSituations(this.mind, this.x358c, false, this.options.random);

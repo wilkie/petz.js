@@ -565,6 +565,7 @@ function goLive() {
       cat: pet.point,
       catGlobal: global,
       catAge: pet.mind.brains[11],
+      x33b8: pet.x33b8,
       cursor: liveCursor,
       things: livePen,
       shelfAt: (kind) => ({
