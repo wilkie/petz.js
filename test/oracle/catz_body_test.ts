@@ -376,4 +376,79 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     expect(pet.stoodIn.deep).toBe(0);
     expect(Object.keys(mice).some((key) => key.startsWith('2/'))).toBe(true);
   });
+
+  /* Petted: the hand on its middle for a minute, stroking, after half a minute on its own. */
+  it.each([1, 2])('is petted with the hand on it, on day %i', (seed) => {
+    const { scripts, positions, frames, shaped, breed, header, neck, butt } = load();
+    const rand = borlandRand(seed);
+    const random = (n: number) => rand() % n;
+    const fudgers = makeCatzFudgers();
+    resetCatzEyelids(fudgers);
+    const placer = new CatzPlacer(breed, header, shaped, { age: 100 });
+    const body = new CatzBody({
+      scripts,
+      positions,
+      flags: (frame) => frames[frame]?.tag ?? 3,
+      shaped,
+      placer,
+      angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
+      stage: STAGE,
+      fudgers,
+      random,
+    });
+    let tick = 0;
+    /* The cursor stroking about the middle of the cat. */
+    const cursor = () => {
+      const rect = body.shown?.rect ?? STAGE;
+      return {
+        x: Math.trunc((rect.left + rect.right) / 2) + ((tick % 6) * 6 - 15),
+        y: Math.trunc((rect.top + rect.bottom) / 2) + (tick % 4) * 3,
+      };
+    };
+    const hand = () => tick >= 300 && tick < 900;
+    const pet = new CatzPet({
+      brains: BRAINS,
+      centres: CENTRES,
+      stage: STAGE,
+      cursor,
+      random,
+      moves: false,
+      play: (action, steer) => body.play(action, steer),
+      dropped: () => body.drop(),
+      entered: (state) => body.entered(state),
+      head: (look) => body.look(look),
+      found: () => !!body.shown?.there,
+      cues: () => body.shown?.step.cues ?? [],
+      hand,
+      ballUnder: () =>
+        body.shown ? placer.ballAt(body.shown.rect, body.shown.pose, cursor()) : -1,
+      cursorOver: () => true,
+      scriptLeft: () => body.queue.length,
+    });
+    const states: Record<string, number> = {};
+
+    for (; tick < 1200; tick++) {
+      const shown = body.next();
+
+      if (shown) {
+        const { rect } = shown;
+        pet.rect = rect;
+        pet.point = {
+          x: Math.trunc((rect.left + rect.right) / 2),
+          y: Math.trunc((rect.top + rect.bottom) / 2),
+        };
+        pet.fields.x688 = body.facing;
+      }
+
+      const { state, global } = pet.tick();
+      states[`${global}/${state}`] = (states[`${global}/${state}`] ?? 0) + 1;
+    }
+
+    console.log(
+      `petted, day ${seed}: ${JSON.stringify(states)}; modes ${pet.petting.modes.slice(0, 8)}; stood in ${JSON.stringify(pet.stoodIn)}`
+    );
+    expect(pet.stoodIn.errors).toBe(0);
+    expect(pet.stoodIn.deep).toBe(0);
+    expect(states['7/50']).toBeGreaterThan(0);
+  });
 });

@@ -298,6 +298,9 @@ let livePressed = false;
 let liveHeld = false;
 let liveScruffed = false;
 
+/** The hand down, to pet the cat: the right button held (the viewer's choice; the engine's host gives `PetParams` `+0x1e`). */
+let liveHand = false;
+
 /** Whether the cursor is about the pen (`PetParams` `+0x46`): the mouse over the stage. */
 let liveCursorAbout = false;
 
@@ -444,7 +447,8 @@ function goLive() {
     centres: brains?.map((brain) => brain.centre) ?? LIVE_CENTRES,
     stage: LIVE_STAGE,
     cursor: () => liveCursor,
-    cursorAbout: () => liveCursorAbout,
+    /* (Petting, the hand down, the cursor is not about: `DoGSPetting` ends petting each tick it is.) */
+    cursorAbout: () => liveCursorAbout && !liveHand,
     /* The pen's things, and the mouse hole (0xe) where the mouse lives, at its hole. */
     pen: () => (mouseFiles ? new Map([...livePen, [0xe, MOUSE_HOLE]]) : livePen),
     random,
@@ -488,6 +492,21 @@ function goLive() {
     scruffed: () => {
       liveScruffed = true;
     },
+    /* Petted: the hand, the ball under the cursor, the rectangle grown by 10 holding it, and the frames left. */
+    hand: () => liveHand,
+    ballUnder: () =>
+      body.shown ? placer.ballAt(body.shown.rect, body.shown.pose, liveCursor) : -1,
+    cursorOver: () => {
+      const rect = body.shown?.rect;
+      return (
+        !!rect &&
+        rect.left - 10 < liveCursor.x &&
+        liveCursor.x < rect.right + 10 &&
+        rect.top - 10 < liveCursor.y &&
+        liveCursor.y < rect.bottom + 10
+      );
+    },
+    scriptLeft: () => body.queue.length,
     cues: () => body.shown?.step.cues ?? [],
   });
   made.pet = pet;
@@ -841,12 +860,25 @@ timesInput.addEventListener('change', () => {
 playButton.addEventListener('click', play);
 liveButton.addEventListener('click', goLive);
 /* Living, a click puts the thing chosen in the pen there -- or, on one there, back on the shelf. */
-canvas.addEventListener('mousedown', () => {
+canvas.addEventListener('mousedown', (event) => {
+  /* The right button the hand, to pet it; the left to pick it up. */
+  if (event.button === 2) {
+    liveHand = true;
+    return;
+  }
+
   livePressed = true;
   liveHeld = true;
   liveScruffed = false;
 });
-canvas.addEventListener('mouseup', () => (liveHeld = false));
+canvas.addEventListener('mouseup', (event) => {
+  if (event.button === 2) {
+    liveHand = false;
+  } else {
+    liveHeld = false;
+  }
+});
+canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 canvas.addEventListener('click', (event) => {
   /* (A press that picked the cat up by the scruff puts nothing in the pen.) */
   if (!live || liveScruffed) {
@@ -870,6 +902,7 @@ canvas.addEventListener('mouseenter', () => (liveCursorAbout = true));
 canvas.addEventListener('mouseleave', () => {
   liveCursorAbout = false;
   liveHeld = false;
+  liveHand = false;
 });
 canvas.addEventListener('mousemove', (event) => {
   liveCursorAbout = true;

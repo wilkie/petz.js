@@ -22,6 +22,7 @@ import {
   catzBehaviorChange,
   catzCursorWiggling,
   catzExtremeSituations,
+  catzPurring,
   catzScruff,
   catzSeesMouse,
   type CatzWiggle,
@@ -30,6 +31,7 @@ import {
   type CatzBox,
   catzCuriosities,
   catzPreMoment,
+  type CatzPetting,
   catzPtToPtAngle,
   catzStateBetween,
   catzStateTick,
@@ -49,6 +51,21 @@ export interface CatzPetOptions {
 
   /** The user's button (`PetParams` `+0xa`, pressed this tick, and `+0xc`, held from before); none without. */
   buttons?: () => { pressed: boolean; held: boolean };
+
+  /** The hand down (`PetParams` `+0x1e`), to pet it; never without. */
+  hand?: () => boolean;
+
+  /** The ball of it under the cursor (`XBallz::HitTest`), as whoever places it says; -1 for none. */
+  ballUnder?: () => number;
+
+  /** Its rectangle grown by 10 each way holds the cursor (for `HasUserStoppedPetting`), as whoever places it says. */
+  cursorOver?: () => boolean;
+
+  /** How much of its script is left (`GetStackRemaining`), as whoever plays it says. */
+  scriptLeft?: () => number;
+
+  /** A purr played or stopped (`HandlePurring`): its sound. */
+  purr?: (sound: number) => void;
 
   /** Where one of its balls is drawn on the stage, as whoever places it says: ball 2 for the scruff. */
   ballAt?: (ball: number) => { x: number; y: number } | undefined;
@@ -151,7 +168,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([1, 2, 3, 6, 8, 9, 11, 15, 16]);
+const BEGUN = new Set([1, 2, 3, 6, 7, 8, 9, 11, 15, 16]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -163,8 +180,8 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  3, 4, 8, 14, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 52, 54, 55, 58, 59,
-  60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 76, 77, 78, 79, 80, 81,
+  3, 4, 8, 14, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55,
+  58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -272,6 +289,13 @@ export class CatzPet {
         this.strikes();
       }
 
+      /* Being petted, mid-script: its fidgeting and where the cursor was, every tick (`DoCatPetting`). */
+      if (this.state === 50) {
+        this.take(
+          catzStateTick(50, this.mind, { ...this.world(false), done: false }, this.options.random)
+        );
+      }
+
       /* Dangling, let go mid-script: it falls (`DoDangling` asks every tick). */
       if (this.state === 33) {
         const ticked = catzStateTick(
@@ -371,6 +395,51 @@ export class CatzPet {
     return this.wiggle.still;
   }
 
+  /**
+   * Its petting (`+0x351c` on): its rate, its own sound (`+0x3570`), the
+   * sound wanted (`+0x3572`), `+0x3576`, where the cursor was, the cursor's
+   * action, the mode it came to may-end with, and its 40 modes; and
+   * `+0x3574`, not to be petted again (after petting resting).
+   */
+  readonly petting: Omit<CatzPetting, 'ball'> = {
+    rate: 2,
+    x3570: -1,
+    x3572: 0,
+    x3576: 0,
+    x362a: -1,
+    x356c: 0,
+    cursorWas: { x: -1, y: -1 },
+    modes: Array(40).fill(0),
+  };
+  x3574 = 0;
+
+  /** The ball petted, as `WhichBallBeingPet` answers: under the hand, 0 to 0x40. */
+  private ballPetted() {
+    const ball = this.options.hand?.() ? (this.options.ballUnder?.() ?? -1) : -1;
+    return ball >= 0 && ball < 0x41 ? ball : -1;
+  }
+
+  /** Its petting as its states read it this tick: the ball petted, whether the user stopped, how far the cursor moved. */
+  private pettingNow(): CatzPetting {
+    const cursor = this.cursorAt();
+    const was = this.petting.cursorWas;
+    const movement = was.x === -1 ? 1 : Math.trunc(Math.hypot(cursor.x - was.x, cursor.y - was.y));
+    const stopped = !(
+      movement !== 0 &&
+      (this.options.cursorOver?.() ?? false) &&
+      this.options.hand?.()
+    );
+    return {
+      ...this.petting,
+      ball: this.ballPetted(),
+      stopped,
+      movement,
+      pose: this.fields.x1500,
+      left: this.options.scriptLeft?.(),
+      cursor,
+    };
+  }
+
   /** Whether it has reacted to the mouse since its global state last changed (`+0x33bc`). */
   x33bc = 0;
 
@@ -463,8 +532,32 @@ export class CatzPet {
       return;
     }
 
+    /* Petted (`HandlePetting`, seg23:0000): not petted already nor resting
+     * after it (`+0x3574`), the hand on one of its balls, on the floor,
+     * nothing held: its behaviour changed (1, `DoCatBehaviorChange`), it
+     * lets go, and is petted (7), `+0x3576` whether it was resting. */
+    if (this.global !== 7 && this.x3574 === 0 && this.ballPetted() !== -1) {
+      catzBehaviorChange(this.mind, 1, [0, 0, 0, 0]);
+      this.petting.x3576 = this.global === 9 ? 1 : 0;
+      this.beginGlobal(7, 0);
+      return;
+    }
+
+    /* Purring (`catzPurring`), as asked. */
+    const purred = catzPurring(this.petting.x3570, this.petting.x3572);
+    this.petting.x3570 = purred.x3570;
+    this.petting.x3572 = purred.x3572;
+
+    if (purred.sound !== undefined) {
+      this.options.purr?.(purred.sound);
+    }
+
     const done = catzExtremeSituations(this.mind, this.x358c, false, this.options.random);
     this.x358c = done.x358c;
+
+    if (done.x3574 !== undefined) {
+      this.x3574 = done.x3574;
+    }
 
     if (done.change !== undefined) {
       catzBehaviorChange(this.mind, done.change, [0, 0, 0, 0]);
@@ -727,6 +820,12 @@ export class CatzPet {
     /* A new global state: it may see the mouse again (`GlobalCatStateMachine::NewState`). */
     this.x33bc = 0;
 
+    /* Petted (`DoGSPetting`): no sound of its own, its modes cleared. */
+    if (global === 7) {
+      this.petting.x3570 = -1;
+      this.petting.modes = Array(40).fill(0);
+    }
+
     /* Leaving having its victim (2): the mouse free (`DoGSHasVictim`, seg33:1527). */
     if (this.global === 2 && global !== 2) {
       this.options.mouseHeld?.('free');
@@ -951,6 +1050,25 @@ export class CatzPet {
   private take(ticked: Partial<CatzStateTick>) {
     const f = this.fields;
 
+    /* After petting, resting at once (`DoCatAfterPetting` entering): not to be petted again so soon (`+0x3574`). */
+    if (this.state === 52 && ticked.global === 9) {
+      this.x3574 = 1;
+    }
+
+    /* What it wrote of its petting; resting after it, not to be petted again so soon. */
+    if (ticked.petting) {
+      const {
+        ball: _ball,
+        stopped: _s,
+        movement: _m,
+        pose: _p,
+        left: _l,
+        cursor: _c,
+        ...written
+      } = ticked.petting;
+      Object.assign(this.petting, written);
+    }
+
     /* Its prey caught and held (`+0xee0`). */
     if (ticked.caught) {
       f.caught = true;
@@ -1069,6 +1187,7 @@ export class CatzPet {
       global: this.global,
       enter,
       inReach: this.options.inReach?.() ?? false,
+      petting: this.pettingNow(),
       ...(this.options.buttons
         ? {
             buttons: {

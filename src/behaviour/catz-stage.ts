@@ -160,6 +160,30 @@ export class CatzPlacer {
   }
 
   /**
+   * The ball under a point, the cat in `rect` (`XBallz::HitTest`,
+   * seg47:54e6, its slot `0x48`): the balls tried front-most first, each a
+   * square half its drawn size each way about its centre, strictly within;
+   * -1 for none.
+   */
+  ballAt(rect: CatzRect, pose: CatzPose, { x, y }: CatzPoint) {
+    const { placed, bounds } = this.get(pose);
+    const order = placed.map((_, n) => n).sort((a, b) => placed[a].depth - placed[b].depth);
+
+    for (const n of order) {
+      const ball = placed[n];
+      const r = ball.diameter / 2;
+      const cx = ball.x + rect.left - bounds.left;
+      const cy = ball.y + rect.top - bounds.top;
+
+      if (cx - r < x && x < cx + r && cy - r < y && y < cy + r) {
+        return n;
+      }
+    }
+
+    return -1;
+  }
+
+  /**
    * The cat's rectangle moved from one pose to the next as their frames' own
    * rectangles move (`XBallz::MoveFrameRect`, seg47:1e64): the one before
    * worked out again turned as the new one is, the rectangle moved by how far

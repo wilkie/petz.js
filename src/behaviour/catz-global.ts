@@ -125,6 +125,11 @@ export function catzGlobalBegin(
     case 9:
       begun.state = world.sleepy ? 28 : 26;
       break;
+    case 7:
+      /* Petted (`DoGSPetting`, seg28:0000): the effect on seriousness alone 15 (its slot `0x114`, 2 and 0xf), and it begins to be petted (0x31). No sound of its own and its modes cleared are its petting's (`CatzPet`). */
+      begun.effects = [0, 0, 15, 0];
+      begun.state = 0x31;
+      break;
     case 2:
       /* Having its victim (`DoGSHasVictim`, seg33:14c0): no effects of its own; it carries it (7). Leaving, it lets go of what it holds (its slot `0xfc`) and the mouse, held by the cat to its mind, is free (`+0x26ca` 0). */
       begun.effects = [0, 0, 0, 0];
@@ -515,8 +520,8 @@ export interface CatzGlobalTicked {
  *   moment readied not watching; after anything else, the cursor about and
  *   not inclined to behaviour 14, its moment.
  *
- * - having its victim (2, `DoGSHasVictim`, seg33:154e): the cursor about,
- *   its moment, watching.
+ * - having its victim (2, `DoGSHasVictim`, seg33:154e), and petted (7,
+ *   `DoGSPetting`): the cursor about, its moment, watching.
  *
  * Others are not reimplemented: nothing. Where whoever ticks it begins the
  * global state asked itself (`begin` false), it is given as `global`.
@@ -544,6 +549,7 @@ export function catzGlobalTick(
     case 14:
     case 3:
     case 2:
+    case 7:
       return about ? moment(true) : {};
     case 15:
     case 16:
