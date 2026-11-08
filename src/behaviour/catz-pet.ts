@@ -913,8 +913,8 @@ export class CatzPet {
       const at =
         to === 'goal'
           ? this.fields.goal
-          : to === 'prey' && this.fields.x35a4 === 0x17
-            ? this.cursorAt()
+          : to === 'prey'
+            ? (this.preyAt() ?? this.walkedToAt())
             : this.walkedToAt();
       return at && { leap: { ball, x: at.x, y: at.y, keep, turn } };
     }

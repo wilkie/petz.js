@@ -440,7 +440,8 @@ function goLive() {
     stage: LIVE_STAGE,
     cursor: () => liveCursor,
     cursorAbout: () => liveCursorAbout,
-    pen: () => livePen,
+    /* The pen's things, and the mouse hole (0xe) where the mouse lives, at its hole. */
+    pen: () => (mouseFiles ? new Map([...livePen, [0xe, MOUSE_HOLE]]) : livePen),
     random,
     /* Placed by its frames, as `PopScript` places it: the pet's straight walk off. */
     moves: false,
