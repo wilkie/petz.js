@@ -135,6 +135,10 @@ export class CatzBody {
   private leapFrom?: { leap: CatzStep['leap'] & {}; held: { step: CatzStep; there?: boolean }[] };
   private leaping?: CatzLeaping;
   private armed?: { ball: number; x: number; y: number };
+  private leapTo?: { ball: number; x: number; y: number };
+
+  /** Each leap landed: its ball, where it leapt to, and where the ball is at its last frame (kept touching the stage, it may fall short). */
+  readonly leaps: { ball: number; x: number; y: number; at: CatzPoint }[] = [];
   private blink: CatzBlink;
   private readonly options: CatzBodyOptions;
 
@@ -288,8 +292,10 @@ export class CatzBody {
     }
 
     const shift = this.leaping && catzLeapTick(this.leaping);
+    const landed =
+      this.leaping && this.leaping.done >= this.leaping.count ? this.leapTo : undefined;
 
-    if (this.leaping && this.leaping.done >= this.leaping.count) {
+    if (landed) {
       this.leaping = undefined;
     }
 
@@ -312,6 +318,20 @@ export class CatzBody {
       position,
       blink: { ...this.blink },
     });
+
+    /* Where its ball landed, against where it leapt to. */
+    if (landed) {
+      const { ball } = landed;
+      const { rect, current } = this.tail;
+      const at =
+        ball === -11
+          ? {
+              x: Math.trunc((rect.left + rect.right) / 2),
+              y: Math.trunc((rect.top + rect.bottom) / 2),
+            }
+          : placer.ballOnStage(rect, current, ball);
+      this.leaps.push({ ...landed, at });
+    }
 
     if (step.leap) {
       this.leapFrom = { leap: step.leap, held: [] };
@@ -337,6 +357,7 @@ export class CatzBody {
       }
     }
 
+    this.leapTo = leap;
     this.leaping =
       this.tail && ahead.length === leap.count
         ? catzLeapFrom(this.options.placer, this.tail, ahead, leap)

@@ -35,27 +35,31 @@ const PEN = new Map([
 ]);
 const NONE = new Map<number, { x: number; y: number }>();
 
+/** The cat's scripts, frames and breed (the clown's), from the demo's files. */
+function load() {
+  const read = (name: string) => new Uint8Array(readFileSync(join(RESOURCE, name)));
+  const text = (name: string) => new TextDecoder('latin1').decode(read(name));
+  const header = parseBhd(read('CAT.BHD'));
+  const frames = header.animations.flatMap((_, n) =>
+    existsSync(join(RESOURCE, `CAT${n}.BDT`)) ? parseAnimation(header, n, read(`CAT${n}.BDT`)) : []
+  );
+  const adult = parseLnz(text('ACLOWN.LNZ'), header.ballCount);
+  const kitten = parseLnz(text(adult.catz!.littleOne!.toUpperCase()), header.ballCount);
+  const breed = averageBreed(adult, kitten, 0);
+  const shaped = extendFrames(frames, breed);
+  const { neck, butt } = skeletonOf(breed);
+  const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
+  const data = read('CAT.SCP');
+  const scripts = parseScripts(data, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz);
+  const preamble = new DataView(data.buffer, data.byteOffset + data.indexOf(0) + 1);
+  const positions = { count: preamble.getUint16(0, true), neutral: preamble.getUint16(2, true) };
+  return { scripts, positions, frames, shaped, breed, header, neck, butt };
+}
+
 describe('a Catz cat on its own, placed and steered by its own frames', () => {
   /* Some days of its, each 6,000 ticks -- ten minutes -- by C's `rand` from a seed. */
   it.each([1, 2, 3, 6])('walks where it means to and gets there, on day %i', (seed) => {
-    const read = (name: string) => new Uint8Array(readFileSync(join(RESOURCE, name)));
-    const text = (name: string) => new TextDecoder('latin1').decode(read(name));
-    const header = parseBhd(read('CAT.BHD'));
-    const frames = header.animations.flatMap((_, n) =>
-      existsSync(join(RESOURCE, `CAT${n}.BDT`))
-        ? parseAnimation(header, n, read(`CAT${n}.BDT`))
-        : []
-    );
-    const adult = parseLnz(text('ACLOWN.LNZ'), header.ballCount);
-    const kitten = parseLnz(text(adult.catz!.littleOne!.toUpperCase()), header.ballCount);
-    const breed = averageBreed(adult, kitten, 0);
-    const shaped = extendFrames(frames, breed);
-    const { neck, butt } = skeletonOf(breed);
-    const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
-    const data = read('CAT.SCP');
-    const scripts = parseScripts(data, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz);
-    const preamble = new DataView(data.buffer, data.byteOffset + data.indexOf(0) + 1);
-    const positions = { count: preamble.getUint16(0, true), neutral: preamble.getUint16(2, true) };
+    const { scripts, positions, frames, shaped, breed, header, neck, butt } = load();
     const rand = borlandRand(seed);
     const random = (n: number) => rand() % n;
     const fudgers = makeCatzFudgers();
@@ -163,6 +167,17 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
           '\n'
         )}\nstood in ${JSON.stringify(pet.stoodIn)}\nstruck ${struck.length} ${JSON.stringify(struck.slice(0, 3))}`
     );
+    /* Each leap's ball where it leapt to, but where the stage stopped it. */
+    const missed = body.leaps.filter(
+      ({ x, y, at }) =>
+        (Math.abs(at.x - x) > 1 || Math.abs(at.y - y) > 1) &&
+        at.x > STAGE.left &&
+        at.x < STAGE.right &&
+        at.y > STAGE.top &&
+        at.y < STAGE.bottom
+    );
+    console.log(`leaps ${body.leaps.length}: ${JSON.stringify(body.leaps.slice(0, 6))}`);
+    expect(missed).toEqual([]);
     expect(pet.stoodIn.errors).toBe(0);
     expect(pet.stoodIn.deep).toBe(0);
     /* It walks, and its walks end where it found what it walked to -- but
@@ -171,5 +186,45 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     const sought = walks.filter(({ to }) => to !== 0x17);
     expect(walks.length).toBeGreaterThan(0);
     expect(sought.filter(({ there }) => there).length).toBeGreaterThan(sought.length / 2);
+  });
+
+  /* Its leaps the demo has the frames of -- pounces (0x20f, 0x35) and a dive (0x238) -- each set up toward points about it. */
+  it.each([0x20f, 0x35, 0x238])('lands a leap (action %i) where it leapt to', (action) => {
+    const { scripts, positions, frames, shaped, breed, header, neck, butt } = load();
+    const rand = borlandRand(action);
+    const random = (n: number) => rand() % n;
+    const fudgers = makeCatzFudgers();
+    resetCatzEyelids(fudgers);
+    const landed: { x: number; y: number; at: { x: number; y: number } }[] = [];
+
+    for (const [x, y] of [
+      [200, 250],
+      [450, 320],
+      [320, 200],
+      [100, 400],
+    ]) {
+      const body = new CatzBody({
+        scripts,
+        positions,
+        flags: (frame) => frames[frame]?.tag ?? 3,
+        shaped,
+        placer: new CatzPlacer(breed, header, shaped, { age: 100 }),
+        angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
+        stage: STAGE,
+        fudgers,
+        random,
+      });
+      /* Standing first, to be placed from; then the leap, ball 0x42 to the point. */
+      body.play(0x15);
+      body.play(action, { leap: { ball: 0x42, x, y } });
+      landed.push(...body.leaps);
+    }
+
+    console.log(`action ${action}: ${JSON.stringify(landed)}`);
+    expect(landed).toHaveLength(4);
+    /* The engine's single floats, rounded toward 0, land it within a pixel. */
+    expect(
+      landed.filter(({ x, y, at }) => Math.abs(at.x - x) > 1 || Math.abs(at.y - y) > 1)
+    ).toEqual([]);
   });
 });
