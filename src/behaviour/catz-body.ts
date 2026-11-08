@@ -455,6 +455,22 @@ export class CatzBody {
     }
   }
 
+  /** Hung by a ball under a point (dangling from the cursor, ball 0x24): the frame shown, and those queued, moved so. */
+  hang(ball: number, point: CatzPoint) {
+    const shown = this.shown;
+
+    if (!shown) {
+      return;
+    }
+
+    const at = this.options.placer.ballOnStage(shown.rect, shown.pose, ball);
+    const rect = shown.rect;
+    this.moveTo({
+      x: Math.trunc((rect.left + rect.right) / 2) + point.x - at.x,
+      y: Math.trunc((rect.top + rect.bottom) / 2) + point.y - at.y,
+    });
+  }
+
   /**
    * Put so that the middle of its rectangle -- its target point -- is at a
    * point (`MoveDrawPt`): the frame shown, and those queued, moved with it.

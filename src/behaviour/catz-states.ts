@@ -4435,6 +4435,11 @@ function catzDangling(
     return tick;
   }
 
+  /* Held on mid-script: only a done script goes on. */
+  if (world.done === false) {
+    return tick;
+  }
+
   const afraid = catzBehavior(mind, 17, random) !== 0 && percent() < 90;
   const independent = mind.brains[CATZ_BRAIN.independence] >= 50 && percent() < 90;
   const pushes: number[] = [];

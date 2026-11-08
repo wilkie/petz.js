@@ -293,6 +293,11 @@ const LIVE_CENTRES = [12, 7, 96, 86, 13, 88, 16, 30, 0, 0, 0, 0];
 let live = 0;
 let liveCursor = { x: 235, y: 300 };
 
+/** The button: pressed since the last tick (`PetParams` `+0xa`), and held (`+0xc`); and whether this press picked the cat up. */
+let livePressed = false;
+let liveHeld = false;
+let liveScruffed = false;
+
 /** Whether the cursor is about the pen (`PetParams` `+0x46`): the mouse over the stage. */
 let liveCursorAbout = false;
 
@@ -476,6 +481,13 @@ function goLive() {
       );
     },
     mouseHeld: (how) => made.mouse?.catHolds(how),
+    /* The button as the engine has it: pressed the tick it went down, held after. */
+    buttons: () => ({ pressed: livePressed, held: liveHeld && !livePressed }),
+    ballAt: (ball) =>
+      body.shown ? placer.ballOnStage(body.shown.rect, body.shown.pose, ball) : undefined,
+    scruffed: () => {
+      liveScruffed = true;
+    },
     cues: () => body.shown?.step.cues ?? [],
   });
   made.pet = pet;
@@ -541,6 +553,12 @@ function goLive() {
     }
 
     const { state, global } = pet.tick();
+    livePressed = false;
+
+    /* Dangling, hung from the cursor by its ball 0x24 (`DoDangling`). */
+    if (state === 33) {
+      body.hang(0x24, liveCursor);
+    }
 
     /* The mouse's tick, the cat where it is. */
     mouse?.tick({
@@ -822,8 +840,15 @@ timesInput.addEventListener('change', () => {
 playButton.addEventListener('click', play);
 liveButton.addEventListener('click', goLive);
 /* Living, a click puts the thing chosen in the pen there -- or, on one there, back on the shelf. */
+canvas.addEventListener('mousedown', () => {
+  livePressed = true;
+  liveHeld = true;
+  liveScruffed = false;
+});
+canvas.addEventListener('mouseup', () => (liveHeld = false));
 canvas.addEventListener('click', (event) => {
-  if (!live) {
+  /* (A press that picked the cat up by the scruff puts nothing in the pen.) */
+  if (!live || liveScruffed) {
     return;
   }
 
@@ -841,7 +866,10 @@ canvas.addEventListener('click', (event) => {
   }
 });
 canvas.addEventListener('mouseenter', () => (liveCursorAbout = true));
-canvas.addEventListener('mouseleave', () => (liveCursorAbout = false));
+canvas.addEventListener('mouseleave', () => {
+  liveCursorAbout = false;
+  liveHeld = false;
+});
 canvas.addEventListener('mousemove', (event) => {
   liveCursorAbout = true;
   const box = canvas.getBoundingClientRect();

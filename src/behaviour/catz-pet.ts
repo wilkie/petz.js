@@ -18,7 +18,12 @@ import { type CatzMind, catzBehavior } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 import { catzGlobalBegin, catzGlobalTick } from './catz-global.ts';
 import { catzMomentBegin, type CatzMomentState, catzMomentTick } from './catz-moment.ts';
-import { catzBehaviorChange, catzExtremeSituations, catzSeesMouse } from './catz-reflexes.ts';
+import {
+  catzBehaviorChange,
+  catzExtremeSituations,
+  catzScruff,
+  catzSeesMouse,
+} from './catz-reflexes.ts';
 import {
   type CatzBox,
   catzCuriosities,
@@ -38,6 +43,15 @@ export interface CatzPetOptions {
 
   /** The pen's mouse (kin 0x1b), where there is one: its own state (1 in its hole) and its target point. */
   mouse?: () => { state: number; at: { x: number; y: number } } | undefined;
+
+  /** The user's button (`PetParams` `+0xa`, pressed this tick, and `+0xc`, held from before); none without. */
+  buttons?: () => { pressed: boolean; held: boolean };
+
+  /** Where one of its balls is drawn on the stage, as whoever places it says: ball 2 for the scruff. */
+  ballAt?: (ball: number) => { x: number; y: number } | undefined;
+
+  /** Picked up by the scruff, this tick. */
+  scruffed?: () => void;
 
   /** Whether the prey is within its paws' reach (`IsSpriteCaught`), as whoever places it says; never without. */
   inReach?: () => boolean;
@@ -255,6 +269,21 @@ export class CatzPet {
         this.strikes();
       }
 
+      /* Dangling, let go mid-script: it falls (`DoDangling` asks every tick). */
+      if (this.state === 33) {
+        const ticked = catzStateTick(
+          33,
+          this.mind,
+          { ...this.world(false), done: false },
+          this.options.random
+        );
+
+        if (ticked.state !== undefined || ticked.global !== undefined) {
+          this.take(ticked);
+          this.change(ticked.global, ticked.state, 0);
+        }
+      }
+
       /* Pouncing or diving, cued to catch (cue 2) mid-script: the catch, as
        * the handler checks it each tick (`DoCatPouncing`, seg14:0f70). */
       if ((this.state === 3 || this.state === 4) && this.cues().includes(2)) {
@@ -345,6 +374,33 @@ export class CatzPet {
    * ticks.
    */
   private reflexes() {
+    /* Picked up by the scruff (`catzScruff`): the button pressed, not held, within 100 of its ball 2. */
+    const buttons = this.options.buttons?.();
+
+    if (buttons && this.state !== 33) {
+      const none = { left: 0, top: 0, right: 0, bottom: 0 };
+      const scruff = catzScruff(this.mind, {
+        left: buttons.pressed,
+        right: buttons.held,
+        holding: false,
+        ball: this.options.ballAt?.(2) ?? this.point,
+        cursor: this.cursorAt(),
+        point: this.point,
+        x9e: 0,
+        hidden: none,
+        x35fc: 0,
+        x35fa: 0,
+        x35f6: -1,
+        x35f8: 0,
+      });
+
+      if (scruff.dangles) {
+        this.options.scruffed?.();
+        this.change(undefined, 33, 0);
+        return;
+      }
+    }
+
     const mouse = this.options.mouse?.();
 
     if (mouse) {
@@ -982,6 +1038,14 @@ export class CatzPet {
       global: this.global,
       enter,
       inReach: this.options.inReach?.() ?? false,
+      ...(this.options.buttons
+        ? {
+            buttons: {
+              left: this.options.buttons().pressed ? 1 : 0,
+              right: this.options.buttons().held ? 1 : 0,
+            },
+          }
+        : {}),
       curiosities: this.fields.curiosities ?? [],
       cursor: none,
       kin: none,
