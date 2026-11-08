@@ -150,16 +150,18 @@ export class CatzMouseLive {
 
   /**
    * Held by the cat, as the cat's handlers have it: caught, in its mouth
-   * (`held`); stilled, its fear 100; put down, its holder the cat (0x1d),
-   * which its fleeing finds; free, its holder none.
+   * (`held`); stilled, its fear 100; thrown, out of its mouth; put down,
+   * its holder the cat (0x1d), which its fleeing finds; free, its holder none.
    */
-  catHolds(how: 'caught' | 'stilled' | 'putDown' | 'free') {
+  catHolds(how: 'caught' | 'stilled' | 'putDown' | 'thrown' | 'free') {
     const { fields } = this.mouse;
 
     if (how === 'caught') {
       this.inMouth = true;
     } else if (how === 'stilled') {
       fields.brains[1] = 100;
+    } else if (how === 'thrown') {
+      this.inMouth = false;
     } else if (how === 'putDown') {
       this.inMouth = false;
       fields.holder = 0x1d;

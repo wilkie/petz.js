@@ -45,10 +45,11 @@ export interface CatzPetOptions {
   /**
    * The mouse held by the cat: caught; stilled as its victim (its fear 100,
    * `DoCatVictimCaptured` entering); put down, held by the cat to its mind
-   * (`+0x26ca` 0x1d, seg19:08b9); free again (0, as dangling frees it,
-   * seg23:4285).
+   * (`+0x26ca` 0x1d, seg19:08b9); thrown, leaving its victim's states
+   * unless let go (`StrikeToy`, the throw's motion not modelled); free
+   * again (0, as dangling frees it, seg23:4285).
    */
-  mouseHeld?: (how: 'caught' | 'stilled' | 'putDown' | 'free') => void;
+  mouseHeld?: (how: 'caught' | 'stilled' | 'putDown' | 'thrown' | 'free') => void;
   /**
    * How many ticks an action plays, and the pose (`+0x1500`) it leaves the
    * cat in, where known (its script's `to`); walking on, with what steers it
@@ -253,6 +254,21 @@ export class CatzPet {
       if (this.state === 0x38 && this.cues().includes(5)) {
         this.strikes();
       }
+
+      /* Pouncing or diving, cued to catch (cue 2) mid-script: the catch, as
+       * the handler checks it each tick (`DoCatPouncing`, seg14:0f70). */
+      if ((this.state === 3 || this.state === 4) && this.cues().includes(2)) {
+        const ticked = catzStateTick(
+          this.state,
+          this.mind,
+          { ...this.world(false), cues: this.cues(), done: false },
+          this.options.random
+        );
+
+        if (ticked.caught) {
+          this.take({ caught: true });
+        }
+      }
     } else {
       this.act();
     }
@@ -310,6 +326,11 @@ export class CatzPet {
     }
 
     return false;
+  }
+
+  /** Whether its prey is within its paws' reach now, as whoever places it says. */
+  inReachNow() {
+    return this.options.inReach?.() ?? false;
   }
 
   /** Whether it has reacted to the mouse since its global state last changed (`+0x33bc`). */
@@ -763,6 +784,16 @@ export class CatzPet {
       this.stoodIn.states[state] = (this.stoodIn.states[state] ?? 0) + 1;
       this.beginGlobal(6, depth + 1);
       return;
+    }
+
+    /* Leaving its victim's states (5, 6) holding it, not let go: it throws it (`StrikeToy`). */
+    if (
+      (this.state === 5 || this.state === 6) &&
+      state !== 5 &&
+      state !== 6 &&
+      this.fields.caught
+    ) {
+      this.options.mouseHeld?.('thrown');
     }
 
     this.state = state;

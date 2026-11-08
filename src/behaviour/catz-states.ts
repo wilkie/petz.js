@@ -2469,6 +2469,11 @@ function catzPouncing(
     }
   }
 
+  /* Cued mid-script: only a done script goes on (seg14:10b7). */
+  if (world.done === false) {
+    return tick;
+  }
+
   if (age !== 0 && world.caught) {
     if (world.x35a4 === 0x17) {
       tick.moment = catzPreMoment(mind, world.area3 ?? false, 6, 0x93, true, random);
@@ -2900,6 +2905,11 @@ function catzDiving(
     world.inReach
   ) {
     tick.caught = true;
+  }
+
+  /* Cued mid-script: only a done script goes on. */
+  if (world.done === false) {
+    return tick;
   }
 
   if (world.caught && age !== 0) {

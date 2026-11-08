@@ -252,7 +252,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     const random = (n: number) => rand() % n;
     const fudgers = makeCatzFudgers();
     resetCatzEyelids(fudgers);
-    const placer = new CatzPlacer(breed, header, shaped, { age: 0 });
+    const placer = new CatzPlacer(breed, header, shaped, { age: 20 });
     const made: { pet?: CatzPet; mouse?: CatzMouseLive } = {};
     const body = new CatzBody({
       scripts,
@@ -267,7 +267,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       trackAt: (kind) => made.pet?.kinAt(kind),
     });
     const brains = [...BRAINS];
-    brains[11] = 0;
+    brains[11] = 20;
     const pet = new CatzPet({
       brains,
       centres: CENTRES,
@@ -320,6 +320,9 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     mouse.mouse.fields.brains[0] = 100;
     mouse.mouse.fields.brains[1] = 20;
 
+    const pounces = { ticks: 0, cued: 0, reach: 0 };
+    const catStates: Record<number, number> = {};
+    let carried = 0;
     const globals: Record<number, number> = {};
     const mice: Record<string, number> = {};
     let after = 0;
@@ -339,9 +342,19 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
         pet.fields.x688 = body.facing;
       }
 
-      const { global } = pet.tick();
+      const { global, state: catState } = pet.tick();
       globals[global] = (globals[global] ?? 0) + 1;
+      catStates[catState] = (catStates[catState] ?? 0) + 1;
       after += pet.fields.x35a4 === 0x1b ? 1 : 0;
+      carried += made.mouse?.inMouth ? 1 : 0;
+
+      /* Pouncing or diving at the mouse: its ticks, those cued to catch (2), and those in reach too. */
+      if ((catState === 3 || catState === 4) && pet.fields.x35a4 === 0x1b) {
+        const cued = (body.shown?.step.cues ?? []).includes(2);
+        pounces.ticks++;
+        pounces.cued += cued ? 1 : 0;
+        pounces.reach += cued && pet.inReachNow() ? 1 : 0;
+      }
       mouse.tick({
         cat: pet.point,
         catGlobal: global,
@@ -356,7 +369,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     }
 
     console.log(
-      `day ${seed}: cat ${JSON.stringify(globals)}, after the mouse ${after} ticks; mouse ${JSON.stringify(mice)}; stood in ${JSON.stringify(pet.stoodIn)}`
+      `day ${seed}: cat ${JSON.stringify(globals)}, after the mouse ${after} ticks, pounced ${JSON.stringify(pounces)}, carried it ${carried} ticks, its states ${JSON.stringify(catStates)}; mouse ${JSON.stringify(mice)}; stood in ${JSON.stringify(pet.stoodIn)}`
     );
     expect(pet.stoodIn.errors).toBe(0);
     expect(pet.stoodIn.deep).toBe(0);
