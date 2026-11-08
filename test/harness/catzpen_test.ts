@@ -1686,7 +1686,13 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         books
       )
         .filter(([key]) => key.startsWith('>'))
-        .reduce((n, [, k]) => n + k.same, 0)} across into another state`
+        .reduce(
+          (n, [, k]) => n + k.same,
+          0
+        )} across into another state; petting fields ${Object.entries(books)
+        .filter(([key]) => /:(rate|x357[026]|cursorWas|x362a|x356c|modes)/.test(key))
+        .map(([key, k]) => `${key} ${k.same}`)
+        .join(', ')}`
     );
     /* Walking on's strides are carried only where the trace keeps what
      * `PopScript` answered (newer traces); nor yet one petting tick in 3,000. */
@@ -2265,7 +2271,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
   let unread = 0;
   let unknown = 0;
   let before: number[] | null = null;
-  type Pending = { state: number; global: number; tick: CatzStateTick };
+  type Pending = { state: number; global: number; tick: CatzStateTick; x3570?: number };
   let pending: Pending | null = null;
   const books: Record<string, { same: number; other: number; examples: string[] }> = {};
 
@@ -2317,6 +2323,10 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
       ) {
         const field = (n: number) => values[5 + n];
         const t = pending.tick;
+        const purred =
+          t.petting?.x3572 !== undefined && pending.x3570 !== undefined
+            ? catzPurring(pending.x3570, t.petting.x3572)
+            : undefined;
         const pairs: [string, number | undefined, number][] = [
           ['count', t.count, field(1)],
           ['passed', t.passed, field(2)],
@@ -2326,6 +2336,19 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           ['x35ee', t.x35ee, field(16)],
           ['x35a4', t.x35a4, field(17)],
           ['x33be', t.x33be, field(21)],
+          /* Petted: what it wrote of its petting fields (the trace's 122 on: its rate, `+0x3570`, `+0x3572`, `+0x3576`, where the cursor was, the cursor's action, `+0x356c` and its modes). */
+          ['rate', t.petting?.rate, values[122]],
+          /* (Purring runs first in the next tick's `Update`: what it asked, purred and cleared; the purr playing after.) */
+          ['x3572', purred?.x3572, values[124]],
+          ['x3570', purred?.x3570, values[123]],
+          ['x3576', t.petting?.x3576, values[125]],
+          ['cursorWas.x', t.petting?.cursorWas?.x, values[126]],
+          ['cursorWas.y', t.petting?.cursorWas?.y, values[127]],
+          ['x362a', t.petting?.x362a, values[128]],
+          ['x356c', t.petting?.x356c, values[129]],
+          ['modes[0]', t.petting?.modes?.[0], values[130]],
+          ['modes[1]', t.petting?.modes?.[1], values[131]],
+          ['modes[2]', t.petting?.modes?.[2], values[132]],
         ];
 
         let agreed = true;
@@ -2433,12 +2456,15 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           ...carried,
           tick: {
             ...carried.tick,
+            /* (What it wrote of its petting, held against the next tick only: a tick between may write where the cursor was, and so clear `+0x34ca`.) */
+            petting: undefined,
             ...catzStateBetween(state, carried.tick, {
               cues: cues ?? [],
               looked: values[13] ?? 0,
               x35d8: b[243],
               popped: values[201] > 0 ? values[202] : undefined,
             }),
+            ...(state === 50 ? { passed: undefined } : {}),
           },
         };
         frames = 0;
@@ -2791,7 +2817,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
     }
     pending =
       tick && tick.state === undefined && tick.global === undefined && !leave
-        ? { state, global, tick }
+        ? { state, global, tick, x3570: b[123] }
         : null;
     frames = 0;
   }

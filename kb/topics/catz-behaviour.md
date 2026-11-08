@@ -185,6 +185,24 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 - [[measured]] Stroked 300 frames of each 360, over 4,000 frames, its mode settles and moves on, to 3 and 4, and all 165 petting ticks in which it acted are as the reimplementation: 140 petting -- mode 2's moves, 0x33 for its reaction, 0xee in its first five in pose 0x14; mode 3, stopped, 0x70 and may-end; mode 4 may-end -- 11 beginning, 12 may-end (its moment, back to petting, a mode less with 0x70) and 2 upset, idling. Petting reads its pose after popping its script, and popping may change it: one tick, 0x6b as it began, 0x14 as it asked, so the recorder of `GetCursorMovement`, the first thing it asks after, keeps its pose then. Modes 5 and 6, after petting, licking and lacking affection are not yet met so.
 - [[measured]] With `TRACE_PET_DEEP=1` (`TRACE.TXT`'s 16384) too, on every 40th tick of being petted the driver makes all 40 of its modes 5 or, in turn, 6, as though it had settled so (`CATZTRACE-PET-DEEP.OUT`). Over 2,000 frames it goes after petting (52) six times: four resting at once (9), asleep (28) in the same tick, and two with 0xd8, their ends to idling (6) and to affectionate (14), petted again at once. All 24 ticks held are as the reimplementation, 12 of petting and the 2 of after petting among them.
 
+- [[read out]] What petting writes, read out of seg28 (corrections to the above first):
+  - `HasUserStoppedPetting` widens the draw rectangle by 10, rather than insetting it.
+  - `GetCursorMovement` tests only `+0x3518` for -1, and writes nothing.
+  - **Entering petting (global 7):** `+0x3570` is -1, and the 40 modes are 0.
+  - **`SetPettingMode`:** pushes to the front of the 40, dropping the oldest.
+  - **`PetRegionSwitch`:** the upsetting regions (1, 2, 5 to 7) push mode 1 before anything else. Otherwise, from beginning, it pushes mode 3 where `+0x3576` is set (awake from resting), else mode 2, and clears `+0x3576`.
+  - **Being petted (50), entering:** `+0x34ca` 0; where the cursor was -1; its rate `(trunc((30 - b) / 30 * 5) + 1) * 2` (b behaviour 5; the floats at `ds:0x37a` and `0x37e` are 30 and 5); its count 0; the cursor's action -1; and three times in ten a sound (5). Then its tick, its script not done.
+  - **Being petted, each tick:** with under 5 of its script left (`GetStackRemaining`) and `+0x34ca` 1, it stores the cursor's target point as where it was, and `+0x34ca` becomes 0.
+  - **Being petted, its script done:**
+    - Not stopped, `+0x34ca` becomes 1.
+    - The sound wanted (`+0x3572`): with no sound of its own, 1 one time in ten; with one, 1 one time in ten, else 3.
+    - Its mode is pushed, moved on or the same. The hairbrush held, 2 is pushed again, and the switch then takes that: not modelled.
+    - The cursor's action (`+0x362a`) becomes 7, and 0xc or 0xf in some branches. Its count goes on, and its script is popped again.
+  - **May it end (51):** entering, it keeps its mode (`+0x356c`) and tracks the cursor with its head (3000). Its script done, `+0x3572` becomes 4 first of all. Going back to petting, mode 1 is made 2. Ending a mode, it pushes the mode less 1.
+  - **After petting (52):** resting at once, it sets `+0x3574` 1.
+  - **Purring (`HandlePurring`):** runs in the next tick's `Update` before the state's handler, and turns the sound wanted into a purr.
+- [[measured]] The model's petting states report what they write (`petting` on their tick, `passed` for `+0x34ca`), and the trace's bookkeeping holds those writes against the fields the engine holds as the next tick begins, purring applied first. Over the 4,000 frames petted, the cursor's action and the newest three modes agree on all 127 ticks of being petted held, the sound wanted and the purr after on all 67, and may it end's on its one. The other pet traces agree too. Where the cursor was is written only where the script's remainder is known, which the trace does not keep.
+
 ## The bottle
 
 - [[read out]] Suckling (global 5; `DoGSSuckling`, seg33:0000) is its bottle (kin 0xf): entering, its slot `0x114` (0xf, with 0, 2, 3), the bottle what it plays with and walks to (`+0x35a4`, `+0x35a6`), the bottle's `+0x9e` 5000, and after it (0x2e). Leaving, the cat's ballz' `+0x71c` 1 and the bottle's lines' `+0x1939` 0 and `+0x9e` 0.

@@ -312,6 +312,17 @@ export interface CatzPetting {
 
   /** Its pose (`+0x1500`) as it asked how far the cursor moved, its script popped. */
   pose?: number;
+
+  /** How much of its script is left (`GetStackRemaining`), for where the cursor was; unknown without. */
+  left?: number;
+
+  /** The cursor's target point now (kin 0x17), stored as where it was. */
+  cursor?: { x: number; y: number };
+}
+
+/** A petting mode pushed onto the 40 kept (`SetPettingMode`, seg28:1752), newest first, the oldest dropped. */
+export function catzPushPettingMode(modes: number[], mode: number) {
+  return [mode, ...modes].slice(0, 40);
 }
 
 /**
@@ -579,6 +590,9 @@ export interface CatzStateTick {
    * `+0x34d0`).
    */
   leap?: { ball: number; to: 'prey' | 'walked' | 'goal'; keep?: number; turn?: number };
+
+  /** Petted: the petting fields it wrote (its modes as they are after, `+0x3572`, the cursor's action and the rest). */
+  petting?: Partial<CatzPetting>;
 
   /** Pouncing or diving, cued to catch: its prey caught and held (`+0xee0`, its slots `0xf0` and `0xf8`). */
   caught?: boolean;
@@ -3087,14 +3101,26 @@ function catzPetRegionSwitch(
   tick: CatzStateTick,
   random: (n: number) => number
 ): CatzStateTick | undefined {
+  const petting = world.petting!;
+  /* Its mode pushed (`SetPettingMode`), on what was pushed already this tick. */
+  const setMode = (mode: number) => {
+    const modes = catzPushPettingMode(tick.petting?.modes ?? petting.modes, mode);
+    tick.petting = { ...tick.petting, modes };
+  };
   const upset = (pushes: number[]) => {
     tick.pushes = pushes;
     tick.pushed = pushes[0];
     tick.state = CATZ_STATE.upsetPetting;
     return tick;
   };
+  const kind = mind.brains[CATZ_BRAIN.age] === 0 ? 8 : region;
 
-  switch (mind.brains[CATZ_BRAIN.age] === 0 ? 8 : region) {
+  /* Upsetting regions push mode 1 first of all (seg28:1b9f on). */
+  if ([1, 2, 5, 6, 7].includes(kind)) {
+    setMode(1);
+  }
+
+  switch (kind) {
     case 1:
       return upset([0xd6]);
     case 2:
@@ -3120,7 +3146,11 @@ function catzPetRegionSwitch(
         return undefined;
       }
 
-      if (!world.petting!.x3576 && [0x6b, 0x76, 0x74].includes(world.x1500 ?? 0)) {
+      /* Awake from resting, mode 3; else mode 2; `+0x3576` cleared either way. */
+      setMode(petting.x3576 ? 3 : 2);
+      tick.petting = { ...tick.petting, x3576: 0 };
+
+      if (!petting.x3576 && [0x6b, 0x76, 0x74].includes(world.x1500 ?? 0)) {
         tick.pushes = [0xf2];
         tick.pushed = 0xf2;
       }
@@ -3166,6 +3196,15 @@ function catzPettingTick(
         : moment();
     }
     case CATZ_STATE.mayEndPetting: {
+      /* Entering, the mode it came with kept (`+0x356c`); its script done, a purr asked to stop (`+0x3572` 4) first of all. */
+      if (world.enter) {
+        tick.petting = { x356c: mode };
+        tick.head = ['track'];
+        tick.headTrack = { kind: 0x17, speed: 3000 };
+        return tick;
+      }
+
+      tick.petting = { x3572: 4 };
       const moved =
         petting.cursorWas.x !== -1 && petting.cursorWas.y !== -1 ? (petting.movement ?? 0) : 0;
       const region = catzPetRegion(petting.ball);
@@ -3175,11 +3214,17 @@ function catzPettingTick(
           return tick;
         }
 
+        /* Back to petting, mode 1 made 2. */
+        if (mode === 1) {
+          tick.petting = { ...tick.petting, modes: catzPushPettingMode(petting.modes, 2) };
+        }
+
         tick.state = CATZ_STATE.petting;
         return tick;
       }
 
       if (mode > 1) {
+        tick.petting = { ...tick.petting, modes: catzPushPettingMode(petting.modes, mode - 1) };
         const action = petting.x356c === 2 ? 0xd7 : petting.x356c === 3 ? 0x70 : 0xe9;
 
         if (petting.x356c >= 2 && petting.x356c <= 6) {
@@ -3244,7 +3289,30 @@ function catzPetting(
   const age = brain(CATZ_BRAIN.age);
   const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
   const petting = world.petting!;
-  const rate = petting.rate;
+  const written: Partial<CatzPetting> = {};
+  tick.petting = written;
+
+  /* Entering (seg28:02ab): nothing done yet, the cursor not yet seen, its
+   * rate by behaviour 5 -- (trunc((30 - b) / 30 * 5) + 1) * 2, the doubles
+   * at `ds:0x37a`, `0x37e` 30 and 5 -- its count 0, the cursor's action
+   * none, and three times in ten a sound (5); then its tick, its script
+   * just pushed, not done. */
+  if (world.enter) {
+    const b = catzBehavior(mind, 5, random);
+    Object.assign(written, {
+      rate: (Math.trunc(((30 - b) / 30) * 5) + 1) * 2,
+      cursorWas: { x: -1, y: -1 },
+      x362a: -1,
+    });
+    tick.passed = 0;
+    tick.count = 0;
+
+    if (percent() < 30) {
+      tick.sound = catzSound(mind, 5, random);
+    }
+  }
+
+  const rate = written.rate ?? petting.rate;
   const modes = petting.modes;
   const settled = () => {
     const last = catzBehavior(mind, 5, random);
@@ -3273,6 +3341,21 @@ function catzPetting(
     }
   }
 
+  /* Where the cursor was: under 5 of its script left, having done something, the cursor's point now, and not done (seg28:06e1). */
+  if (
+    petting.left !== undefined &&
+    petting.left < 5 &&
+    (world.passed ?? 0) === 1 &&
+    petting.cursor
+  ) {
+    written.cursorWas = { ...petting.cursor };
+    tick.passed = 0;
+  }
+
+  if (world.enter || world.done === false) {
+    return tick;
+  }
+
   const region = catzPetRegion(petting.ball);
   const moved = petting.movement ?? 0;
   const stopped = petting.stopped ?? false;
@@ -3291,14 +3374,20 @@ function catzPetting(
     return tick;
   }
 
+  /* It has done something (`+0x34ca` 1). */
+  tick.passed = 1;
+
+  /* A purr asked (`+0x3572`): with no sound of its own one time in ten 1; with one, one time in ten 1, else 3. */
   if (petting.x3570 === -1) {
     if (percent() >= 10) {
       if ((catzBehavior(mind, 26, random) !== 0 && percent() < 50) || percent() < 30) {
         tick.sound = catzSound(mind, percent() < 50 ? 5 : 3, random);
       }
+    } else {
+      written.x3572 = 1;
     }
   } else {
-    percent();
+    written.x3572 = percent() < 10 ? 1 : 3;
   }
 
   let mode = modes[0];
@@ -3307,6 +3396,14 @@ function catzPetting(
     mode +=
       mode === 2 ? (percent() < 10 ? random(3) : 0) : percent() < 50 ? random(2) : random(3) - 1;
   }
+
+  /* Its mode pushed, moved on or not (and, the hairbrush held, 2 again: not modelled). */
+  written.modes = catzPushPettingMode(modes, mode);
+  /* The cursor's action, 7 unless a branch says otherwise. */
+  written.x362a = 7;
+  const action = (n: number) => {
+    written.x362a = n;
+  };
 
   const odds = rate * 5;
   const near = moved < 10;
@@ -3321,14 +3418,23 @@ function catzPetting(
       }
 
       if (early && pose === 0x61) {
+        if (!near) {
+          action(0xc);
+        }
         return push(near ? 0xbd : 0xbb);
       }
 
       if (early && pose === 0x31) {
+        if (!near) {
+          action(0xc);
+        }
         return push(near ? 0xc8 : 0xc7);
       }
 
       if (early && pose === 0x5f) {
+        if (!near) {
+          action(0xc);
+        }
         return push(near ? 0xc0 : 0xbf);
       }
 
@@ -3337,10 +3443,12 @@ function catzPetting(
       }
 
       if (region === 3 && percent() < odds && age !== 0) {
+        action(0xc);
         return push(near ? 0x10d : 0x10c);
       }
 
       if (region === 4 && percent() < odds) {
+        action(0xf);
         return push(near ? 0xd3 : 0xd2);
       }
 
@@ -3349,10 +3457,13 @@ function catzPetting(
       }
 
       if (percent() < 10) {
+        action(0xc);
         return push(age === 0 ? 0x322 : 0x2ae);
       }
 
       if (moved > 30 && age !== 0) {
+        action(0xc);
+
         if (percent() < catzBehavior(mind, 6, random)) {
           switch (catzReaction(mind, random)) {
             case 2:
@@ -3376,11 +3487,24 @@ function catzPetting(
         return push(percent() < 50 ? 0x33 : 0x32);
       }
 
-      return push(moved > 10 && percent() < odds ? 0xca : 0xcb);
+      if (moved > 10 && percent() < odds) {
+        action(0xc);
+        return push(0xca);
+      }
+
+      return push(0xcb);
     }
     case 3:
+      if (!stopped && !near && moved < 30) {
+        action(0xc);
+      }
+
       return stopped ? push(0x70) : near ? push(0xc8) : moved < 30 ? push(0xc7) : tick;
     case 4:
+      if (!stopped && !near && moved < 30) {
+        action(0xc);
+      }
+
       return stopped ? push(0xe9) : near ? push(0xe2) : moved < 30 ? push(0xe3) : tick;
     case 5:
       if (percent() < 10) {
@@ -3388,8 +3512,12 @@ function catzPetting(
         return tick;
       }
 
+      if (!stopped) {
+        action(0xc);
+      }
       return push(stopped ? 0x70 : 0x9b);
     case 6:
+      action(0xc);
       tick.state = CATZ_STATE.afterPetting;
       return tick;
     default:
