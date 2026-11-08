@@ -855,7 +855,12 @@ export function catzStateTick(
       if (world.enter) {
         return world.x1500 !== 0x14
           ? done({ state: CATZ_STATE.stalking })
-          : done({ pushed: 0x156, pushes: [0x156], goal: world.cursorAt });
+          : done({
+              pushed: 0x156,
+              pushes: [0x156],
+              goal: world.cursorAt,
+              leap: { ball: 0x42, to: 'goal' },
+            });
       }
 
       const at = world.cursorAt;
