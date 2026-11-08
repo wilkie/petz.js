@@ -240,8 +240,8 @@ export function catzMomentLinger(
  * `behaviour 3 × 2 + 50` more, at least 1 -- and, where it was watching
  * something (mode 1), one time in five watching it hard (2). It then turns
  * to face the user, where it faces more than 96 from them
- * (`MakeCatFaceForwardIfNeeded`, seg16:35e0; not reimplemented), and goes
- * on to a tick of lingering.
+ * (`MakeCatFaceForwardIfNeeded`, seg16:35e0; `catzFaceForward`, which
+ * `CatzPet` pushes), and goes on to a tick of lingering.
  */
 export function catzMomentBegin(
   mind: CatzMind,

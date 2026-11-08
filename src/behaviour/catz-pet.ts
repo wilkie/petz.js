@@ -31,6 +31,7 @@ import {
 import {
   type CatzBox,
   catzCuriosities,
+  catzFaceForward,
   catzPreMoment,
   type CatzPetting,
   catzPtToPtAngle,
@@ -389,6 +390,17 @@ export class CatzPet {
     return false;
   }
 
+  /** Where the mouse is: the live one's point, else standing in, in its hole at the floor's lower left (as the viewer has it, 206, 403 of 640 by 480). */
+  private mouseAt() {
+    const { stage } = this.options;
+    return (
+      this.options.mouse?.()?.at ?? {
+        x: stage.left + Math.trunc(((stage.right - stage.left) * 206) / 640),
+        y: stage.top + Math.trunc(((stage.bottom - stage.top) * 403) / 480),
+      }
+    );
+  }
+
   /** Whether its prey is within its paws' reach now, as whoever places it says. */
   inReachNow() {
     return this.options.inReach?.() ?? false;
@@ -617,7 +629,7 @@ export class CatzPet {
   /** Where a kind of sprite is (its target point), for its head to track: the cursor, its marker, or one of the pen's things, on the shelf or off; none else. */
   kinAt(kind: number) {
     return kind === 0x1b
-      ? this.options.mouse?.()?.at
+      ? this.mouseAt()
       : kind === 0x17
         ? this.cursorAt()
         : kind === 0x16
@@ -631,7 +643,7 @@ export class CatzPet {
   private preyAt() {
     const kind = this.fields.x35a4 ?? 0;
     return kind === 0x1b
-      ? this.options.mouse?.()?.at
+      ? this.mouseAt()
       : kind === 0x17
         ? this.cursorAt()
         : kind > 0 && kind < 0x10
@@ -661,8 +673,8 @@ export class CatzPet {
   /** Where what it walks to is (`+0x35a6`): the cursor, its marker (kin 0x16) where it put one, a thing on the shelf, else its goal. */
   private walkedToAt() {
     const kind = this.fields.x35a6 ?? 0;
-    return kind === 0x1b && this.options.mouse?.()
-      ? this.options.mouse()!.at
+    return kind === 0x1b
+      ? this.mouseAt()
       : kind === 0x17
         ? this.cursorAt()
         : kind === 0x16 && this.marker
@@ -776,7 +788,7 @@ export class CatzPet {
       ticked = catzStateTick(this.state, this.mind, this.world(enter), this.options.random);
     } catch (error) {
       this.stoodIn.errors++;
-      this.stoodIn.firstError ??= `${this.state}: ${String(error)}`;
+      this.stoodIn.firstError ??= `${this.state}: ${String(error)} (+0x35a4 ${this.fields.x35a4}, +0x35a6 ${this.fields.x35a6}, global ${this.global})`;
       this.beginGlobal(6, depth + 1);
       return;
     }
@@ -1044,6 +1056,14 @@ export class CatzPet {
         going: false,
       };
       catzMomentBegin(this.mind, this.moment, this.options.stage, this.options.random);
+
+      /* Turned to face the user, where it faces more than 96 from them (`MakeCatFaceForwardIfNeeded`). */
+      const turns = catzFaceForward(this.mind, this.world(false));
+
+      if (turns) {
+        this.push(turns);
+      }
+
       this.act(depth);
       /* Its first script only now begun: not minding the cursor yet. */
       this.minded = this.state === 21 ? false : this.minded;
