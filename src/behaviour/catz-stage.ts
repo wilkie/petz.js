@@ -272,11 +272,14 @@ export function placeCatzTick(
     glued = false,
     ball = catzGlueBall(placer.breed),
     area,
+    shift,
   }: {
     reference?: { frame: number; turn?: number };
     glued?: boolean;
     ball?: number;
     area?: CatzRect;
+    /** How far a leap carries it this tick, before it is kept touching (`catzLeapTick`). */
+    shift?: CatzPoint;
   } = {}
 ): CatzPlaced {
   if (reference) {
@@ -295,6 +298,15 @@ export function placeCatzTick(
     ? placer.moveFrameRectBall(rect, pose, before, ball)
     : placer.moveFrameRect(rect, pose, before);
 
+  if (shift) {
+    rect = {
+      left: rect.left + shift.x,
+      top: rect.top + shift.y,
+      right: rect.right + shift.x,
+      bottom: rect.bottom + shift.y,
+    };
+  }
+
   return { rect: area ? keepCatzTouching(rect, area) : rect, before: pose, current: pose };
 }
 
@@ -302,6 +314,70 @@ export function placeCatzTick(
 export interface CatzPoint {
   x: number;
   y: number;
+}
+
+/** A leap under way (`+0x1480` to `+0x1492`): its steps a tick and how far they have come, single floats, and its ticks done of how many. */
+export interface CatzLeaping {
+  step: CatzPoint;
+  sum: CatzPoint;
+  done: number;
+  count: number;
+}
+
+/**
+ * A leap begun (`InitializeAlignRequest`, seg40:65e0): the frames ahead
+ * placed from where the tick left it -- each as `placeCatzTick` places
+ * them, not kept touching the stage, as playing ahead with the sprite saved
+ * leaves them (`theirSaved`, seg41:187b) -- and where its ball is at the
+ * last of them (the middle of the rectangle, rounded toward 0, for -11);
+ * the way from there to the point, over the frames, single floats. None
+ * for any other ball under 0, which the engine leaves unset.
+ */
+export function catzLeapFrom(
+  placer: CatzPlacer,
+  placed: CatzPlaced,
+  frames: { pose: CatzPose; reference?: { frame: number; turn?: number }; glued?: boolean }[],
+  { ball, x, y }: { ball: number; x: number; y: number }
+): CatzLeaping | undefined {
+  if (!frames.length || (ball < 0 && ball !== -11)) {
+    return undefined;
+  }
+
+  for (const { pose, reference, glued } of frames) {
+    placed = placeCatzTick(placer, placed, pose, { reference, glued });
+  }
+
+  const { rect, current } = placed;
+  const at =
+    ball === -11
+      ? {
+          x: Math.trunc((rect.left + rect.right) / 2),
+          y: Math.trunc((rect.top + rect.bottom) / 2),
+        }
+      : placer.ballOnStage(rect, current, ball);
+  const count = frames.length;
+
+  return {
+    step: { x: Math.fround((x - at.x) / count), y: Math.fround((y - at.y) / count) },
+    sum: { x: 0, y: 0 },
+    done: 0,
+    count,
+  };
+}
+
+/**
+ * A tick of a leap (`ProcessAlignRequest`, seg40:651d): its steps added to
+ * how far it has come, single floats, and the cat moved by how far the
+ * whole parts of that moved (rounded toward 0). Changes the leap; whether
+ * it is done is `done` reaching `count`.
+ */
+export function catzLeapTick(leaping: CatzLeaping): CatzPoint {
+  const { step, sum } = leaping;
+  const was = { x: Math.trunc(sum.x), y: Math.trunc(sum.y) };
+  sum.x = Math.fround(sum.x + step.x);
+  sum.y = Math.fround(sum.y + step.y);
+  leaping.done++;
+  return { x: Math.trunc(sum.x) - was.x, y: Math.trunc(sum.y) - was.y };
 }
 
 /**

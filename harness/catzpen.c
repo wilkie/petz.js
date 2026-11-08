@@ -532,7 +532,7 @@ static long forcing;
 static int forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
     fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks,
     ignoreTicks, sprayTicks, watchTicks, watches,
-    deepTicks, lackTicks, lacks;
+    deepTicks, lackTicks, lacks, climbTicks, climbs;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -844,6 +844,42 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             *(int __far *)(global + 0x3a) != 13 && groomTicks++ % 10 == 9) {
             depth--;
             passGlobal(global, 13, p);
+            return;
+        }
+    }
+
+    /* And where it asks (16777216), on every tenth tick of looking at things, passing the time
+     * or its moment, the cat sent exploring up the stage's edges and onto the shelf, as idling's
+     * walk arriving sends it (seg25:1464): its way (`+0x35a8`) in turn 1 to 5, what it walks to
+     * its marker (`+0x35a6` 0x16), its goal (`+0x34cc`) by the way -- the stage's left (1) or
+     * right (2), or above it (3), each 200 above its target point, or the middle of its kin
+     * 0x22's top (4, 5) -- and might it jump (14; `CatSprite::NewState`, 497). */
+    if (forcing & 16777216 && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+
+        if ((state == 12 || state == 19 || state == 21) && climbTicks++ % 10 == 9) {
+            int way = 1 + climbs++ % 5;
+            long at = ((TARGETPT)ordinal(10))(cat, 0);
+            int x = (int)at, y = (int)(at >> 16) - 200;
+
+            if (way == 1) {
+                x = *(int __far *)MK_FP(traceData, 0x2ba6);
+            } else if (way == 2) {
+                x = *(int __far *)MK_FP(traceData, 0x2baa);
+            } else if (way >= 4) {
+                int rect[4];
+
+                ((DRAWRECT)ordinal(15))(rect, ((GETKIN)ordinal(18))(cat, 0x22), 0);
+                x = (rect[2] - rect[0]) / 2 + rect[0];
+                y = rect[1];
+            }
+
+            *(int __far *)(cat + 0x35a8) = way;
+            *(int __far *)(cat + 0x35a6) = 0x16;
+            *(int __far *)(cat + 0x34cc) = x;
+            *(int __far *)(cat + 0x34ce) = y;
+            depth--;
+            ((CATSTATE)ordinal(497))(cat, 0xe, p);
             return;
         }
     }

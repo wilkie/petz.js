@@ -100,7 +100,9 @@ export type CatzSteer =
       to: () => { x: number; y: number } | undefined;
       box: { width: number; height: number; share: number };
     }
-  | { rotation: number };
+  | { rotation: number }
+  /** A leap set up before it (`alignBallToPtSetup3`): a ball of the cat's carried to a point. */
+  | { leap: { ball: number; x: number; y: number } };
 
 /** What a tick did, for a viewer or a test to follow. */
 export interface CatzPetTicked {
@@ -786,6 +788,17 @@ export class CatzPet {
       return { rotation: ticked.creepAim };
     }
 
+    if (ticked.leap) {
+      const { ball, to } = ticked.leap;
+      const at =
+        to === 'goal'
+          ? this.fields.goal
+          : to === 'prey' && this.fields.x35a4 === 0x17
+            ? this.cursorAt()
+            : this.walkedToAt();
+      return at && { leap: { ball, x: at.x, y: at.y } };
+    }
+
     const words = ticked.steer;
 
     if (!words || ticked.steerStopped) {
@@ -798,8 +811,9 @@ export class CatzPet {
 
   /** Actions pushed: played for as long as each is given to. */
   private push(actions: number[], steer?: CatzSteer) {
-    for (const action of actions) {
-      const played = this.options.play(action, steer);
+    for (const [n, action] of actions.entries()) {
+      /* A leap's words pushed once, ahead of them all. */
+      const played = this.options.play(action, n && steer && 'leap' in steer ? undefined : steer);
       const { ticks, pose } =
         typeof played === 'number' ? { ticks: played, pose: undefined } : played;
       this.pushed.push(action);

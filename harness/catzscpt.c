@@ -36,7 +36,10 @@
  *   fields, what `PopScript` answered (2: the target is in the box) and the
  *   rotation's fudger's target (`Fudger` `+0xc0`); and where `track` is
  *   set (1), the head tracks the target each tick (`+0x1508`), looking away
- *   with 2 (`+0x1514`) and as on the shelf with 4 (`+0x1512`), the last
+ *   with 2 (`+0x1514`) and as on the shelf with 4 (`+0x1512`), the
+ *   next-to-last number of `case`; and where the case gives a `ball` after
+ *   `track` (999 for none), a leap set up before the action is pushed
+ *   (`alignBallToPtSetup3`): that ball carried to the case's point, the last
  *   number of `case`;
  * * before its first tick, `place`: its rectangle, and the state it was
  *   last placed in (`+0x246`), its frame, rotation, tilt, roll, head,
@@ -61,6 +64,7 @@ typedef unsigned long(__cdecl __far *TARGETPT)(void __far *apt, int space);
 typedef int(__cdecl __far *REMAINING)(void __far *sprite);
 typedef void(__cdecl __far *PLAIN)(void);
 typedef void(__cdecl __far *PLAIN_SPRITE)(void __far *sprite);
+typedef void(__cdecl __far *WORDS)(void __far *sprite, int a, int b, int c, int d, int end);
 
 #define DIRECTORY "C:\\CORPUS\\CATZSCPT\\"
 #define TICKS 200
@@ -157,7 +161,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     ((AVERAGE)ordinal(931))(linez, adult, young, 100L, params);
 
     sprite = ((MAKE)ordinal(944))(GlobalLock(GlobalAlloc(GPTR, 0x4000)));
-    ((INITSPRITE)ordinal(946))(sprite, DIRECTORY, linez, "CAT", 0, 0, params);
+    /* Saved whole as a cat is, 0x36a0 bytes (`+0x14a4`, `InitCatSprite`
+     * seg16:0fd5), so a leap's frames played ahead are put back
+     * (`SaveEnvironment`, seg40:2b20). */
+    ((INITSPRITE)ordinal(946))(sprite, DIRECTORY, linez, "CAT", 0x36a0, 0, params);
     ((LOADSCRIPTS)ordinal(949))(sprite, DIRECTORY "CAT.SCP", linez, params);
 
     /* A second sprite, for a case's target: a point, its rectangle there and
@@ -201,7 +208,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     for (;;) {
         int action = number(cases), variant = number(cases), from = number(cases);
         int x = number(cases), y = number(cases), width = number(cases), height = number(cases);
-        int share = number(cases), track = number(cases);
+        int share = number(cases), track = number(cases), ball = number(cases);
         int x1512 = *(int __far *)(sprite + 0x1512), x1514 = *(int __far *)(sprite + 0x1514);
 
         if (from < 0) {
@@ -276,8 +283,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(void __far *__far *)(sprite + 0x1508) = 0;
         }
 
-        keep("case %d %d %d %d %lu %d\r\n", action, variant, from, *(int __far *)(sprite + 0x146c),
-             *(unsigned long __far *)MK_FP(dgroup, 0x28ba), track);
+        keep("case %d %d %d %d %lu %d %d\r\n", action, variant, from,
+             *(int __far *)(sprite + 0x146c), *(unsigned long __far *)MK_FP(dgroup, 0x28ba), track,
+             ball);
         keep("start");
 
         for (n = 0; n < FUDGERS; n++) {
@@ -297,6 +305,15 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                  *(long __far *)(fudger + 0xda), *(unsigned long __far *)(fudger + 0xbc),
                  *(unsigned long __far *)(fudger + 0xb8));
         }
+        /* A leap set up before it, as the cat's states set one up
+         * (`alignBallToPtSetup3`, its slot `0xa4` with 0x7534, the ball and
+         * the point, up to 0x756f): where the case gives a ball (999 for
+         * none), to the case's point. */
+        if (ball != 999) {
+            (*(WORDS __far *)(*(unsigned char __far *__far *)sprite + 0xa4))(sprite, 0x7534, ball,
+                                                                             x, y, 0x756f);
+        }
+
         push(sprite, action, variant);
         keep("pushed %d %d\r\n", *(int __far *)(sprite + 0x14fe), *(int __far *)(sprite + 0x1500));
 

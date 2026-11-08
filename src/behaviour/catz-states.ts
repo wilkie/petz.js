@@ -562,6 +562,14 @@ export interface CatzStateTick {
   /** Walking on: the words that set its steering (`targetSprite4`, 0x756d: what to, the box's width and height, and its share), the layered action begun, the sound made, `+0x688` (before the steering moves it on) and `+0x35aa` where set, and its fullness after. */
   steer?: number[];
 
+  /**
+   * A leap set up before what it pushes (`alignBallToPtSetup3`, its words
+   * 0x7534, a ball and `+0x34cc`): the ball, and where it aims -- at its
+   * prey (`+0x35a4`'s target point, the mouse's led), at what it walks to
+   * (`+0x35a6`'s, `GetOrientationInfo`), or at its goal.
+   */
+  leap?: { ball: number; to: 'prey' | 'walked' | 'goal' };
+
   /** Crawling up the edge: its climb (`+0x35ba`), as entering draws it. */
   x35ba?: number;
 
@@ -2410,6 +2418,7 @@ function catzPouncing(
     pushes.push(leap);
     tick.pushes = pushes;
     tick.pushed = pushes[0];
+    tick.leap = { ball: 0x42, to: 'prey' };
     return tick;
   }
 
@@ -2843,6 +2852,7 @@ function catzDiving(
 
     tick.pushes = pushes;
     tick.pushed = pushes[0];
+    tick.leap = { ball: 0x42, to: 'prey' };
     return tick;
   }
 
@@ -4584,7 +4594,11 @@ function catzJumping(
 
       const action = percent() < 100 - energy ? 0x22f : 0x132;
       tire();
-      return tired({ pushed: action, pushes: [action] });
+      return tired({
+        pushed: action,
+        pushes: [action],
+        ...(way !== 3 ? { leap: { ball: 0x16, to: 'walked' as const } } : {}),
+      });
     }
     case CATZ_STATE.crawlUpEdge: {
       /* Entering, pushing nothing, its tick goes on at once. */
@@ -4648,7 +4662,7 @@ function catzJumping(
       return crawl(
         () => (percent() < now() ? 0x1fe : percent() < 10 && way === 1 ? 0x2fb : 0x218),
         point!.x > stage!.left && point!.x < stage!.right,
-        { passed }
+        { passed, ...(world.enter ? { leap: { ball: 0x16, to: 'goal' as const } } : {}) }
       );
     }
     default: {
@@ -4664,7 +4678,7 @@ function catzJumping(
       }
 
       pushes.push(0x14f);
-      return tired({ pushed: 0x120, pushes, passed: 0 });
+      return tired({ pushed: 0x120, pushes, passed: 0, leap: { ball: 0x31, to: 'walked' } });
     }
   }
 

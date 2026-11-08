@@ -27,6 +27,9 @@ import {
   catzFocusRect,
   catzHeadTarget,
   catzInside,
+  type CatzLeaping,
+  catzLeapFrom,
+  catzLeapTick,
   type CatzPlaced,
   type CatzPlacer,
   type CatzPoint,
@@ -123,6 +126,15 @@ export class CatzBody {
    * however many ticks later.
    */
   private aligned = false;
+
+  /**
+   * A leap: begun, the frames after the tick it begins in held back until
+   * all of them are played out, to be placed ahead of time (`leapFrom`);
+   * then under way, a tick at a time.
+   */
+  private leapFrom?: { leap: CatzStep['leap'] & {}; held: { step: CatzStep; there?: boolean }[] };
+  private leaping?: CatzLeaping;
+  private armed?: { ball: number; x: number; y: number };
   private blink: CatzBlink;
   private readonly options: CatzBodyOptions;
 
@@ -152,6 +164,11 @@ export class CatzBody {
     }
 
     const position = scripts[action].to || this.position;
+
+    /* A leap set up: kept until a script says go (`+0x1478`). */
+    if (steer && 'leap' in steer) {
+      this.armed = steer.leap;
+    }
 
     catzTimeline(scripts, positions, action, {
       flags,
@@ -196,46 +213,39 @@ export class CatzBody {
         const at = this.tracked ? this.options.trackAt?.(this.tracked) : undefined;
         return at && this.tail ? this.lookAt(at, rotation, this.head) : undefined;
       },
+      align: this.armed,
+      went: () => {
+        this.armed = undefined;
+      },
       done: (step) => {
         if (!shaped[step.frame]) {
           return;
         }
 
-        if (step.reference) {
-          /* Popped, it places the next; the last of all, done again as its tick ends, the same. */
-          this.held = step;
+        /* A leap's frames held back until it has all of them. */
+        if (this.leapFrom) {
+          this.leapFrom.held.push({ step, there });
+          there = undefined;
+
+          if (
+            this.leapFrom.held.filter(({ step }) => !step.reference).length >=
+            this.leapFrom.leap.count
+          ) {
+            this.leapt(position);
+          }
+
           return;
         }
 
-        const pose = catzPoseOf(step);
-
-        /* A layered action whose frames these files lack (the demo's) not layered. */
-        if (pose.layer && (!shaped[pose.layer.first] || !shaped[pose.layer.frame])) {
-          pose.layer = undefined;
-          step.layer = undefined;
-        }
-
-        this.tail = this.tail
-          ? placeCatzTick(placer, this.tail, pose, {
-              reference: this.held,
-              glued: !!step.glue,
-              area: stage,
-            })
-          : this.first(pose);
-        this.tailLayer = step.layer;
-        this.held = undefined;
-        this.queue.push({
-          step,
-          rect: this.tail.rect,
-          pose,
-          there,
-          fudgers: copy(fudgers),
-          position,
-          blink: { ...this.blink },
-        });
+        this.place(step, there, position);
         there = undefined;
       },
     });
+
+    /* A leap cut short by its action's end: its frames placed as they are. */
+    if (this.leapFrom) {
+      this.leapt(position);
+    }
 
     /* And the word after it: the fudger reset. */
     if (steer && 'rotation' in steer) {
@@ -250,6 +260,91 @@ export class CatzBody {
     }
 
     return { ticks: this.queue.length - before, pose: position };
+  }
+
+  /**
+   * A step done placed, as `PopScript` places it, and queued: a reference
+   * frame kept to place the next by; a leap under way carrying it; a leap
+   * begun in its tick waited on.
+   */
+  private place(step: CatzStep, there: boolean | undefined, position: number) {
+    const { placer, stage, fudgers } = this.options;
+
+    if (step.reference) {
+      /* Popped, it places the next; the last of all, done again as its tick ends, the same. */
+      this.held = step;
+      return;
+    }
+
+    const pose = catzPoseOf(step);
+
+    /* A layered action whose frames these files lack (the demo's) not layered. */
+    if (
+      pose.layer &&
+      (!this.options.shaped[pose.layer.first] || !this.options.shaped[pose.layer.frame])
+    ) {
+      pose.layer = undefined;
+      step.layer = undefined;
+    }
+
+    const shift = this.leaping && catzLeapTick(this.leaping);
+
+    if (this.leaping && this.leaping.done >= this.leaping.count) {
+      this.leaping = undefined;
+    }
+
+    this.tail = this.tail
+      ? placeCatzTick(placer, this.tail, pose, {
+          reference: this.held,
+          glued: !!step.glue,
+          area: stage,
+          shift,
+        })
+      : this.first(pose);
+    this.tailLayer = step.layer;
+    this.held = undefined;
+    this.queue.push({
+      step,
+      rect: this.tail.rect,
+      pose,
+      there,
+      fudgers: copy(fudgers),
+      position,
+      blink: { ...this.blink },
+    });
+
+    if (step.leap) {
+      this.leapFrom = { leap: step.leap, held: [] };
+    }
+  }
+
+  /**
+   * A leap's frames all played out: placed ahead from where its first tick
+   * left the cat (`catzLeapFrom`), and then each placed in turn, carried.
+   */
+  private leapt(position: number) {
+    const { leap, held } = this.leapFrom!;
+    this.leapFrom = undefined;
+    const ahead: Parameters<typeof catzLeapFrom>[2] = [];
+    let before: CatzStep | undefined;
+
+    for (const { step } of held) {
+      if (step.reference) {
+        before = step;
+      } else {
+        ahead.push({ pose: catzPoseOf(step), reference: before, glued: !!step.glue });
+        before = undefined;
+      }
+    }
+
+    this.leaping =
+      this.tail && ahead.length === leap.count
+        ? catzLeapFrom(this.options.placer, this.tail, ahead, leap)
+        : undefined;
+
+    for (const { step, there } of held) {
+      this.place(step, there, position);
+    }
   }
 
   /** The head and eyes aimed at a point (`catzHeadTarget`) from where the last frame queued leaves it. */
@@ -304,6 +399,7 @@ export class CatzBody {
     }
 
     this.queue.length = 0;
+    this.leaping = undefined;
     this.rewind(this.shown);
     /* Cut short, its action never got to its end to align what follows. */
     this.aligned = !!this.shown.ends;

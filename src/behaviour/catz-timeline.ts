@@ -35,6 +35,9 @@ export const CATZ_OP = {
   actionDone: 30001,
   actionStart: 30002,
   alignScripts: 30003,
+  alignBallToPtSetup: 30004,
+  alignBallToPtGo: 30005,
+  alignBallToPtStop: 30006,
   alignFudgeBallToPtSetup: 30007,
   cueCode: 30008,
   disableFudgeAim: 30010,
@@ -128,6 +131,22 @@ export interface CatzStep {
 
   /** Cues raised for this tick (`cueCode1`). */
   cues?: number[];
+
+  /**
+   * A leap begun as this tick ends (`alignBallToPtGo0` popped in it with a
+   * leap set up; `InitializeAlignRequest`, seg40:65e0): over the `count`
+   * frames after this one -- up to `alignBallToPtStop0` or the action's end
+   * -- the cat is carried so its `ball` lands on the point (`catzLeapFrom`).
+   */
+  leap?: CatzLeap;
+}
+
+/** A leap: a ball (-11 for the middle of the cat's rectangle) carried to a point over so many frames. */
+export interface CatzLeap {
+  ball: number;
+  x: number;
+  y: number;
+  count: number;
 }
 
 /**
@@ -253,6 +272,16 @@ export interface CatzTimelineOptions {
    * nothing. With `fudgers`.
    */
   track?: (step: CatzStep, rotation: number, fields: number[]) => number[] | undefined;
+
+  /**
+   * A leap set up before the action (`alignBallToPtSetup3`, which the cat's
+   * states push ahead of it, seg41:0fa4): its ball carried to the point
+   * once the script says go. None without.
+   */
+  align?: { ball: number; x: number; y: number };
+
+  /** The leap set up said go to, so no longer set up (seg41:1020). */
+  went?: () => void;
 
   /**
    * Each step as it is done, in turn: a reference frame as it is popped, a
@@ -389,6 +418,8 @@ export function catzTimeline(
     tracking,
     track,
     head = { divisor: 4, shelved: false, away: false },
+    align,
+    went,
   }: CatzTimelineOptions
 ): CatzStep[] {
   const steps: CatzStep[] = [];
@@ -420,6 +451,68 @@ export function catzTimeline(
 
   /* A turn a reference frame makes, applied to the rotation as the tick ends. */
   let turned = 0;
+
+  /* A leap set up (`+0x1478`, `+0x147a` on), said go to with the frames
+   * to come, and what the tick it begins in plays ahead. */
+  let armed = align;
+  let going: Omit<CatzLeap, 'count'> | undefined;
+  let ahead: Element[] | undefined;
+
+  /**
+   * An opcode popped playing ahead (`InitializeAlignRequest` running
+   * `PopScript` over the leap's frames, seg40:66ea): its random operands
+   * drawn, and a sound's choice and loudness, or a random point's.
+   */
+  const drawAhead = (element: Element) => {
+    if (!('op' in element)) {
+      return;
+    }
+
+    if (!sound(element, true)) {
+      element.operands.forEach((operand) => value(operand));
+
+      if (element.op === CATZ_OP.lookAtRandomPt) {
+        const { left = 0, top = 0, right = 1, bottom = 1 } = area ?? {};
+        random(right - left, 'rand');
+        random(bottom - top, 'rand');
+      }
+    }
+  };
+
+  /**
+   * A leap said go to, as the tick it is in ends: the frames after its
+   * first counted to its stop -- or the action's end -- passing over
+   * opcodes (seg40:6609 on), and the opcodes before each of them, which
+   * playing ahead pops.
+   */
+  const leapAhead = (elements: Element[]) => {
+    let count = 0;
+    let popped: Element[] = [];
+    const drawn: Element[] = [];
+
+    for (const element of frames(elements)) {
+      if ('op' in element && element.op === CATZ_OP.alignBallToPtStop) {
+        break;
+      }
+
+      if (!('frame' in element)) {
+        popped.push(element);
+      } else {
+        count++;
+        drawn.push(...popped);
+        popped = [];
+      }
+    }
+
+    return { count, drawn };
+  };
+
+  /**
+   * What is left on the stack being played (`+0x145e`): each action run
+   * its own, innermost last -- the frames still to come of a sequence
+   * being shown, then the elements after it.
+   */
+  const playing: { elements: Element[]; at: number; rest: number[] }[] = [];
 
   /** The tick done: each fudger updated from the number it drives, the rotation turned first (seg41:154a on). */
   /** What a cat does before its script each tick: blink. */
@@ -456,6 +549,15 @@ export function catzTimeline(
     }
 
     turned = 0;
+
+    /* A leap begun this tick: the frames ahead played and put back, all
+     * but C's `rand`, whose draws stay drawn. */
+    if (ahead) {
+      const draws = ahead;
+      ahead = undefined;
+      draws.forEach(drawAhead);
+    }
+
     startTick();
   };
 
@@ -530,6 +632,22 @@ export function catzTimeline(
     steps.push(step);
     turned += step.turn ?? 0;
 
+    if (going && shown) {
+      /* Counted on the stack its tick's frame came from, after it. */
+      const { elements, at, rest } = playing.at(-1)!;
+      const { count, drawn } = leapAhead([
+        ...rest.map((frame) => ({ frame })),
+        ...elements.slice(at),
+      ]);
+
+      if (count > 0) {
+        step.leap = { ...going, count };
+        ahead = drawn;
+      }
+
+      going = undefined;
+    }
+
     if (shown) {
       tick(step);
     }
@@ -580,7 +698,7 @@ export function catzTimeline(
    * one's loudness by another `rand` (`XApt::XPlayStereoSound`, seg2:0c79).
    * Whether it was one.
    */
-  const sound = ({ op, operands }: { op: number; operands: Operand[] }) => {
+  const sound = ({ op, operands }: { op: number; operands: Operand[] }, ahead = false) => {
     if (op < CATZ_OP.soundEmptyQueue || op > CATZ_OP.soundStop) {
       return false;
     }
@@ -592,7 +710,10 @@ export function catzTimeline(
       const chosen = choices[random(choices.length, 'rand')];
 
       if (played) {
-        pending.sounds = [...(pending.sounds ?? []), chosen];
+        if (!ahead) {
+          pending.sounds = [...(pending.sounds ?? []), chosen];
+        }
+
         random(1, 'rand');
       }
     }
@@ -710,9 +831,26 @@ export function catzTimeline(
 
   const run = (elements: Element[], action: number, depth: number) => {
     let at = 0;
+    const stack = { elements, at, rest: [] as number[] };
+    playing.push(stack);
+
+    /* A sequence's frames shown in turn, those after each still to come. */
+    const showAll = (list: number[]) => {
+      for (const [n, frame] of list.entries()) {
+        if (steps.length >= limit) {
+          break;
+        }
+
+        stack.rest = list.slice(n + 1);
+        show(frame, action);
+      }
+
+      stack.rest = [];
+    };
 
     while (at < elements.length && steps.length < limit) {
       const element = elements[at++];
+      stack.at = at;
 
       if ('frame' in element) {
         show(element.frame, action);
@@ -730,28 +868,26 @@ export function catzTimeline(
         case CATZ_OP.sequence: {
           const [first, last] = [value(a), value(b)];
           const way = first <= last ? 1 : -1;
+          const list: number[] = [];
 
-          for (let frame = first; frame !== last + way && steps.length < limit; frame += way) {
-            show(frame, action);
+          for (let frame = first; frame !== last + way && list.length < limit; frame += way) {
+            list.push(frame);
           }
+
+          showAll(list);
           break;
         }
-        case CATZ_OP.sequenceToEnd: {
-          let frame = value(a);
-          show(frame, action);
-
-          while (!(flags(frame) & 2) && steps.length < limit) {
-            show(++frame, action);
-          }
-          break;
-        }
+        case CATZ_OP.sequenceToEnd:
         case CATZ_OP.sequenceToStart: {
-          let frame = value(a);
-          show(frame, action);
+          /* On to the sequence's end, or back to its start. */
+          const [way, end] = op === CATZ_OP.sequenceToEnd ? [1, 2] : [-1, 1];
+          const list = [value(a)];
 
-          while (!(flags(frame) & 1) && steps.length < limit) {
-            show(--frame, action);
+          while (!(flags(list.at(-1)!) & end) && list.length < limit) {
+            list.push(list.at(-1)! + way);
           }
+
+          showAll(list);
           break;
         }
         case CATZ_OP.startLoop: {
@@ -838,6 +974,20 @@ export function catzTimeline(
         case CATZ_OP.alignScripts:
           reference = true;
           break;
+        case CATZ_OP.alignBallToPtSetup:
+          armed = { ball: value(a), x: value(b), y: value(operands[2]) };
+          break;
+        case CATZ_OP.alignBallToPtGo:
+          /* Set up, the leap begins as this tick ends, over the frames
+           * still on the stack (seg41:100d, 1bb6). */
+          if (armed) {
+            going = armed;
+            armed = undefined;
+            went?.();
+          }
+          break;
+        case CATZ_OP.alignBallToPtStop:
+          break;
         case CATZ_OP.lookFoward:
           /* Head and eyes straight ahead (`SetHeadTarget` with no point, seg40:5a47), tracking nothing. */
           for (const n of fudgers ? [3, 4, 10, 11] : []) {
@@ -911,6 +1061,8 @@ export function catzTimeline(
         }
       }
     }
+
+    playing.pop();
   };
 
   startTick();

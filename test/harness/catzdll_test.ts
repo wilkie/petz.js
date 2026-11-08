@@ -21,12 +21,15 @@ import {
   makeCatzFudgers,
 } from '../../src/behaviour/catz-fudger.ts';
 import {
+  type CatzLeaping,
   type CatzPlaced,
   type CatzPose,
   catzAimAt,
   catzFocusRect,
   catzHeadTarget,
   catzInside,
+  catzLeapFrom,
+  catzLeapTick,
   CatzPlacer,
   placeCatzTick,
 } from '../../src/behaviour/catz-stage.ts';
@@ -62,6 +65,8 @@ const HARNESS = join(ROOT, 'oracle', 'build', 'harness');
 const SYSTEM = join(ROOT, 'oracle', 'build', 'catz-retail-drive-c', 'WINDOWS', 'SYSTEM');
 /** A case with no target to walk to. */
 const NO_TARGET = [-1, -1, -1, -1, -1];
+/** No leap set up before a case's action. */
+const NO_LEAP = 999;
 
 const RESOURCE = join(
   ROOT,
@@ -691,6 +696,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
               action % 3 ? ends[(action * 37) % ends.length] : positions.neutral,
               ...NO_TARGET,
               0,
+              NO_LEAP,
             ],
           ]
     );
@@ -711,7 +717,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
           [60, 40, 3],
           [120, 80, 4],
         ]) {
-          cases.push([walk, 0, scripts[walk].from, x, y, width, height, share, 0]);
+          cases.push([walk, 0, scripts[walk].from, x, y, width, height, share, 0, NO_LEAP]);
         }
       }
     }
@@ -728,8 +734,43 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
         [200, 120],
       ]) {
         for (const track of [1, 3, 5]) {
-          cases.push([action, 0, scripts[action].from || positions.neutral, x, y, 0, 0, 0, track]);
+          cases.push([
+            action,
+            0,
+            scripts[action].from || positions.neutral,
+            x,
+            y,
+            0,
+            0,
+            0,
+            track,
+            NO_LEAP,
+          ]);
         }
+      }
+    }
+
+    /* And leaps (`alignBallToPtSetup3` pushed before the action, as the
+     * cat's states push it): each action that says go to one, a ball of
+     * the cat's -- the one a pounce and a dive carry (0x42), the climb's
+     * (0x16), and the middle of its rectangle (-11) -- carried to points
+     * about the cat, at (270, 190) to begin with. */
+    const leapers = scripts.flatMap((script, action) =>
+      script.variants.some((variant) =>
+        variant.some((element) => 'op' in element && element.op === 30005)
+      )
+        ? [action]
+        : []
+    );
+
+    for (const action of leapers) {
+      for (const [n, ball] of [0x42, 0x16, -11].entries()) {
+        const [x, y] = [
+          [100, 60],
+          [520, 400],
+          [330, 300],
+        ][(action + n) % 3];
+        cases.push([action, 0, scripts[action].from || positions.neutral, x, y, 0, 0, 0, 0, ball]);
       }
     }
 
@@ -825,9 +866,13 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
 
     let targeted = 0;
     let trackedCases = 0;
+    let leapCases = 0;
+    let leapt = 0;
 
     for (const { values, ticks, fudgers, blink, place, eyes, target } of played) {
-      const [action, variant, from, index, seed, track = 0] = values;
+      const [action, variant, from, index, seed, track = 0, ball = NO_LEAP] = values;
+      const align = ball !== NO_LEAP && target ? { ball, x: target[0], y: target[1] } : undefined;
+      leapCases += align ? 1 : 0;
       /* Its head tracking the target each tick, where the case says. */
       const tracked = (track & 1) !== 0 && !!target;
       let trackedTicks = 0;
@@ -888,6 +933,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
          * the cat as the script is popped: the tick before's rectangle and
          * state (or, first, the snapshot's), its rotation as it now is. */
         area: STAGE,
+        align,
         head: tracked ? { ...head, shelved: (track & 4) !== 0, away: (track & 2) !== 0 } : head,
         /* Tracking the target each tick, aimed as steering aims: from the
          * rectangle the tick before left, its new frame as it now is. */
@@ -1022,6 +1068,8 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
         let held: CatzStep | null = null;
         let tick = 0;
         let misplaced = false;
+        /* A leap under way, from the tick after the one it begins in. */
+        let leaping: CatzLeaping | undefined;
 
         for (const [n, step] of steps.entries()) {
           if (step.reference) {
@@ -1044,13 +1092,52 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
               ? 'glued'
               : 'plain';
 
+          const shift = leaping && catzLeapTick(leaping);
+
+          if (leaping && leaping.done >= leaping.count) {
+            leaping = undefined;
+          }
+
           placed = placeCatzTick(placer, placed, pose, {
             reference: held ?? undefined,
             glued: !!step.glue,
             area: STAGE,
+            shift,
           });
           held = null;
           rect = placed.rect;
+
+          /* A leap begun as this tick ends: the frames ahead placed from
+           * here, as the engine shows them (but for the first, its tick's
+           * placing, which this tick's own is). */
+          if (step.leap) {
+            const ahead: Parameters<typeof catzLeapFrom>[2] = [];
+            let before: CatzStep | undefined;
+
+            for (const later of steps.slice(n + 1)) {
+              if (ahead.length >= step.leap.count || tick + 1 + ahead.length >= shown.length) {
+                break;
+              }
+
+              if (later.reference) {
+                before = later;
+                continue;
+              }
+
+              ahead.push({
+                pose: poseOf(shown[tick + 1 + ahead.length]),
+                reference: before,
+                glued: !!later.glue,
+              });
+              before = undefined;
+            }
+
+            leaping =
+              ahead.length === step.leap.count
+                ? catzLeapFrom(placer, { ...placed, rect: { ...placed.rect } }, ahead, step.leap)
+                : undefined;
+            leapt += leaping ? 1 : 0;
+          }
 
           const theirRect = shown[tick].slice(21, 25);
 
@@ -1077,6 +1164,7 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     expect(placedCount).toBeGreaterThan(0);
     expect(targeted).toBe(40);
     expect(trackedCases).toBe(72);
+    console.log(`leaps: ${leapCases} cases, ${leapt} leapt`);
     expect(wrong).toEqual([]);
   }, 2700000);
 
