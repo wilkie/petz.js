@@ -592,9 +592,12 @@ static int popped, pop;
 
 static void popJump(void);
 
+static unsigned char __far *tracedMouse;
+
 static int __cdecl __far __loadds popping(void __far *sprite, void __far *params)
 {
     int k, answer;
+    unsigned long seed = traceData ? *(unsigned long __far *)MK_FP(traceData, 0x28ba) : 0;
 
     for (k = 0; k < 5; k++) {
         popCode[k] = popWas[k];
@@ -602,6 +605,15 @@ static int __cdecl __far __loadds popping(void __far *sprite, void __far *params
 
     answer = ((POP)ordinal(992))(sprite, params);
     popJump();
+
+    /* The mouse's, followed (33554432): the seed before, what it answered,
+     * the seed after, and its target point, placed by its new frame. */
+    if (tracedMouse && sprite == tracedMouse) {
+        long at = ((TARGETPT)ordinal(10))(sprite, 0);
+
+        say("mpop %lu %d %lu %d %d\r\n", seed, answer,
+            *(unsigned long __far *)MK_FP(traceData, 0x28ba), (int)at, (int)(at >> 16));
+    }
 
     if (sprite == traced && !popped++) {
         pop = answer;
@@ -1779,6 +1791,124 @@ static void __cdecl __far __loadds layering(void __far *sprite, void __far *para
     layer(sprite, params);
 }
 
+/*
+ * Following the mouse too, where `TRACE.TXT` asks (33554432): each dispatch
+ * of its own machine (`+0x2518`, `o`) and its global one (`+0x257a`, `g`)
+ * wrapped (their slot 4), a line before (`mtick`) and after (`mticked`):
+ * which machine, whether entering and leaving, C's `rand` seed, and the
+ * fields its handlers read -- its state and global state, `+0x26d4` (its
+ * count), `+0x26d8` (what it goes for), `+0x26ca` (who holds it), `+0x26d2`,
+ * `+0x26d6`, `+0x688`, `+0x9e`, its four brains (`+0x257e` on, 0x52 apart,
+ * each's `+0x3a`), its target point; the cat's target point, global state,
+ * age (brain 11) and `+0x33b8`; and `PetParams` `+0xfe`, one of what keeps
+ * the mouse hole covered. A dispatch within another (an entering) is
+ * written in its turn; and each pop of its script (`mpop`, in `popping`).
+ */
+static DISPATCH mouseHandle, mouseGlobalHandle;
+static unsigned char mouseLocalTable[0x40], mouseGlobalTable[0x40];
+
+static void mouseFields(void)
+{
+    unsigned char __far *mouse = tracedMouse;
+    unsigned char __far *global = *(unsigned char __far *__far *)(mouse + 0x257a);
+    unsigned char __far *cat = traced;
+    unsigned char __far *catGlobal = *(unsigned char __far *__far *)(cat + 0x2fba);
+    static const unsigned at[] = {0x2552, 0x26d4, 0x26d8, 0x26ca, 0x26d2, 0x26d6, 0x688, 0x9e};
+    long point = ((TARGETPT)ordinal(10))(mouse, 0);
+    long catAt = ((TARGETPT)ordinal(10))(cat, 0);
+    int b;
+
+    say(" %lu %d", *(unsigned long __far *)MK_FP(traceData, 0x28ba), *(int __far *)(global + 0x3a));
+
+    for (b = 0; b < sizeof at / sizeof at[0]; b++) {
+        say(" %d", *(int __far *)(mouse + at[b]));
+    }
+
+    for (b = 0; b < 4; b++) {
+        say(" %d", *(int __far *)(mouse + 0x257e + 0x52 * b + 0x3a));
+    }
+
+    say(" %d %d %d %d %d %d %d %d", (int)point, (int)(point >> 16), (int)catAt,
+        (int)(catAt >> 16), *(int __far *)(catGlobal + 0x3a),
+        *(int __far *)(cat + 0x2fda + 0x52 * 11 + 0x3a), *(int __far *)(cat + 0x33b8),
+        *(int *)(params + 0xfe));
+
+    /* And the cursor's and the cheese's target points (kin 0x17, 8), which
+     * kinds 1 to 0xf are on the shelf (`isSpriteInShelf`, bit n for kind n),
+     * and the layered frames it has left (954). */
+    {
+        void __far *cursor = ((GETKIN)ordinal(18))(mouse, 0x17);
+        void __far *cheese = ((GETKIN)ordinal(18))(mouse, 8);
+        long c = cursor ? ((TARGETPT)ordinal(10))(cursor, 0) : 0;
+        long h = cheese ? ((TARGETPT)ordinal(10))(cheese, 0) : 0;
+        unsigned shelved = 0;
+
+        for (b = 1; b < 16; b++) {
+            if (((INSHELF)ordinal(38))(mouse, b)) {
+                shelved |= 1u << b;
+            }
+        }
+
+        say(" %d %d %d %d %u %d\r\n", (int)c, (int)(c >> 16), (int)h, (int)(h >> 16), shelved,
+            ((REMAINING)ordinal(954))(mouse));
+    }
+}
+
+/* Its `CollisionDetect` (slot `0x158`), each answer written (`mcollide`: the kind, the answer). */
+typedef int(__cdecl __far *COLLIDE)(void __far *mouse, int kind, void __far *params);
+static COLLIDE collide;
+static unsigned char mouseTable[0x180];
+
+static int __cdecl __far __loadds colliding(void __far *mouse, int kind, void __far *p)
+{
+    int answer = collide(mouse, kind, p);
+
+    say("mcollide %d %d\r\n", kind, answer);
+    return answer;
+}
+
+static void mouseDispatch(DISPATCH pass, char which, void __far *machine, void __far *p, int enter,
+                          int leave)
+{
+    say("mtick %c %d %d", which, enter, leave);
+    mouseFields();
+    pass(machine, p, enter, leave);
+    say("mticked %c", which);
+    mouseFields();
+}
+
+static void __cdecl __far __loadds mouseTracing(void __far *machine, void __far *p, int enter,
+                                                int leave)
+{
+    mouseDispatch(mouseHandle, 'o', machine, p, enter, leave);
+}
+
+static void __cdecl __far __loadds mouseGlobalTracing(void __far *machine, void __far *p,
+                                                      int enter, int leave)
+{
+    mouseDispatch(mouseGlobalHandle, 'g', machine, p, enter, leave);
+}
+
+static void installMouse(unsigned char __far *mouse)
+{
+    unsigned char __far *machine = mouse + 0x2518;
+    unsigned char __far *global = *(unsigned char __far *__far *)(mouse + 0x257a);
+
+    tracedMouse = mouse;
+    _fmemcpy(mouseTable, *(void __far *__far *)mouse, sizeof mouseTable);
+    collide = *(COLLIDE *)(mouseTable + 0x158);
+    *(COLLIDE *)(mouseTable + 0x158) = colliding;
+    *(void __far *__far *)mouse = mouseTable;
+    _fmemcpy(mouseLocalTable, *(void __far *__far *)machine, sizeof mouseLocalTable);
+    mouseHandle = *(DISPATCH *)(mouseLocalTable + 4);
+    *(DISPATCH *)(mouseLocalTable + 4) = mouseTracing;
+    *(void __far *__far *)machine = mouseLocalTable;
+    _fmemcpy(mouseGlobalTable, *(void __far *__far *)global, sizeof mouseGlobalTable);
+    mouseGlobalHandle = *(DISPATCH *)(mouseGlobalTable + 4);
+    *(DISPATCH *)(mouseGlobalTable + 4) = mouseGlobalTracing;
+    *(void __far *__far *)global = mouseGlobalTable;
+}
+
 static void install(unsigned char __far *cat)
 {
     unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
@@ -2803,6 +2933,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         if (cat) {
             install(cat);
+
+            if (forcing & 33554432L) {
+                unsigned char __far *mouse = ((GETKIN)ordinal(18))(cat, 0x1b);
+
+                if (mouse) {
+                    installMouse(mouse);
+                }
+            }
         }
     }
 
@@ -2984,6 +3122,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         /* And where it asks (262144), every 30 frames, `+0x33bc` cleared, as
          * a new global state clears it, that it may see the mouse again
          * (`HandleCatSeesMouse`). */
+        /* And, following the mouse (33554432), every 100 frames waiting in
+         * its hole (1), its first brain (`+0x257e`, its wish to come out)
+         * made 100 and its fear (`+0x25d0`) 20 -- at 50 or more it is always
+         * in danger (`IsMouseInDanger`), and `InitBrain` makes it 50 to 99 --
+         * that it may come out. */
+        if (forcing & 33554432L && tracedMouse && n % 100 == 50 &&
+            *(int __far *)(tracedMouse + 0x2552) == 1) {
+            *(int __far *)(tracedMouse + 0x257e + 0x3a) = 100;
+            *(int __far *)(tracedMouse + 0x257e + 0x52 + 0x3a) = 20;
+        }
+
         if (forcing & 262144L && cat && n % 30 == 0) {
             *(int __far *)(cat + 0x33bc) = 0;
         }
