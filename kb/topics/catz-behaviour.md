@@ -209,6 +209,14 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 - [[inferred]] Its moment begun live, the pet turns it to face the user where it faces more than 96 from them (`catzFaceForward`, as `MakeCatFaceForwardIfNeeded` pushes: 0x80, 0x11b, 0x87 or 0x86 by its age, energy and half of the stage, then 0x150), before its first lingering. Where there is no live mouse, the pet stands the mouse in at its hole (the floor's lower left, scaled from the viewer's 206, 403 of 640 by 480), as the engine's mouse is always there: attacking it, it has somewhere to stalk.
 
+- [[read out]] A window event (global 20; `DoGSWindowEvent`, seg24:1b12), which the playpen's message 19 (its window resized) begins.
+  - **Entering:** the effects on liveliness, seriousness and grooming are 15, on independence none (its slot `0x114` with 0, 2 and 3).
+  - **Its sound:** the cat more than a third of the stage across or high (`+0x33c4`, `+0x33c6` times 3 against `ds:2ba6` to `2bac`), a sound (2) and 0xdc. Otherwise, three times in four, a sound of 3, 7 or 10, chosen by `rand() % 3` (seg48:1b3a picks its first, second or third argument so).
+  - **Then:** under its energy it lets go (its slot `0x238` 0) and readies a walk to nothing (22, `+0x35a6` 0); else it looks about the window (0x14, `DoCatWindowResized`, modelled already).
+  - **Each tick:** the cursor about, its moment, watching (8).
+
+  `catzGlobalBegin` and `catzGlobalTick` have it, read out. The pet begins it where asked, though nothing yet asks: the playpen's messages wait on its conditions.
+
 ## The bottle
 
 - [[read out]] Suckling (global 5; `DoGSSuckling`, seg33:0000) is its bottle (kin 0xf): entering, its slot `0x114` (0xf, with 0, 2, 3), the bottle what it plays with and walks to (`+0x35a4`, `+0x35a6`), the bottle's `+0x9e` 5000, and after it (0x2e). Leaving, the cat's ballz' `+0x71c` 1 and the bottle's lines' `+0x1939` 0 and `+0x9e` 0.
@@ -461,4 +469,4 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 ## Not yet
 
-The reflexes the pet does not yet run, though `catz-reflexes.ts` has them held against the engine: blinking (its own `blinkCatz` plays in the timeline), and the playpen's messages (which need the conditions and states the playpen's dragging sets, above). The pen's own sprites besides the mouse: the dog, the toys' physics in the pet's world, the user holding things. A window event's entering (global 20). What place on the stage `GetSpriteScreenArea` calls 3.
+The reflexes the pet does not yet run, though `catz-reflexes.ts` has them held against the engine: blinking (its own `blinkCatz` plays in the timeline), and the playpen's messages (which need the conditions and states the playpen's dragging sets, above). The pen's own sprites besides the mouse: the dog, the toys' physics in the pet's world, the user holding things. What place on the stage `GetSpriteScreenArea` calls 3.

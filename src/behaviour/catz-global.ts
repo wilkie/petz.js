@@ -59,6 +59,9 @@ export interface CatzGlobalBegun {
   kind?: number;
   x35d2?: number;
 
+  /** A window event: what it walks to (`+0x35a6`) alone, none. */
+  x35a6?: number;
+
   /** Chasing: `+0x35ac` set, so it runs. */
   x35ac?: number;
 
@@ -125,6 +128,35 @@ export function catzGlobalBegin(
     case 9:
       begun.state = world.sleepy ? 28 : 26;
       break;
+    case 20: {
+      /* A window event (`DoGSWindowEvent`, seg24:1b12): liveliness,
+       * seriousness and grooming's effects 15, independence's none; the cat
+       * more than a third of the stage across or high, a sound (2) and 0xdc;
+       * else three times in four a sound of 3, 7 or 10 (`rand() % 3`,
+       * seg48:1b3a); then under its energy it lets go and readies a walk to
+       * nothing (22, `+0x35a6` 0), else looks about the window (0x14). */
+      begun.effects = [15, 0, 15, 15];
+      const { stage, size } = world;
+      const big =
+        !!stage &&
+        !!size &&
+        (size.width * 3 > stage.right - stage.left || size.height * 3 > stage.bottom - stage.top);
+
+      if (big) {
+        begun.sound = catzSound(mind, 2, random);
+        begun.pushes = [0xdc];
+      } else if (percent() < 75) {
+        begun.sound = catzSound(mind, [3, 7, 10][random(3)], random);
+      }
+
+      if (percent() < mind.brains[CATZ_BRAIN.energy]) {
+        begun.x35a6 = 0;
+        begun.state = 22;
+      } else {
+        begun.state = 0x14;
+      }
+      break;
+    }
     case 7:
       /* Petted (`DoGSPetting`, seg28:0000): the effect on seriousness alone 15 (its slot `0x114`, 2 and 0xf), and it begins to be petted (0x31). No sound of its own and its modes cleared are its petting's (`CatzPet`). */
       begun.effects = [0, 0, 15, 0];
@@ -550,6 +582,7 @@ export function catzGlobalTick(
     case 3:
     case 2:
     case 7:
+    case 20:
       return about ? moment(true) : {};
     case 15:
     case 16:
