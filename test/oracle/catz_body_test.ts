@@ -8,6 +8,7 @@ import { catzArity, parseScripts, readCatzOpcodes, SCRIPTS } from '../../src/for
 import { CatzBody } from '../../src/behaviour/catz-body.ts';
 import { makeCatzFudgers, resetCatzEyelids } from '../../src/behaviour/catz-fudger.ts';
 import { CatzPet } from '../../src/behaviour/catz-pet.ts';
+import { CatzMouseLive, readMouseFactors } from '../../src/behaviour/catz-mouse-live.ts';
 import { CatzPlacer } from '../../src/behaviour/catz-stage.ts';
 import { catzFrameAngle } from '../../src/behaviour/catz-timeline.ts';
 import { borlandRand } from '../../src/behaviour/random.ts';
@@ -227,5 +228,138 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     expect(
       landed.filter(({ x, y, at }) => Math.abs(at.x - x) > 1 || Math.abs(at.y - y) > 1)
     ).toEqual([]);
+  });
+
+  /* The cat and the pen's mouse together, the mouse unafraid and restless to begin with (as `?mouse=bold`), the cat a kitten. */
+  it.each([1, 2, 3, 4])('lives with the mouse, on day %i', (seed) => {
+    const { scripts, positions, frames, shaped, breed, header, neck, butt } = load();
+    const MOUSE = join(PETZ, 'MOUSE', 'RESOURCE');
+    const readMouse = (name: string) => new Uint8Array(readFileSync(join(MOUSE, name)));
+    const lnzText = new TextDecoder('latin1').decode(readMouse('MOUSE.LNZ'));
+    const mouseHeader = parseBhd(readMouse('MOUSE.BHD'));
+    const mouseFrames = mouseHeader.animations.flatMap((_, n) =>
+      parseAnimation(mouseHeader, n, readMouse(`MOUSE${n}.BDT`))
+    );
+    const lnz = parseLnz(lnzText, mouseHeader.ballCount);
+    const mouseShaped = extendFrames(mouseFrames, lnz);
+    const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
+    const mouseData = readMouse('MOUSE.SCP');
+    const mousePre = new DataView(
+      mouseData.buffer,
+      mouseData.byteOffset + mouseData.indexOf(0) + 1
+    );
+    const rand = borlandRand(seed);
+    const random = (n: number) => rand() % n;
+    const fudgers = makeCatzFudgers();
+    resetCatzEyelids(fudgers);
+    const placer = new CatzPlacer(breed, header, shaped, { age: 0 });
+    const made: { pet?: CatzPet; mouse?: CatzMouseLive } = {};
+    const body = new CatzBody({
+      scripts,
+      positions,
+      flags: (frame) => frames[frame]?.tag ?? 3,
+      shaped,
+      placer,
+      angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
+      stage: STAGE,
+      fudgers,
+      random,
+      trackAt: (kind) => made.pet?.kinAt(kind),
+    });
+    const brains = [...BRAINS];
+    brains[11] = 0;
+    const pet = new CatzPet({
+      brains,
+      centres: CENTRES,
+      stage: STAGE,
+      cursor: () => ({ x: 630, y: 20 }),
+      random,
+      moves: false,
+      play: (action, steer) => body.play(action, steer),
+      dropped: () => body.drop(),
+      entered: (state) => body.entered(state),
+      head: (look) => body.look(look),
+      found: () => !!body.shown?.there,
+      cues: () => body.shown?.step.cues ?? [],
+      mouse: () =>
+        made.mouse ? { state: made.mouse.mouse.fields.state, at: made.mouse.at } : undefined,
+      inReach: () => {
+        const prey = made.mouse?.rect;
+        const shown = body.shown;
+
+        if (!prey || !shown) {
+          return false;
+        }
+
+        const [a, b] = [0x16, 0x17].map((ball) => placer.ballOnStage(shown.rect, shown.pose, ball));
+        return (
+          Math.max(Math.min(a.x, b.x) - 70, prey.left) <
+            Math.min(Math.max(a.x, b.x) + 70, prey.right) &&
+          Math.max(Math.min(a.y, b.y) - 40, prey.top) <
+            Math.min(Math.max(a.y, b.y) + 40, prey.bottom)
+        );
+      },
+      mouseHeld: (how) => made.mouse?.catHolds(how),
+    });
+    made.pet = pet;
+    const mouse = new CatzMouseLive({
+      scripts: parseScripts(mouseData, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz),
+      positions: { count: mousePre.getUint16(0, true), neutral: mousePre.getUint16(2, true) },
+      flags: (frame) => mouseFrames[frame]?.tag ?? 3,
+      shaped: mouseShaped,
+      placer: new CatzPlacer(lnz, mouseHeader, mouseShaped, { scales: { pet: 200, ball: 200 } }),
+      stage: STAGE,
+      hole: { x: 206, y: 403 },
+      factors: readMouseFactors(lnzText),
+      random,
+      clearCatSaw: () => {
+        pet.x33bc = 0;
+      },
+    });
+    made.mouse = mouse;
+    mouse.mouse.fields.brains[0] = 100;
+    mouse.mouse.fields.brains[1] = 20;
+
+    const globals: Record<number, number> = {};
+    const mice: Record<string, number> = {};
+    let after = 0;
+    let clock = 0;
+
+    for (let n = 0; n < 6000; n++) {
+      clock += 100 / 17;
+      const shown = body.next();
+
+      if (shown) {
+        const { rect } = shown;
+        pet.rect = rect;
+        pet.point = {
+          x: Math.trunc((rect.left + rect.right) / 2),
+          y: Math.trunc((rect.top + rect.bottom) / 2),
+        };
+        pet.fields.x688 = body.facing;
+      }
+
+      const { global } = pet.tick();
+      globals[global] = (globals[global] ?? 0) + 1;
+      after += pet.fields.x35a4 === 0x1b ? 1 : 0;
+      mouse.tick({
+        cat: pet.point,
+        catGlobal: global,
+        catAge: pet.mind.brains[11],
+        cursor: { x: 630, y: 20 },
+        things: new Map(),
+        shelfAt: (kind) => ({ x: 30 * kind, y: 30 }),
+        clock: Math.trunc(clock),
+      });
+      const { global: g, state } = mouse.mouse.fields;
+      mice[`${g}/${state}`] = (mice[`${g}/${state}`] ?? 0) + 1;
+    }
+
+    console.log(
+      `day ${seed}: cat ${JSON.stringify(globals)}, after the mouse ${after} ticks; mouse ${JSON.stringify(mice)}; stood in ${JSON.stringify(pet.stoodIn)}`
+    );
+    expect(pet.stoodIn.errors).toBe(0);
+    expect(pet.stoodIn.deep).toBe(0);
+    expect(Object.keys(mice).some((key) => key.startsWith('2/'))).toBe(true);
   });
 });

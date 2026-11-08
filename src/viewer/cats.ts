@@ -416,7 +416,7 @@ function goLive() {
    * `PopScript` places it, a walk steered each tick and what it walks to
    * looked for in its focus box. */
   /* The pet, made after its body: where what its head tracks is, once there is one. */
-  const made: { pet?: CatzPet } = {};
+  const made: { pet?: CatzPet; mouse?: CatzMouseLive } = {};
   const body = new CatzBody({
     scripts,
     positions,
@@ -450,6 +450,31 @@ function goLive() {
     head: (look) => body.look(look),
     strike: strikeToy,
     found: () => !!body.shown?.there,
+    /* The pen's mouse, out of its hole or in it. */
+    mouse: () =>
+      made.mouse ? { state: made.mouse.mouse.fields.state, at: made.mouse.at } : undefined,
+    /* Its paws' reach (`IsSpriteCaught`): the box of balls 0x16 and 0x17, 70 wider and 40 taller each way, meeting the mouse's rectangle. */
+    inReach: () => {
+      const shown = body.shown;
+      const prey = made.mouse?.rect;
+
+      if (!shown || !prey) {
+        return false;
+      }
+
+      const [a, b] = [0x16, 0x17].map((ball) => placer.ballOnStage(shown.rect, shown.pose, ball));
+      const reach = {
+        left: Math.min(a.x, b.x) - 70,
+        top: Math.min(a.y, b.y) - 40,
+        right: Math.max(a.x, b.x) + 70,
+        bottom: Math.max(a.y, b.y) + 40,
+      };
+      return (
+        Math.max(reach.left, prey.left) < Math.min(reach.right, prey.right) &&
+        Math.max(reach.top, prey.top) < Math.min(reach.bottom, prey.bottom)
+      );
+    },
+    mouseHeld: (how) => made.mouse?.catHolds(how),
     cues: () => body.shown?.step.cues ?? [],
   });
   made.pet = pet;
@@ -469,8 +494,12 @@ function goLive() {
         hole: MOUSE_HOLE,
         factors: mouseFiles.factors,
         random,
+        clearCatSaw: () => {
+          pet.x33bc = 0;
+        },
       })
     : undefined;
+  made.mouse = mouse;
 
   /* `?mouse=bold`: the mouse unafraid (20) and restless (100) to begin with,
    * as the pen harness makes it, that it comes out soon; else its fear, made

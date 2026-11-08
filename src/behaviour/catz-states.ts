@@ -178,6 +178,9 @@ export interface CatzStateWorld {
   /** Begging: whether its script cued it (cue 6) as it was popped. */
   cued?: boolean;
 
+  /** Pouncing or diving, whether its prey is within its paws' reach (`IsSpriteCaught`: the box of balls 0x16 and 0x17, 70 wider and 40 taller each way, meeting the prey's rectangle). */
+  inReach?: boolean;
+
   /** The cues it was given (`IsCued`), where known; and pouncing, whether it has caught its prey (`+0xee0`). */
   cues?: number[];
   caught?: boolean;
@@ -576,6 +579,9 @@ export interface CatzStateTick {
    * `+0x34d0`).
    */
   leap?: { ball: number; to: 'prey' | 'walked' | 'goal'; keep?: number; turn?: number };
+
+  /** Pouncing or diving, cued to catch: its prey caught and held (`+0xee0`, its slots `0xf0` and `0xf8`). */
+  caught?: boolean;
 
   /** Crawling up the edge: its climb (`+0x35ba`), as entering draws it. */
   x35ba?: number;
@@ -2451,9 +2457,15 @@ function catzPouncing(
       return tick;
     }
 
-    /* The mouse: caught at or over what its age leaves of 100, halved; else, with an age, over 69 of another draw. */
-    if (world.x35a4 === 0x1b && percent() < 100 - Math.trunc(age / 2)) {
-      percent();
+    /* The mouse: not dodging at or over what its age leaves of 100, halved,
+     * else with an age over 69 of another draw (seg14:0fbc); then caught
+     * where it is within its paws' reach (`IsSpriteCaught`). */
+    if (
+      world.x35a4 === 0x1b &&
+      (percent() >= 100 - Math.trunc(age / 2) || percent() >= 70) &&
+      world.inReach
+    ) {
+      tick.caught = true;
     }
   }
 
@@ -2879,8 +2891,15 @@ function catzDiving(
     return tick;
   }
 
-  if (world.cues?.includes(2) && age !== 0 && world.x35a4 === 0x1b) {
-    percent();
+  /* The mouse caught at or over what its age leaves of 100, halved, where it is within its paws' reach. */
+  if (
+    world.cues?.includes(2) &&
+    age !== 0 &&
+    world.x35a4 === 0x1b &&
+    percent() >= 100 - Math.trunc(age / 2) &&
+    world.inReach
+  ) {
+    tick.caught = true;
   }
 
   if (world.caught && age !== 0) {

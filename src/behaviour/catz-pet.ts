@@ -18,7 +18,7 @@ import { type CatzMind, catzBehavior } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 import { catzGlobalBegin, catzGlobalTick } from './catz-global.ts';
 import { catzMomentBegin, type CatzMomentState, catzMomentTick } from './catz-moment.ts';
-import { catzBehaviorChange, catzExtremeSituations } from './catz-reflexes.ts';
+import { catzBehaviorChange, catzExtremeSituations, catzSeesMouse } from './catz-reflexes.ts';
 import {
   type CatzBox,
   catzCuriosities,
@@ -35,6 +35,20 @@ export interface CatzPetOptions {
   brains: number[];
   centres: number[];
   stage: CatzBox;
+
+  /** The pen's mouse (kin 0x1b), where there is one: its own state (1 in its hole) and its target point. */
+  mouse?: () => { state: number; at: { x: number; y: number } } | undefined;
+
+  /** Whether the prey is within its paws' reach (`IsSpriteCaught`), as whoever places it says; never without. */
+  inReach?: () => boolean;
+
+  /**
+   * The mouse held by the cat: caught; stilled as its victim (its fear 100,
+   * `DoCatVictimCaptured` entering); put down, held by the cat to its mind
+   * (`+0x26ca` 0x1d, seg19:08b9); free again (0, as dangling frees it,
+   * seg23:4285).
+   */
+  mouseHeld?: (how: 'caught' | 'stilled' | 'putDown' | 'free') => void;
   /**
    * How many ticks an action plays, and the pose (`+0x1500`) it leaves the
    * cat in, where known (its script's `to`); walking on, with what steers it
@@ -267,7 +281,7 @@ export class CatzPet {
         /* `+0x34ca`: in its moment, whether it minds the cursor; else passing the time's. */
         x34ca: this.state === 21 ? Number(this.minded) : this.fields.passed,
         /* The mouse in its hole in an empty pen. */
-        mouseState: 0,
+        mouseState: this.options.mouse?.()?.state ?? 0,
       },
       this.options.random,
       { begin: false }
@@ -298,8 +312,49 @@ export class CatzPet {
     return false;
   }
 
-  /** Extreme situations: its behaviour changed by its diet every 281 ticks. */
+  /** Whether it has reacted to the mouse since its global state last changed (`+0x33bc`). */
+  x33bc = 0;
+
+  /**
+   * Its reflexes, as `CatSprite::Update` runs them: seeing the mouse
+   * (`catzSeesMouse`) -- dangling, its head turned to it; else reacting, the
+   * mouse what it plays with (`+0x35a4` 0x1b), a global state begun, and
+   * `+0x33bc` 1 after (the global machine's `NewState` clears it) -- and
+   * then extreme situations: its behaviour changed by its diet every 281
+   * ticks.
+   */
   private reflexes() {
+    const mouse = this.options.mouse?.();
+
+    if (mouse) {
+      const seen = catzSeesMouse(
+        this.mind,
+        {
+          state: mouse.state,
+          at: mouse.at,
+          point: this.point,
+          stage: this.options.stage,
+          x33bc: this.x33bc,
+        },
+        this.options.random
+      );
+
+      if (seen.head) {
+        this.options.head?.({ kind: 0x1b, speed: 3000, shelved: false });
+      }
+
+      if (seen.global !== undefined) {
+        this.fields.x35a4 = 0x1b;
+
+        if (seen.x35b6 !== undefined) {
+          this.fields.x35b6 = seen.x35b6;
+        }
+
+        this.beginGlobal(seen.global, 0);
+        this.x33bc = 1;
+      }
+    }
+
     const done = catzExtremeSituations(this.mind, this.x358c, false, this.options.random);
     this.x358c = done.x358c;
 
@@ -339,23 +394,27 @@ export class CatzPet {
 
   /** Where a kind of sprite is (its target point), for its head to track: the cursor, its marker, or one of the pen's things, on the shelf or off; none else. */
   kinAt(kind: number) {
-    return kind === 0x17
-      ? this.cursorAt()
-      : kind === 0x16
-        ? this.marker
-        : kind > 0 && kind < 0x10
-          ? this.thingAt(kind)
-          : undefined;
+    return kind === 0x1b
+      ? this.options.mouse?.()?.at
+      : kind === 0x17
+        ? this.cursorAt()
+        : kind === 0x16
+          ? this.marker
+          : kind > 0 && kind < 0x10
+            ? this.thingAt(kind)
+            : undefined;
   }
 
   /** Where what it plays with (`+0x35a4`) is: the cursor, or one of the pen's things, in the pen or on the shelf. */
   private preyAt() {
     const kind = this.fields.x35a4 ?? 0;
-    return kind === 0x17
-      ? this.cursorAt()
-      : kind > 0 && kind < 0x10
-        ? this.thingAt(kind)
-        : undefined;
+    return kind === 0x1b
+      ? this.options.mouse?.()?.at
+      : kind === 0x17
+        ? this.cursorAt()
+        : kind > 0 && kind < 0x10
+          ? this.thingAt(kind)
+          : undefined;
   }
 
   /** Where the cursor is. */
@@ -380,13 +439,15 @@ export class CatzPet {
   /** Where what it walks to is (`+0x35a6`): the cursor, its marker (kin 0x16) where it put one, a thing on the shelf, else its goal. */
   private walkedToAt() {
     const kind = this.fields.x35a6 ?? 0;
-    return kind === 0x17
-      ? this.cursorAt()
-      : kind === 0x16 && this.marker
-        ? this.marker
-        : kind > 0 && kind < 0x10
-          ? this.thingAt(kind)
-          : this.fields.goal;
+    return kind === 0x1b && this.options.mouse?.()
+      ? this.options.mouse()!.at
+      : kind === 0x17
+        ? this.cursorAt()
+        : kind === 0x16 && this.marker
+          ? this.marker
+          : kind > 0 && kind < 0x10
+            ? this.thingAt(kind)
+            : this.fields.goal;
   }
 
   /** Whether a kind of the pen's things is on the shelf (`isSpriteInShelf`): the cursor, its marker and the rest of the cast never are; the others but those put in the pen. */
@@ -555,6 +616,9 @@ export class CatzPet {
       global = 6;
     }
 
+    /* A new global state: it may see the mouse again (`GlobalCatStateMachine::NewState`). */
+    this.x33bc = 0;
+
     /* The global state left: most reset its eyelids and turn its head's tracking off. */
     this.options.head?.('lids');
     this.options.head?.('off');
@@ -704,6 +768,19 @@ export class CatzPet {
     this.state = state;
     this.mind.state = state;
 
+    /* Its victim, the mouse, stilled (its fear 100) as it is held; the
+     * catch forgotten once it is past pouncing and its victim; and, the cat
+     * itself picked up (0x21, 0x22), the mouse free. */
+    if ((state === 5 || state === 6) && this.fields.x35a4 === 0x1b && this.fields.caught) {
+      this.options.mouseHeld?.('stilled');
+    } else if (state !== 3 && state !== 4 && state !== 5 && state !== 6) {
+      this.fields.caught = false;
+    }
+
+    if (state === 0x21 || state === 0x22) {
+      this.options.mouseHeld?.('free');
+    }
+
     if (this.left > 0) {
       this.options.dropped?.();
     }
@@ -750,6 +827,12 @@ export class CatzPet {
   /** What a tick wrote, kept. */
   private take(ticked: Partial<CatzStateTick>) {
     const f = this.fields;
+
+    /* Its prey caught and held (`+0xee0`). */
+    if (ticked.caught) {
+      f.caught = true;
+      this.options.mouseHeld?.('caught');
+    }
 
     if (ticked.strike) {
       this.options.strike?.(ticked.strike);
@@ -817,6 +900,11 @@ export class CatzPet {
 
   /** Actions pushed: played for as long as each is given to. */
   private push(actions: number[], steer?: CatzSteer) {
+    /* Put down by its victim's handler, let go (0x269): the mouse held by the cat to its mind. */
+    if (this.state === 5 && this.fields.x35a4 === 0x1b && actions.includes(0x269)) {
+      this.options.mouseHeld?.('putDown');
+    }
+
     for (const [n, action] of actions.entries()) {
       /* A leap's words pushed once, ahead of them all. */
       const played = this.options.play(action, n && steer && 'leap' in steer ? undefined : steer);
@@ -857,6 +945,7 @@ export class CatzPet {
       x1500: !this.posed && (this.state === 2 || this.state === 3) ? 0x14 : this.fields.x1500,
       global: this.global,
       enter,
+      inReach: this.options.inReach?.() ?? false,
       curiosities: this.fields.curiosities ?? [],
       cursor: none,
       kin: none,
@@ -899,7 +988,8 @@ export class CatzPet {
         shelved: this.isShelved(this.fields.x35a4 ?? 0),
         shelfClosed: false,
         x1d0: 0,
-        mouseRunning: false,
+        /* (What the trace calls the mouse running: back in its hole, its state 1, seg29:1580.) */
+        mouseRunning: this.options.mouse?.()?.state === 1,
         side: 0,
         zone: 0,
         x3596: 0,

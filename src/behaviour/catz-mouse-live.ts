@@ -100,6 +100,8 @@ export interface CatzMouseLiveOptions {
   hole: CatzMousePoint;
   factors: [number, number, number][];
   random: (n: number) => number;
+  /** The cat's `+0x33bc` cleared, as the mouse coming out clears it. */
+  clearCatSaw?: () => void;
 }
 
 export class CatzMouseLive {
@@ -146,6 +148,35 @@ export class CatzMouseLive {
     this.mouse = new CatzMouse(fields);
   }
 
+  /**
+   * Held by the cat, as the cat's handlers have it: caught, in its mouth
+   * (`held`); stilled, its fear 100; put down, its holder the cat (0x1d),
+   * which its fleeing finds; free, its holder none.
+   */
+  catHolds(how: 'caught' | 'stilled' | 'putDown' | 'free') {
+    const { fields } = this.mouse;
+
+    if (how === 'caught') {
+      this.inMouth = true;
+    } else if (how === 'stilled') {
+      fields.brains[1] = 100;
+    } else if (how === 'putDown') {
+      this.inMouth = false;
+      fields.holder = 0x1d;
+    } else {
+      this.inMouth = false;
+      fields.holder = 0;
+    }
+  }
+
+  /** In the cat's mouth: carried where the cat is, each tick. */
+  inMouth = false;
+
+  /** Its rectangle, where it is shown. */
+  get rect() {
+    return this.body.shown?.rect;
+  }
+
   /** Where it is: the middle of its rectangle (its target point). */
   get at(): CatzMousePoint {
     const rect = this.body.shown?.rect;
@@ -164,6 +195,11 @@ export class CatzMouseLive {
       updateCatzBrain(brain, pen.clock);
       fields.brains[n] = brain.value;
     });
+
+    /* In the cat's mouth, carried with it. */
+    if (this.inMouth) {
+      this.body.moveTo(pen.cat);
+    }
 
     if (fields.state === 0) {
       this.mouse.dispatch('global', true, false, this.world(), this.options.random);
@@ -247,6 +283,7 @@ export class CatzMouseLive {
       reset: () => body.drop(),
       words: () => {},
       toHole: (at) => body.moveTo(at),
+      clearCatSaw: () => this.options.clearCatSaw?.(),
       hide: () => (this.hidden = true),
       show: () => (this.hidden = false),
       aim: (heading) => {
