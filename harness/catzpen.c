@@ -1836,7 +1836,9 @@ static void mouseFields(void)
     /* And the cursor's and the cheese's target points (kin 0x17, 8), which
      * kinds 1 to 0xf are on the shelf (`isSpriteInShelf`, bit n for kind n),
      * the layered frames it has left (954), whether the user holds it
-     * (`+0xfc`), and the button down (`PetParams` `+0xa`). */
+     * (`+0xfc`), and the button down (`PetParams` `+0xa`); and on a line of
+     * its own (`mrect`), its rectangle (`+0x124` to `+0x12a`) and the frame
+     * it shows (`+0x692`). */
     {
         void __far *cursor = ((GETKIN)ordinal(18))(mouse, 0x17);
         void __far *cheese = ((GETKIN)ordinal(18))(mouse, 8);
@@ -1853,6 +1855,9 @@ static void mouseFields(void)
         say(" %d %d %d %d %u %d %d %d\r\n", (int)c, (int)(c >> 16), (int)h, (int)(h >> 16),
             shelved, ((REMAINING)ordinal(954))(mouse), *(int __far *)(mouse + 0xfc),
             *(int *)(params + 0xa));
+        say("mrect %d %d %d %d %d\r\n", *(int __far *)(mouse + 0x124),
+            *(int __far *)(mouse + 0x126), *(int __far *)(mouse + 0x128),
+            *(int __far *)(mouse + 0x12a), *(int __far *)(mouse + 0x692));
     }
 }
 
@@ -3132,7 +3137,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * scruff -- the cursor on its target point and the button down
          * (`+0xa`), held (`+0xc`) after the first frame, the cursor lifted
          * 1 a frame -- for 40 frames, and lets it go (`HandleScruff`); and
-         * at 450 the cat catches it, below. */
+         * at 380 the cat catches it, below. */
         if (forcing & 67108864L && tracedMouse) {
             static int grabbing, grabX, grabY;
             int cycle = n % 500;
@@ -3178,7 +3183,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 }
             }
 
-            /* And at 450, exploring or fleeing and held by nobody, caught by
+            /* And at 380, exploring or fleeing and held by nobody, caught by
              * the cat as `DoCatVictimCaptured` catches it (seg19:08b9: its
              * holder, `+0x26ca`, 0x1d) and its fear 60, that it is in danger
              * and flees, which finds it held; let go at 499, as the cat lets
@@ -3187,7 +3192,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 unsigned char __far *global = *(unsigned char __far *__far *)(tracedMouse + 0x257a);
                 int gs = *(int __far *)(global + 0x3a);
 
-                if (cycle == 450 && (gs == 2 || gs == 3) &&
+                if (cycle == 380 && (gs == 2 || gs == 3) &&
                     *(int __far *)(tracedMouse + 0x26ca) == 0) {
                     *(int __far *)(tracedMouse + 0x26ca) = 0x1d;
                     *(int __far *)(tracedMouse + 0x257e + 0x52 + 0x3a) = 60;

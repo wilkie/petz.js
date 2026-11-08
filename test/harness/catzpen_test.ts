@@ -115,7 +115,7 @@ const TRACE_CLIMB = process.env.TRACE_CLIMB === '1';
 /** `TRACE_MICE=1`: the mouse followed too, each dispatch of its machines (`mtick`, `mticked`), and every 100 frames in its hole made restless (100) and unafraid (20), that it comes out. */
 const TRACE_MICE = process.env.TRACE_MICE === '1' || process.env.TRACE_MICE === '2';
 
-/** `TRACE_MICE=2`: and each 500 frames the cheese put by its hole, and the mouse, out, picked up by the scruff for 40 frames; waiting, it is made hungry too (fullness 10); and at 450, out, caught by the cat (its holder 0x1d, its fear 60) till 499. */
+/** `TRACE_MICE=2`: and each 500 frames the cheese put by its hole, and the mouse, out, picked up by the scruff for 40 frames; waiting, it is made hungry too (fullness 10); and at 380, out, caught by the cat (its holder 0x1d, its fear 60) till 499. */
 const TRACE_MICE_HELD = process.env.TRACE_MICE === '2';
 /** `TRACE_IGNORE=1`: on every tenth tick of looking at things, passing the time, its moment or walking on, the cat shown the bottle or the cursor, in turn, to ignore it (12) where it may (`ShouldNoticeAndIgnore`). */
 const TRACE_IGNORE = process.env.TRACE_IGNORE === '1';
