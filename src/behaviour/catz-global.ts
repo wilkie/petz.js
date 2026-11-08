@@ -125,6 +125,11 @@ export function catzGlobalBegin(
     case 9:
       begun.state = world.sleepy ? 28 : 26;
       break;
+    case 11:
+      /* Snubbing (`DoGSSnub`, seg30:17e4): no effects of its own; it snubs what it plays with (0x50). Leaving, its head no longer looks away (`+0x1514` 0, not modelled). */
+      begun.effects = [0, 0, 0, 0];
+      begun.state = 0x50;
+      break;
     case 3:
       return catzEatingBegin(mind, world, random, begun);
     case 15:
