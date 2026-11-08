@@ -3131,7 +3131,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * (neither waiting nor coming out), the user picks it up by the
          * scruff -- the cursor on its target point and the button down
          * (`+0xa`), held (`+0xc`) after the first frame, the cursor lifted
-         * 1 a frame -- for 40 frames, and lets it go (`HandleScruff`). */
+         * 1 a frame -- for 40 frames, and lets it go (`HandleScruff`); and
+         * at 450 the cat catches it, below. */
         if (forcing & 67108864L && tracedMouse) {
             static int grabbing, grabX, grabY;
             int cycle = n % 500;
@@ -3176,6 +3177,24 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                     grabbing = 0;
                 }
             }
+
+            /* And at 450, exploring or fleeing and held by nobody, caught by
+             * the cat as `DoCatVictimCaptured` catches it (seg19:08b9: its
+             * holder, `+0x26ca`, 0x1d) and its fear 60, that it is in danger
+             * and flees, which finds it held; let go at 499, as the cat lets
+             * it go (seg23:4285). */
+            {
+                unsigned char __far *global = *(unsigned char __far *__far *)(tracedMouse + 0x257a);
+                int gs = *(int __far *)(global + 0x3a);
+
+                if (cycle == 450 && (gs == 2 || gs == 3) &&
+                    *(int __far *)(tracedMouse + 0x26ca) == 0) {
+                    *(int __far *)(tracedMouse + 0x26ca) = 0x1d;
+                    *(int __far *)(tracedMouse + 0x257e + 0x52 + 0x3a) = 60;
+                } else if (cycle == 499 && *(int __far *)(tracedMouse + 0x26ca) == 0x1d) {
+                    *(int __far *)(tracedMouse + 0x26ca) = 0;
+                }
+            }
         }
 
         /* And, following the mouse (33554432), every 100 frames waiting in
@@ -3187,6 +3206,11 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int __far *)(tracedMouse + 0x2552) == 1) {
             *(int __far *)(tracedMouse + 0x257e + 0x3a) = 100;
             *(int __far *)(tracedMouse + 0x257e + 0x52 + 0x3a) = 20;
+
+            /* And, with the cheese out (67108864), its fullness 10, that it goes for it. */
+            if (forcing & 67108864L) {
+                *(int __far *)(tracedMouse + 0x257e + 0x52 * 2 + 0x3a) = 10;
+            }
         }
 
         if (forcing & 262144L && cat && n % 30 == 0) {
