@@ -568,9 +568,11 @@ export interface CatzStateTick {
    * prey (`+0x35a4`'s target point, the mouse's led), at what it walks to
    * (`+0x35a6`'s, `GetOrientationInfo`), or at its goal; and, with
    * `keep`, on each axis where the ball is within it of the point already,
-   * the ball's own place kept.
+   * the ball's own place kept; with `turn`, its rotation set up to align
+   * to it as the leap goes (`alignFudgeBallToPtSetup2`, its words 0x7537 0,
+   * `+0x34d0`).
    */
-  leap?: { ball: number; to: 'prey' | 'walked' | 'goal'; keep?: number };
+  leap?: { ball: number; to: 'prey' | 'walked' | 'goal'; keep?: number; turn?: number };
 
   /** Crawling up the edge: its climb (`+0x35ba`), as entering draws it. */
   x35ba?: number;
@@ -4607,7 +4609,7 @@ function catzJumping(
       return tired({
         pushed: action,
         pushes: [action],
-        ...(way !== 3 ? { leap: { ball: 0x16, to: 'walked' as const } } : {}),
+        ...(way !== 3 ? { leap: { ball: 0x16, to: 'walked' as const, turn: jump[2] } } : {}),
       });
     }
     case CATZ_STATE.crawlUpEdge: {
@@ -4688,7 +4690,12 @@ function catzJumping(
       }
 
       pushes.push(0x14f);
-      return tired({ pushed: 0x120, pushes, passed: 0, leap: { ball: 0x31, to: 'walked' } });
+      return tired({
+        pushed: 0x120,
+        pushes,
+        passed: 0,
+        leap: { ball: 0x31, to: 'walked', turn: jump[2] },
+      });
     }
   }
 

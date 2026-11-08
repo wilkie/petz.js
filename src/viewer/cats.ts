@@ -428,6 +428,7 @@ function goLive() {
     moves: false,
     play: (action, steer) => body.play(action, steer),
     dropped: () => body.drop(),
+    entered: (state) => body.entered(state),
     head: (look) => body.look(look),
     strike: strikeToy,
     found: () => !!body.shown?.there,

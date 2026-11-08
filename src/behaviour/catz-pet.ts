@@ -55,6 +55,9 @@ export interface CatzPetOptions {
   /** A state entered, what was left of the last script dropped: whoever plays its scripts drops its frames still to come. */
   dropped?: () => void;
 
+  /** A state of its own entered (`CatSprite::NewState`), after any drop and before its entering's actions play. */
+  entered?: (state: number) => void;
+
   /** The cues its script gave as this tick's frame was popped (`IsCued`), where whoever plays its scripts knows. */
   cues?: () => number[];
 
@@ -102,7 +105,7 @@ export type CatzSteer =
     }
   | { rotation: number }
   /** A leap set up before it (`alignBallToPtSetup3`): a ball of the cat's carried to a point. */
-  | { leap: { ball: number; x: number; y: number; keep?: number } };
+  | { leap: { ball: number; x: number; y: number; keep?: number; turn?: number } };
 
 /** What a tick did, for a viewer or a test to follow. */
 export interface CatzPetTicked {
@@ -704,6 +707,7 @@ export class CatzPet {
     }
 
     this.left = 0;
+    this.options.entered?.(state);
 
     if (state === 21) {
       const readied = this.readied;
@@ -789,14 +793,14 @@ export class CatzPet {
     }
 
     if (ticked.leap) {
-      const { ball, to, keep } = ticked.leap;
+      const { ball, to, keep, turn } = ticked.leap;
       const at =
         to === 'goal'
           ? this.fields.goal
           : to === 'prey' && this.fields.x35a4 === 0x17
             ? this.cursorAt()
             : this.walkedToAt();
-      return at && { leap: { ball, x: at.x, y: at.y, keep } };
+      return at && { leap: { ball, x: at.x, y: at.y, keep, turn } };
     }
 
     const words = ticked.steer;

@@ -19,6 +19,7 @@ import {
   type CatzFudger,
   defaultCatzFudgerRate,
   driftCatzFudger,
+  goAlignCatzFudger,
   rateCatzFudger,
   requestedCatzFudgers,
   resetCatzFudger,
@@ -456,7 +457,7 @@ export function catzTimeline(
    * to come, and what the tick it begins in plays ahead. */
   let armed = align;
   let going: Omit<CatzLeap, 'count'> | undefined;
-  let ahead: Element[] | undefined;
+  let ahead: { draws: Element[]; count: number } | undefined;
 
   /**
    * An opcode popped playing ahead (`InitializeAlignRequest` running
@@ -553,8 +554,16 @@ export function catzTimeline(
     /* A leap begun this tick: the frames ahead played and put back, all
      * but C's `rand`, whose draws stay drawn. */
     if (ahead) {
-      const draws = ahead;
+      const { draws, count } = ahead;
       ahead = undefined;
+
+      /* Each fudger set up to align (`alignFudgeBallToPtSetup2`) going
+       * over the leap's frames (`AlignOverStepsGo`, slot `0x54`,
+       * seg40:669f), before it is played ahead. */
+      for (const fudger of fudgers ?? []) {
+        goAlignCatzFudger(fudger, count);
+      }
+
       draws.forEach(drawAhead);
     }
 
@@ -642,7 +651,7 @@ export function catzTimeline(
 
       if (count > 0) {
         step.leap = { ...going, count };
-        ahead = drawn;
+        ahead = { draws: drawn, count };
       }
 
       going = undefined;

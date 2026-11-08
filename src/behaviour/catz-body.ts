@@ -14,6 +14,8 @@ import { type Frame } from '../formats/animation.ts';
 import { type Script } from '../formats/script.ts';
 import {
   aimCatzFudger,
+  alignCatzFudger,
+  goAlignCatzFudger,
   type CatzBlink,
   type CatzFudger,
   rateCatzFudger,
@@ -171,7 +173,13 @@ export class CatzBody {
 
     /* A leap set up: kept until a script says go (`+0x1478`). */
     if (steer && 'leap' in steer) {
-      const { ball, x, y, keep } = steer.leap;
+      const { ball, x, y, keep, turn } = steer.leap;
+
+      /* Its rotation set up to align as the leap goes, its words popped first. */
+      if (turn !== undefined) {
+        alignCatzFudger(fudgers[0], turn);
+      }
+
       /* Within `keep` of the point on an axis, the ball's own place on it, where the cat is (seg25:3db7 on). */
       const from = this.tail ?? (this.shown && { rect: this.shown.rect, current: this.shown.pose });
       const at =
@@ -413,6 +421,32 @@ export class CatzBody {
       this.head.shelved = look.shelved;
       rateCatzFudger(fudgers[3], look.speed);
       rateCatzFudger(fudgers[4], look.speed);
+    }
+  }
+
+  /**
+   * A state of its own entered (`CatSprite::NewState`, seg16:22dd): but for
+   * 9, 0x21 and 0x22, tilted (`+0x68a`) its tilt's fudger (2), and rolled
+   * (`+0x68c`) its roll's (1), set up to align to 0 and gone over 5 ticks
+   * (`Fudger` slots `0x50`, `0x54`).
+   */
+  entered(state: number) {
+    const pose = this.shown?.pose;
+
+    if (!pose || state === 9 || state === 0x21 || state === 0x22) {
+      return;
+    }
+
+    const { fudgers } = this.options;
+
+    for (const [n, value] of [
+      [2, pose.tilt],
+      [1, pose.roll],
+    ]) {
+      if (value) {
+        alignCatzFudger(fudgers[n], 0);
+        goAlignCatzFudger(fudgers[n], 5);
+      }
     }
   }
 

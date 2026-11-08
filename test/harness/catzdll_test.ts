@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { type Frame, parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { type CatzBrain, initCatzBrains, updateCatzBrain } from '../../src/behaviour/catz-brain.ts';
 import {
+  alignCatzFudger,
   type CatzBlink,
   type CatzFudger,
   makeCatzFudgers,
@@ -771,6 +772,19 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
           [330, 300],
         ][(action + n) % 3];
         cases.push([action, 0, scripts[action].from || positions.neutral, x, y, 0, 0, 0, 0, ball]);
+        /* And the rotation set up to turn as it goes (0x7537 0, the share): a quarter turn and more either way. */
+        cases.push([
+          action,
+          0,
+          scripts[action].from || positions.neutral,
+          x,
+          y,
+          0,
+          0,
+          [70, -100, 128][n],
+          0,
+          ball,
+        ]);
       }
     }
 
@@ -872,6 +886,10 @@ describeHarness('CATZDLL.DLL on winbox.js, against the reimplementation', () => 
     for (const { values, ticks, fudgers, blink, place, eyes, target } of played) {
       const [action, variant, from, index, seed, track = 0, ball = NO_LEAP] = values;
       const align = ball !== NO_LEAP && target ? { ball, x: target[0], y: target[1] } : undefined;
+      /* The rotation set up to align as the leap goes, where the case pushed it (its share). */
+      if (align && target![4]) {
+        alignCatzFudger(fudgers[0], target![4]);
+      }
       leapCases += align ? 1 : 0;
       /* Its head tracking the target each tick, where the case says. */
       const tracked = (track & 1) !== 0 && !!target;

@@ -309,6 +309,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * (`alignBallToPtSetup3`, its slot `0xa4` with 0x7534, the ball and
          * the point, up to 0x756f): where the case gives a ball (999 for
          * none), to the case's point. */
+        /* And, with a ball and a share (no box), the rotation set up to
+         * align to the share as the leap goes (`alignFudgeBallToPtSetup2`,
+         * 0x7537 0, as the states push it ahead of a leap). */
+        if (ball != 999 && share) {
+            (*(WORDS __far *)(*(unsigned char __far *__far *)sprite + 0xa4))(sprite, 0x7537, 0,
+                                                                             share, 0x756f, 0);
+        }
+
         if (ball != 999) {
             (*(WORDS __far *)(*(unsigned char __far *__far *)sprite + 0xa4))(sprite, 0x7534, ball,
                                                                              x, y, 0x756f);
