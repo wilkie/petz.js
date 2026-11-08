@@ -171,7 +171,16 @@ export class CatzBody {
 
     /* A leap set up: kept until a script says go (`+0x1478`). */
     if (steer && 'leap' in steer) {
-      this.armed = steer.leap;
+      const { ball, x, y, keep } = steer.leap;
+      /* Within `keep` of the point on an axis, the ball's own place on it, where the cat is (seg25:3db7 on). */
+      const from = this.tail ?? (this.shown && { rect: this.shown.rect, current: this.shown.pose });
+      const at =
+        keep !== undefined && from ? placer.ballOnStage(from.rect, from.current, ball) : undefined;
+      this.armed = {
+        ball,
+        x: at && Math.abs(x - at.x) <= keep! ? at.x : x,
+        y: at && Math.abs(y - at.y) <= keep! ? at.y : y,
+      };
     }
 
     catzTimeline(scripts, positions, action, {

@@ -566,9 +566,11 @@ export interface CatzStateTick {
    * A leap set up before what it pushes (`alignBallToPtSetup3`, its words
    * 0x7534, a ball and `+0x34cc`): the ball, and where it aims -- at its
    * prey (`+0x35a4`'s target point, the mouse's led), at what it walks to
-   * (`+0x35a6`'s, `GetOrientationInfo`), or at its goal.
+   * (`+0x35a6`'s, `GetOrientationInfo`), or at its goal; and, with
+   * `keep`, on each axis where the ball is within it of the point already,
+   * the ball's own place kept.
    */
-  leap?: { ball: number; to: 'prey' | 'walked' | 'goal' };
+  leap?: { ball: number; to: 'prey' | 'walked' | 'goal'; keep?: number };
 
   /** Crawling up the edge: its climb (`+0x35ba`), as entering draws it. */
   x35ba?: number;
@@ -3397,6 +3399,8 @@ function catzFond(
         }
 
         const wide = Math.abs(dx) > Math.abs(dy);
+        /* Its leap (its words 0x7534, seg25:3e93): eating (global 3) its ball 0x16, else its nose (7), at what it aligns to, an axis within 5 kept. */
+        tick.leap = { ball: world.global === 3 ? 0x16 : 7, to: 'walked', keep: 5 };
 
         switch (swat.facing) {
           case 1:
@@ -3406,6 +3410,7 @@ function catzFond(
           case 2:
             return push(wide ? (dx > 0 ? 0xf2 : 0x23) : dy > 0 ? 0x26 : 0x27);
           case 3:
+            tick.leap = undefined;
             return moment();
           default:
             return tick;

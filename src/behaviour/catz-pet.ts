@@ -102,7 +102,7 @@ export type CatzSteer =
     }
   | { rotation: number }
   /** A leap set up before it (`alignBallToPtSetup3`): a ball of the cat's carried to a point. */
-  | { leap: { ball: number; x: number; y: number } };
+  | { leap: { ball: number; x: number; y: number; keep?: number } };
 
 /** What a tick did, for a viewer or a test to follow. */
 export interface CatzPetTicked {
@@ -789,14 +789,14 @@ export class CatzPet {
     }
 
     if (ticked.leap) {
-      const { ball, to } = ticked.leap;
+      const { ball, to, keep } = ticked.leap;
       const at =
         to === 'goal'
           ? this.fields.goal
           : to === 'prey' && this.fields.x35a4 === 0x17
             ? this.cursorAt()
             : this.walkedToAt();
-      return at && { leap: { ball, x: at.x, y: at.y } };
+      return at && { leap: { ball, x: at.x, y: at.y, keep } };
     }
 
     const words = ticked.steer;
