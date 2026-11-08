@@ -100,6 +100,12 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       play: (action, steer) => body.play(action, steer),
       dropped: () => body.drop(),
       entered: (state) => body.entered(state),
+      layer: (action) => {
+        layered.asked.push(action);
+        body.layer(action);
+        layered.played += body.layering ? 1 : 0;
+      },
+      layering: () => body.layering,
       head: (look) => body.look(look),
       strike: (strike) => {
         struck.push(strike);
@@ -109,6 +115,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     });
     made.pet = pet;
 
+    const layered = { asked: [] as number[], played: 0 };
     const states: Record<number, number> = {};
     /* Each walk: how long, how far it went, how far from what it walked to at its end. */
     const walks: {
@@ -167,7 +174,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
         )
         .join(
           '\n'
-        )}\nstood in ${JSON.stringify(pet.stoodIn)}\nstruck ${struck.length} ${JSON.stringify(struck.slice(0, 3))}`
+        )}\nstood in ${JSON.stringify(pet.stoodIn)}\nlayered ${layered.asked.length} asked (${[...new Set(layered.asked)].map((a) => a.toString(16))}), ${layered.played} played\nstruck ${struck.length} ${JSON.stringify(struck.slice(0, 3))}`
     );
     /* Each leap's ball where it leapt to, but where the stage stopped it. */
     const missed = body.leaps.filter(
@@ -278,6 +285,8 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       play: (action, steer) => body.play(action, steer),
       dropped: () => body.drop(),
       entered: (state) => body.entered(state),
+      layer: (action) => body.layer(action),
+      layering: () => body.layering,
       head: (look) => body.look(look),
       found: () => !!body.shown?.there,
       cues: () => body.shown?.step.cues ?? [],
@@ -416,6 +425,8 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       play: (action, steer) => body.play(action, steer),
       dropped: () => body.drop(),
       entered: (state) => body.entered(state),
+      layer: (action) => body.layer(action),
+      layering: () => body.layering,
       head: (look) => body.look(look),
       found: () => !!body.shown?.there,
       cues: () => body.shown?.step.cues ?? [],

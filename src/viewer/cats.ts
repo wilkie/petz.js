@@ -457,6 +457,8 @@ function goLive() {
     play: (action, steer) => body.play(action, steer),
     dropped: () => body.drop(),
     entered: (state) => body.entered(state),
+    layer: (action) => body.layer(action),
+    layering: () => body.layering,
     head: (look) => body.look(look),
     strike: strikeToy,
     found: () => !!body.shown?.there,

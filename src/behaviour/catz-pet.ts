@@ -22,6 +22,7 @@ import {
   catzBehaviorChange,
   catzCursorWiggling,
   catzExtremeSituations,
+  catzLayering,
   catzPurring,
   catzScruff,
   catzSeesMouse,
@@ -63,6 +64,10 @@ export interface CatzPetOptions {
 
   /** How much of its script is left (`GetStackRemaining`), as whoever plays it says. */
   scriptLeft?: () => number;
+
+  /** A layered action pushed (`PushLayeredAction`), and whether one plays (`GetLayeredFramesRemaining`). */
+  layer?: (action: number) => void;
+  layering?: () => boolean;
 
   /** A purr played or stopped (`HandlePurring`): its sound. */
   purr?: (sound: number) => void;
@@ -413,6 +418,9 @@ export class CatzPet {
   };
   x3574 = 0;
 
+  /** Ticks to its next layering (`+0x358a`). */
+  private x358a = 0;
+
   /** The ball petted, as `WhichBallBeingPet` answers: under the hand, 0 to 0x40. */
   private ballPetted() {
     const ball = this.options.hand?.() ? (this.options.ballUnder?.() ?? -1) : -1;
@@ -557,6 +565,19 @@ export class CatzPet {
 
     if (done.x3574 !== undefined) {
       this.x3574 = done.x3574;
+    }
+
+    /* Layering (`catzLayering`), last of its reflexes: every so long, a layered action where none plays. */
+    const layered = catzLayering(
+      this.mind,
+      this.x358a,
+      this.options.layering?.() ?? false,
+      this.options.random
+    );
+    this.x358a = layered.x358a;
+
+    if (layered.layer !== undefined) {
+      this.options.layer?.(layered.layer);
     }
 
     if (done.change !== undefined) {

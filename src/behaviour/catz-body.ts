@@ -504,9 +504,55 @@ export class CatzBody {
     }
   }
 
-  /** The next frame shown, where there is one; else the last stays. */
+  /** A layered action pushed on its own (`PushLayeredAction`): its frames, one a tick, drawn over what is shown. */
+  private readonly layered: { first: number; frame: number }[] = [];
+
+  /** Whether a layered action pushed on its own plays (`GetLayeredFramesRemaining`). */
+  get layering() {
+    return this.layered.length > 0;
+  }
+
+  /**
+   * A layered action played over what it shows, as a reflex pushes one
+   * (`HandleMiscLayering`): its frames as its script has them (a variant,
+   * its sequences, drawn so), each drawn over a frame shown in turn -- not
+   * placed by them. None where its frames are missing.
+   */
+  layer(action: number) {
+    const { scripts, positions, flags, shaped, random } = this.options;
+
+    if (!scripts[action] || this.layered.length) {
+      return;
+    }
+
+    const steps = catzTimeline(scripts, positions, action, {
+      flags,
+      random: (n) => random(n),
+      limit: 200,
+      from: scripts[action].from || positions.neutral,
+    }).filter(({ reference }) => !reference);
+    const first = steps[0]?.frame;
+
+    if (first === undefined || steps.some(({ frame }) => !shaped[frame])) {
+      return;
+    }
+
+    this.layered.push(...steps.map(({ frame }) => ({ first, frame })));
+  }
+
+  /** The next frame shown, where there is one; else the last stays. A layered action pushed on its own drawn over it. */
   next() {
     this.shown = this.queue.shift() ?? this.shown;
+    const layer = this.layered.shift();
+
+    if (layer && this.shown && !this.shown.step.layer) {
+      this.shown = {
+        ...this.shown,
+        step: { ...this.shown.step, layer },
+        pose: { ...this.shown.pose, layer },
+      };
+    }
+
     return this.shown;
   }
 
