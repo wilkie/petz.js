@@ -53,6 +53,7 @@ import {
 import { initCatzBrains, updateCatzBrain } from '../behaviour/catz-brain.ts';
 import { CatzBody } from '../behaviour/catz-body.ts';
 import { CatzPet } from '../behaviour/catz-pet.ts';
+import { CatzMouseLive, readMouseFactors } from '../behaviour/catz-mouse-live.ts';
 import {
   type CatzJingleBall,
   catzJingleTick,
@@ -295,6 +296,23 @@ let liveCursor = { x: 235, y: 300 };
 /** Whether the cursor is about the pen (`PetParams` `+0x46`): the mouse over the stage. */
 let liveCursorAbout = false;
 
+/** The mouse's hole, where the harness's pen has it scaled to the stage: its target point. */
+const MOUSE_HOLE = { x: 206, y: 403 };
+
+/** The mouse's own files, where the game has them: its frames, its file, its scripts. */
+let mouseFiles:
+  | {
+      header: AnimationHeader;
+      frames: Frame[];
+      lnz: Breed;
+      shaped: Frame[];
+      scripts: Script[];
+      positions: CatzPositions;
+      factors: [number, number, number][];
+      order: number[];
+    }
+  | undefined;
+
 /** The pen's things put off the shelf into the pen, by kind, and where each is. */
 const livePen = new Map<number, { x: number; y: number }>();
 
@@ -436,6 +454,32 @@ function goLive() {
   });
   made.pet = pet;
 
+  /* The mouse in its hole, its body its own, at scales of 200 (`InitMouseSprite`). */
+  const mouseScales = { pet: 200, ball: 200 };
+  const mouse = mouseFiles
+    ? new CatzMouseLive({
+        scripts: mouseFiles.scripts,
+        positions: mouseFiles.positions,
+        flags: (frame) => mouseFiles!.frames[frame]?.tag ?? 3,
+        shaped: mouseFiles.shaped,
+        placer: new CatzPlacer(mouseFiles.lnz, mouseFiles.header, mouseFiles.shaped, {
+          scales: mouseScales,
+        }),
+        stage: LIVE_STAGE,
+        hole: MOUSE_HOLE,
+        factors: mouseFiles.factors,
+        random,
+      })
+    : undefined;
+
+  /* `?mouse=bold`: the mouse unafraid (20) and restless (100) to begin with,
+   * as the pen harness makes it, that it comes out soon; else its fear, made
+   * 50 to 99, keeps it in its hole till it draws back under 50. */
+  if (mouse && new URLSearchParams(location.search).get('mouse') === 'bold') {
+    mouse.mouse.fields.brains[0] = 100;
+    mouse.mouse.fields.brains[1] = 20;
+  }
+
   liveButton.textContent = 'Stop';
   live = window.setInterval(() => {
     /* Its brains drawn back toward their centres by the engine's clock
@@ -463,12 +507,26 @@ function goLive() {
         y: Math.trunc((rect.top + rect.bottom) / 2),
       };
       pet.fields.x688 = body.facing;
-      drawLive(cat, shaped, placer, shown);
+      drawLive(cat, shaped, placer, shown, mouse);
     }
 
     const { state, global } = pet.tick();
+
+    /* The mouse's tick, the cat where it is. */
+    mouse?.tick({
+      cat: pet.point,
+      catGlobal: global,
+      catAge: pet.mind.brains[11],
+      cursor: liveCursor,
+      things: livePen,
+      shelfAt: (kind) => ({
+        x: LIVE_STAGE.left + Math.trunc(((LIVE_STAGE.right - LIVE_STAGE.left) * (kind + 1)) / 17),
+        y: LIVE_STAGE.top + 30,
+      }),
+      clock: Math.trunc(clock),
+    });
     ticks++;
-    status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}, at ${pet.point.x}, ${pet.point.y}${body.queue.length ? `, ${body.queue.length} frames to play` : ''}.`;
+    status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}, at ${pet.point.x}, ${pet.point.y}${body.queue.length ? `, ${body.queue.length} frames to play` : ''}${mouse ? `; the mouse ${mouse.hidden ? 'in its hole' : 'out'} (${mouse.mouse.fields.global}/${mouse.mouse.fields.state}) at ${mouse.at.x}, ${mouse.at.y}` : ''}.`;
   }, 100);
 }
 
@@ -477,7 +535,8 @@ function drawLive(
   cat: Breed,
   shaped: Frame[],
   placer: CatzPlacer,
-  { step, rect, pose }: { step: CatzStep; rect: CatzPlaced['rect']; pose: CatzPose }
+  { step, rect, pose }: { step: CatzStep; rect: CatzPlaced['rect']; pose: CatzPose },
+  mouse?: CatzMouseLive
 ) {
   const frame =
     step.layer && shaped[step.layer.first] && shaped[step.layer.frame]
@@ -507,6 +566,32 @@ function drawLive(
         green
       );
     }
+  }
+
+  /* The mouse's hole, where the mouse has its files: a dark mouth at the floor, under it. */
+  if (mouseFiles) {
+    for (let dy = -9; dy <= 9; dy++) {
+      const half = Math.trunc(16 * Math.sqrt(1 - (dy / 9) ** 2));
+      bitmap.span(MOUSE_HOLE.x - half, MOUSE_HOLE.y + 6 + dy, 2 * half + 1, 0);
+    }
+  }
+
+  /* The mouse, out of its hole, behind the cat. */
+  const shownMouse = mouse?.body.shown;
+
+  if (mouse && mouseFiles && shownMouse && !mouse.hidden) {
+    const mouseBounds = new CatzPlacer(mouseFiles.lnz, mouseFiles.header, mouseFiles.shaped, {
+      scales: { pet: 200, ball: 200 },
+    }).bounds(shownMouse.pose);
+    drawPet(bitmap, mouseFiles.lnz, mouseFiles.header, mouseFiles.shaped[shownMouse.step.frame], {
+      colours: 256,
+      originX: shownMouse.rect.left - mouseBounds.left,
+      originY: shownMouse.rect.top - mouseBounds.top,
+      scales: { pet: 200, ball: 200 },
+      order: mouseFiles.order,
+      translate,
+      ...poseOf(shownMouse.step.fudged),
+    });
   }
 
   drawPet(bitmap, cat, header, frame, {
@@ -626,6 +711,44 @@ async function start(game: GameFiles) {
   scripts = parseScripts(data, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz);
   const preamble = new DataView(data.buffer, data.byteOffset + data.indexOf(0) + 1);
   positions = { count: preamble.getUint16(0, true), neutral: preamble.getUint16(2, true) };
+
+  /* And the mouse's, where they are. */
+  mouseFiles = undefined;
+
+  try {
+    const MOUSE = 'CATZ.DOG/PTZFILES/MOUSE/RESOURCE';
+    const mouseHeader = parseBhd(await game.read(`${MOUSE}/MOUSE.BHD`));
+    const mouseFrames: Frame[] = [];
+
+    for (let n = 0; n < mouseHeader.animations.length; n++) {
+      mouseFrames.push(
+        ...parseAnimation(mouseHeader, n, await game.read(`${MOUSE}/MOUSE${n}.BDT`))
+      );
+    }
+
+    const lnzText = await text(`${MOUSE}/MOUSE.LNZ`);
+    const lnz = parseLnz(lnzText, mouseHeader.ballCount);
+    const mouseData = await game.read(`${MOUSE}/MOUSE.SCP`);
+    const mousePreamble = new DataView(
+      mouseData.buffer,
+      mouseData.byteOffset + mouseData.indexOf(0) + 1
+    );
+    mouseFiles = {
+      header: mouseHeader,
+      frames: mouseFrames,
+      lnz,
+      shaped: extendFrames(mouseFrames, lnz),
+      scripts: parseScripts(mouseData, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz),
+      positions: {
+        count: mousePreamble.getUint16(0, true),
+        neutral: mousePreamble.getUint16(2, true),
+      },
+      factors: readMouseFactors(lnzText),
+      order: [],
+    };
+  } catch {
+    /* No mouse: the cat alone. */
+  }
 
   /* Only the scripts the demo's frames will play, as far as a few tries tell. */
   scripts.forEach((script, index) => {

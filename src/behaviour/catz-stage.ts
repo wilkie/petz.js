@@ -415,9 +415,10 @@ export function catzFocusRect(
   placer: CatzPlacer,
   rect: CatzRect,
   pose: CatzPose,
-  { width, height, share }: CatzFocus
+  { width, height, share }: CatzFocus,
+  ball = skeletonOf(placer.breed).head
 ): CatzRect {
-  const head = placer.ballOnStage(rect, pose, skeletonOf(placer.breed).head);
+  const head = placer.ballOnStage(rect, pose, ball);
   const [tilt, turn] = [wrapCatzAngle(pose.tilt), wrapCatzAngle(pose.rotation)];
   const ahead = Math.trunc(Math.trunc(Math.sqrt(width * width + height * height)) / share);
   const x = head.x - Math.trunc((cosine(tilt, true) * ahead * sine(turn, true)) / 0x10000);

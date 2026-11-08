@@ -104,6 +104,8 @@ export type CatzSteer =
       box: { width: number; height: number; share: number };
     }
   | { rotation: number }
+  /** Its rotation's fudger aimed at a heading first, left aiming after (the mouse's `SetAimTarget`). */
+  | { heading: number }
   /** A leap set up before it (`alignBallToPtSetup3`): a ball of the cat's carried to a point. */
   | { leap: { ball: number; x: number; y: number; keep?: number; turn?: number } };
 

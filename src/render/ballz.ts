@@ -22,6 +22,7 @@ import {
   type Head,
   type Placed,
   project,
+  type Scales,
   scalesForAge,
 } from './project.ts';
 import {
@@ -54,6 +55,9 @@ export interface DrawOptions {
 
   /** The dog's age, from 0, a puppy, to 100. */
   age?: number;
+
+  /** Its pet and ball scales as given, where not by its age: the Catz mouse's 200 (`InitMouseSprite`). */
+  scales?: Scales;
 
   /** Which way the dog is turned, in 256ths of a turn. */
   yaw?: number;
@@ -363,13 +367,14 @@ export function ballAt(
     head,
     angles,
     blend,
-  }: Pick<DrawOptions, 'age' | 'yaw' | 'head' | 'angles' | 'blend'>
+    scales,
+  }: Pick<DrawOptions, 'age' | 'yaw' | 'head' | 'angles' | 'blend' | 'scales'>
 ) {
   const placed = project(
     breed,
     header,
     frame,
-    scalesForAge(breed, age),
+    scales ?? scalesForAge(breed, age),
     yaw,
     100 - age,
     head,
@@ -409,6 +414,7 @@ export function drawPet(
     translate = (colour: number) => colour,
     catzLids = 20,
     catzHead,
+    scales,
   }: DrawOptions
 ) {
   const tables = circleTables(seed);
@@ -418,7 +424,7 @@ export function drawPet(
     breed,
     header,
     frame,
-    scalesForAge(breed, age),
+    scales ?? scalesForAge(breed, age),
     yaw,
     100 - age,
     head,

@@ -163,6 +163,11 @@ export class CatzBody {
     let there: boolean | undefined;
     const walk = steer && 'to' in steer ? steer : undefined;
 
+    /* Steered by a heading: its rotation's fudger aimed so, as the mouse aims it each tick. */
+    if (steer && 'heading' in steer) {
+      aimCatzFudger(fudgers[0], steer.heading);
+    }
+
     /* A creep: the words pushed before it, its rotation's fudger at a rate of 100 aimed at the angle. */
     if (steer && 'rotation' in steer) {
       rateCatzFudger(fudgers[0], 100);
@@ -447,6 +452,39 @@ export class CatzBody {
         alignCatzFudger(fudgers[n], 0);
         goAlignCatzFudger(fudgers[n], 5);
       }
+    }
+  }
+
+  /**
+   * Put so that the middle of its rectangle -- its target point -- is at a
+   * point (`MoveDrawPt`): the frame shown, and those queued, moved with it.
+   */
+  moveTo({ x, y }: CatzPoint) {
+    const rect = (this.queue.at(-1) ?? this.shown)?.rect;
+    const from = this.shown?.rect ?? rect;
+
+    if (!from) {
+      this.options.start = { x, y };
+      return;
+    }
+
+    const dx = x - Math.trunc((from.left + from.right) / 2);
+    const dy = y - Math.trunc((from.top + from.bottom) / 2);
+    const move = (r: CatzRect) => ({
+      left: r.left + dx,
+      top: r.top + dy,
+      right: r.right + dx,
+      bottom: r.bottom + dy,
+    });
+
+    if (this.shown) {
+      this.shown = { ...this.shown, rect: move(this.shown.rect) };
+    }
+
+    this.queue.forEach((shown, n) => (this.queue[n] = { ...shown, rect: move(shown.rect) }));
+
+    if (this.tail) {
+      this.tail = { ...this.tail, rect: move(this.tail.rect) };
     }
   }
 
