@@ -1690,7 +1690,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (n, [, k]) => n + k.same,
           0
         )} across into another state; petting fields ${Object.entries(books)
-        .filter(([key]) => /:(rate|x357[026]|cursorWas|x362a|x356c|modes)/.test(key))
+        .filter(([key]) => /:(rate|x357[026]|cursorWas|x362a|x356c|modes|kit\.)/.test(key))
         .map(([key, k]) => `${key} ${k.same}`)
         .join(', ')}`
     );
@@ -2349,6 +2349,16 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           ['modes[0]', t.petting?.modes?.[0], values[130]],
           ['modes[1]', t.petting?.modes?.[1], values[131]],
           ['modes[2]', t.petting?.modes?.[2], values[132]],
+          /* In the Kit: what it wrote of the Kit's fields (the trace's 229 on: its peek's mode, peeks, wait, basket and the baskets been in). */
+          ['kit.peekMode', t.kit?.peekMode, values[229]],
+          ['kit.peeks', t.kit?.peeks, values[230]],
+          ['kit.wait', t.kit?.wait, values[231]],
+          ['kit.basket', t.kit?.basket, values[232]],
+          ...[0, 1, 2, 3, 4].map((n): [string, number | undefined, number] => [
+            `kit.baskets[${n}]`,
+            t.kit?.baskets?.[n],
+            values[233 + n],
+          ]),
         ];
 
         let agreed = true;
@@ -2456,8 +2466,9 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           ...carried,
           tick: {
             ...carried.tick,
-            /* (What it wrote of its petting, held against the next tick only: a tick between may write where the cursor was, and so clear `+0x34ca`.) */
+            /* (What it wrote of its petting and the Kit, held against the next tick only: a tick between may write where the cursor was, and so clear `+0x34ca`.) */
             petting: undefined,
+            kit: undefined,
             ...catzStateBetween(state, carried.tick, {
               cues: cues ?? [],
               looked: values[13] ?? 0,

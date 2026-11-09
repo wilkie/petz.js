@@ -262,6 +262,12 @@ export interface CatzKit {
 
   /** Where the Kit is (`PetParams` `+0xdc`, `+0xde`), from which its baskets lie. */
   origin?: { x: number; y: number };
+
+  /** The basket it was in last (`+0x35f8`, -1 none), which it is not put in again at once. */
+  last?: number;
+
+  /** Out of its basket (`+0x35fa`). */
+  out?: number;
 }
 
 /** Where each basket of the Adoption Kit lies from the Kit (`GetBasketLocation`, seg13:113b, a jump table at seg13:12b5). */
@@ -590,6 +596,10 @@ export interface CatzStateTick {
    * `+0x34d0`).
    */
   leap?: { ball: number; to: 'prey' | 'walked' | 'goal'; keep?: number; turn?: number };
+
+  /** In the Adoption Kit: the Kit's fields it wrote; and, put in a basket, the kitten to be made again as that basket's breed (`SetupNewBasket`). */
+  kit?: Partial<CatzKit>;
+  remade?: number;
 
   /** Petted: the petting fields it wrote (its modes as they are after, `+0x3572`, the cursor's action and the rest). */
   petting?: Partial<CatzPetting>;
@@ -3968,15 +3978,51 @@ function catzKit(
     return tick;
   }
 
+  /* What it writes of the Kit's fields (seg13; kb/topics/catz-behaviour.md, "In the Adoption Kit"). */
+  const write = (fields: Partial<CatzKit>) => {
+    tick.kit = { ...tick.kit, ...fields };
+  };
+
   switch (state) {
     case CATZ_STATE.initKit:
+      /* `DoCatInitKit`, seg13:0162: entering, 0x1c4 and the baskets been in cleared; its script done, no basket, in the baskets. */
       if (world.enter) {
+        write({ baskets: [0, 0, 0, 0, 0] });
         return push(0x1c4);
       }
 
+      write({ basket: -1 });
       tick.state = CATZ_STATE.inBaskets;
       return tick;
     case CATZ_STATE.inBaskets:
+      /* `DoCatInBaskets`, seg13:0290, entering: with no basket, one picked
+       * (`PickANewBasket`, seg13:12bf: `rand() % 5`, the next where it is the
+       * last, the basket the user holds down where one is) and the kitten
+       * made again as its breed (`SetupNewBasket`), its count and wait 0,
+       * then its tick; with one (a click), made again so and climbing out. */
+      if (world.enter) {
+        if (kit.basket === -1) {
+          let basket = random(5);
+
+          if (basket === kit.last) {
+            basket = (basket + 1) % 5;
+          }
+
+          if (kit.rootCount > 10) {
+            basket = kit.rootCount - 11;
+          }
+
+          write({ basket, last: basket, wait: 0 });
+          tick.remade = basket;
+          tick.count = 1;
+          return tick;
+        }
+
+        tick.remade = kit.basket;
+        tick.state = 0x4c;
+        return tick;
+      }
+
       if (world.count > kit.wait) {
         tick.state = CATZ_STATE.peekFromBasket;
         return tick;
@@ -3986,7 +4032,12 @@ function catzKit(
       return push(0x1c4);
     case CATZ_STATE.peekFromBasket: {
       if (world.enter) {
-        if (percent() < 75 || kit.peeks === 0) {
+        /* Its peek's mode (`+0x3610`), counted where `PetParams` `+0xca` is set, its count 0; then its tick at once. */
+        const first = percent() < 75 || kit.peeks === 0;
+        write({ peekMode: first ? 0 : 1, peeks: kit.peeks + (kit.ca !== 0 ? 1 : 0) });
+        tick.count = 1;
+
+        if (first) {
           const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
           const after = behave(24)
             ? 0x1c5
@@ -4003,6 +4054,7 @@ function catzKit(
         return push(0x1ca, 0x1c8);
       }
 
+      /* Each tick, the cursor about and no basket held, it climbs out (`+0x3612` kept). */
       if (world.cursorAbout && kit.rootCount < 10) {
         tick.state = 0x4c;
         return tick;
@@ -4012,9 +4064,14 @@ function catzKit(
         tick.sound = catzSound(mind, 7, random);
       }
 
+      if (world.done === false) {
+        return tick;
+      }
+
       const moving = kit.basket === 3 && kit.mouseState !== 1;
 
       if ((random(6) + 2 > kit.peeks && !moving) || kit.ca === 0 || kit.rootCount >= 10) {
+        write({ basket: -1 });
         tick.state = CATZ_STATE.endPeekFromBasket;
         return tick;
       }
@@ -4023,18 +4080,35 @@ function catzKit(
         ? kit.baskets.map(() => 0)
         : kit.baskets;
 
+      if (baskets !== kit.baskets) {
+        write({ baskets });
+      }
+
       if (baskets[kit.basket] !== 0 && !moving) {
+        write({ basket: -1 });
         tick.state = CATZ_STATE.endPeekFromBasket;
         return tick;
       }
 
+      write({ peeks: 0 });
       tick.state = 0x4c;
       return tick;
     }
     case CATZ_STATE.exitBasket: {
       /* `DoCatExitBasket`, seg13:09d3: entering, out (`+0x35fa` 1, its slot `0x3d8`), 0x171; cued (0), it lets the basket go and has been in it; its script done, by temperament: 24 grooming (13); 27, after the cursor (`+0x35a4` 0x17), one time in two the mouse roused, one time in five scared (17), else playing (15); 25 the same, attacking (1); 26, its energy 50, one time in two eating (3), else affectionate (14); else one time in two affectionate, else playing with one of 6, 7 and 5. */
       if (world.enter) {
+        write({ out: 1 });
         return push(0x171);
+      }
+
+      if (world.cues?.includes(0)) {
+        const baskets = [...kit.baskets];
+        baskets[kit.basket] = 1;
+        write({ baskets });
+      }
+
+      if (world.done === false) {
+        return tick;
       }
 
       const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
@@ -4072,11 +4146,12 @@ function catzKit(
     }
     case CATZ_STATE.jumpInBasket:
     case CATZ_STATE.dropIntoBasket:
-      /* `DoCatJumpInBasket`, seg13:0d29, and `DoCatDropIntoBasket`, seg13:0e9a: entering, its basket's place its goal (its slot `0x3cc`), its words to it, and 0x1c4 jumping, 0x297 dropping; cued (0), in the basket; its script done, in the baskets (0x49, `+0x35f6` -1). */
+      /* `DoCatJumpInBasket`, seg13:0d29, and `DoCatDropIntoBasket`, seg13:0e9a: entering, its basket's place its goal (its slot `0x3cc`), its words to it, and 0x1c4 jumping, 0x297 dropping; cued (0), in the basket; its script done, in the baskets with none (0x49, `+0x35f6` -1), to pick another. */
       if (world.enter) {
         return push(state === CATZ_STATE.jumpInBasket ? 0x1c4 : 0x297);
       }
 
+      write({ basket: -1 });
       tick.state = CATZ_STATE.inBaskets;
       return tick;
     default:
