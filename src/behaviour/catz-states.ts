@@ -624,7 +624,14 @@ export interface CatzStateTick {
    * to it as the leap goes (`alignFudgeBallToPtSetup2`, its words 0x7537 0,
    * `+0x34d0`).
    */
-  leap?: { ball: number; to: 'prey' | 'walked' | 'goal'; keep?: number; turn?: number };
+  leap?: {
+    ball: number;
+    to: 'prey' | 'walked' | 'goal';
+    keep?: number;
+    turn?: number;
+    /** The action, of those pushed, its words go before; the first where none. */
+    before?: number;
+  };
 
   /** In the Adoption Kit: the Kit's fields it wrote; and, put in a basket, the kitten to be made again as that basket's breed (`SetupNewBasket`). */
   kit?: Partial<CatzKit>;
@@ -972,6 +979,38 @@ export function catzStateTick(
     case CATZ_STATE.alignToEat: {
       /* `DoCatAlignToEat`, seg22:1291: entering, it tracks its food with its head (3000), turns toward it by `+0x688` (to -40, 40, -32 or 35, or as it faces), and moves its nose to it (0x123, 0x1cf, 0x125). Its script done, by what it walked to (`+0x35a6`): a treat (0xb) the user holds it nibbles (0x25), else, its head let go and the treat's `+0x9e` -1000, it eats (0x27), as a piece (8); catnip (4) it nibbles (0x2b); else it eats from the bowl (0x28). */
       const food = world.x35a6;
+
+      /* Entering (seg22:12a0 on): its head on its food (3000); its angle by
+       * how it faces (`+0x688`): under -40, -40; over 40, 40; -32 to 0, -32;
+       * 0 to 35, 35; else as it faces (`+0x34d0`). Its goal projected from
+       * its food's target point (catnip, `ProjectToCatnip`; else
+       * `ProjectToFoodObject`), and its words -- its rotation aligned to the
+       * angle, its paw (0x16, catnip) or its nose (6) to the goal -- before
+       * the second of 0x123, 0x1cf and 0x125. */
+      if (world.enter && world.prey) {
+        const facing = world.x688 ?? 0;
+        const turn =
+          facing < -40
+            ? -40
+            : facing > 40
+              ? 40
+              : facing > -32 && facing < 0
+                ? -32
+                : facing >= 0 && facing < 35
+                  ? 35
+                  : facing;
+        const goal =
+          food === 4
+            ? catzProjectToCatnip(world.prey, turn)
+            : catzProjectToFood(mind, world.prey, turn, world.size?.height ?? 104);
+        return done({
+          goal,
+          head: ['track'],
+          headTrack: { kind: food ?? 0, speed: 3000 },
+          pushes: [0x123, 0x1cf, 0x125],
+          leap: { ball: food === 4 ? 0x16 : 6, to: 'goal', turn, before: 1 },
+        });
+      }
 
       if (food === 0xb) {
         return done({ state: world.walkedToHeld ? 0x25 : 0x27 });
@@ -2799,6 +2838,33 @@ function catzEatPiece(
 
   tick.global = 8;
   return tick;
+}
+
+/**
+ * The goal to eat a thing from (`ProjectToFoodObject`, seg22:29ec): its
+ * target point, across by the angle folded into -64 to 64 (`0x40 - |0x40 -
+ * a|` where it is over 0, else its negative of `|a + 0x40|`'s) times one
+ * and a quarter of its age in hundreds (`ds:0x366`, `0x36a`), and up by the
+ * cat's height (`+0x33c6`) times 0.45 (`ds:0x356`) where brains 2, 3 and 7
+ * are centred under 50, else 0.4 (`0x35e`), each rounded toward 0.
+ */
+export function catzProjectToFood(
+  mind: CatzMind,
+  at: { x: number; y: number },
+  angle: number,
+  height: number
+) {
+  const centre = (n: number) => (mind.centres ?? mind.brains)[n];
+  const calm = centre(2) < 50 && centre(3) < 50 && centre(7) < 50;
+  const up = Math.trunc(height * (calm ? 0.45 : 0.4));
+  const across = angle > 0 ? 0x40 - Math.abs(0x40 - angle) : -(0x40 - Math.abs(angle + 0x40));
+  const spread = 1 + (mind.brains[CATZ_BRAIN.age] / 100) * 0.25;
+  return { x: Math.trunc(at.x + across * spread), y: at.y - up };
+}
+
+/** The goal to nibble catnip from (`ProjectToCatnip`, seg22:2ce9): its target point, 20 right at an angle of 35 or more, else 40 left, and 10 down. */
+export function catzProjectToCatnip(at: { x: number; y: number }, angle: number) {
+  return { x: at.x + (angle >= 35 ? 20 : -40), y: at.y + 10 };
 }
 
 /** A thing's condition by what is left of it: 2 over the first mark, 3 over the next, and so on; past the last, one more. */

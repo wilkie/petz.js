@@ -244,6 +244,11 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
   - **Nibbling catnip (43):** each bite (cue 5), 20 less: 2 over 80, 3 over 60, 4 over 40, 5 over 20, 6 over 0, else 7 (seg22:289f).
   - **Suckling the bottle (45):** entering, the bottle in the pen, 1 (seg33:0461).
   - **Others:** `DetachBowlSprites` (seg22:2ea2) the water bowl 1; `CatGetsTiredAndHungry` (seg16:3a34) knocks the food bowl off the shelf and makes it empty, 8; `ShelfToPlaypen` 1 and `PlaypenToShelf` 0, the playpen's own.
+- [[read out]] Aligning to eat (38; `DoCatAlignToEat`, seg22:1291), entering:
+  - **Its head and angle:** its head tracks its food (its slot `0xe0`, 3000). Its angle (`+0x34d0`) goes by how it faces (`+0x688`): under -40, -40; over 40, 40; over -32 and under 0, -32; 0 and under 35, 35; else as it faces.
+  - **Its goal (`+0x34cc`):** catnip is the catnip's target point plus 20 across where the angle is 35 or more (else -40) and 10 down (`ProjectToCatnip`, seg22:2ce9). Other food is the food's target point plus, across, the angle folded into -64 to 64 times 1 + age / 100 × 0.25 (`ds:0x366`, `0x36a`, floats); and up, the cat's height (`+0x33c6`) times 0.45 (`ds:0x356`) where brains 2, 3 and 7 are centred under 50 (the first test's brain 0 either way), else 0.4 (`0x35e`), each rounded toward 0 (`ProjectToFoodObject`, seg22:29ec).
+  - **What it pushes:** 0x123; then its words, its rotation's fudger aligned to the angle (`alignFudgeBallToPtSetup2` 0, `+0x34d0`) and its paw (0x16, catnip) or nose (ball 6) to the goal (`alignBallToPtSetup3`); then 0x1cf, which says go (`alignBallToPtGo0`), and 0x125.
+- [[inferred]] `catzStateTick` enters 38 so (`catzProjectToFood`, `catzProjectToCatnip`). A leap's words can now go before an action other than the first (`leap.before`). The four traces through it (the day's, eating, diet, treats) still agree, replayed. In the viewer the cat eats with its nose in the bowl, where it ate 60 to the left before.
 - [[read out]] Eating's bites. The chewing actions eating plays (0x202, 0x201, 0x208, 0x20c, 0x1cb) each play 0x1ce one to six times, and 0x1ce cues 5 twice. The catnip's nibbles (0x279, 0x2d2) play 0x278 and 0x2d3, which cue 5. The cue's frame is a reference frame: 0x1ce begins by aligning, so its first frame is popped with the next in one tick, and `IsCued` answers for both. The handlers ask every tick (`DoCatEatFromBowl`, seg22:1beb; `DoCatNibbleCatnip`). Food brought out is full (`SetupSpriteJustBroughtOut`, seg23:315f, the cat's slot `0x17c`: kind 0xc, `+0x35d2` 100; kind 4, `+0x35d4` 100), on message 1 or 7, and on entering eating where `+0x35d2` is under -1 or over 100.
 - [[inferred]] Four faults kept the live cat from eating its bowl, all mended:
   - **Not filled:** messages 1 and 7 didn't fill the food (`x35d2`, `x35d4`), so a bowl brought out read as empty and the cat gave up on it at once.
@@ -574,4 +579,4 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 ## Not yet
 
-Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`). A thing's states' animations (its sets past 0). The cat aligning to eat: drawn with each thing's target point on its point, the bowl lies right of where the cat eats, facing away, about 60 to the left of it (its nose not yet moved to the food as `DoCatAlignToEat` moves it).
+Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`). A thing's states' animations (its sets past 0).

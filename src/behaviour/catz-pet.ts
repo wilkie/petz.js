@@ -232,8 +232,8 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  3, 4, 8, 14, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55,
-  58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  3, 4, 8, 14, 38, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54,
+  55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -1223,7 +1223,7 @@ export class CatzPet {
     if (playing) {
       /* Nothing more pushed while it plays. */
     } else if (ticked.pushes?.length) {
-      this.push(ticked.pushes, this.steering(ticked));
+      this.push(ticked.pushes, this.steering(ticked), ticked.leap?.before);
     } else if (ticked.pushed !== undefined) {
       this.push([ticked.pushed], this.steering(ticked));
     }
@@ -1679,15 +1679,18 @@ export class CatzPet {
   }
 
   /** Actions pushed: played for as long as each is given to. */
-  private push(actions: number[], steer?: CatzSteer) {
+  private push(actions: number[], steer?: CatzSteer, steerAt = 0) {
     /* Put down by its victim's handler, let go (0x269): the mouse held by the cat to its mind. */
     if (this.state === 5 && this.fields.x35a4 === 0x1b && actions.includes(0x269)) {
       this.options.mouseHeld?.('putDown');
     }
 
     for (const [n, action] of actions.entries()) {
-      /* A leap's words pushed once, ahead of them all. */
-      const played = this.options.play(action, n && steer && 'leap' in steer ? undefined : steer);
+      /* A leap's words pushed once, ahead of the action they go before (the first, else as asked). */
+      const played = this.options.play(
+        action,
+        steer && 'leap' in steer ? (n === steerAt ? steer : undefined) : steer
+      );
       const { ticks, pose } =
         typeof played === 'number' ? { ticks: played, pose: undefined } : played;
       this.pushed.push(action);
