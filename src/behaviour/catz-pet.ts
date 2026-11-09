@@ -138,6 +138,28 @@ export interface CatzPetOptions {
     away: () => void;
   };
 
+  /**
+   * CatNapz's cloud (kin 0x10, `CloudSprite`), played by its own scripts
+   * where whoever shows it has one: its width and height (`+0x251e`,
+   * `+0x2520`); put with its target point at a point (`0x44`) and shown
+   * (`0x78`); sent to a point (its words 0x7534, -11, there; 2 pushed) and
+   * on (`+0x2518` 1); whether the frame it shows is cued so; its draw point
+   * (`GetDrawPt`); moved, its target point at a point; let go and playing 1
+   * (the dream's end); put away (`0x7c`); off (`+0x2518` 0). Without one,
+   * it is stood in for, come 20 ticks after it is sent.
+   */
+  cloud?: {
+    size: () => { width: number; height: number };
+    put: (at: { x: number; y: number }) => void;
+    fly: (to: { x: number; y: number }) => void;
+    cued: (cue: number) => boolean;
+    drawPoint: () => { x: number; y: number } | undefined;
+    moveTo: (at: { x: number; y: number }) => void;
+    end: () => void;
+    away: () => void;
+    off: () => void;
+  };
+
   /** Put with its target point at a point (its slot `0x44`, as the dog's chase puts it past the stage), by whoever places it. */
   moveTo?: (at: { x: number; y: number }) => void;
 
@@ -274,6 +296,8 @@ export class CatzPet {
     passed: number;
     x35ce?: number;
     x35d6?: number;
+    /** The corner it last made for (`TargetACornerToAvoidSprite`, 1 to 4), by which its dream's cloud comes. */
+    x35ae?: number;
   };
 
   /** Where it is, and where it walks to. */
@@ -376,6 +400,8 @@ export class CatzPet {
     at: { x: 0, y: 0 },
     inPhase: 0,
     dogX: undefined as number | undefined,
+    /** Its cloud's draw point less its own (`+0x35f0`, `+0x35f2`), kept as it begins to float. */
+    cloudOffset: { x: 0, y: 0 },
     /** How far the dog's stand-in runs a tick: right as it starts, then the way it is put facing. */
     dogStep: 10,
     mouseX: 0,
@@ -389,9 +415,14 @@ export class CatzPet {
     dream.inPhase++;
 
     if (this.global !== 21) {
-      /* (Leaving CatNapz puts its dog away.) */
+      /* (Leaving CatNapz puts its dog and its cloud away.) */
       if (dream.dogX !== undefined) {
         this.options.dog?.away();
+      }
+
+      if (dream.phase !== -1) {
+        this.options.cloud?.away();
+        dream.phase = -1;
       }
 
       dream.dogX = undefined;
@@ -462,6 +493,55 @@ export class CatzPet {
     dog.push(1);
   }
 
+  /** The dream's end (69; `DoCatDreamEnd`, seg18:151d), each tick: its cloud cued (0) at the end of what it plays, put away and off. */
+  private cloudGoes() {
+    const cloud = this.options.cloud;
+
+    if (cloud && this.global === 21 && this.state === 69 && cloud.cued(0)) {
+      cloud.away();
+      cloud.off();
+    }
+  }
+
+  /**
+   * Its cloud as its dream's phase goes on (`DoCatStartDream`): cued to
+   * dream (0 to 1), it is put twice its width and height beyond the corner
+   * the cat last made for (`+0x35ae`: 1 top left, 2 top right, 3 bottom
+   * left, 4 bottom right; none, the top left's standing in for a point
+   * never set), shown, and sent to 25 right of the cat's target point; its
+   * 28 ticks counted (2 to 3), how far it is from the cat kept, draw point
+   * from draw point.
+   */
+  private cloudPhase(from: number, to: number) {
+    const cloud = this.options.cloud;
+
+    if (!cloud) {
+      return;
+    }
+
+    if (from === 0 && to === 1) {
+      const { stage } = this.options;
+      const { width, height } = cloud.size();
+      const corner = this.fields.x35ae ?? 0;
+      const right = corner === 2 || corner === 4;
+      const below = corner === 3 || corner === 4;
+      cloud.put({
+        x: right ? stage.right + width * 2 : stage.left - width * 2,
+        y: below ? stage.bottom + height * 2 : stage.top - height * 2,
+      });
+      cloud.fly({ x: this.point.x + 25, y: this.point.y });
+    }
+
+    if (from === 2 && to === 3) {
+      const cloudAt = cloud.drawPoint();
+      const rect = this.rect;
+
+      if (cloudAt && rect) {
+        this.dream.cloudOffset = { x: cloudAt.x - rect.left, y: cloudAt.y - rect.top };
+      }
+    }
+  }
+
   /** The dream's world, for its states (`catzDream`, `catzDogChase`). */
   private dreamWorld() {
     const dream = this.dream;
@@ -469,7 +549,10 @@ export class CatzPet {
       phase: dream.phase,
       kind: dream.kind,
       x35d8: dream.x35d8,
-      cloudCome: this.state === 65 && dream.phase === 1 && dream.inPhase >= 20,
+      cloudCome:
+        this.state === 65 &&
+        dream.phase === 1 &&
+        (this.options.cloud ? this.options.cloud.cued(4) : dream.inPhase >= 20),
       at: dream.at,
       stage: this.options.stage,
       mouseX: dream.mouseX,
@@ -499,6 +582,7 @@ export class CatzPet {
     }
 
     this.dogChases();
+    this.cloudGoes();
 
     if (this.left > 0) {
       this.left--;
@@ -1542,6 +1626,10 @@ export class CatzPet {
     }
 
     /* Attacking: walking to a point, the corner it made for. */
+    if (begun.x35ae !== undefined) {
+      this.fields.x35ae = begun.x35ae;
+    }
+
     if (begun.x35a2 !== undefined) {
       this.fields.x35a2 = begun.x35a2;
     }
@@ -1749,6 +1837,9 @@ export class CatzPet {
     if (state === 65) {
       this.dream.phase = 0;
       this.dream.inPhase = 0;
+    } else if (state === 69) {
+      /* The dream's end, entering: its cloud let go, playing 1. */
+      this.options.cloud?.end();
     } else if (state === 70) {
       const { stage } = this.options;
       this.dream.dogX = stage.left - 200;
@@ -1876,6 +1967,7 @@ export class CatzPet {
     if (ticked.x35c2 !== undefined) f.x35c2 = ticked.x35c2;
     if (ticked.dream) {
       if (ticked.dream.phase !== undefined && ticked.dream.phase !== this.dream.phase) {
+        this.cloudPhase(this.dream.phase, ticked.dream.phase);
         this.dream.phase = ticked.dream.phase;
         this.dream.inPhase = 0;
       }
@@ -1930,6 +2022,15 @@ export class CatzPet {
     if (ticked.x35aa !== undefined) f.x35aa = ticked.x35aa;
     if (ticked.ticks !== undefined) f.ticks = ticked.ticks;
     if (ticked.goal !== undefined) f.goal = ticked.goal;
+
+    /* Floating (65, phase 3): its cloud moved with it, its target point at its goal less its offset (seg18:0874). */
+    if (this.state === 65 && this.dream.phase === 3 && ticked.goal) {
+      const { cloudOffset } = this.dream;
+      this.options.cloud?.moveTo({
+        x: ticked.goal.x + cloudOffset.x,
+        y: ticked.goal.y + cloudOffset.y,
+      });
+    }
     if (ticked.explore !== undefined) f.x35a8 = ticked.explore;
     if (ticked.marker !== undefined) this.marker = ticked.marker;
     if (ticked.energy !== undefined) this.mind.brains[CATZ_BRAIN.energy] = ticked.energy;

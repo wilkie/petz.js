@@ -4791,9 +4791,11 @@ function catzDream(
       let phase = dream.phase;
       let at = dream.at;
 
+      /* Cued to dream: its cloud sent to 25 right of its target point, kept as its goal (`+0x34cc`, seg18:0414). */
       if (phase === 0 && world.cued) {
         phase = 1;
         tick.count = 0;
+        tick.goal = { x: world.point!.x + 25, y: world.point!.y };
       }
 
       if (dream.cloudCome) {

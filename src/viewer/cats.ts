@@ -63,6 +63,7 @@ import {
 import { catzKitLocked } from '../behaviour/catz-reflexes.ts';
 import { catzBasketHit } from '../behaviour/catz-states.ts';
 import { CatzMouseLive, readMouseFactors } from '../behaviour/catz-mouse-live.ts';
+import { CatzCloudLive } from '../behaviour/catz-cloud.ts';
 import { CatzDogLive } from '../behaviour/catz-dog.ts';
 import {
   type CatzJingleBall,
@@ -408,18 +409,20 @@ let mouseFiles:
     }
   | undefined;
 
-/** CatNapz's dog's own files, where the game has them (`PTZFILES/DOG`): its frames, its file, its scripts. */
-let dogFiles:
-  | {
-      header: AnimationHeader;
-      frames: Frame[];
-      lnz: Breed;
-      shaped: Frame[];
-      scripts: Script[];
-      positions: CatzPositions;
-      order: number[];
-    }
-  | undefined;
+/** One of CatNapz's visitors' own files, where the game has them (`PTZFILES/DOG`, `PTZFILES/CLOUD`): its frames, its file, its scripts. */
+interface VisitorFiles {
+  header: AnimationHeader;
+  frames: Frame[];
+  lnz: Breed;
+  shaped: Frame[];
+  scripts: Script[];
+  positions: CatzPositions;
+  order: number[];
+}
+
+/** CatNapz's dog's and cloud's. */
+let dogFiles: VisitorFiles | undefined;
+let cloudFiles: VisitorFiles | undefined;
 
 /** The pen's things put off the shelf into the pen, by kind, and where each is. */
 const livePen = new Map<number, { x: number; y: number }>();
@@ -594,7 +597,8 @@ function goLive() {
    * `PopScript` places it, a walk steered each tick and what it walks to
    * looked for in its focus box. */
   /* The pet, made after its body: where what its head tracks is, once there is one. */
-  const made: { pet?: CatzPet; mouse?: CatzMouseLive; dog?: CatzDogLive } = {};
+  const made: { pet?: CatzPet; mouse?: CatzMouseLive; dog?: CatzDogLive; cloud?: CatzCloudLive } =
+    {};
   const body = new CatzBody({
     scripts,
     positions,
@@ -641,6 +645,33 @@ function goLive() {
           push: (action) => made.dog?.push(action),
           put: (at, facing) => made.dog?.put(at, facing),
           away: () => made.dog?.away(),
+        }
+      : undefined,
+    /* CatNapz's cloud, its body its own, where it has its files. */
+    cloud: cloudFiles
+      ? {
+          size: () => made.cloud?.size ?? { width: 0, height: 0 },
+          put: (at) => {
+            made.cloud?.moveTo(at);
+            made.cloud?.show();
+          },
+          fly: (to) => {
+            made.cloud?.fly(to);
+
+            if (made.cloud) {
+              made.cloud.on = true;
+            }
+          },
+          cued: (cue) => made.cloud?.cued(cue) ?? false,
+          drawPoint: () => made.cloud?.drawPoint(),
+          moveTo: (at) => made.cloud?.moveTo(at),
+          end: () => made.cloud?.end(),
+          away: () => made.cloud?.away(),
+          off: () => {
+            if (made.cloud) {
+              made.cloud.on = false;
+            }
+          },
         }
       : undefined,
     /* The pen's mouse, out of its hole or in it. */
@@ -780,6 +811,19 @@ function goLive() {
     : undefined;
   made.mouse = mouse;
 
+  /* CatNapz's cloud, put away and off till a dream. */
+  made.cloud = cloudFiles
+    ? new CatzCloudLive({
+        scripts: cloudFiles.scripts,
+        positions: cloudFiles.positions,
+        flags: (frame) => cloudFiles!.frames[frame]?.tag ?? 3,
+        shaped: cloudFiles.shaped,
+        placer: new CatzPlacer(cloudFiles.lnz, cloudFiles.header, cloudFiles.shaped, {}),
+        stage: LIVE_STAGE,
+        random,
+      })
+    : undefined;
+
   /* CatNapz's dog, put away till its chase. */
   made.dog = dogFiles
     ? new CatzDogLive({
@@ -825,8 +869,9 @@ function goLive() {
     /* The frame this tick shows, as `PopScript` pops it before the state's own tick. */
     let shown = body.next();
 
-    /* And the dog's, popped before the chase looks where it is. */
+    /* And the dog's, popped before the chase looks where it is; and the cloud's own tick. */
     made.dog?.next();
+    made.cloud?.tick();
 
     /* Made again in a basket: seated on its place once placed (`MoveDrawPt`). */
     if (seat && shown) {
@@ -851,7 +896,18 @@ function goLive() {
       const lit = kitPet
         ? [out || liveBasketLit ? kitPet.kit!.basket : -1, kitPet.kitHighlight]
         : [];
-      drawLive(cat, shaped, placer, shown, mouse, kitMode, lit, made.pet?.dream.shown, made.dog);
+      drawLive(
+        cat,
+        shaped,
+        placer,
+        shown,
+        mouse,
+        kitMode,
+        lit,
+        made.pet?.dream.shown,
+        made.dog,
+        made.cloud
+      );
     }
 
     /* A command's message this tick. */
@@ -946,7 +1002,8 @@ function drawLive(
   kitMode = false,
   litBaskets: number[] = [],
   dream?: { kind: number; at: { x: number; y: number } },
-  dog?: CatzDogLive
+  dog?: CatzDogLive,
+  cloud?: CatzCloudLive
 ) {
   const frame =
     step.layer && shaped[step.layer.first] && shaped[step.layer.frame]
@@ -1022,21 +1079,26 @@ function drawLive(
     });
   }
 
-  /* CatNapz's dog, shown, behind the cat. */
-  const shownDog = dog && !dog.hidden ? dog.body.shown : undefined;
+  /* CatNapz's cloud (behind all, `+0x9e` -5000) and dog, shown, behind the cat. */
+  for (const [files, visitor] of [
+    [cloudFiles, cloud],
+    [dogFiles, dog],
+  ] as const) {
+    const shownVisitor = visitor && !visitor.hidden ? visitor.body.shown : undefined;
 
-  if (dogFiles && shownDog) {
-    const dogBounds = new CatzPlacer(dogFiles.lnz, dogFiles.header, dogFiles.shaped, {}).bounds(
-      shownDog.pose
-    );
-    drawPet(bitmap, dogFiles.lnz, dogFiles.header, dogFiles.shaped[shownDog.step.frame], {
-      colours: 256,
-      originX: shownDog.rect.left - dogBounds.left,
-      originY: shownDog.rect.top - dogBounds.top,
-      order: dogFiles.order,
-      translate,
-      ...poseOf(shownDog.step.fudged),
-    });
+    if (files && shownVisitor) {
+      const visitorBounds = new CatzPlacer(files.lnz, files.header, files.shaped, {}).bounds(
+        shownVisitor.pose
+      );
+      drawPet(bitmap, files.lnz, files.header, files.shaped[shownVisitor.step.frame], {
+        colours: 256,
+        originX: shownVisitor.rect.left - visitorBounds.left,
+        originY: shownVisitor.rect.top - visitorBounds.top,
+        order: files.order,
+        translate,
+        ...poseOf(shownVisitor.step.fudged),
+      });
+    }
   }
 
   drawPet(bitmap, cat, header, frame, {
@@ -1271,37 +1333,48 @@ async function start(game: GameFiles) {
     /* No mouse: the cat alone. */
   }
 
-  /* And CatNapz's dog's, where they are. */
-  dogFiles = undefined;
+  /* And CatNapz's dog's and cloud's, where they are. */
+  const visitor = async (name: string): Promise<VisitorFiles | undefined> => {
+    try {
+      const at = `CATZ.DOG/PTZFILES/${name}/RESOURCE`;
+      const visitorHeader = parseBhd(await game.read(`${at}/${name}.BHD`));
+      const visitorFrames: Frame[] = [];
 
-  try {
-    const DOG = 'CATZ.DOG/PTZFILES/DOG/RESOURCE';
-    const dogHeader = parseBhd(await game.read(`${DOG}/DOG.BHD`));
-    const dogFrames: Frame[] = [];
-
-    for (let n = 0; n < dogHeader.animations.length; n++) {
-      try {
-        dogFrames.push(...parseAnimation(dogHeader, n, await game.read(`${DOG}/DOG${n}.BDT`)));
-      } catch {
-        /* (An animation it does not ship.) */
+      for (let n = 0; n < visitorHeader.animations.length; n++) {
+        try {
+          visitorFrames.push(
+            ...parseAnimation(visitorHeader, n, await game.read(`${at}/${name}${n}.BDT`))
+          );
+        } catch {
+          /* (An animation it does not ship.) */
+        }
       }
-    }
 
-    const lnz = parseLnz(await text(`${DOG}/DOG.LNZ`), dogHeader.ballCount);
-    const dogData = await game.read(`${DOG}/DOG.SCP`);
-    const dogPreamble = new DataView(dogData.buffer, dogData.byteOffset + dogData.indexOf(0) + 1);
-    dogFiles = {
-      header: dogHeader,
-      frames: dogFrames,
-      lnz,
-      shaped: extendFrames(dogFrames, lnz),
-      scripts: parseScripts(dogData, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz),
-      positions: { count: dogPreamble.getUint16(0, true), neutral: dogPreamble.getUint16(2, true) },
-      order: [],
-    };
-  } catch {
-    /* No dog: its stand-in runs unseen. */
-  }
+      const lnz = parseLnz(await text(`${at}/${name}.LNZ`), visitorHeader.ballCount);
+      const visitorData = await game.read(`${at}/${name}.SCP`);
+      const visitorPreamble = new DataView(
+        visitorData.buffer,
+        visitorData.byteOffset + visitorData.indexOf(0) + 1
+      );
+      return {
+        header: visitorHeader,
+        frames: visitorFrames,
+        lnz,
+        shaped: extendFrames(visitorFrames, lnz),
+        scripts: parseScripts(visitorData, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz),
+        positions: {
+          count: visitorPreamble.getUint16(0, true),
+          neutral: visitorPreamble.getUint16(2, true),
+        },
+        order: [],
+      };
+    } catch {
+      /* Not there: its stand-in, unseen. */
+      return undefined;
+    }
+  };
+  dogFiles = await visitor('DOG');
+  cloudFiles = await visitor('CLOUD');
 
   /* Only the scripts the demo's frames will play, as far as a few tries tell. */
   scripts.forEach((script, index) => {

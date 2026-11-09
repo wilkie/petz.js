@@ -290,6 +290,13 @@ export interface CatzTimelineOptions {
    * places the cat can place each before the next is aimed.
    */
   done?: (step: CatzStep) => void;
+
+  /**
+   * Cues after its last frame (`cueCode1` before `endPos`, as the cloud's
+   * come (4) and gone (0)): raised by the pop that ends it, so with its
+   * last frame, as it is seen done.
+   */
+  trailing?: (cues: number[]) => void;
 }
 
 /**
@@ -413,6 +420,7 @@ export function catzTimeline(
     blink,
     aim,
     done,
+    trailing,
     aligned = false,
     look,
     area,
@@ -1078,6 +1086,11 @@ export function catzTimeline(
 
   for (let n = 0; n < times && steps.length < limit; n++) {
     playPushed(push(index, 0, n === 0 ? variant : undefined), 0);
+  }
+
+  /* Cued after its last frame: raised as it ends. */
+  if (pending.cues?.length && steps.length) {
+    trailing?.(pending.cues);
   }
 
   /* Ended on a reference frame, with nothing after it, the tick ends on it. */

@@ -6,6 +6,7 @@ import { averageBreed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import { catzArity, parseScripts, readCatzOpcodes, SCRIPTS } from '../../src/formats/script.ts';
 import { CatzBody } from '../../src/behaviour/catz-body.ts';
+import { CatzCloudLive } from '../../src/behaviour/catz-cloud.ts';
 import { CatzDogLive } from '../../src/behaviour/catz-dog.ts';
 import { makeCatzFudgers, resetCatzEyelids } from '../../src/behaviour/catz-fudger.ts';
 import { CatzPet } from '../../src/behaviour/catz-pet.ts';
@@ -474,18 +475,20 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
   });
 });
 
-/** CatNapz's dog's scripts, frames and placer, from its own files (`PTZFILES/DOG`). */
-function loadDog() {
-  const dir = join(PETZ, 'DOG', 'RESOURCE');
-  const read = (name: string) => new Uint8Array(readFileSync(join(dir, name)));
-  const header = parseBhd(read('DOG.BHD'));
+/** One of CatNapz's visitors' scripts, frames and placer, from its own files (`PTZFILES/DOG`, `PTZFILES/CLOUD`). */
+function loadVisitor(name: 'DOG' | 'CLOUD') {
+  const dir = join(PETZ, name, 'RESOURCE');
+  const read = (file: string) => new Uint8Array(readFileSync(join(dir, file)));
+  const header = parseBhd(read(`${name}.BHD`));
   const frames = header.animations.flatMap((_, n) =>
-    existsSync(join(dir, `DOG${n}.BDT`)) ? parseAnimation(header, n, read(`DOG${n}.BDT`)) : []
+    existsSync(join(dir, `${name}${n}.BDT`))
+      ? parseAnimation(header, n, read(`${name}${n}.BDT`))
+      : []
   );
-  const lnz = parseLnz(new TextDecoder('latin1').decode(read('DOG.LNZ')), header.ballCount);
+  const lnz = parseLnz(new TextDecoder('latin1').decode(read(`${name}.LNZ`)), header.ballCount);
   const shaped = extendFrames(frames, lnz);
   const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
-  const data = read('DOG.SCP');
+  const data = read(`${name}.SCP`);
   const scripts = parseScripts(data, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz);
   const preamble = new DataView(data.buffer, data.byteOffset + data.indexOf(0) + 1);
   return {
@@ -497,12 +500,14 @@ function loadDog() {
   };
 }
 
-describe('a Catz cat napping, chasing CatNapz’s dog, each played by its own frames', () => {
+describe('a Catz cat napping, its cloud come and CatNapz’s dog chased, each played by its own frames', () => {
   /* Grown cats put to nap, each day by C's `rand` from a seed, put to nap again as each leaves it: of those days with a chase, each runs across, waits off the stage for the dog to run past, is put back past the stage with it and runs back; none is held at the stage's edge. */
   it('runs across and back, the dog after it', () => {
     const { scripts, positions, frames, shaped, breed, header, neck, butt } = load();
-    const dogFiles = loadDog();
+    const dogFiles = loadVisitor('DOG');
+    const cloudFiles = loadVisitor('CLOUD');
     const tally = { chases: 0, puts: 0, ranPast: 0, barks: 0, longest: 0 };
+    const clouds = { sent: 0, come: 0, longest: 0, floated: 0, dreams: 0, gone: 0 };
 
     for (let seed = 1; seed <= 30; seed++) {
       const rand = borlandRand(seed);
@@ -524,6 +529,9 @@ describe('a Catz cat napping, chasing CatNapz’s dog, each played by its own fr
         trackAt: (kind) => made.pet?.kinAt(kind),
       });
       const dog = new CatzDogLive({ ...dogFiles, stage: STAGE, random });
+      const cloud = new CatzCloudLive({ ...cloudFiles, stage: STAGE, random });
+      let sentAt: number | undefined;
+      let tickNow = 0;
       const pet = new CatzPet({
         brains: [...BRAINS.slice(0, 11), 60],
         centres: CENTRES,
@@ -550,6 +558,30 @@ describe('a Catz cat napping, chasing CatNapz’s dog, each played by its own fr
           },
           away: () => dog.away(),
         },
+        cloud: {
+          size: () => cloud.size,
+          put: (at) => {
+            cloud.moveTo(at);
+            cloud.show();
+          },
+          fly: (to) => {
+            clouds.sent++;
+            sentAt = tickNow;
+            cloud.fly(to);
+            cloud.on = true;
+          },
+          cued: (cue) => cloud.cued(cue),
+          drawPoint: () => cloud.drawPoint(),
+          moveTo: (at) => cloud.moveTo(at),
+          end: () => cloud.end(),
+          away: () => {
+            clouds.gone += cloud.hidden ? 0 : 1;
+            cloud.away();
+          },
+          off: () => {
+            cloud.on = false;
+          },
+        },
       });
       made.pet = pet;
       let still = 0;
@@ -558,8 +590,10 @@ describe('a Catz cat napping, chasing CatNapz’s dog, each played by its own fr
       let dogWas: number | undefined;
 
       for (let n = 0; n < 4000; n++) {
+        tickNow = n;
         const shown = body.next();
         dog.next();
+        cloud.tick();
 
         if (shown) {
           const { rect } = shown;
@@ -575,7 +609,18 @@ describe('a Catz cat napping, chasing CatNapz’s dog, each played by its own fr
           pet.nap();
         }
 
+        const phaseWas = pet.dream.phase;
+        const stateWas = pet.state;
         const { state, global } = pet.tick();
+
+        /* The cloud come (phase 1 to 2), and how long it took; floating (3); dreaming (66, 67). */
+        if (phaseWas === 1 && pet.dream.phase === 2 && sentAt !== undefined) {
+          clouds.come++;
+          clouds.longest = Math.max(clouds.longest, n - sentAt);
+        }
+
+        clouds.floated += global === 21 && state === 65 && pet.dream.phase === 3 ? 1 : 0;
+        clouds.dreams += stateWas === 65 && (state === 66 || state === 67) ? 1 : 0;
         const chasing = global === 21 && pet.fields.x35ee === 10;
         tally.chases += chasing && !wasChasing ? 1 : 0;
         wasChasing = chasing;
@@ -602,7 +647,14 @@ describe('a Catz cat napping, chasing CatNapz’s dog, each played by its own fr
       }
     }
 
-    console.log(`napping with the dog: ${JSON.stringify(tally)}`);
+    console.log(
+      `napping with the dog: ${JSON.stringify(tally)}; the cloud: ${JSON.stringify(clouds)}`
+    );
+    /* Each cloud sent comes, carried to the cat over its 284 frames, and the dreams float on and begin. */
+    expect(clouds.sent).toBeGreaterThan(0);
+    expect(clouds.come).toBeGreaterThanOrEqual(clouds.sent - 30);
+    expect(clouds.longest).toBeLessThan(400);
+    expect(clouds.dreams).toBeGreaterThan(0);
     expect(tally.chases).toBeGreaterThan(0);
     expect(tally.ranPast).toBeGreaterThan(0);
     /* Put at its start and again with the cat at each end it ran past. */

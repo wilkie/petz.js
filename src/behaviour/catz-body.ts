@@ -161,6 +161,7 @@ export class CatzBody {
 
     const before = this.queue.length;
     let there: boolean | undefined;
+    let trailing: number[] | undefined;
     const walk = steer && 'to' in steer ? steer : undefined;
 
     /* Steered by a heading: its rotation's fudger aimed so, as the mouse aims it each tick. */
@@ -243,6 +244,9 @@ export class CatzBody {
       went: () => {
         this.armed = undefined;
       },
+      trailing: (cues) => {
+        trailing = cues;
+      },
       done: (step) => {
         if (!shaped[step.frame]) {
           return;
@@ -271,6 +275,16 @@ export class CatzBody {
     /* A leap cut short by its action's end: its frames placed as they are. */
     if (this.leapFrom) {
       this.leapt(position);
+    }
+
+    /* Cued after its last frame: the cues its last shown frame raises, as it is done. */
+    const last = this.queue.at(-1);
+
+    if (trailing && last && this.queue.length > before) {
+      this.queue[this.queue.length - 1] = {
+        ...last,
+        step: { ...last.step, cues: [...(last.step.cues ?? []), ...trailing] },
+      };
     }
 
     /* And the word after it: the fudger reset. */
@@ -504,7 +518,7 @@ export class CatzBody {
     }
 
     this.queue.forEach(
-      (shown, n) => (this.queue[n] = { ...shown, rect: move(shown.rect), there: undefined }),
+      (shown, n) => (this.queue[n] = { ...shown, rect: move(shown.rect), there: undefined })
     );
 
     if (this.tail) {
