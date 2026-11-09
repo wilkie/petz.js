@@ -121,6 +121,45 @@ describe('a Catz cat told of the pen’s things', () => {
   });
 });
 
+/** CatNapz (global 21): a grown cat put to nap, its dreams standing in for the screen saver's other scripts. */
+describe('a Catz cat napping', () => {
+  it('dreams well and badly and sets off after the dog, without fault', () => {
+    const seen: Record<number, number> = {};
+
+    /* (The dog's chase begins one nap in ten: on days 14, 17 and 21 of these.) */
+    for (let seed = 1; seed <= 24; seed++) {
+      const rand = borlandRand(seed);
+      const pet = new CatzPet({
+        brains: [...BRAINS.slice(0, 11), 60],
+        centres: CENTRES,
+        stage: { left: 0, top: 0, right: 640, bottom: 480 },
+        play: () => 10,
+        random: (n) => rand() % n,
+      });
+
+      for (let n = 0; n < 50; n++) {
+        pet.tick();
+      }
+
+      pet.nap();
+
+      for (let n = 0; n < 1500; n++) {
+        const { state } = pet.tick();
+        seen[state] = (seen[state] ?? 0) + 1;
+      }
+
+      expect(pet.stoodIn.errors).toBe(0);
+      expect(pet.stoodIn.unread).toBe(0);
+      expect(pet.stoodIn.deep).toBe(0);
+    }
+
+    /* Starting a dream, a good one and a bad one, their ends, and the dog's chase begun. */
+    for (const state of [65, 66, 67, 69, 70]) {
+      expect(seen[state]).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('a Catz kitten in the Adoption Kit', () => {
   /* Its baskets, each a breed: it begins, sits in one, peeks, and double-clicked now and then, comes out; clicked, its own basket sends it back. */
   it('begins, peeks from its baskets, comes out and goes back', () => {

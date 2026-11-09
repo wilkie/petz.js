@@ -65,6 +65,10 @@ export interface CatzGlobalBegun {
   /** A window event: what it walks to (`+0x35a6`) alone, none. */
   x35a6?: number;
 
+  /** CatNapz: `+0x35ee` made 0, and its energy put at 20. */
+  x35ee?: number;
+  energy?: number;
+
   /** Chasing: `+0x35ac` set, so it runs. */
   x35ac?: number;
 
@@ -136,6 +140,26 @@ export function catzGlobalBegin(
       /* Sprayed (`DoGSSprayed`, seg31:0ab5) or flea-sprayed or painted (`DoGSFleaSprayedOrColored`, seg31:0e15): no effects of their own; sprayed (0x3f) or flea-sprayed (0x40). */
       begun.effects = [0, 0, 0, 0];
       begun.state = global === 18 ? 0x3f : 0x40;
+      break;
+    case 21:
+      /* CatNapz (`DoGSCatNapz`, seg18:000d), entering: no effects of its own; the cloud's offset (`+0x35f0`, `+0x35f2`) 0; one time in ten the dog's chase (0x46); else `+0x35ee` 0 and, one time in two, 0x2a6, its energy put at 20, letting go (its slot `0x238` 0), `+0x35a6` 0 and walking (22); else lying down tired (26). */
+      begun.effects = [0, 0, 0, 0];
+
+      if (percent() < 10) {
+        begun.state = 70;
+        break;
+      }
+
+      begun.x35ee = 0;
+
+      if (percent() < 50) {
+        begun.pushes = [0x2a6];
+        begun.energy = 20;
+        begun.x35a6 = 0;
+        begun.state = 22;
+      } else {
+        begun.state = 26;
+      }
       break;
     case 4:
       /* Catnip (`DoGSCatnip`, seg22:23e5), entering: liveliness, independence and seriousness 15; inclined to behaviour 21, one time in two a sound (1) and 0xdf; it walks to the catnip (22, `+0x35a6` and `+0x35a4` 4, `+0x35a2` 0). */

@@ -223,7 +223,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 15, 16, 18, 19, 20, 22]);
+const BEGUN = new Set([1, 2, 3, 4, 6, 21, 7, 8, 9, 11, 12, 15, 16, 18, 19, 20, 22]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -236,9 +236,9 @@ const REIMPLEMENTED = new Set([
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 19, 20, 25, 27, 28, 29, 30, 34, 35, 36, 37, 38, 39,
-  40, 41, 43, 47, 56, 57, 66, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48,
-  49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
-  79, 80, 81,
+  40, 41, 43, 47, 56, 57, 65, 66, 67, 68, 69, 70, 71, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32,
+  33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72,
+  73, 74, 75, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). The engine has no limit: a state whose tick runs as it is entered may change state at once, and pre-exploring off the stage and idling went nine deep before a walk began. */
@@ -341,6 +341,59 @@ export class CatzPet {
     return this.left;
   }
 
+  /**
+   * CatNapz's dream as it goes on (`+0x35da` its phase, `+0x35ec` what it
+   * dreams of, `+0x35d8`, the float's doubles `+0x35dc`, `+0x35e4`), and
+   * what the screen saver's other scripts would do, standing in as the
+   * harness's driver does: its own script's cue to dream (6) on the second
+   * tick of phase 0, the cloud's that it has come (4) on the twentieth of
+   * phase 1; the dog and the dream's mouse each set off 200 left of the
+   * stage and run across, 10 and 8 a tick.
+   */
+  private readonly dream = {
+    phase: 0,
+    kind: 0,
+    x35d8: 0,
+    at: { x: 0, y: 0 },
+    inPhase: 0,
+    dogX: undefined as number | undefined,
+    mouseX: 0,
+  };
+
+  /** A tick of the dream's stand-ins: the ticks in its phase, the dog and the mouse on their way. */
+  private dreamOn() {
+    const dream = this.dream;
+    dream.inPhase++;
+
+    if (this.global !== 21) {
+      dream.dogX = undefined;
+      return;
+    }
+
+    if (dream.dogX !== undefined) {
+      dream.dogX += 10;
+    }
+
+    if (this.state === 68) {
+      dream.mouseX += 8;
+    }
+  }
+
+  /** The dream's world, for its states (`catzDream`, `catzDogChase`). */
+  private dreamWorld() {
+    const dream = this.dream;
+    return {
+      phase: dream.phase,
+      kind: dream.kind,
+      x35d8: dream.x35d8,
+      cloudCome: this.state === 65 && dream.phase === 1 && dream.inPhase >= 20,
+      at: dream.at,
+      stage: this.options.stage,
+      mouseX: dream.mouseX,
+      dogX: dream.dogX,
+    };
+  }
+
   /** Where the cursor was the tick before (`PetParams` `+0x86`, `+0x88`), for how it moved as it let the cat go. */
   private cursorWas?: { x: number; y: number };
 
@@ -354,6 +407,7 @@ export class CatzPet {
   private tickOn(): CatzPetTicked {
     this.ticks++;
     this.pushed = [];
+    this.dreamOn();
     this.reflexes();
 
     /* Its global state's handler, before its own state's. */
@@ -402,7 +456,19 @@ export class CatzPet {
       }
 
       /* Eating from a bowl, nibbling catnip or tripping, mid-script: what they are cued to (`DoCatEatFromBowl`, `DoCatNibbleCatnip`, `DoCatTripAndSkid` ask every tick); the catnip moved or held, after it again. */
-      if (this.state === 40 || this.state === 43 || this.state === 25) {
+      /* Napping, its bad dream cued (7): the breed it dreams of, at random (`LoadRandomLinezFile`, seg18:1e1e: one time in two `rand() % 6`, else `rand() % 9`, into `+0x35ee`). */
+      if (this.state === 67 && this.cues().includes(7)) {
+        this.fields.x35ee =
+          this.options.random(101) < 50 ? this.options.random(6) : this.options.random(9);
+      }
+
+      if (
+        this.state === 40 ||
+        this.state === 43 ||
+        this.state === 25 ||
+        this.state === 65 ||
+        this.state === 68
+      ) {
         const ticked = catzStateTick(
           this.state,
           this.mind,
@@ -704,6 +770,11 @@ export class CatzPet {
     if (message !== undefined) {
       this.x33c0 = message;
     }
+  }
+
+  /** Put to nap, as CatNapz, the screen saver, puts it (global 21, `DoGSCatNapz`). */
+  nap() {
+    this.beginGlobal(21, 0);
   }
 
   /** A message the playpen's commands leave it (`XApt::DoCommand`): 19 its window resized (0x7f1), 21 the camera (0x7f2). */
@@ -1376,6 +1447,15 @@ export class CatzPet {
       this.fields.x35a6 = begun.x35a6;
     }
 
+    /* CatNapz: `+0x35ee` none, and its energy at 20. */
+    if (begun.x35ee !== undefined) {
+      this.fields.x35ee = begun.x35ee;
+    }
+
+    if (begun.energy !== undefined) {
+      this.mind.brains[CATZ_BRAIN.energy] = begun.energy;
+    }
+
     /* Attacking: walking to a point, the corner it made for. */
     if (begun.x35a2 !== undefined) {
       this.fields.x35a2 = begun.x35a2;
@@ -1580,6 +1660,16 @@ export class CatzPet {
       this.fields.passed = 0;
     }
 
+    /* Napping: starting a dream, its phase 0 begun; the dog's chase begun, the dog set off 200 left of the stage; the dream's mouse, so. */
+    if (state === 65) {
+      this.dream.phase = 0;
+      this.dream.inPhase = 0;
+    } else if (state === 70) {
+      this.dream.dogX = this.options.stage.left - 200;
+    } else if (state === 68) {
+      this.dream.mouseX = this.options.stage.left - 200;
+    }
+
     /* Begging (`DoCatBegging`, seg22:0697), waiting for a treat (`DoCatWaitForTreat`, 0a67) and nibbling it (`DoCatNibbleTreat`, 108c), entering: `+0x34ca` 0 for the first two, `+0x3504` 0 and its count 0 for the last two (`+0x3504` the second only), its head on what it plays with (2500 begging, else 3000); then on into their ticks, nothing pushed. */
     if (state === 35 || state === 36 || state === 37) {
       const f = this.fields;
@@ -1690,6 +1780,16 @@ export class CatzPet {
 
     if (ticked.count !== undefined) f.count = ticked.count;
     if (ticked.x35c2 !== undefined) f.x35c2 = ticked.x35c2;
+    if (ticked.dream) {
+      if (ticked.dream.phase !== undefined && ticked.dream.phase !== this.dream.phase) {
+        this.dream.phase = ticked.dream.phase;
+        this.dream.inPhase = 0;
+      }
+
+      if (ticked.dream.kind !== undefined) this.dream.kind = ticked.dream.kind;
+      if (ticked.dream.x35d8 !== undefined) this.dream.x35d8 = ticked.dream.x35d8;
+      if (ticked.dream.at !== undefined) this.dream.at = ticked.dream.at;
+    }
     if (ticked.swatFields) Object.assign(this.swatFields, ticked.swatFields);
     if (ticked.calmsMouse) this.options.mouseFear?.(-50);
     if (ticked.x35d2 !== undefined) f.x35d2 = ticked.x35d2;
@@ -1837,6 +1937,11 @@ export class CatzPet {
       c4: this.kit ? 1 : 0,
       goal: this.fields.goal ?? this.point,
       cursorAt: this.cursorAt(),
+      /* Napping: its dream, and its own script's cue to dream on phase 0's second tick (standing in). */
+      ...(this.global === 21 ? { dream: this.dreamWorld() } : {}),
+      ...(this.state === 65 && this.dream.phase === 0 && this.dream.inPhase === 2
+        ? { cued: true }
+        : {}),
       /* How the cursor moved its last frame, as it let the cat go. */
       thrown: this.cursorWas
         ? { dx: this.cursorAt().x - this.cursorWas.x, dy: this.cursorAt().y - this.cursorWas.y }

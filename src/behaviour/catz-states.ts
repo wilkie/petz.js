@@ -780,9 +780,10 @@ export function catzStateTick(
         return done({ pushed: 0xb3, pushes: [0xb3] });
       }
 
+      /* Napping (seg30:018a): its energy put at 20, letting go (its slot `0x238` 0), what it walks to none (`+0x35a6` 0), and walking (22). */
       if (world.global === 21) {
         energy = 20;
-        return done({ state: CATZ_STATE.locomote });
+        return done({ state: CATZ_STATE.locomote, x35a6: 0 });
       }
 
       return done({ state: percent() < energy ? CATZ_STATE.dozing : CATZ_STATE.sleep });
