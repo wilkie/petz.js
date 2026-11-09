@@ -502,6 +502,7 @@ function goLive() {
     },
     /* Petted: the hand, the ball under the cursor, the rectangle grown by 10 holding it, and the frames left. */
     hand: () => liveHand,
+    holding: () => liveDragging,
     ballUnder: () =>
       body.shown ? placer.ballAt(body.shown.rect, body.shown.pose, liveCursor) : -1,
     cursorOver: () => {
@@ -601,6 +602,7 @@ function goLive() {
       catAge: pet.mind.brains[11],
       x33b8: pet.x33b8,
       cursor: liveCursor,
+      cheeseHeld: liveDragging === 8,
       things: livePen,
       shelfAt: (kind) => ({
         x: LIVE_STAGE.left + Math.trunc(((LIVE_STAGE.right - LIVE_STAGE.left) * (kind + 1)) / 17),

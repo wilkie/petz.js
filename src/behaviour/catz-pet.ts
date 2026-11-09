@@ -56,6 +56,9 @@ export interface CatzPetOptions {
   /** The user's button (`PetParams` `+0xa`, pressed this tick, and `+0xc`, held from before); none without. */
   buttons?: () => { pressed: boolean; held: boolean };
 
+  /** What the user holds (`IsSomethingBeingHeld`, a thing dragged: state 3), by kind; none without. */
+  holding?: () => number | undefined;
+
   /** The hand down (`PetParams` `+0x1e`), to pet it; never without. */
   hand?: () => boolean;
 
@@ -176,7 +179,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([1, 2, 3, 6, 7, 8, 9, 11, 12, 15, 16, 20]);
+const BEGUN = new Set([1, 2, 3, 6, 7, 8, 9, 11, 12, 15, 16, 18, 19, 20]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -578,7 +581,7 @@ export class CatzPet {
       const scruff = catzScruff(this.mind, {
         left: buttons.pressed,
         right: buttons.held,
-        holding: false,
+        holding: this.options.holding?.() !== undefined,
         ball: this.options.ballAt?.(2) ?? this.point,
         cursor: this.cursorAt(),
         point: this.point,
@@ -652,9 +655,16 @@ export class CatzPet {
 
     /* Petted (`HandlePetting`, seg23:0000): not petted already nor resting
      * after it (`+0x3574`), the hand on one of its balls, on the floor,
-     * nothing held: its behaviour changed (1, `DoCatBehaviorChange`), it
+     * nothing held but the hairbrush (0xa): its behaviour changed (1, `DoCatBehaviorChange`), it
      * lets go, and is petted (7), `+0x3576` whether it was resting. */
-    if (this.global !== 7 && this.x3574 === 0 && this.ballPetted() !== -1) {
+    const held = this.options.holding?.();
+
+    if (
+      this.global !== 7 &&
+      this.x3574 === 0 &&
+      this.ballPetted() !== -1 &&
+      (held === undefined || held === 0xa)
+    ) {
       catzBehaviorChange(this.mind, 1, [0, 0, 0, 0]);
       this.petting.x3576 = this.global === 9 ? 1 : 0;
       this.beginGlobal(7, 0);

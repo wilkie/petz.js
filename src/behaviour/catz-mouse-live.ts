@@ -85,6 +85,9 @@ export interface CatzMousePen {
   /** Where each kind of the pen's things is that is off the shelf; the shelf's places for the rest. */
   things: Map<number, CatzMousePoint>;
   shelfAt: (kind: number) => CatzMousePoint;
+  /** Whether the user holds the cheese (`CatSprite::IsThisSpriteBeingHeld`, 8). */
+  cheeseHeld?: boolean;
+
   /** The engine's clock: milliseconds over 17. */
   clock: number;
 }
@@ -270,7 +273,7 @@ export class CatzMouseLive {
       x33b8: pen.x33b8 ?? 0,
       holeCovered: false,
       shelved: (kind) => kind < 0x10 && !pen.things.has(kind),
-      cheeseHeld: false,
+      cheeseHeld: pen.cheeseHeld ?? false,
       layered: () => 0,
       collide: (kind) => this.collide(kind),
       /* A frame on; done where nothing is left of what was pushed. */

@@ -128,6 +128,12 @@ export function catzGlobalBegin(
     case 9:
       begun.state = world.sleepy ? 28 : 26;
       break;
+    case 18:
+    case 19:
+      /* Sprayed (`DoGSSprayed`, seg31:0ab5) or flea-sprayed or painted (`DoGSFleaSprayedOrColored`, seg31:0e15): no effects of their own; sprayed (0x3f) or flea-sprayed (0x40). */
+      begun.effects = [0, 0, 0, 0];
+      begun.state = global === 18 ? 0x3f : 0x40;
+      break;
     case 12:
       /* Ignoring something (`DoGSIgnore`, seg30:1964): no effects of its own; it ignores it (0x51). */
       begun.effects = [0, 0, 0, 0];
