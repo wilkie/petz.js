@@ -1003,6 +1003,8 @@ export function catzStateTick(
               pushes: [0x156],
               goal: world.cursorAt,
               leap: { ball: 0x42, to: 'goal' },
+              /* Tired and hungry by the leap (its slot `0x170` with 5 and 1, seg14:130a). */
+              ...catzTires(mind, 5, 1, random),
             });
       }
 
@@ -2761,7 +2763,8 @@ function catzPouncing(
     tick.pushes = pushes;
     tick.pushed = pushes[0];
     tick.leap = { ball: 0x42, to: 'prey' };
-    return tick;
+    /* Tired and hungry by the leap (its slot `0x170` with 5 and 1, seg14:0efa). */
+    return { ...tick, ...catzTires(mind, 5, 1, random) };
   }
 
   if (world.cues?.includes(2) && age !== 0) {
@@ -3192,6 +3195,32 @@ export function catzProjectToCatnip(at: { x: number; y: number }, angle: number)
 }
 
 /**
+ * Tired and hungry by an exertion (`CatGetsTiredAndHungry`, seg16:36fb, the
+ * cat's slot `0x170`): under what its liveliness leaves of 100, its energy
+ * `tired` less; then under 10 (for `hungry` 1, else 30), its fullness
+ * `hungry` less (`XBrain::Decrement`, kept to 0).
+ */
+export function catzTires(
+  mind: CatzMind,
+  tired: number,
+  hungry: number,
+  random: (n: number) => number
+): { energy: number; fullness: number } {
+  let energy = mind.brains[CATZ_BRAIN.energy];
+  let fullness = mind.brains[CATZ_BRAIN.fullness];
+
+  if (random(101) < 100 - mind.brains[CATZ_BRAIN.liveliness]) {
+    energy = Math.max(0, energy - tired);
+  }
+
+  if (random(101) < (hungry === 1 ? 10 : 30)) {
+    fullness = Math.max(0, fullness - hungry);
+  }
+
+  return { energy, fullness };
+}
+
+/**
  * Eating's effects (`CatEatingEffects`, seg22:2dcc, the cat's slot `0x33c`):
  * inclined to behaviour 22, its behaviour changed (5); its fullness 5 more;
  * its proper diet 7 more under 50 or for a treat (`+0x35a4` 0xb), else one
@@ -3429,7 +3458,8 @@ function catzDiving(
     tick.pushes = pushes;
     tick.pushed = pushes[0];
     tick.leap = { ball: 0x42, to: 'prey' };
-    return tick;
+    /* Tired and hungry by the leap (its slot `0x170` with 5 and 1, seg19:03a1). */
+    return { ...tick, ...catzTires(mind, 5, 1, random) };
   }
 
   /* The mouse caught at or over what its age leaves of 100, halved, where it is within its paws' reach. */

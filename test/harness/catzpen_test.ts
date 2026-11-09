@@ -1694,8 +1694,9 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         .map(([key, k]) => `${key} ${k.same}`)
         .join(', ')}`
     );
-    /* Walking on's strides are carried only where the trace keeps what
-     * `PopScript` answered (newer traces); nor yet one petting tick in 3,000. */
+    /* Walking on's strides, and whether it arrived (`+0x35aa`), are followed
+     * only where the trace keeps what `PopScript` answered (newer traces);
+     * nor yet one petting tick in 3,000. */
     const popsKept = lines.some(
       (line) => line.startsWith('ticked ') && line.split(' ').length > 204
     );
@@ -1703,7 +1704,9 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       Object.entries(books)
         .filter(
           ([key, k]) =>
-            k.other && !(key === '23:count' && !popsKept) && !(key === '50:count' && k.other < 2)
+            k.other &&
+            !((key === '23:count' || key === '23:x35aa') && !popsKept) &&
+            !(key === '50:count' && k.other < 2)
         )
         .map(([key, k]) => `${key}: ${k.examples.join('; ')}`)
     ).toEqual([]);
@@ -2327,7 +2330,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           t.petting?.x3572 !== undefined && pending.x3570 !== undefined
             ? catzPurring(pending.x3570, t.petting.x3572)
             : undefined;
-        const pairs: [string, number | undefined, number][] = [
+        const pairs: [string, number | undefined, number, number?][] = [
           ['count', t.count, field(1)],
           ['passed', t.passed, field(2)],
           ['mode', t.mode, field(5)],
@@ -2336,6 +2339,15 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           ['x35ee', t.x35ee, field(16)],
           ['x35a4', t.x35a4, field(17)],
           ['x33be', t.x33be, field(21)],
+          /* Its goal (`+0x34cc`, `+0x34ce`), `+0x35aa`, `+0x3504`, and its energy, fullness and proper diet (brains 1, 4 and 9, from field 22 on), where it wrote them. */
+          ['goal.x', t.goal?.x, field(10)],
+          ['goal.y', t.goal?.y, field(11)],
+          ['x35aa', t.x35aa, field(13)],
+          ['ticks', t.ticks, field(3)],
+          /* (Brains move by the clock between ticks, `XBrain::Update`, which this does not run: within 1.) */
+          ['energy', t.energy, field(22 + 1), 1],
+          ['fullness', t.fullness, field(22 + 4), 1],
+          ['properDiet', t.properDiet, field(22 + 9), 1],
           /* Petted: what it wrote of its petting fields (the trace's 122 on: its rate, `+0x3570`, `+0x3572`, `+0x3576`, where the cursor was, the cursor's action, `+0x356c` and its modes). */
           ['rate', t.petting?.rate, values[122]],
           /* (Purring runs first in the next tick's `Update`: what it asked, purred and cleared; the purr playing after.) */
@@ -2363,7 +2375,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
         let agreed = true;
 
-        for (const [name, ours, theirs] of pairs) {
+        for (const [name, ours, theirs, within = 0] of pairs) {
           if (ours === undefined) {
             continue;
           }
@@ -2371,7 +2383,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           const key = `${pending.state}:${name}`;
           const k = (books[key] ??= { same: 0, other: 0, examples: [] });
 
-          if (ours === theirs) {
+          if (Math.abs(ours - theirs) <= within) {
             k.same++;
           } else {
             k.other++;
@@ -2476,6 +2488,14 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
               popped: values[201] > 0 ? values[202] : undefined,
             }),
             ...(state === 50 ? { passed: undefined } : {}),
+            /* Looking at things counts `+0x3504` down every tick, its script done or not (seg24:052e), as the pet's tick between does; at 0 it looks anew, drawing, which is not followed here. */
+            ...(state === 12 && carried.tick.ticks !== undefined
+              ? { ticks: carried.tick.ticks > 0 ? carried.tick.ticks - 1 : undefined }
+              : {}),
+            /* (Its brains, compared only the tick after: the clock moves them between.) */
+            energy: undefined as unknown as number,
+            fullness: undefined,
+            properDiet: undefined,
           },
         };
         frames = 0;
