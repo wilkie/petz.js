@@ -47,31 +47,35 @@ describe('a Catz cat on its own', () => {
     expect(globals[15]).toBeGreaterThan(0);
   });
 
-  /* Exploring is rare: at age 7 an idling begins it about two times in a
-   * hundred (`percent() < age / 3`). Day 3 on a 640 by 480 stage is one it
-   * does: up the stage's edges, might it jump (14), jumping to the edge (15)
-   * and crawling up it (16). */
-  it('explores up the stage edges on a day it explores', () => {
-    const rand = borlandRand(3);
+  /* Exploring begins with idling under its age / 3 in a hundred
+   * (`percent() < age / 3`): rare at 7, one idling in five grown (60). A
+   * grown cat over three days explores up the stage's edges: might it jump
+   * (14), jumping to the edge (15) and crawling up it (16). */
+  it('explores up the stage edges, grown', () => {
     const states: Record<number, number> = {};
-    const pet = new CatzPet({
-      brains: BRAINS,
-      centres: CENTRES,
-      stage: { left: 0, top: 0, right: 640, bottom: 480 },
-      cursor: (tick) => ({
-        x: 60 + ((Math.trunc(tick / 300) * 137) % 350),
-        y: 100 + ((Math.trunc(tick / 300) * 89) % 250),
-      }),
-      play: () => 10,
-      random: (n) => rand() % n,
-    });
 
-    for (let n = 0; n < 20000; n++) {
-      const { state } = pet.tick();
-      states[state] = (states[state] ?? 0) + 1;
+    for (const seed of [1, 2, 3]) {
+      const rand = borlandRand(seed);
+      const pet = new CatzPet({
+        brains: [...BRAINS.slice(0, 11), 60],
+        centres: CENTRES,
+        stage: { left: 0, top: 0, right: 640, bottom: 480 },
+        cursor: (tick) => ({
+          x: 60 + ((Math.trunc(tick / 300) * 137) % 350),
+          y: 100 + ((Math.trunc(tick / 300) * 89) % 250),
+        }),
+        play: () => 10,
+        random: (n) => rand() % n,
+      });
+
+      for (let n = 0; n < 5000; n++) {
+        const { state } = pet.tick();
+        states[state] = (states[state] ?? 0) + 1;
+      }
+
+      expect(pet.stoodIn.errors).toBe(0);
     }
 
-    expect(pet.stoodIn.errors).toBe(0);
     expect(states[13]).toBeGreaterThan(0);
     expect(states[14]).toBeGreaterThan(0);
     expect(states[15]).toBeGreaterThan(0);

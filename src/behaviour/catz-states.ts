@@ -8,6 +8,7 @@ import { type CatzMind, catzBehavior, catzSound, mapCatzValue } from './catz-beh
 import { CATZ_TURN } from '../render/raster.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 import { catzStrikeSpeed } from './catz-toys.ts';
+import { catzBehaviorChange } from './catz-reflexes.ts';
 
 /** The cat's own states these model, by CATZDLL.DLL's numbers (`eKatState_…`). */
 export const CATZ_STATE = {
@@ -578,6 +579,11 @@ export interface CatzStateTick {
   /** Swatting: its fields as it wrote them -- its side (`+0x358e`), `+0x3590`, `+0x3592`, the zone it swatted in last (`+0x3594`) and `+0x3596`. */
   swatFields?: Partial<{ side: number; x3590: number; x3592: number; zone: number; x3596: number }>;
 
+  /** Its behaviour changed (`DoCatBehaviorChange`, slot `0x2b4`), and, eating, its fullness and proper diet after (`CatEatingEffects`). */
+  changes?: number[];
+  properDiet?: number;
+  x35d6?: number;
+
   /** Falling asleep, the mouse's fear 50 less (`DoCatSleep`'s `XBrain::Decrement`). */
   calmsMouse?: boolean;
 
@@ -641,6 +647,8 @@ export interface CatzStateTick {
     turn?: number;
     /** The action, of those pushed, its words go before; the first where none. */
     before?: number;
+    /** The point itself, where its words name one other than what `to` says. */
+    at?: { x: number; y: number };
   };
 
   /** In the Adoption Kit: the Kit's fields it wrote; and, put in a basket, the kitten to be made again as that basket's breed (`SetupNewBasket`). */
@@ -922,11 +930,26 @@ export function catzStateTick(
           : done({ state: 0x26 });
     case CATZ_STATE.nibbleCatnip: {
       /* `DoCatNibbleCatnip`, seg22:2669: each tick, the catnip moved from its goal (`+0x34cc`) or held, it lets go (its slot `0x9c` 1) and goes for it again (global 4); cued (5), it eats 20 of what is left (`+0x35d4`, to 0) and grows more catnipped (20); its script done, having nibbled (`+0x34ca`, a draw against its catnip of no account), with none left it idles (6), else, having nibbled, 0x279 over 70 left, else 0x2d2. Leaving, under its catnip 0x27a, else, catnipped, a sound (10) and 0x250. */
-      const prey = world.prey!;
-      const goal = world.goal!;
+      let prey = world.prey!;
+      let goal = world.goal!;
+      let entered: Partial<CatzStateTick> = {};
+
+      /* Entering (seg22:267b): `+0x35d6` and `+0x34ca` 0, its goal the catnip's target point, the catnip full where what is left is out of 0 to 100 (`SetupSpriteJustBroughtOut`); on into its tick, nothing pushed. */
+      if (world.enter) {
+        goal = { ...prey };
+        const left = world.x35d4 ?? 0;
+        entered = {
+          x35d6: 0,
+          passed: 0,
+          goal,
+          ...(left < 0 || left > 100 ? { x35d4: 100 } : {}),
+        };
+        world = { ...world, passed: 0, x35d4: entered.x35d4 ?? world.x35d4 };
+        prey = goal;
+      }
 
       if (prey.x !== goal.x || prey.y !== goal.y || world.preyHeld) {
-        return done({ global: 4 });
+        return done({ ...entered, global: 4 });
       }
 
       const left = world.cues?.includes(5) ? Math.max(0, (world.x35d4 ?? 0) - 20) : world.x35d4;
@@ -947,8 +970,14 @@ export function catzStateTick(
       }
 
       return left === 0
-        ? done({ global: 6, conds, x35d4 })
-        : done({ passed: 1, pushed: left! > 70 ? 0x279 : 0x2d2, conds, x35d4 });
+        ? done({ ...entered, global: 6, conds, x35d4: x35d4 ?? entered.x35d4 })
+        : done({
+            ...entered,
+            passed: 1,
+            pushed: left! > 70 ? 0x279 : 0x2d2,
+            conds,
+            x35d4: x35d4 ?? entered.x35d4,
+          });
     }
     case CATZ_STATE.stayAway:
     case CATZ_STATE.scaredWatch:
@@ -1028,12 +1057,13 @@ export function catzStateTick(
           food === 4
             ? catzProjectToCatnip(world.prey, turn)
             : catzProjectToFood(mind, world.prey, turn, world.size?.height ?? 104);
+        /* Its words name the projected point; then its goal is its food's target point again (seg22:147d). */
         return done({
-          goal,
+          goal: { ...world.prey },
           head: ['track'],
           headTrack: { kind: food ?? 0, speed: 3000 },
           pushes: [0x123, 0x1cf, 0x125],
-          leap: { ball: food === 4 ? 0x16 : 6, to: 'goal', turn, before: 1 },
+          leap: { ball: food === 4 ? 0x16 : 6, to: 'goal', at: goal, turn, before: 1 },
         });
       }
 
@@ -1104,7 +1134,7 @@ export function catzStateTick(
       return catzEatBowl(mind, world, random);
     case CATZ_STATE.eatHide:
       /* `DoCatEatHide`, seg22:2353: entering, 0x20d; its script done, eating (global 3). */
-      return done({ global: 3 });
+      return world.enter ? done({ pushed: 0x20d, pushes: [0x20d] }) : done({ global: 3 });
     case CATZ_STATE.sniffMouseHole:
       /* `DoCatSniffMouseHole`, seg14:1850: entering, it tracks what it plays with with its head (3000); inclined to behaviour 7, the mouse in (kin 0x1b's slot `0x110`), under its age, it aims at the hole, a quarter of its width and height past its target point, faces 0x40, sniffs (0x123, 0x1cf, 0x125, 0x2b8), and keeps where kin 0xe is (`+0x35c2`, `+0x34ca` 1); else 0x2a4. Each tick, that kin moved, or its script done, it readies its moment (`PreMoment`, after it idling, 0x93 meanwhile) and has it (8). */
       return done({
@@ -2947,6 +2977,24 @@ function catzEatPiece(
   const age = brain(CATZ_BRAIN.age);
   const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
 
+  /* Entering (seg22:15c9): `+0x35d6` 0; it chews -- 0x1f4 a treat, else 0x178 -- and more, 0x1f5 or 0x203, while a fresh `rand() % 4 + 1` is over how many more; with an age one time in four 0x2e9; not inclined to behaviour 23, its behaviour changed (1) and it eats (`CatEatingEffects`). */
+  if (world.enter) {
+    const treat = world.x35a6 === 0xb;
+    const pushes = [treat ? 0x1f4 : 0x178];
+
+    for (let more = 0; random(4) + 1 > more; more++) {
+      pushes.push(treat ? 0x1f5 : 0x203);
+    }
+
+    if (percent() < 25 && age !== 0) {
+      pushes.push(0x2e9);
+    }
+
+    const eats =
+      catzBehavior(mind, 23, random) === 0 ? catzEatingEffects(mind, world.x35a4, random, [1]) : {};
+    return { ...tick, ...eats, x35d6: 0, pushes, pushed: pushes[0] };
+  }
+
   if (world.cues?.includes(0)) {
     const look = (['track', 'user', 'off'] as const).find(() => percent() < 20);
 
@@ -3005,6 +3053,38 @@ export function catzProjectToCatnip(at: { x: number; y: number }, angle: number)
   return { x: at.x + (angle >= 35 ? 20 : -40), y: at.y + 10 };
 }
 
+/**
+ * Eating's effects (`CatEatingEffects`, seg22:2dcc, the cat's slot `0x33c`):
+ * inclined to behaviour 22, its behaviour changed (5); its fullness 5 more;
+ * its proper diet 7 more under 50 or for a treat (`+0x35a4` 0xb), else one
+ * time in five 2 more (`XBrain::Increment`, kept to 100). Its mind as it is
+ * after any change before it.
+ */
+function catzEatingEffects(
+  mind: CatzMind,
+  food: number | undefined,
+  random: (n: number) => number,
+  changes: number[] = []
+): { changes: number[]; fullness: number; properDiet: number } {
+  const after = { ...mind, brains: [...mind.brains] };
+  changes.forEach((change) => catzBehaviorChange(after, change, [0, 0, 0, 0]));
+  const change = catzBehavior(after, 22, random) !== 0 ? 5 : undefined;
+
+  if (change !== undefined) {
+    catzBehaviorChange(after, change, [0, 0, 0, 0]);
+  }
+
+  const fullness = Math.min(100, after.brains[CATZ_BRAIN.fullness] + 5);
+  const diet = after.brains[CATZ_BRAIN.properDiet];
+  const properDiet =
+    diet < 50 || food === 0xb
+      ? Math.min(100, diet + 7)
+      : random(101) < 20
+        ? Math.min(100, diet + 2)
+        : diet;
+  return { changes: change !== undefined ? [...changes, change] : changes, fullness, properDiet };
+}
+
 /** A thing's condition by what is left of it: 2 over the first mark, 3 over the next, and so on; past the last, one more. */
 function catzLeftCond(left: number, marks: number[]) {
   const n = marks.findIndex((mark) => left > mark);
@@ -3040,12 +3120,41 @@ function catzEatBowl(
   const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
   const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
   const food = world.x35a6;
+
+  /* Entering (seg22:19fe): nothing eaten yet (`+0x34ca` 0). Its goal not the bowl's point, or the bowl held, it eats on (global 3). Else the bowl in the pen shown so (2), had (its slot `0xf0` 7); the food bowl with more than 1, not inclined to behaviour 23, its behaviour changed (1); the food bowl's food full where it is under -1 or over 100 (`SetupSpriteJustBroughtOut`). On into its tick. */
+  if (world.enter) {
+    const at = world.walkedToAt;
+    const goal = world.goal;
+
+    if (!at || !goal || at.x !== goal.x || at.y !== goal.y || world.walkedToHeld) {
+      return { ...tick, passed: 0, global: 3 };
+    }
+
+    tick.passed = 0;
+
+    if (food !== undefined && !world.inShelf!(food)) {
+      tick.conds = [[food, 2]];
+    }
+
+    if (food === 0xc && (world.x35d2 ?? 0) > 1 && !behave(23)) {
+      tick.changes = [1];
+    }
+
+    if (food === 0xc && ((world.x35d2 ?? 0) < -1 || (world.x35d2 ?? 0) > 100)) {
+      tick.x35d2 = 100;
+    }
+
+    world = { ...world, passed: 0, x35d2: tick.x35d2 ?? world.x35d2 };
+  }
+
   const eaten = world.passed !== 0;
   const full = brain(CATZ_BRAIN.fullness) > 0x4b;
   let left = world.x35d2 ?? 0;
 
   /* Cued to bite (5), 5 less, the food bowl shown by what is left (seg22:1c7c): 2 over 95, then 3, 4, 5, 6, 7 over 0, else 8; else the water bowl, cued 1, 3, and cued 0, 2 (`CatSetCond`). */
   if (world.cues?.includes(5)) {
+    /* It eats (`CatEatingEffects`, seg22:1c2c), then 5 less. */
+    Object.assign(tick, catzEatingEffects(mind, world.x35a4, random, tick.changes));
     left = Math.max(0, left - 5);
     tick.x35d2 = left;
 

@@ -235,9 +235,9 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  1, 2, 3, 4, 8, 14, 19, 20, 25, 27, 28, 29, 30, 38, 56, 57, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31,
-  32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71,
-  72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  1, 2, 3, 4, 8, 14, 19, 20, 25, 27, 28, 29, 30, 38, 39, 40, 41, 43, 56, 57, 53, 62, 15, 16, 17, 18,
+  22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65,
+  67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -1488,15 +1488,8 @@ export class CatzPet {
     }
 
     /* The highlight hidden: a basket picked, held or not (`PickANewBasket`, or `DoCatInBaskets` with one), or the cat's own chosen (76). */
-    /* Eating from a bowl in the pen, it shown so (`DoCatEatFromBowl`, seg22:1a9a, 2); suckling the bottle in the pen, 1 (`DoSucklingSelf`, seg33:0461). Held, the bowl is not eaten from (back to eating, 3); the bottle is taken. */
-    if (
-      state === 40 &&
-      this.fields.x35a6 !== undefined &&
-      !this.isShelved(this.fields.x35a6) &&
-      this.options.holding?.() !== this.fields.x35a6
-    ) {
-      this.catSetCond(this.fields.x35a6, 2);
-    } else if (state === 45 && !this.isShelved(0xf)) {
+    /* Suckling the bottle in the pen, it shown so (1; `DoSucklingSelf`, seg33:0461), held or not. (Eating from a bowl, its own entering shows it so.) */
+    if (state === 45 && !this.isShelved(0xf)) {
       this.catSetCond(0xf, 1);
     }
 
@@ -1679,6 +1672,12 @@ export class CatzPet {
     if (ticked.explore !== undefined) f.x35a8 = ticked.explore;
     if (ticked.marker !== undefined) this.marker = ticked.marker;
     if (ticked.energy !== undefined) this.mind.brains[CATZ_BRAIN.energy] = ticked.energy;
+    /* Its behaviour changed (`DoCatBehaviorChange`), then, eating or tiring, its fullness and diet as they are after. */
+    ticked.changes?.forEach((change) => catzBehaviorChange(this.mind, change, [0, 0, 0, 0]));
+    if (ticked.fullness !== undefined) this.mind.brains[CATZ_BRAIN.fullness] = ticked.fullness;
+    if (ticked.properDiet !== undefined)
+      this.mind.brains[CATZ_BRAIN.properDiet] = ticked.properDiet;
+    if (ticked.x35d6 !== undefined) f.x35d6 = ticked.x35d6;
   }
 
   /** Walking on, what it is steered at: what it walks to, in the box its words give; none where its steering stopped. Creeping, the angle to its prey. */
@@ -1689,8 +1688,9 @@ export class CatzPet {
 
     if (ticked.leap) {
       const { ball, to, keep, turn } = ticked.leap;
-      const at =
-        to === 'goal'
+      const at = ticked.leap.at
+        ? ticked.leap.at
+        : to === 'goal'
           ? this.fields.goal
           : to === 'prey'
             ? (this.preyAt() ?? this.walkedToAt())
