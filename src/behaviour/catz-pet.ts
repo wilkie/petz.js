@@ -360,8 +360,8 @@ export class CatzPet {
       {
         cursorAbout: this.options.cursorAbout?.(this.ticks) ?? false,
         cursorMoved: false,
-        area3: false,
-        area1: true,
+        area3: this.screenArea(0x1d) === 3,
+        area1: this.screenArea(0x1d) === 1,
         screenSaver: false,
         sleepy: false,
         x35a4: this.fields.x35a4 ?? 0,
@@ -506,7 +506,7 @@ export class CatzPet {
         x35a6: f.x35a6 ?? 0,
         x35d6: f.x35d6 ?? 0,
         x35b2: this.x35b2,
-        area: 1,
+        area: this.screenArea(0x1d),
         mouseState: this.options.mouse?.()?.state ?? 1,
         treatShelved: this.isShelved(0xb),
         rect: this.rect,
@@ -551,6 +551,31 @@ export class CatzPet {
     }
 
     return false;
+  }
+
+  /**
+   * Where a kind of sprite's target point lies (`GetSpriteScreenArea`,
+   * seg24:1e2d): 1 within the stage less half the cat's width and height
+   * each side, 2 within the stage, 3 off it; 3 where it is nowhere.
+   */
+  screenArea(kind: number) {
+    const at = kind === 0x1d ? this.point : this.kinAt(kind);
+
+    if (!at) {
+      return 3;
+    }
+
+    const { stage } = this.options;
+    const size = this.options.size ?? { width: 137, height: 104 };
+    const [w, h] = [Math.trunc(size.width / 2), Math.trunc(size.height / 2)];
+    const within = (left: number, top: number, right: number, bottom: number) =>
+      at.x >= left && at.x <= right && at.y >= top && at.y <= bottom;
+
+    if (within(stage.left + w, stage.top + h, stage.right - w, stage.bottom - h)) {
+      return 1;
+    }
+
+    return within(stage.left, stage.top, stage.right, stage.bottom) ? 2 : 3;
   }
 
   /** What it ignored last (`+0x35b2`). */
@@ -863,7 +888,7 @@ export class CatzPet {
           c4: 0,
           x35d2: 0,
           x3516: this.readied?.after ?? 0,
-          area3: false,
+          area3: this.screenArea(0x1d) === 3,
           cursorAbout: this.options.cursorAbout?.(this.ticks) ?? false,
           minded: this.minded,
           soundPlaying: false,
@@ -982,7 +1007,7 @@ export class CatzPet {
       this.mind,
       {
         cursorMoved: false,
-        area3: false,
+        area3: this.screenArea(0x1d) === 3,
         screenSaver: false,
         sleepy: false,
         inShelf: this.isShelved,
@@ -1340,6 +1365,7 @@ export class CatzPet {
       global: this.global,
       enter,
       inReach: this.options.inReach?.() ?? false,
+      preyArea3: this.screenArea(this.fields.x35a4 ?? 0) === 3,
       petting: this.pettingNow(),
       ...(this.options.buttons
         ? {
@@ -1362,8 +1388,8 @@ export class CatzPet {
         bottom: y,
       },
       /* On the pen's floor, as the cat mostly is (`GetSpriteScreenArea`, 1). */
-      area1: true,
-      area3: false,
+      area1: this.screenArea(0x1d) === 1,
+      area3: this.screenArea(0x1d) === 3,
       inShelf: this.isShelved,
       c4: 0,
       goal: this.fields.goal ?? this.point,
