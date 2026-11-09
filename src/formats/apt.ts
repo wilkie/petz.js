@@ -24,6 +24,9 @@ export interface AptThing {
   numbers: number[];
   /** By condition, its sets; by set, its frames; by frame, its pictures, in order. */
   conds: Map<number, AptPicture[][][]>;
+
+  /** By condition, its rectangle from its picture's corner (`+0x1c4` to `+0x1ca`), whose middle is its target point (`XApt::GetTargetRect`, `GetTargetPt`, seg2:1780, 172a). */
+  rects: Map<number, [number, number, number, number]>;
 }
 
 /** Each line's numbers, where the line is wholly numbers. */
@@ -57,10 +60,12 @@ function readThing(lines: string[], at: number): { thing: AptThing; next: number
     return got;
   };
   const conds = new Map<number, AptPicture[][][]>();
+  const rects = new Map<number, [number, number, number, number]>();
 
   try {
     for (let c = 0; c < count[0]; c++) {
-      const [cond, setCount] = take(6);
+      const [cond, setCount, left, top, right, bottom] = take(6);
+      rects.set(cond, [left, top, right, bottom]);
       const sets: AptPicture[][][] = [];
 
       for (let s = 0; s < setCount; s++) {
@@ -92,7 +97,7 @@ function readThing(lines: string[], at: number): { thing: AptThing; next: number
     return undefined;
   }
 
-  return { thing: { name, label, numbers, conds }, next: n };
+  return { thing: { name, label, numbers, conds, rects }, next: n };
 }
 
 /** The things a definition holds, in order, each read whole. */
@@ -119,6 +124,14 @@ export function parseAptThings(text: string): AptThing[] {
  */
 export function aptShelfKinds(things: AptThing[]) {
   return new Map(things.slice(-15).map((thing, n) => [n + 1, thing]));
+}
+
+/** Where a thing's target point lies on its picture in a condition: its rectangle's middle (halves rounded toward 0, as `GetTargetPt`). */
+export function aptTargetOffset(thing: AptThing, cond: number) {
+  const rect = thing.rects.get(cond);
+  return rect
+    ? { x: Math.trunc((rect[0] + rect[2]) / 2), y: Math.trunc((rect[1] + rect[3]) / 2) }
+    : undefined;
 }
 
 /** The pictures a thing shows at rest in a condition: its set 0's first frame. */

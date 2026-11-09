@@ -57,6 +57,7 @@ import {
   type AptThing,
   aptRestingPictures,
   aptShelfKinds,
+  aptTargetOffset,
   parseAptThings,
 } from '../formats/apt.ts';
 import { catzKitLocked } from '../behaviour/catz-reflexes.ts';
@@ -829,10 +830,16 @@ function drawLive(
   const bounds = placer.bounds(pose);
   const bitmap = new IndexedBitmap(LIVE_STAGE.right, LIVE_STAGE.bottom);
 
-  /* The pen's things with pictures first, the cat in front: each about its point. */
+  /* The pen's things with pictures first, the cat in front: each with its target point (its condition's rectangle's middle, `GetTargetPt`) on its point; else centred there. */
   for (const [kind, { x, y }] of livePen) {
     const picture = penPictures.get(kind);
     const layers = condPictures(kind);
+    const thing = shelfThings.get(kind);
+    const target =
+      (thing && aptTargetOffset(thing, liveConds.get(kind) ?? 1)) ??
+      (picture
+        ? { x: Math.trunc(picture.dib.width / 2), y: Math.trunc(picture.dib.height / 2) }
+        : undefined);
 
     /* In a condition of its own (a bowl part eaten, the catnip nibbled), its pictures for it, each by its rectangle, about the same point. */
     if (picture && layers.length) {
@@ -842,23 +849,15 @@ function drawLive(
           bitmap,
           dib,
           colours,
-          x - Math.trunc(picture.dib.width / 2) + rect[0],
-          y - Math.trunc(picture.dib.height / 2) + rect[1],
+          x - target!.x + rect[0],
+          y - target!.y + rect[1],
           false,
           green
         );
       }
     } else if (picture) {
       const { dib, colours, green } = picture;
-      drawPicture(
-        bitmap,
-        dib,
-        colours,
-        x - Math.trunc(dib.width / 2),
-        y - Math.trunc(dib.height / 2),
-        false,
-        green
-      );
+      drawPicture(bitmap, dib, colours, x - target!.x, y - target!.y, false, green);
     }
   }
 

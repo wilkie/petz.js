@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 
-import { aptRestingPictures, aptShelfKinds, parseAptThings } from '../../src/formats/apt.ts';
+import {
+  aptRestingPictures,
+  aptShelfKinds,
+  aptTargetOffset,
+  parseAptThings,
+} from '../../src/formats/apt.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import { describeWithOracle } from './with-oracle.ts';
 
@@ -44,5 +49,10 @@ describe('the Catz shelf’s things', () => {
     );
     expect(resting(13, 2)).toEqual([13600, 13601]);
     expect(resting(12, 1)).toEqual([12200]);
+  });
+
+  it("puts the food bowl's target point at (40, 65) of its picture in the pen, the middle of (7, 48) to (74, 83)", () => {
+    expect(things.get(12)!.rects.get(1)).toEqual([7, 48, 74, 83]);
+    expect(aptTargetOffset(things.get(12)!, 1)).toEqual({ x: 40, y: 65 });
   });
 });
