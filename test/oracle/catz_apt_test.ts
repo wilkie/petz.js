@@ -55,4 +55,13 @@ describe('the Catz shelf’s things', () => {
     expect(things.get(12)!.rects.get(1)).toEqual([7, 48, 74, 83]);
     expect(aptTargetOffset(things.get(12)!, 1)).toEqual({ x: 40, y: 65 });
   });
+
+  it('has the catnip land once as it is let go (set 1, 14 frames) and loop while it is held (set 3, 12 frames)', () => {
+    const catnip = things.get(4)!;
+    expect(catnip.conds.get(1)![1].map((frame) => frame[0].bitmap)).toEqual(
+      [...Array(14).keys()].map((n) => 4220 + n)
+    );
+    expect(catnip.conds.get(1)![3]).toHaveLength(12);
+    expect([catnip.loops.get(1)![1], catnip.loops.get(1)![3]]).toEqual([false, true]);
+  });
 });

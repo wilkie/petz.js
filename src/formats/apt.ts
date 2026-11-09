@@ -27,6 +27,9 @@ export interface AptThing {
 
   /** By condition, its rectangle from its picture's corner (`+0x1c4` to `+0x1ca`), whose middle is its target point (`XApt::GetTargetRect`, `GetTargetPt`, seg2:1780, 172a). */
   rects: Map<number, [number, number, number, number]>;
+
+  /** By condition, whether each set loops (its header's second number). */
+  loops: Map<number, boolean[]>;
 }
 
 /** Each line's numbers, where the line is wholly numbers. */
@@ -61,15 +64,18 @@ function readThing(lines: string[], at: number): { thing: AptThing; next: number
   };
   const conds = new Map<number, AptPicture[][][]>();
   const rects = new Map<number, [number, number, number, number]>();
+  const loops = new Map<number, boolean[]>();
 
   try {
     for (let c = 0; c < count[0]; c++) {
       const [cond, setCount, left, top, right, bottom] = take(6);
       rects.set(cond, [left, top, right, bottom]);
       const sets: AptPicture[][][] = [];
+      const looping: boolean[] = [];
 
       for (let s = 0; s < setCount; s++) {
-        const [set, , frameCount] = take(3);
+        const [set, loop, frameCount] = take(3);
+        looping[set] = loop !== 0;
         const frames: AptPicture[][] = [];
 
         for (let f = 0; f < frameCount; f++) {
@@ -92,12 +98,13 @@ function readThing(lines: string[], at: number): { thing: AptThing; next: number
       }
 
       conds.set(cond, sets);
+      loops.set(cond, looping);
     }
   } catch {
     return undefined;
   }
 
-  return { thing: { name, label, numbers, conds, rects }, next: n };
+  return { thing: { name, label, numbers, conds, rects, loops }, next: n };
 }
 
 /** The things a definition holds, in order, each read whole. */

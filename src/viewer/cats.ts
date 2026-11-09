@@ -414,6 +414,41 @@ const livePen = new Map<number, { x: number; y: number }>();
  */
 const penPictures = new Map<number, { dib: Dib; colours: number[]; green: number }>();
 
+/**
+ * The pen's things' animations playing, by kind: its condition's set for
+ * the state it was put in (`XApt::SetState`: 1 let go, 3 held and dragged),
+ * a frame a tick, round again where the set loops, else back at rest.
+ */
+const liveAnimations = new Map<number, { set: number; frame: number }>();
+
+/** A thing put in a state: its set for it played, where its condition has one past rest. */
+function thingState(kind: number, state: number) {
+  const frames = shelfThings.get(kind)?.conds.get(liveConds.get(kind) ?? 1)?.[state];
+
+  if (state > 0 && frames?.length) {
+    liveAnimations.set(kind, { set: state, frame: 0 });
+  } else {
+    liveAnimations.delete(kind);
+  }
+}
+
+/** Each animation on a frame; done, at rest, or round again. */
+function animateThings() {
+  for (const [kind, playing] of liveAnimations) {
+    const cond = liveConds.get(kind) ?? 1;
+    const thing = shelfThings.get(kind);
+    const frames = thing?.conds.get(cond)?.[playing.set] ?? [];
+
+    if (playing.frame + 1 < frames.length) {
+      playing.frame++;
+    } else if (thing?.loops.get(cond)?.[playing.set]) {
+      playing.frame = 0;
+    } else {
+      liveAnimations.delete(kind);
+    }
+  }
+}
+
 /** The shelf's things' bitmaps by id (CATZDLL.DLL's, and the retail CATZREZX.DLL's), and their definitions by kind. */
 const thingBitmaps = new Map<number, { dib: Dib; colours: number[]; green: number }>();
 let shelfThings = new Map<number, AptThing>();
@@ -421,8 +456,15 @@ let shelfThings = new Map<number, AptThing>();
 /** A thing's pictures in the pen in its condition, at rest (its set 0's first frame), where the condition has its own and all are here; else none. */
 function condPictures(kind: number) {
   const cond = liveConds.get(kind) ?? 1;
-  const pictures =
-    cond >= 2 && shelfThings.get(kind) ? aptRestingPictures(shelfThings.get(kind)!, cond) : [];
+  const thing = shelfThings.get(kind);
+  const playing = liveAnimations.get(kind);
+  const pictures = !thing
+    ? []
+    : playing
+      ? (thing.conds.get(cond)?.[playing.set]?.[playing.frame] ?? [])
+      : cond >= 2
+        ? aptRestingPictures(thing, cond)
+        : [];
   const found = pictures.map((picture) => ({
     ...picture,
     image: thingBitmaps.get(picture.bitmap),
@@ -764,8 +806,11 @@ function goLive() {
     /* The playpen's notice this tick, leaving the cat its message. */
     const notice = liveNotices.shift();
 
+    animateThings();
+
     if (notice) {
       pet.notify(...notice);
+      thingState(notice[0], notice[2]);
     }
 
     const { state, global } = pet.tick();
