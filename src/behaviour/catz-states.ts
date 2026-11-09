@@ -571,6 +571,9 @@ export function catzPreMoment(
 
 /** What a tick did: the state it went to, the global state it was put in, the action it pushed, and its energy and count after. */
 export interface CatzStateTick {
+  /** The conditions it set its things to (`XApt::CatSetCond`, seg2:02ce): each kind and its condition, in turn. */
+  conds?: [number, number][];
+
   state?: number;
   global?: number;
   pushed?: number;
@@ -891,14 +894,18 @@ export function catzStateTick(
       }
 
       const left = world.cues?.includes(5) ? Math.max(0, (world.x35d4 ?? 0) - 20) : world.x35d4;
+      /* Each bite, the catnip shown by what is left (seg22:289f): 2 over 80, then 3, 4, 5, 6 over 0, else 7. */
+      const conds: [number, number][] | undefined = world.cues?.includes(5)
+        ? [[world.x35a6 ?? 4, catzLeftCond(left ?? 0, [80, 60, 40, 20, 0])]]
+        : undefined;
 
       if (world.passed !== 0) {
         percent();
       }
 
       return left === 0
-        ? done({ global: 6 })
-        : done({ passed: 1, pushed: left! > 70 ? 0x279 : 0x2d2 });
+        ? done({ global: 6, conds })
+        : done({ passed: 1, pushed: left! > 70 ? 0x279 : 0x2d2, conds });
     }
     case CATZ_STATE.stayAway:
     case CATZ_STATE.scaredWatch:
@@ -2783,6 +2790,12 @@ function catzEatPiece(
   return tick;
 }
 
+/** A thing's condition by what is left of it: 2 over the first mark, 3 over the next, and so on; past the last, one more. */
+function catzLeftCond(left: number, marks: number[]) {
+  const n = marks.findIndex((mark) => left > mark);
+  return 2 + (n < 0 ? marks.length : n);
+}
+
 /**
  * Eating from a bowl (40; `DoCatEatFromBowl`, seg22:19e5), the food bowl
  * (0xc, `+0x35d2` what is left in it) or the water bowl (0xd). Entering, its
@@ -2816,8 +2829,17 @@ function catzEatBowl(
   const full = brain(CATZ_BRAIN.fullness) > 0x4b;
   let left = world.x35d2 ?? 0;
 
+  /* Cued to bite (5), 5 less, the food bowl shown by what is left (seg22:1c7c): 2 over 95, then 3, 4, 5, 6, 7 over 0, else 8; else the water bowl, cued 1, 3, and cued 0, 2 (`CatSetCond`). */
   if (world.cues?.includes(5)) {
     left = Math.max(0, left - 5);
+
+    if (food === 0xc) {
+      tick.conds = [[0xc, catzLeftCond(left, [95, 80, 60, 40, 20, 0])]];
+    }
+  } else if (food === 0xd && world.cues?.includes(1)) {
+    tick.conds = [[0xd, 3]];
+  } else if (food === 0xd && world.cues?.includes(0)) {
+    tick.conds = [[0xd, 2]];
   }
 
   const go = (fields: Partial<CatzStateTick>) => {

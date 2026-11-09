@@ -624,6 +624,16 @@ function goLive() {
     /* Petted: the hand, the ball under the cursor, the rectangle grown by 10 holding it, and the frames left. */
     hand: () => liveHand,
     holding: () => liveDragging,
+    /* The cat's conditions for its things, kept; and a thing it takes from the user let go where it is, its state 1 (`ForceRelease`). */
+    setCond: (kind: number, cond: number) => liveConds.set(kind, cond),
+    forceRelease: (kind: number) => {
+      if (liveDragging === kind) {
+        liveNotices.push([kind, liveConds.get(kind) ?? 1, 1, false]);
+        liveDragging = undefined;
+        liveHand = false;
+        livePressed = false;
+      }
+    },
     ballUnder: () =>
       body.shown ? placer.ballAt(body.shown.rect, body.shown.pose, liveCursor) : -1,
     cursorOver: () => {
@@ -1096,6 +1106,9 @@ function stageAt(event: MouseEvent) {
 
 /** The shelf: a strip along the stage's top, where a thing dropped goes back (`PlaypenToShelf`). */
 const SHELF_DEPTH = 40;
+
+/** The pen's things' conditions as the cat set them (`CatSetCond`), by kind; 1, in the pen, where it has not. */
+const liveConds = new Map<number, number>();
 
 /** A thing of the pen the user is dragging, by kind; and whether this press grabbed one. */
 let liveDragging: number | undefined;

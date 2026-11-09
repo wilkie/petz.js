@@ -97,6 +97,19 @@ export interface CatzPetOptions {
     xea?: number;
   };
 
+  /**
+   * A thing's condition set by the cat (`XApt::CatSetCond`): a bowl's, the
+   * catnip's or the bottle's, as it eats, nibbles or suckles.
+   */
+  setCond?: (kind: number, cond: number) => void;
+
+  /**
+   * A thing the user held taken from them (`XApt::ForceRelease`, seg2:017a):
+   * let go where it is, the user's hand and press none (`PetParams` `+0x1e`,
+   * `+0xa`), and the playpen told so (its state 1, `SetState`).
+   */
+  forceRelease?: (kind: number) => void;
+
   /** Words for the Kit's text bar (`TextStatusBar`): a string of CATZDLL's (`RT_STRING`); none, cleared. */
   words?: (string: number | undefined) => void;
 
@@ -525,6 +538,15 @@ export class CatzPet {
 
   /** The Kit's text bar: its hint, advert and counts (`catzKitText`). */
   readonly kitText: CatzKitText = makeCatzKitText();
+
+  /** A thing's condition set (`XApt::CatSetCond`, seg2:02ce): held by the user, taken from them first (`ForceRelease`, its slot `0x28`). */
+  private catSetCond(kind: number, cond: number) {
+    if (this.options.holding?.() === kind) {
+      this.options.forceRelease?.(kind);
+    }
+
+    this.options.setCond?.(kind, cond);
+  }
 
   /** Words to the Kit's text bar (`TextStatusBar`): a tip only once enough ticks have passed. */
   private say(string: number) {
@@ -1429,6 +1451,18 @@ export class CatzPet {
     }
 
     /* The highlight hidden: a basket picked, held or not (`PickANewBasket`, or `DoCatInBaskets` with one), or the cat's own chosen (76). */
+    /* Eating from a bowl in the pen, it shown so (`DoCatEatFromBowl`, seg22:1a9a, 2); suckling the bottle in the pen, 1 (`DoSucklingSelf`, seg33:0461). Held, the bowl is not eaten from (back to eating, 3); the bottle is taken. */
+    if (
+      state === 40 &&
+      this.fields.x35a6 !== undefined &&
+      !this.isShelved(this.fields.x35a6) &&
+      this.options.holding?.() !== this.fields.x35a6
+    ) {
+      this.catSetCond(this.fields.x35a6, 2);
+    } else if (state === 45 && !this.isShelved(0xf)) {
+      this.catSetCond(0xf, 1);
+    }
+
     /* Climbing out (`DoCatExitBasket`): its breed's words (`GiveBreedDescriptions`, 0x233d on by its basket), its hint's count 0. */
     if (state === 76 && this.kit) {
       this.kitText.x35fe = 0;
@@ -1569,6 +1603,10 @@ export class CatzPet {
     }
 
     if (ticked.count !== undefined) f.count = ticked.count;
+    for (const [kind, cond] of ticked.conds ?? []) {
+      this.catSetCond(kind, cond);
+    }
+
     if (ticked.passed !== undefined) f.passed = ticked.passed;
     if (ticked.mode !== undefined) f.mode = ticked.mode;
     if (ticked.x35a6 !== undefined) f.x35a6 = ticked.x35a6;
