@@ -812,6 +812,11 @@ export function catzStateTick(
       return done({ pushed: 0x1d4 });
     }
     case CATZ_STATE.dozing: {
+      /* `DoCatShortRest`, seg30:022e, entering: placed 3, its eyelids reset and it idles (6); else its count 0 and 0xb4. */
+      if (world.enter) {
+        return world.area3 ? done({ global: 6 }) : done({ count: 0, pushed: 0xb4, pushes: [0xb4] });
+      }
+
       if (count < 101) {
         count++;
       } else {
@@ -836,7 +841,8 @@ export function catzStateTick(
       return done({ pushed: 0xb4 });
     }
     case CATZ_STATE.wakeup:
-      return done({ global: 6 });
+      /* `DoCatWakeup`, seg30:0741: entering, 0xb5; its script done, it idles (6). */
+      return world.enter ? done({ pushed: 0xb5, pushes: [0xb5] }) : done({ global: 6 });
     case CATZ_STATE.sharpenClaws:
       return world.enter ? done({ pushed: 0x13f }) : done({ global: 6 });
     case CATZ_STATE.swatting:
