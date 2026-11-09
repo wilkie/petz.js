@@ -235,9 +235,9 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  1, 3, 4, 8, 14, 19, 20, 25, 27, 28, 29, 30, 38, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33,
-  42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73,
-  74, 75, 76, 77, 78, 79, 80, 81,
+  1, 2, 3, 4, 8, 14, 19, 20, 25, 27, 28, 29, 30, 38, 56, 57, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31,
+  32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71,
+  72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -551,6 +551,9 @@ export class CatzPet {
     const place = CATZ_BASKETS[basket] ?? CATZ_BASKETS[0];
     return { x: place.x + origin.x, y: place.y + origin.y };
   }
+
+  /** Swatting's fields (`+0x358e` its side, `+0x3590`, `+0x3592`, `+0x3594` its last zone, `+0x3596`), as its entering, its swats and its strikes write them. */
+  private readonly swatFields = { side: 0, x3590: 0, x3592: 0, zone: 0, x3596: 0 };
 
   /** The Kit's highlight (kin 0x19, `baskhi.apt`): the basket it is shown over, -1 hidden. */
   kitHighlight = -1;
@@ -1039,7 +1042,14 @@ export class CatzPet {
     if ('tick' in struck) {
       this.take(struck.tick);
       this.change(struck.tick.global, struck.tick.state, 0);
-    } else if (struck.strike) {
+      return;
+    }
+
+    if (struck.fields) {
+      Object.assign(this.swatFields, struck.fields);
+    }
+
+    if (struck.strike) {
       /* Struck, and swinging on after all: the toy given its speed all the same. */
       this.options.strike?.(struck.strike);
     }
@@ -1644,6 +1654,7 @@ export class CatzPet {
 
     if (ticked.count !== undefined) f.count = ticked.count;
     if (ticked.x35c2 !== undefined) f.x35c2 = ticked.x35c2;
+    if (ticked.swatFields) Object.assign(this.swatFields, ticked.swatFields);
     if (ticked.calmsMouse) this.options.mouseFear?.(-50);
     if (ticked.x35d2 !== undefined) f.x35d2 = ticked.x35d2;
     if (ticked.x35d4 !== undefined) f.x35d4 = ticked.x35d4;
@@ -1802,15 +1813,15 @@ export class CatzPet {
                 (this.preyAt() ?? this.cursorAt()).y - y
               )
             ),
-        x3592: 0,
+        x3592: this.swatFields.x3592,
         shelved: this.isShelved(this.fields.x35a4 ?? 0),
         shelfClosed: false,
         x1d0: 0,
         /* (What the trace calls the mouse running: back in its hole, its state 1, seg29:1580.) */
         mouseRunning: this.options.mouse?.()?.state === 1,
-        side: 0,
-        zone: 0,
-        x3596: 0,
+        side: this.swatFields.side,
+        zone: this.swatFields.zone,
+        x3596: this.swatFields.x3596,
       },
       preyHeld: false,
       /* The bottle, on the shelf or in the pen, not held: near it within

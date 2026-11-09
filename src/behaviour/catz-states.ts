@@ -575,6 +575,9 @@ export interface CatzStateTick {
   /** The conditions it set its things to (`XApt::CatSetCond`, seg2:02ce): each kind and its condition, in turn. */
   conds?: [number, number][];
 
+  /** Swatting: its fields as it wrote them -- its side (`+0x358e`), `+0x3590`, `+0x3592`, the zone it swatted in last (`+0x3594`) and `+0x3596`. */
+  swatFields?: Partial<{ side: number; x3590: number; x3592: number; zone: number; x3596: number }>;
+
   /** Falling asleep, the mouse's fear 50 less (`DoCatSleep`'s `XBrain::Decrement`). */
   calmsMouse?: boolean;
 
@@ -2060,6 +2063,19 @@ function catzSwatting(
   const percent = () => random(101);
   let swat = world.swat!;
   let before: number[] = [];
+  let entered: Partial<CatzStateTick> = {};
+
+  /* Entering (seg29:0be2): `+0x3590` and `+0x3592` 0; one time in two, its toy the cursor or held by the user, it looks at the user (`LookAtUser`), else its head on its toy (3000); its side (`+0x358e`) 0 one time in two, else 1; `+0x3594` 0, `+0x3596` 1 and its count 0. Nothing pushed, it goes on to its tick, its script done. */
+  if (world.enter) {
+    const look =
+      percent() < 50 && (world.x35a4 === 0x17 || world.preyHeld)
+        ? { head: ['user' as const] }
+        : { head: ['track' as const], headTrack: { kind: world.x35a4 ?? 0, speed: 3000 } };
+    const side = percent() < 50 ? 0 : 1;
+    entered = { ...look, swatFields: { x3590: 0, x3592: 0, side, zone: 0, x3596: 1 } };
+    swat = { ...swat, side, zone: 0, x3596: 1, x3592: 0 };
+    world = { ...world, count: 0 };
+  }
 
   /* Cued to strike (cue 5, and `+0x3590` 1: where it turns its head to the toy). */
   if (world.cued) {
@@ -2070,6 +2086,10 @@ function catzSwatting(
     }
 
     ({ swat, before } = struck);
+
+    if (struck.fields) {
+      entered = { ...entered, swatFields: { ...entered.swatFields, ...struck.fields } };
+    }
 
     /* Struck mid-script: only a done script goes on to swat again (seg29:113d). */
     if (world.done === false) {
@@ -2092,6 +2112,7 @@ function catzSwatting(
     fullness: brain(CATZ_BRAIN.fullness),
     count: world.count,
     pushes: [],
+    ...entered,
   };
   let zone: number;
   let left: number;
@@ -2117,6 +2138,8 @@ function catzSwatting(
     [left, right] = percent() < Math.trunc(age / 4) ? [0x27e, 0x27e] : [0xf4, 0xf5];
   } else if (over(0.3)) {
     [zone, left, right] = [6, 0x54, 0x59];
+    /* (seg29:12f3) */
+    tick.swatFields = { ...tick.swatFields, x3596: 2 };
   } else if (over(0.2)) {
     if (swat.dx > 0 && swat.facing === 1) {
       [zone, left, right] = [4, 0x63, 0x63];
@@ -2148,13 +2171,22 @@ function catzSwatting(
     tick.fullness = Math.max(0, tick.fullness! - 1);
   }
 
+  /* Having swatted (seg29:1468): `+0x3590` 1; a new zone kept, `+0x3592` 0 again; counted, two in zone 8; three times in ten its side drawn anew, else one time in five `+0x3596` 1 or 2. */
+  const fields = { ...tick.swatFields, x3590: 1 };
+
+  if (zone !== swat.zone) {
+    Object.assign(fields, { zone, x3592: 0 });
+  }
+
   tick.count = world.count + (zone === 8 ? 2 : 1);
 
   if (percent() < 30) {
-    percent();
+    fields.side = percent() < 50 ? 0 : 1;
   } else if (percent() < 20) {
-    percent();
+    fields.x3596 = percent() < 50 ? 1 : 2;
   }
+
+  tick.swatFields = fields;
 
   if (Math.trunc(tick.energy / 20) < tick.count && percent() < 50) {
     tick.state = 0x39;
@@ -2166,8 +2198,8 @@ function catzSwatting(
 }
 
 /**
- * Whether to stop swatting (57; `DoCatMayEndSwatting`, seg29:15d9), not
- * entered: the toy near (its paw missing it by under 100) -- and, where it
+ * Whether to stop swatting (57; `DoCatMayEndSwatting`, seg29:15d9), its
+ * entering below: the toy near (its paw missing it by under 100) -- and, where it
  * was near as it began (`+0x34ca`), one time in five -- and the mouse not
  * running, it swats again (56). Else, its script done, it counts; past a
  * twentieth of its energy it stops -- the toy far, or not inclined to
@@ -2185,7 +2217,17 @@ function catzMayEndSwatting(
   const swat = world.swat!;
   const mouse = world.x35a4 === 0x1b && swat.mouseRunning;
   const age = brain(CATZ_BRAIN.age);
-  const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+
+  /* Entering (seg29:15e8): its count 0, and near as it began (`+0x34ca`) where its paw misses the toy by under 100 (`GetSwatMissDistance`); on into its tick, nothing pushed. */
+  if (world.enter) {
+    world = { ...world, count: 0, passed: swat.miss < 100 ? 1 : 0 };
+  }
+
+  const tick: CatzStateTick = {
+    energy: brain(CATZ_BRAIN.energy),
+    count: world.count,
+    ...(world.enter ? { passed: world.passed } : {}),
+  };
 
   if (swat.miss < 100) {
     const stays = world.passed ? percent() > 19 : false;
@@ -2282,6 +2324,19 @@ function catzStalking(
     tick.pushes!.push(action);
     tick.pushed ??= action;
   };
+  /* Entering (`DoCatStalking`, seg14:051e): its head on its prey (3000); inclined to behaviour 7, 0xdf; then 0x15; no creep yet (`+0x35b8` -1); and its `+0x1996`'s slot `0x30` with 0, drawing nothing. */
+  if (world.enter) {
+    if (catzBehavior(mind, 7, random) !== 0) {
+      push(0xdf);
+    }
+
+    push(0x15);
+    tick.x35b8 = -1;
+    tick.head = ['track'];
+    tick.headTrack = { kind: world.x35a4 ?? 0, speed: 3000 };
+    return tick;
+  }
+
   const at = world.point!;
   const prey = world.prey!;
   const angle = catzPtToPtAngle(at, prey);
@@ -2480,7 +2535,14 @@ export function catzStrike(
   world: CatzStateWorld,
   random: (n: number) => number
 ):
-  { tick: CatzStateTick } | { swat: CatzSwat; before: number[]; strike?: CatzStateTick['strike'] } {
+  | { tick: CatzStateTick }
+  | {
+      swat: CatzSwat;
+      before: number[];
+      strike?: CatzStateTick['strike'];
+      /** The fields it wrote: missing far the first time, `+0x3592` 1 and its other side. */
+      fields?: CatzStateTick['swatFields'];
+    } {
   const brain = (n: number) => mind.brains[n];
   const percent = () => random(101);
   const swat = world.swat!;
@@ -2527,12 +2589,13 @@ export function catzStrike(
     }
 
     const side = swat.side === 1 ? 0 : 1;
+    const fields = { x3592: 1, side };
 
     if (catzBehavior(mind, 8, random) === 0) {
-      return swing([0xdf], side);
+      return { ...swing([0xdf], side), fields };
     }
 
-    return swing(catzBehavior(mind, 9, random) !== 0 ? [0x141] : [], side);
+    return { ...swing(catzBehavior(mind, 9, random) !== 0 ? [0x141] : [], side), fields };
   }
 
   const shelved = swat.shelved!;

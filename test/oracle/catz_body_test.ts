@@ -389,7 +389,8 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     );
     expect(pet.stoodIn.errors).toBe(0);
     expect(pet.stoodIn.deep).toBe(0);
-    expect(Object.keys(mice).some((key) => key.startsWith('2/'))).toBe(true);
+    /* The mouse leaves waiting in its hole: out exploring, or at least at its mouth, where a cat sitting by the hole may catch it as it peeks (day 1). */
+    expect(Object.keys(mice).some((key) => key !== '1/1')).toBe(true);
   });
 
   /* Petted: the hand on its middle for a minute, stroking, after half a minute on its own. */
