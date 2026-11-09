@@ -1168,18 +1168,21 @@ export function catzStateTick(
     case CATZ_STATE.postDangling:
       return catzPostDangling(mind, world, random);
     case CATZ_STATE.lazyWatch: {
-      /* `DoCatLazyWatch`, seg30:1695: entering, it tracks what it plays with with its head (2000); leaving, it stops; its script done, one time in five, as it watches (`+0x35b6`), it idles (global 6) or rests (9), else pushes 0x93 or 0x8c. */
+      /* `DoCatLazyWatch`, seg30:1695: entering, it tracks what it plays with with its head (2000), and goes on to its tick, nothing pushed; leaving, it stops; its script done, one time in five, as it watches (`+0x35b6`), it idles (global 6) or rests (9), else pushes 0x93 or 0x8c. */
+      const head: Partial<CatzStateTick> = world.enter
+        ? { head: ['track'], headTrack: { kind: world.x35a4 ?? 0, speed: 2000 } }
+        : {};
       const goes = percent() < 20;
 
       if (world.x35b6 === 1) {
-        return done(goes ? { global: 6 } : { pushed: 0x93 });
+        return done({ ...head, ...(goes ? { global: 6 } : { pushed: 0x93 }) });
       }
 
       if (world.x35b6 === 2) {
-        return done(goes ? { global: 9 } : { pushed: 0x8c });
+        return done({ ...head, ...(goes ? { global: 9 } : { pushed: 0x8c }) });
       }
 
-      return done({});
+      return done(head);
     }
     case CATZ_STATE.carryVictim:
       /* `DoCatCarryVictim`, seg33:15ac: its script done, it lets its victim go (its slot `0x238`) and walks on, to nothing (22). */
@@ -1363,6 +1366,11 @@ export function catzStateTick(
       return done({ state: CATZ_STATE.locomote, goal, explore, x35a6: 0 });
     }
     case CATZ_STATE.passTheTime: {
+      /* `DoCatPassTheTime`, seg24:1896, entering: nothing done yet (`+0x34ca` 0), and no tick. */
+      if (world.enter) {
+        return done({ passed: 0 });
+      }
+
       const behave = (n: number) => catzBehavior(mind, n, random) !== 0;
 
       if (world.passed && percent() < 50) {
