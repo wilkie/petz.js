@@ -545,6 +545,7 @@ describe('a Catz cat napping, its cloud come and CatNapz’s dog chased, each pl
         found: () => !!body.shown?.there,
         cues: () => body.shown?.step.cues ?? [],
         moveTo: (at) => body.moveTo(at),
+        aimRate: (rate) => body.aimRate(rate),
         dog: {
           at: () => dog.at(),
           done: () => dog.done(),

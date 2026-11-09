@@ -160,6 +160,9 @@ export interface CatzPetOptions {
     off: () => void;
   };
 
+  /** Its rotation's fudger's aim rate set (`SetAimRate`), by whoever plays its body. */
+  aimRate?: (rate: number) => void;
+
   /** Put with its target point at a point (its slot `0x44`, as the dog's chase puts it past the stage), by whoever places it. */
   moveTo?: (at: { x: number; y: number }) => void;
 
@@ -2000,6 +2003,7 @@ export class CatzPet {
         this.options.dog?.put({ x, y }, ticked.x688 ?? -0x40);
       }
     }
+    if (ticked.aimRate !== undefined) this.options.aimRate?.(ticked.aimRate);
     if (ticked.swatFields) Object.assign(this.swatFields, ticked.swatFields);
     if (ticked.calmsMouse) this.options.mouseFear?.(-50);
     if (ticked.x35d2 !== undefined) f.x35d2 = ticked.x35d2;

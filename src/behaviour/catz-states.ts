@@ -702,6 +702,9 @@ export interface CatzStateTick {
   x35ac?: number;
   x35ee?: number;
 
+  /** Its rotation's fudger's aim rate set (`SetAimRate`, the fudger's slot `0x20`), as running after the dog has it. */
+  aimRate?: number;
+
   /** Where it is put, its target point there (its slot `0x44`); the dog with it, where `dog`. */
   place?: { x: number; y: number; dog?: boolean };
 
@@ -1734,6 +1737,11 @@ function catzWalkOn(
     (G === 21 && world.x35ee === 10);
 
   if (runs) {
+    /* Running after the dog, its rotation aimed at 700 a tick first (`SetAimRate`, seg25:2683). */
+    if (G === 21 && world.x35ee === 10) {
+      tick.aimRate = 700;
+    }
+
     if (percent() < Math.trunc((100 - age) / 20) + 1 && age !== 0 && world.area1) {
       tick.state = 25;
       return tick;

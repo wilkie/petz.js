@@ -490,6 +490,11 @@ export class CatzBody {
     });
   }
 
+  /** Its rotation's fudger's aim rate set (`SetAimRate`): what it plays after turns so. */
+  aimRate(rate: number) {
+    rateCatzFudger(this.options.fudgers[0], rate);
+  }
+
   /**
    * Put so that the middle of its rectangle -- its target point -- is at a
    * point (`MoveDrawPt`): the frame shown, and those queued, moved with it.

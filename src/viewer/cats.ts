@@ -637,6 +637,7 @@ function goLive() {
     strike: strikeToy,
     found: () => !!body.shown?.there,
     moveTo: (at) => body.moveTo(at),
+    aimRate: (rate) => body.aimRate(rate),
     /* CatNapz's dog, its body its own, where it has its files. */
     dog: dogFiles
       ? {
