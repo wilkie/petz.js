@@ -235,10 +235,10 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 19, 20, 25, 27, 28, 29, 30, 34, 35, 36, 37, 38, 39, 40,
-  41, 43, 47, 56, 57, 66, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49,
-  50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
-  80, 81,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 19, 20, 25, 27, 28, 29, 30, 34, 35, 36, 37, 38, 39,
+  40, 41, 43, 47, 56, 57, 66, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48,
+  49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
+  79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). The engine has no limit: a state whose tick runs as it is entered may change state at once, and pre-exploring off the stage and idling went nine deep before a walk began. */

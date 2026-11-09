@@ -192,7 +192,9 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     /* It walks, and its walks end where it found what it walked to -- but
      * after the cursor in its moment, which may end one time in five where
      * it is near and faces it, found or not. */
-    const sought = walks.filter(({ to }) => to !== 0x17);
+    /* Walks to what it can get to by walking: not the cursor, and not a thing on the shelf, which it reaches by jumping (attacking one there, it stalks, finds it far, and walks again). */
+    const pen = seed % 2 ? PEN : NONE;
+    const sought = walks.filter(({ to }) => to !== 0x17 && !(to > 0 && to < 0x10 && !pen.has(to)));
     expect(walks.length).toBeGreaterThan(0);
     expect(sought.filter(({ there }) => there).length).toBeGreaterThan(sought.length / 2);
   });
