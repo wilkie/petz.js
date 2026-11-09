@@ -161,6 +161,11 @@ export interface CatzStateWorld {
   /** Whether a layered action plays already (`GetLayeredFramesRemaining`). */
   layeredPlaying?: boolean;
 
+  /** Let go of, after dangling: how the cursor moved its last frame (`PetParams` `+0x82` less `+0x86`, `+0x84` less `+0x88`), its tilt's fudger's speed (`+0x1636`) and its tilt (`+0x68c`); 0 where not given. */
+  thrown?: { dx: number; dy: number };
+  spin?: number;
+  x68c?: number;
+
   /** Stalking: where its prey (`+0x35a4`) is, whether the user holds it, and the stalk's action (`+0x35b8`, -1 for none). */
   prey?: { x: number; y: number };
   preyHeld?: boolean;
@@ -2945,6 +2950,97 @@ export function catzFaceForward(mind: CatzMind, world: CatzStateWorld): number[]
  * Entering, it lands as it was thrown, by how the cursor moved: not
  * reimplemented.
  */
+/**
+ * Let go of, landing (34's entering, `DoPostDangling`, seg23:4a92): its
+ * rotation's fudger stilled; in the Kit, 0x2c. Else flung -- the cursor's
+ * last move over 20 (its length rounded toward 0), three times it past its
+ * target point within twice its width of the stage's edge it faces -- it
+ * slides there: its words align its rotation to that way (0x40 or -0x40;
+ * fudgers 1 and 2 to 0, not played) and its ball 0x31 to the edge, 4 in, at
+ * its draw point's height and its own below, then 0x252 and 0x133. Not
+ * flung: its words 0x756e (not played); spinning (`+0x1636` over 14), one
+ * time in three, 0x251, and done. Then, inclined to behaviour 26, one time
+ * in two, 0x263; else tilted under -10, 0x229; over 10, 0x187; else its
+ * transition to a neutral pose (`PushTransitionToNeutral` 0x6b, not
+ * reimplemented: nothing pushed). Landed hard (0x251, the slide, 0x229), a
+ * sound of 8, 11 or 1 (`rand() % 3`, seg48:1b3a).
+ */
+function catzLanding(
+  mind: CatzMind,
+  world: CatzStateWorld,
+  random: (n: number) => number,
+  tick: CatzStateTick
+): CatzStateTick {
+  const pushes: number[] = [];
+  let hard = false;
+  const done = () => {
+    if (hard) {
+      tick.sound = catzSound(mind, [8, 11, 1][random(3)], random);
+    }
+
+    if (pushes.length) {
+      tick.pushes = pushes;
+      tick.pushed = pushes[0];
+    }
+
+    return tick;
+  };
+
+  if (world.c4) {
+    pushes.push(0x2c);
+    return done();
+  }
+
+  const facing = world.x688 ?? 0;
+  const { dx, dy } = world.thrown ?? { dx: 0, dy: 0 };
+  const stage = world.stage!;
+  const width = world.size!.width;
+  const at = world.point!;
+  let slides = false;
+
+  if (Math.trunc(Math.sqrt(dx * dx + dy * dy)) > 20) {
+    const x = at.x + 3 * dx;
+    slides =
+      (facing > 0 && Math.abs(x - stage.left) < 2 * width) ||
+      (facing < 0 && Math.abs(x - stage.right) < 2 * width);
+  }
+
+  if (!slides && (world.spin ?? 0) > 14 && random(3) === 0) {
+    pushes.push(0x251);
+    hard = true;
+    return done();
+  }
+
+  if (slides) {
+    hard = true;
+    const rect = world.rect!;
+    const edge = facing > 0 ? stage.left + 4 : stage.right - 4;
+    tick.leap = {
+      ball: 0x31,
+      to: 'goal',
+      at: { x: edge, y: rect.top + world.size!.height },
+      turn: facing > 0 ? 0x40 : -0x40,
+    };
+    pushes.push(0x252, 0x133);
+  }
+
+  if (catzBehavior(mind, 26, random) !== 0 && random(101) < 50) {
+    pushes.push(0x263);
+    return done();
+  }
+
+  const tilt = world.x68c ?? 0;
+
+  if (tilt < -10) {
+    pushes.push(0x229);
+    hard = true;
+  } else if (tilt > 10) {
+    pushes.push(0x187);
+  }
+
+  return done();
+}
+
 function catzPostDangling(
   mind: CatzMind,
   world: CatzStateWorld,
@@ -2953,6 +3049,11 @@ function catzPostDangling(
   const brain = (n: number) => mind.brains[n];
   const percent = () => random(101);
   const tick: CatzStateTick = { energy: brain(CATZ_BRAIN.energy), count: world.count };
+
+  if (world.enter) {
+    return catzLanding(mind, world, random, tick);
+  }
+
   const turns = catzFaceForward(mind, world);
 
   if (turns) {
