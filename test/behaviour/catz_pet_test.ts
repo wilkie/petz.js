@@ -50,3 +50,41 @@ describe('a Catz cat on its own', () => {
     expect(states[16]).toBeGreaterThan(0);
   });
 });
+
+describe('a Catz cat told of the pen’s things', () => {
+  /* The food bowl put in the pen, the playpen telling it so: taken out (1), then let go (2). Over ten days, it reads each, and answers some. */
+  it('reads the playpen’s messages and answers them', () => {
+    const answers: Record<string, number> = {};
+
+    for (let seed = 1; seed <= 10; seed++) {
+      const rand = borlandRand(seed);
+      const pet = new CatzPet({
+        brains: BRAINS,
+        centres: CENTRES,
+        stage: { left: 0, top: 0, right: 470, bottom: 370 },
+        pen: () => new Map([[0xc, { x: 300, y: 300 }]]),
+        play: () => 10,
+        random: (n) => rand() % n,
+      });
+
+      for (let n = 0; n < 100; n++) {
+        pet.tick();
+      }
+
+      pet.notify(0xc, 1, 3, true);
+      expect(pet.x33c0).toBe(1);
+      pet.tick();
+      expect(pet.x33c0).toBe(0);
+      pet.notify(0xc, 1, 1, false);
+      expect(pet.x33c0).toBe(2);
+      const { state, global } = pet.tick();
+      expect(pet.x33c0).toBe(0);
+      answers[`${global}/${state}`] = (answers[`${global}/${state}`] ?? 0) + 1;
+      expect(pet.stoodIn.errors).toBe(0);
+    }
+
+    console.log(`after the food bowl: ${JSON.stringify(answers)}`);
+    /* Some go to eat it (3), play with it (15) or ignore it (12). */
+    expect(Object.keys(answers).some((key) => /^(3|15|12)\//.test(key))).toBe(true);
+  });
+});

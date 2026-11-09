@@ -875,61 +875,103 @@ timesInput.addEventListener('change', () => {
 playButton.addEventListener('click', play);
 liveButton.addEventListener('click', goLive);
 /* Living, a click puts the thing chosen in the pen there -- or, on one there, back on the shelf. */
+/** Where on the stage a pointer event is, in the engine's pixels. */
+function stageAt(event: MouseEvent) {
+  const box = canvas.getBoundingClientRect();
+  return {
+    x: Math.round(((event.clientX - box.left) / box.width) * LIVE_STAGE.right),
+    y: Math.round(((event.clientY - box.top) / box.height) * LIVE_STAGE.bottom),
+  };
+}
+
+/** The shelf: a strip along the stage's top, where a thing dropped goes back (`PlaypenToShelf`). */
+const SHELF_DEPTH = 40;
+
+/** A thing of the pen the user is dragging, by kind; and whether this press grabbed one. */
+let liveDragging: number | undefined;
+let liveGrabbed = false;
+
 canvas.addEventListener('mousedown', (event) => {
-  /* The right button the hand, to pet it; the left to pick it up. */
+  /* The right button the hand, to pet it; the left to pick up a thing or the cat. */
   if (event.button === 2) {
     liveHand = true;
     return;
   }
 
+  liveGrabbed = false;
+  liveScruffed = false;
+  const at = stageAt(event);
+  const near = live
+    ? [...livePen].find(([, p]) => Math.hypot(p.x - at.x, p.y - at.y) < 16)
+    : undefined;
+
+  /* A thing in the pen pressed: pressed (4) and dragged (3), as the engine's mouse sets them; not the cat. */
+  if (near) {
+    liveDragging = near[0];
+    liveGrabbed = true;
+    /* Held, a toy rolling stops. */
+    liveToys.delete(near[0]);
+    liveNotices.push([near[0], 1, 4, false], [near[0], 1, 3, false]);
+    return;
+  }
+
   livePressed = true;
   liveHeld = true;
-  liveScruffed = false;
 });
 canvas.addEventListener('mouseup', (event) => {
   if (event.button === 2) {
     liveHand = false;
-  } else {
-    liveHeld = false;
+    return;
+  }
+
+  liveHeld = false;
+
+  /* A thing let go: on the shelf, back on it (condition 0, which nothing answers); else let go (1) in the pen. */
+  if (liveDragging !== undefined) {
+    const at = stageAt(event);
+
+    if (at.y < LIVE_STAGE.top + SHELF_DEPTH) {
+      livePen.delete(liveDragging);
+    } else {
+      livePen.set(liveDragging, at);
+      liveNotices.push([liveDragging, 1, 1, false]);
+    }
+
+    liveDragging = undefined;
   }
 });
 canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 canvas.addEventListener('click', (event) => {
-  /* (A press that picked the cat up by the scruff puts nothing in the pen.) */
-  if (!live || liveScruffed) {
+  /* (A press that picked up the cat, or a thing, puts nothing in the pen.) */
+  if (!live || liveScruffed || liveGrabbed) {
     return;
   }
 
-  const box = canvas.getBoundingClientRect();
-  const at = {
-    x: Math.round(((event.clientX - box.left) / box.width) * LIVE_STAGE.right),
-    y: Math.round(((event.clientY - box.top) / box.height) * LIVE_STAGE.bottom),
-  };
-  const near = [...livePen].find(([, p]) => Math.hypot(p.x - at.x, p.y - at.y) < 16);
-
-  if (near) {
-    /* Put back on the shelf: its condition 0, which nothing answers. */
-    livePen.delete(near[0]);
-  } else {
-    /* Taken off the shelf and dragged (3, the user's), then let go (1) in the pen. */
-    const kind = Number(thingSelect.value);
-    livePen.set(kind, at);
-    liveNotices.push([kind, 1, 3, true], [kind, 1, 1, false]);
-  }
+  /* Taken off the shelf and dragged (3, the user's), then let go (1) in the pen. */
+  const kind = Number(thingSelect.value);
+  livePen.set(kind, stageAt(event));
+  liveNotices.push([kind, 1, 3, true], [kind, 1, 1, false]);
 });
 canvas.addEventListener('mouseenter', () => (liveCursorAbout = true));
 canvas.addEventListener('mouseleave', () => {
   liveCursorAbout = false;
   liveHeld = false;
   liveHand = false;
+
+  /* A thing dragged off the stage stays where it was last. */
+  if (liveDragging !== undefined) {
+    liveNotices.push([liveDragging, 1, 1, false]);
+    liveDragging = undefined;
+  }
 });
 canvas.addEventListener('mousemove', (event) => {
   liveCursorAbout = true;
-  const box = canvas.getBoundingClientRect();
-  liveCursor = {
-    x: Math.round(((event.clientX - box.left) / box.width) * LIVE_STAGE.right),
-    y: Math.round(((event.clientY - box.top) / box.height) * LIVE_STAGE.bottom),
-  };
+  liveCursor = stageAt(event);
+
+  /* A thing dragged goes with the cursor. */
+  if (liveDragging !== undefined) {
+    livePen.set(liveDragging, liveCursor);
+  }
 });
 
 picker.addEventListener('change', () => {
