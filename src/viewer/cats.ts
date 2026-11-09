@@ -298,6 +298,12 @@ let livePressed = false;
 let liveHeld = false;
 let liveScruffed = false;
 
+/**
+ * What the playpen tells the cat of the pen's things, a notice a tick (`XApt::ParentNotify`):
+ * kind, condition, state, and whether the user just took it off the shelf.
+ */
+const liveNotices: [number, number, number, boolean][] = [];
+
 /** The hand down, to pet the cat: the right button held (the viewer's choice; the engine's host gives `PetParams` `+0x1e`). */
 let liveHand = false;
 
@@ -571,6 +577,13 @@ function goLive() {
       };
       pet.fields.x688 = body.facing;
       drawLive(cat, shaped, placer, shown, mouse);
+    }
+
+    /* The playpen's notice this tick, leaving the cat its message. */
+    const notice = liveNotices.shift();
+
+    if (notice) {
+      pet.notify(...notice);
     }
 
     const { state, global } = pet.tick();
@@ -895,9 +908,13 @@ canvas.addEventListener('click', (event) => {
   const near = [...livePen].find(([, p]) => Math.hypot(p.x - at.x, p.y - at.y) < 16);
 
   if (near) {
+    /* Put back on the shelf: its condition 0, which nothing answers. */
     livePen.delete(near[0]);
   } else {
-    livePen.set(Number(thingSelect.value), at);
+    /* Taken off the shelf and dragged (3, the user's), then let go (1) in the pen. */
+    const kind = Number(thingSelect.value);
+    livePen.set(kind, at);
+    liveNotices.push([kind, 1, 3, true], [kind, 1, 1, false]);
   }
 });
 canvas.addEventListener('mouseenter', () => (liveCursorAbout = true));

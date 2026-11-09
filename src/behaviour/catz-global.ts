@@ -128,6 +128,11 @@ export function catzGlobalBegin(
     case 9:
       begun.state = world.sleepy ? 28 : 26;
       break;
+    case 12:
+      /* Ignoring something (`DoGSIgnore`, seg30:1964): no effects of its own; it ignores it (0x51). */
+      begun.effects = [0, 0, 0, 0];
+      begun.state = 0x51;
+      break;
     case 20: {
       /* A window event (`DoGSWindowEvent`, seg24:1b12): liveliness,
        * seriousness and grooming's effects 15, independence's none; the cat

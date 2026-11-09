@@ -217,6 +217,30 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
   `catzGlobalBegin` and `catzGlobalTick` have it, read out. The pet begins it where asked, though nothing yet asks: the playpen's messages wait on its conditions.
 
+- [[read out]] When the playpen tells the cat. `ParentNotify` is the `XApt` vtable slot `0x54` (`IsSomethingBeingHeld` 0x20, `IsThisBeingHeld` 0x24). The root's list is the cat (0x1d) and the mouse (0x1b), whose responder is empty. A thing's states are 0 ready, 1 let go, 2 selected, 3 dragged (held), 4 pressed; its conditions 0 on the shelf, 1 in the pen. Five places notify:
+  - `SetState` twice: a thing in the pen tells its parent, the root; a thing on its shelf (kinds 1 to 15) tells the root. Both with flag 0.
+  - `ShelfToPlaypen` (seg3:3d34; at 3:409e): (kind, 1, its state, 1) where the user takes it out, none where the cat knocks it off (`CatSprite::ShelfToPen`).
+  - `DoUpdate` twice, (kind, 1, 3, 1), a locked thing pressed (`+0x1d0` 0; the Adoption Kit's).
+
+  `SetCond`, `UserSetCond` and `CatSetCond` tell no one. The flag (`ChildRespond`'s fourth) is "the user just took it off the shelf", not a distance; the only distance tests are the cat's own (the sprays' box) and dropping on the shelf.
+
+  The mouse's actions on a thing of the pen (its table from resource 32513, 7000):
+  - a press sets state 4 then 3, and takes it off the shelf where it is there;
+  - its first held frame sets 3 again;
+  - let go, it sets 1, put back first where it is over the open shelf;
+  - its let-go animation done, 0.
+
+  So the user taking a thing out tells (kind, 1, 3, 1) then, let go, (kind, 1, 1, 0); pressing one in the pen, (kind, 1, 4, 0) and (kind, 1, 3, 0), let go (kind, 1, 1, 0); putting it back, nothing the cat answers (condition 0). A swat (`StrikeToy`) or the cat taking what the user holds (`ForceRelease`) tells (kind, its condition, 1, 0).
+
+  The responders (`catzChildRespond`), in the conditions each answers (the food bowl 1 to 8, the water bowl 1 to 3, catnip 1 to 7, the yarn and jingle balls 1 and 2, the rest 1): taken out, the first of its pair (in the Kit its own, 0x1c to 0x29); then by state, which wins:
+  - let go (1): food 2, water 4, the spray 0x10, the flea spray 0x11, catnip 8, a treat 6;
+  - pressed (4): the Cat Dancer 0xc, yarn 0xa, jingle 9, squeaky 0xb, a treat 5;
+  - dragged (3): the bottle 0xd.
+
+  The paint bucket, hair brush and flea spray have a first only in the Kit; the mouse hole none. Messages 19 (its window resized, not in the Kit) and 21 (the camera, with its sound) are `XApt::DoCommand`'s, commands 0x7f1 and 0x7f2.
+- [[measured]] `catzChildRespond` agrees with that table (`test/behaviour/catz_child_respond_test.ts`, 24 cases).
+- [[inferred]] The pet keeps its message (`+0x33c0`), the last left the one read, and reads it first of its reflexes (`catzMessage`), doing what it asks: what it plays with, its count, what it ignores (`+0x35b2`, `+0x35b0`, `+0x35b4`), its head, its pushes, a global state or its own. `catzGlobalBegin` begins ignoring (12; `DoGSIgnore`, seg30:1964: no effects, ignoring it, 0x51). In the viewer, a thing put in the pen tells the cat it was taken out, then, the next tick, let go. Food, it made to eat (22 in global 3); a treat, it groomed; yarn, it ignored it (0x51 in 12) and then attacked it.
+
 ## The bottle
 
 - [[read out]] Suckling (global 5; `DoGSSuckling`, seg33:0000) is its bottle (kin 0xf): entering, its slot `0x114` (0xf, with 0, 2, 3), the bottle what it plays with and walks to (`+0x35a4`, `+0x35a6`), the bottle's `+0x9e` 5000, and after it (0x2e). Leaving, the cat's ballz' `+0x71c` 1 and the bottle's lines' `+0x1939` 0 and `+0x9e` 0.
@@ -465,8 +489,8 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 - [[inferred]] The cursor wiggled: the pet runs `catzCursorWiggling` after seeing the mouse, as the engine orders its reflexes, from where the cursor is each tick. Ten or more changes of way among 20 ticks, it is scared of what the user holds (the cursor, 0x17), plays with it or attacks it. Else, under half its energy, it readies its moment (`PreMoment` 6, 0x93, watching), turns its head to the cursor (3000) and has it (8). Its `+0x33b8` (the cursor kept one way through its last look) is the mouse's: with it set the cursor never troubles the mouse. In the viewer, the pointer wiggled by the cat had it leave its moment to attack it (22 in global 1).
 
-- [[read out]] Where the playpen's messages come from: a sprite notified of another (`XApt::InitNotifyArray`, `AddNotify`; `InitPetModule` has the cat notified of 0x1d's own and of 0x1b) is told of its condition or state changing through `XApt::ParentNotify` (seg2:28ed, an `XApt` slot), which passes kind, condition, state and a flag to each notified sprite's slot `0x58`. For the cat that is `CatSprite::ChildRespond` (seg16:3e3e), which names them (`GetToyString`, `GetCondString`, `GetStateString`) and calls a responder by kind: `RespondToFood`, `RespondToWaterBowl`, `RespondToSprayBottle`, `RespondToFleaSpray`, `RespondToMouseHole`, `RespondToBottle` and the rest (seg16:4040 to 4590). Each leaves its message (`+0x33c0`): with the condition 1 (the water bowl 1 to 3) and the flag set, the first of its pair (food 1, water 3, the spray 0xf), or the Adoption Kit's own (0x27, 0x28, 0x1d) where `PetParams` `+0xc4` is set; with the state 1, the second (2, 4, 0x10). `HandleCatAptMessages` (seg23:13ed) reads and clears it. A thing's condition (`+0x1da`, the last at `+0x1dc`) and state (`+0x1d8`) are kept by `XApt::SetCond` (seg2:0092) and `SetState` (seg2:0465). `ShelfToPlaypen` sets neither, so the condition and state come from the playpen's dragging and its shelf's buttons (`UserSetCond`, `CondAdd`, `PetModule::DoDrawFrame`), not yet read.
+- [[read out]] Where the playpen's messages come from: a sprite notified of another (`XApt::InitNotifyArray`, `AddNotify`; `InitPetModule` has the cat notified of 0x1d's own and of 0x1b) is told of its condition or state changing through `XApt::ParentNotify` (seg2:28ed, an `XApt` slot), which passes kind, condition, state and a flag to each notified sprite's slot `0x58`. For the cat that is `CatSprite::ChildRespond` (seg16:3e3e), which names them (`GetToyString`, `GetCondString`, `GetStateString`) and calls a responder by kind: `RespondToFood`, `RespondToWaterBowl`, `RespondToSprayBottle`, `RespondToFleaSpray`, `RespondToMouseHole`, `RespondToBottle` and the rest (seg16:4040 to 4590). Each leaves its message (`+0x33c0`): with the condition 1 (the water bowl 1 to 3) and the flag set, the first of its pair (food 1, water 3, the spray 0xf), or the Adoption Kit's own (0x27, 0x28, 0x1d) where `PetParams` `+0xc4` is set; with the state 1, the second (2, 4, 0x10). `HandleCatAptMessages` (seg23:13ed) reads and clears it. A thing's condition (`+0x1da`, the last at `+0x1dc`) and state (`+0x1d8`) are kept by `XApt::SetCond` (seg2:0092) and `SetState` (seg2:0465). Which are read out below.
 
 ## Not yet
 
-The reflexes the pet does not yet run, though `catz-reflexes.ts` has them held against the engine: blinking (its own `blinkCatz` plays in the timeline), and the playpen's messages (which need the conditions and states the playpen's dragging sets, above). The pen's own sprites besides the mouse: the dog, the toys' physics in the pet's world, the user holding things. What place on the stage `GetSpriteScreenArea` calls 3.
+The reflexes the pet does not yet run, though `catz-reflexes.ts` has them held against the engine: blinking (its own `blinkCatz` plays in the timeline),. The pen's own sprites besides the mouse: the dog, the toys' physics in the pet's world, the user holding things. What place on the stage `GetSpriteScreenArea` calls 3.

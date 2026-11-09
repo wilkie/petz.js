@@ -21,8 +21,10 @@ import { catzMomentBegin, type CatzMomentState, catzMomentTick } from './catz-mo
 import {
   catzBehaviorChange,
   catzCursorWiggling,
+  catzChildRespond,
   catzExtremeSituations,
   catzLayering,
+  catzMessage,
   catzPurring,
   catzScruff,
   catzSeesMouse,
@@ -174,7 +176,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([1, 2, 3, 6, 7, 8, 9, 11, 15, 16, 20]);
+const BEGUN = new Set([1, 2, 3, 6, 7, 8, 9, 11, 12, 15, 16, 20]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -199,7 +201,12 @@ export class CatzPet {
   global = 0;
 
   /** The cat's own fields, as its states read and write them. */
-  readonly fields: Partial<CatzStateWorld> & { count: number; passed: number; x35ce?: number };
+  readonly fields: Partial<CatzStateWorld> & {
+    count: number;
+    passed: number;
+    x35ce?: number;
+    x35d6?: number;
+  };
 
   /** Where it is, and where it walks to. */
   point: { x: number; y: number };
@@ -460,6 +467,92 @@ export class CatzPet {
     };
   }
 
+  /** The message the playpen left it (`+0x33c0`), 0 none. */
+  x33c0 = 0;
+
+  /**
+   * The playpen telling it of a thing of the pen (`XApt::ParentNotify`):
+   * its kind, its condition (0 on the shelf, 1 in the pen), its state (1 let
+   * go, 3 dragged, 4 pressed) and whether the user just took it off the
+   * shelf -- its message left as `ChildRespond` leaves it, the last left
+   * the one read.
+   */
+  notify(kind: number, cond: number, state: number, flag: boolean) {
+    const message = catzChildRespond(kind, cond, state, flag);
+
+    if (message !== undefined) {
+      this.x33c0 = message;
+    }
+  }
+
+  /** A message read (`HandleCatAptMessages`): what it asks of it. */
+  private messaged() {
+    const message = this.x33c0;
+    this.x33c0 = 0;
+
+    if (!message) {
+      return false;
+    }
+
+    const f = this.fields;
+    const done = catzMessage(
+      this.mind,
+      message,
+      {
+        x35a4: f.x35a4 ?? 0,
+        x35a6: f.x35a6 ?? 0,
+        x35d6: f.x35d6 ?? 0,
+        x35b2: this.x35b2,
+        area: 1,
+        mouseState: this.options.mouse?.()?.state ?? 1,
+        treatShelved: this.isShelved(0xb),
+        rect: this.rect,
+        spray: this.thingAt(2),
+        flea: this.thingAt(3),
+      },
+      this.options.random
+    );
+
+    if (!done) {
+      return false;
+    }
+
+    if (done.x35a4 !== undefined) {
+      f.x35a4 = done.x35a4;
+    }
+
+    if (done.x35d6 !== undefined) {
+      f.x35d6 = done.x35d6;
+    }
+
+    if (done.ignored) {
+      this.x35b2 = done.ignored.kin;
+      f.x35b0 = done.ignored.kin;
+
+      if (done.ignored.x35b4 !== undefined) {
+        f.x35b4 = done.ignored.x35b4;
+      }
+    }
+
+    if (done.head) {
+      this.options.head?.({ kind: f.x35a4 ?? 0, speed: 3000, shelved: false });
+    }
+
+    if (done.pushes?.length) {
+      this.push(done.pushes);
+    }
+
+    if (done.global !== undefined || done.state !== undefined) {
+      this.change(done.global, done.state, 0);
+      return true;
+    }
+
+    return false;
+  }
+
+  /** What it ignored last (`+0x35b2`). */
+  private x35b2 = 0;
+
   /** Whether it has reacted to the mouse since its global state last changed (`+0x33bc`). */
   x33bc = 0;
 
@@ -472,6 +565,11 @@ export class CatzPet {
    * ticks.
    */
   private reflexes() {
+    /* The playpen's messages first (`HandleCatAptMessages`). */
+    if (this.messaged()) {
+      return;
+    }
+
     /* Picked up by the scruff (`catzScruff`): the button pressed, not held, within 100 of its ball 2. */
     const buttons = this.options.buttons?.();
 

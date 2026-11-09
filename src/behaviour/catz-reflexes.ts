@@ -405,6 +405,65 @@ export function catzPurring(
   return { x3570: purr ?? x3570, x3572: 0 };
 }
 
+/**
+ * The message a thing of the pen leaves the cat (`+0x33c0`) as the playpen
+ * tells it of the thing's condition (0 on the shelf, 1 in the pen) and
+ * state (0 ready, 1 let go, 2 selected, 3 dragged, 4 pressed) changing
+ * (`XApt::ParentNotify` to `CatSprite::ChildRespond`, seg16:3e3e, a
+ * responder by kind, seg16:403f to 4590). Taken off the shelf by the user
+ * (`flag`), the first of its pair -- in the Adoption Kit (`kit`, `PetParams`
+ * `+0xc4`) the Kit's own, 0x1c to 0x29; then by its state, the second, which
+ * wins where both. None where it says nothing.
+ */
+export function catzChildRespond(
+  kind: number,
+  cond: number,
+  state: number,
+  flag: boolean,
+  kit = false
+): number | undefined {
+  /* Each kind: the conditions it answers in, its taken-off message (and the Kit's), and its message by state. */
+  const responders: Record<
+    number,
+    { conds: number[]; taken?: number; kitTaken: number; byState?: Record<number, number> }
+  > = {
+    1: { conds: [1], kitTaken: 0x1c },
+    2: { conds: [1], taken: 0xf, kitTaken: 0x1d, byState: { 1: 0x10 } },
+    3: { conds: [1], kitTaken: 0x1e, byState: { 1: 0x11 } },
+    4: { conds: [1, 2, 3, 4, 5, 6, 7], taken: 7, kitTaken: 0x1f, byState: { 1: 8 } },
+    5: { conds: [1], taken: 0xc, kitTaken: 0x20, byState: { 4: 0xc } },
+    6: { conds: [1, 2], taken: 0xa, kitTaken: 0x22, byState: { 4: 0xa } },
+    7: { conds: [1, 2], taken: 9, kitTaken: 0x23, byState: { 4: 9 } },
+    8: { conds: [1], taken: 0xe, kitTaken: 0x24 },
+    9: { conds: [1], taken: 0xb, kitTaken: 0x21, byState: { 4: 0xb } },
+    0xa: { conds: [1], kitTaken: 0x25 },
+    0xb: { conds: [1], taken: 5, kitTaken: 0x26, byState: { 1: 6, 4: 5 } },
+    0xc: { conds: [1, 2, 3, 4, 5, 6, 7, 8], taken: 1, kitTaken: 0x27, byState: { 1: 2 } },
+    0xd: { conds: [1, 2, 3], taken: 3, kitTaken: 0x28, byState: { 1: 4 } },
+    0xf: { conds: [1], taken: 0xd, kitTaken: 0x29, byState: { 3: 0xd } },
+  };
+  const responder = responders[kind];
+
+  if (!responder || !responder.conds.includes(cond)) {
+    return undefined;
+  }
+
+  let message: number | undefined;
+
+  if (flag) {
+    message = kit ? responder.kitTaken : responder.taken;
+  }
+
+  /* (The bottle dragged leaves its own unless the Kit's is left already.) */
+  const byState = responder.byState?.[state];
+
+  if (byState !== undefined && !(kind === 0xf && message === 0x29)) {
+    message = byState;
+  }
+
+  return message;
+}
+
 /** What the cat's messages ask of it and of where it is (`HandleCatAptMessages`). */
 export interface CatzMessaged {
   /** What it plays with and walks to (`+0x35a4`, `+0x35a6`), and `+0x35d6`, a count. */
