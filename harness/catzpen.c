@@ -1291,6 +1291,16 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
          * which its baskets lie (`GetBasketLocation`). */
         say(" %d %d", *(int *)(params + 0xdc), *(int *)(params + 0xde));
 
+        /* And swatting's fields -- its side (`+0x358e`), `+0x3590`,
+         * `+0x3592`, the zone it swatted in last (`+0x3594`) and `+0x3596` --
+         * and what is left in the food bowl (`+0x35d2`) and of the catnip
+         * (`+0x35d4`), as each tick begins, against what the tick before
+         * wrote. */
+        say(" %d %d %d %d %d %d %d", *(int __far *)(cat + 0x358e), *(int __far *)(cat + 0x3590),
+            *(int __far *)(cat + 0x3592), *(int __far *)(cat + 0x3594),
+            *(int __far *)(cat + 0x3596), *(int __far *)(cat + 0x35d2),
+            *(int __far *)(cat + 0x35d4));
+
         say("\r\n");
         outside = outsideGlobal = 0;
     }

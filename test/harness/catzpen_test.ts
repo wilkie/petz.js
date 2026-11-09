@@ -24,6 +24,7 @@ import {
   catzCuriosities,
   catzStateBetween,
   catzStateTick,
+  type CatzStateWorld,
   type CatzStateTick,
 } from '../../src/behaviour/catz-states.ts';
 import {
@@ -1689,8 +1690,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         .reduce(
           (n, [, k]) => n + k.same,
           0
-        )} across into another state; petting fields ${Object.entries(books)
-        .filter(([key]) => /:(rate|x357[026]|cursorWas|x362a|x356c|modes|kit\.)/.test(key))
+        )} across into another state; petting, Kit, swatting and food fields ${Object.entries(books)
+        .filter(([key]) =>
+          /:(rate|x357[026]|cursorWas|x362a|x356c|modes|kit\.|swat\.|x35d[24])/.test(key)
+        )
         .map(([key, k]) => `${key} ${k.same}`)
         .join(', ')}`
     );
@@ -1717,6 +1720,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
       `reflexes: ${reflexes.counted} counted down, ${reflexes.fired} extreme situations, ${reflexes.changed} changing its behaviour`
     );
     expect(reflexes.wrong).toEqual([]);
+
+    const bites = followBites(lines);
+    console.log(`bites: ${bites.held} held of the food bowl's, its food left as the engine's`);
+    expect(bites.wrong).toEqual([]);
 
     const wiggles = followWiggles(lines);
     console.log(
@@ -1873,6 +1880,67 @@ function followReflexes(lines: string[]) {
  * reacted to; where it readies its moment, `PreMoment` draws before it asks
  * one, and its draws there are not held.
  */
+/**
+ * Eating from the bowl's bites, in newer traces (the tick line's 272, `+0x35d2`):
+ * each tick of eating from the food bowl (40, `+0x35a6` 0xc) whose cue 5 the
+ * engine answered, the model's bite from what was left as it began, against
+ * what is left as the next tick begins.
+ */
+function followBites(lines: string[]) {
+  const wrong: string[] = [];
+  let held = 0;
+  let before: number[] | undefined;
+  let bite: number | undefined;
+
+  for (const line of lines) {
+    const [kind, ...rest] = line.split(' ');
+    const values = rest.map(Number);
+
+    if (kind === 'tick') {
+      if (bite !== undefined && values.length > 273 && values[5] === 40) {
+        held++;
+
+        if (values[272] !== bite) {
+          wrong.push(`seed ${values[0]}: ${bite} not ${values[272]}`);
+        }
+      }
+
+      bite = undefined;
+      before = values;
+      continue;
+    }
+
+    if (kind !== 'ticked' || !before || before.length <= 273 || before[5] !== 40) {
+      continue;
+    }
+
+    const cued = [0, 1, 2, 3].some(
+      (k) => k < values[113] && values[114 + 2 * k] === 5 && values[115 + 2 * k] === 1
+    );
+
+    if (cued && before[12] === 0xc) {
+      const brains = before.slice(27, 39);
+      const ticked = catzStateTick(
+        40,
+        { brains, state: 40, global: before[4], target: 0, count: 0 },
+        {
+          global: before[4],
+          count: 0,
+          x35a6: 0xc,
+          x35d2: before[272],
+          cues: [5],
+          done: false,
+          inShelf: () => false,
+        } as CatzStateWorld,
+        () => 0
+      );
+      bite = ticked.x35d2;
+    }
+  }
+
+  return { held, wrong };
+}
+
 function followWiggles(lines: string[]) {
   const wrong: string[] = [];
   const how: number[] = [];
@@ -2348,6 +2416,18 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           ['energy', t.energy, field(22 + 1), 1],
           ['fullness', t.fullness, field(22 + 4), 1],
           ['properDiet', t.properDiet, field(22 + 9), 1],
+          /* Swatting's fields and the food and catnip left (the tick line's 267 on, in newer traces). */
+          ...((values.length > 273
+            ? [
+                ['swat.side', t.swatFields?.side, values[267]],
+                ['swat.x3590', t.swatFields?.x3590, values[268]],
+                ['swat.x3592', t.swatFields?.x3592, values[269]],
+                ['swat.zone', t.swatFields?.zone, values[270]],
+                ['swat.x3596', t.swatFields?.x3596, values[271]],
+                ['x35d2', t.x35d2, values[272]],
+                ['x35d4', t.x35d4, values[273]],
+              ]
+            : []) as [string, number | undefined, number, number?][]),
           /* Petted: what it wrote of its petting fields (the trace's 122 on: its rate, `+0x3570`, `+0x3572`, `+0x3576`, where the cursor was, the cursor's action, `+0x356c` and its modes). */
           ['rate', t.petting?.rate, values[122]],
           /* (Purring runs first in the next tick's `Update`: what it asked, purred and cleared; the purr playing after.) */
