@@ -304,6 +304,9 @@ let liveScruffed = false;
  */
 const liveNotices: [number, number, number, boolean][] = [];
 
+/** Messages the playpen's commands leave the cat (`XApt::DoCommand`), read in turn: 19 its window resized, 21 the camera. */
+const liveCommands: number[] = [];
+
 /** The hand down, to pet the cat: the right button held (the viewer's choice; the engine's host gives `PetParams` `+0x1e`). */
 let liveHand = false;
 
@@ -583,6 +586,13 @@ function goLive() {
       };
       pet.fields.x688 = body.facing;
       drawLive(cat, shaped, placer, shown, mouse);
+    }
+
+    /* A command's message this tick. */
+    const command = liveCommands.shift();
+
+    if (command !== undefined) {
+      pet.leave(command);
     }
 
     /* The playpen's notice this tick, leaving the cat its message. */
@@ -881,6 +891,18 @@ timesInput.addEventListener('change', () => {
 });
 playButton.addEventListener('click', play);
 liveButton.addEventListener('click', goLive);
+/* The window resized, living: the playpen's command 0x7f1 (message 19). */
+window.addEventListener('resize', () => {
+  if (live && liveCommands.at(-1) !== 19) {
+    liveCommands.push(19);
+  }
+});
+/* The camera: the playpen's command 0x7f2 (message 21; its sound not played). */
+element<HTMLButtonElement>('camera').addEventListener('click', () => {
+  if (live) {
+    liveCommands.push(21);
+  }
+});
 /* Living, a click puts the thing chosen in the pen there -- or, on one there, back on the shelf. */
 /** Where on the stage a pointer event is, in the engine's pixels. */
 function stageAt(event: MouseEvent) {

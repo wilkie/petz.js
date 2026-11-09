@@ -488,6 +488,11 @@ export class CatzPet {
     }
   }
 
+  /** A message the playpen's commands leave it (`XApt::DoCommand`): 19 its window resized (0x7f1), 21 the camera (0x7f2). */
+  leave(message: number) {
+    this.x33c0 = message;
+  }
+
   /** A message read (`HandleCatAptMessages`): what it asks of it. */
   private messaged() {
     const message = this.x33c0;
