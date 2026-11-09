@@ -1,5 +1,11 @@
 import { CatzPet } from '../../src/behaviour/catz-pet.ts';
-import { CATZ_STATE, catzStateTick, type CatzStateWorld } from '../../src/behaviour/catz-states.ts';
+import {
+  CATZ_STATE,
+  catzProjectToCatnip,
+  catzProjectToFood,
+  catzStateTick,
+  type CatzStateWorld,
+} from '../../src/behaviour/catz-states.ts';
 
 /** A cat eating, aged and middling in all. */
 const MIND = {
@@ -84,5 +90,24 @@ describe('a Catz cat taking a thing from the user', () => {
     set(0xc, 5);
     set(0xd, 3);
     expect(happened).toEqual(['released 12', '12 5', '13 3']);
+  });
+});
+
+/** `ProjectToFoodObject` and `ProjectToCatnip`: where the cat puts its nose or paw to eat. */
+describe('where a Catz cat aligns to eat', () => {
+  const calm = { ...MIND, centres: [50, 50, 10, 10, 50, 50, 50, 10, 50, 50, 50, 50] };
+
+  it('puts its nose above the food by its height, across by its angle and age', () => {
+    /* Calm: 0.45 of 104 up (46); angle 35 across, times 1.125 at age 50. */
+    expect(catzProjectToFood(calm, { x: 300, y: 400 }, 35, 104)).toEqual({ x: 339, y: 354 });
+    /* Not calm: 0.4 (41); angle -40 folds to -40. */
+    expect(
+      catzProjectToFood({ ...MIND, centres: MIND.brains }, { x: 300, y: 400 }, -40, 104)
+    ).toEqual({ x: 255, y: 359 });
+  });
+
+  it('puts its paw by the catnip, right of it at 35 or more, else left', () => {
+    expect(catzProjectToCatnip({ x: 100, y: 100 }, 35)).toEqual({ x: 120, y: 110 });
+    expect(catzProjectToCatnip({ x: 100, y: 100 }, -32)).toEqual({ x: 60, y: 110 });
   });
 });
