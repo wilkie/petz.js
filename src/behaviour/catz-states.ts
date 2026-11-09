@@ -575,6 +575,9 @@ export interface CatzStateTick {
   /** The conditions it set its things to (`XApt::CatSetCond`, seg2:02ce): each kind and its condition, in turn. */
   conds?: [number, number][];
 
+  /** Falling asleep, the mouse's fear 50 less (`DoCatSleep`'s `XBrain::Decrement`). */
+  calmsMouse?: boolean;
+
   /** A point it keeps (`+0x35c2`, `+0x35c4`), where it kept one: arriving affectionate, the cursor's; at a treat the user holds, the treat's. */
   x35c2?: { x: number; y: number };
 
@@ -768,6 +771,15 @@ export function catzStateTick(
 
       return done({ state: percent() < energy ? CATZ_STATE.dozing : CATZ_STATE.sleep });
     case CATZ_STATE.sleep: {
+      /* `DoCatSleep`, seg30:0426, entering: placed 3, its eyelids reset (its slot `0x1fc`, not played) and it idles (6); else its count (`+0x3502`) 0 and 0xd5, and one time in two the mouse's fear (kin 0x1b's brain at `+0x25d0`) 50 less (`XBrain::Decrement`). */
+      if (world.enter) {
+        if (world.area3) {
+          return done({ global: 6 });
+        }
+
+        return done({ count: 0, pushed: 0xd5, pushes: [0xd5], calmsMouse: percent() < 50 });
+      }
+
       if (count < 101) {
         count++;
       } else {

@@ -97,6 +97,9 @@ export interface CatzPetOptions {
     xea?: number;
   };
 
+  /** The mouse's fear moved by the cat (falling asleep, 50 less: `XBrain::Decrement` of its brain at `+0x25d0`). */
+  mouseFear?: (by: number) => void;
+
   /**
    * A thing's condition set by the cat (`XApt::CatSetCond`): a bowl's, the
    * catnip's or the bottle's, as it eats, nibbles or suckles.
@@ -232,9 +235,9 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  1, 3, 4, 8, 14, 20, 25, 38, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48,
-  49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
-  79, 80, 81,
+  1, 3, 4, 8, 14, 20, 25, 28, 38, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46,
+  48, 49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77,
+  78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -1641,6 +1644,7 @@ export class CatzPet {
 
     if (ticked.count !== undefined) f.count = ticked.count;
     if (ticked.x35c2 !== undefined) f.x35c2 = ticked.x35c2;
+    if (ticked.calmsMouse) this.options.mouseFear?.(-50);
     if (ticked.x35d2 !== undefined) f.x35d2 = ticked.x35d2;
     if (ticked.x35d4 !== undefined) f.x35d4 = ticked.x35d4;
 

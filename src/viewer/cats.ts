@@ -688,6 +688,13 @@ function goLive() {
     /* Petted: the hand, the ball under the cursor, the rectangle grown by 10 holding it, and the frames left. */
     hand: () => liveHand,
     holding: () => liveDragging,
+    /* The mouse's fear moved by the cat (falling asleep, 50 less), kept within 0 to 100 as `SetVal` keeps it. */
+    mouseFear: (by: number) => {
+      if (made.mouse) {
+        const brains = made.mouse.mouse.fields.brains;
+        brains[1] = Math.max(0, Math.min(100, brains[1] + by));
+      }
+    },
     /* The cat's conditions for its things, kept; and a thing it takes from the user let go where it is, its state 1 (`ForceRelease`). */
     setCond: (kind: number, cond: number) => liveConds.set(kind, cond),
     forceRelease: (kind: number) => {
