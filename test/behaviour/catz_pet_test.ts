@@ -122,7 +122,7 @@ describe('a Catz cat told of the pen’s things', () => {
 });
 
 describe('a Catz kitten in the Adoption Kit', () => {
-  /* Its baskets, each a breed: it begins, sits in one, peeks, and with a double-click now and then, comes out; clicked, its own basket sends it back. */
+  /* Its baskets, each a breed: it begins, sits in one, peeks, and double-clicked now and then, comes out; clicked, its own basket sends it back. */
   it('begins, peeks from its baskets, comes out and goes back', () => {
     const states: Record<number, number> = {};
     const remade: number[] = [];
@@ -135,7 +135,7 @@ describe('a Catz kitten in the Adoption Kit', () => {
         centres: CENTRES,
         stage: { left: 0, top: 0, right: 640, bottom: 480 },
         kit: { origin: { x: 0, y: 0 }, ca: 1 },
-        doubleClicked: () => tick % 400 < 20,
+        doubleClicked: () => tick % 400 === 10,
         remade: (basket) => {
           remade.push(basket);
           return undefined;

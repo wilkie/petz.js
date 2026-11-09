@@ -91,8 +91,8 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
         x: 60 + ((Math.trunc(tick / 300) * 137) % 520),
         y: 100 + ((Math.trunc(tick / 300) * 89) % 340),
       }),
-      /* And about the pen every other minute. */
-      doubleClicked: (tick) => Math.trunc(tick / 600) % 2 === 1,
+      /* And the user double-clicking, calling the cat, once each 600 ticks (a double-click lasts a frame: held on for ten seconds, as this test once had it, the moment broke off every walk). */
+      doubleClicked: (tick) => tick % 600 === 300,
       /* And, on two days, the food bowl, the water bowl and the Cat Dancer off the shelf in the pen. */
       pen: () => (seed % 2 ? PEN : NONE),
       random,

@@ -1057,9 +1057,9 @@ export function catzStateTick(
           food === 4
             ? catzProjectToCatnip(world.prey, turn)
             : catzProjectToFood(mind, world.prey, turn, world.size?.height ?? 104);
-        /* Its words name the projected point; then its goal is its food's target point again (seg22:147d). */
+        /* Its words name the projected point; then its goal is what it walked to's target point (`+0x35a6`, seg22:147d). */
         return done({
-          goal: { ...world.prey },
+          goal: { ...(world.walkedToAt ?? world.prey) },
           head: ['track'],
           headTrack: { kind: food ?? 0, speed: 3000 },
           pushes: [0x123, 0x1cf, 0x125],

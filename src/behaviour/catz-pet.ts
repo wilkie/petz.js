@@ -235,9 +235,9 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  1, 2, 3, 4, 8, 14, 19, 20, 25, 27, 28, 29, 30, 38, 39, 40, 41, 43, 56, 57, 53, 62, 15, 16, 17, 18,
-  22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65,
-  67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  1, 2, 3, 4, 8, 14, 19, 20, 25, 27, 28, 29, 30, 35, 36, 37, 38, 39, 40, 41, 43, 56, 57, 53, 62, 15,
+  16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55, 58, 59, 60, 61,
+  63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -1558,6 +1558,29 @@ export class CatzPet {
       this.fields.curiosities = catzCuriosities(this.mind, this.isShelved, this.options.random);
       this.fields.count = 0;
       this.fields.ticks = 0;
+    }
+
+    /* Begging (`DoCatBegging`, seg22:0697), waiting for a treat (`DoCatWaitForTreat`, 0a67) and nibbling it (`DoCatNibbleTreat`, 108c), entering: `+0x34ca` 0 for the first two, `+0x3504` 0 and its count 0 for the last two (`+0x3504` the second only), its head on what it plays with (2500 begging, else 3000); then on into their ticks, nothing pushed. */
+    if (state === 35 || state === 36 || state === 37) {
+      const f = this.fields;
+
+      if (state !== 37) {
+        f.passed = 0;
+      }
+
+      if (state === 36) {
+        f.ticks = 0;
+      }
+
+      if (state !== 35) {
+        f.count = 0;
+      }
+
+      this.options.head?.({
+        kind: f.x35a4 ?? 0,
+        speed: state === 35 ? 2500 : 3000,
+        shelved: false,
+      });
     }
 
     /* Walking on (`DoCatPerformLocomote`, seg25:07d5): not there before (`+0x35aa`), not walked (`+0x34ca`), no strides (`+0x3502`), and its head on what it walks to (3000): what it plays with where it walks to a point (`+0x35a2`), else what it walks to. */
