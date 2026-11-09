@@ -350,7 +350,7 @@ export class CatzPet {
    * phase 1; the dog and the dream's mouse each set off 200 left of the
    * stage and run across, 10 and 8 a tick.
    */
-  private readonly dream = {
+  readonly dream = {
     phase: 0,
     kind: 0,
     x35d8: 0,

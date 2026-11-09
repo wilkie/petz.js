@@ -381,6 +381,9 @@ let liveHand = false;
  */
 let liveDoubleClicked = false;
 
+/** Put the live cat to nap (CatNapz). */
+let liveNap: () => void = () => {};
+
 /** Whether a point on the stage is on one of the live cat's balls. */
 let liveOverCat: (at: { x: number; y: number }) => boolean = () => false;
 
@@ -721,6 +724,7 @@ function goLive() {
     cues: () => body.shown?.step.cues ?? [],
   });
   made.pet = pet;
+  liveNap = () => pet.nap();
   liveOverCat = (at) => !!body.shown && placer.ballAt(body.shown.rect, body.shown.pose, at) >= 0;
 
   /* The mouse in its hole, its body its own, at scales of 200 (`InitMouseSprite`). */
@@ -822,6 +826,11 @@ function goLive() {
 
     const { state, global } = pet.tick();
     livePressed = false;
+
+    /* Dreaming, floating about the stage's middle: the cat put where the float has it (its goal and target point, `DoCatStartDream`'s phase 3). */
+    if (global === 21 && state === 65 && pet.dream.phase === 3 && pet.fields.goal) {
+      body.moveTo(pet.fields.goal);
+    }
     liveDoubleClicked = false;
 
     /* The Kit's baskets pressed, as the playpen's root has them after its sprites: none where the press took the cat or a thing. */
@@ -1199,6 +1208,11 @@ window.addEventListener('resize', () => {
   }
 });
 /* The camera: the playpen's command 0x7f2 (message 21; its sound not played). */
+element<HTMLButtonElement>('nap').addEventListener('click', () => {
+  if (live) {
+    liveNap();
+  }
+});
 element<HTMLButtonElement>('camera').addEventListener('click', () => {
   if (live) {
     liveCommands.push(21);
