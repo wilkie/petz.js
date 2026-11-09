@@ -448,12 +448,13 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
   - **Headless** (`test/behaviour/catz_pet_test.ts`), three days of 3,000 ticks, the cursor about 20 of each 400 and its own basket clicked now and then: it began, sat in its baskets, peeked, came out, was sent back, walked to above its basket and jumped in (77), made again as each basket it was put in (never the same twice running), without fault.
 
 - [[inferred]] The Kit in the viewer (an Adoption Kit box, then Live).
-  - **The baskets:** its origin is (0, 40). The five baskets are drawn at their rectangles from it, each the basket's back and handle (16500) behind the kitten and its woven front (16501) over it, so it sits in it. The lit pictures (16510, 16511) and the hover highlight (kin 0x19) are not used.
+  - **The baskets:** its origin is (0, 40). The five baskets are drawn at their rectangles from it, each the basket's back and handle (16500) behind the kitten and its woven front (16501) over it, so it sits in it. The kitten's own basket is drawn lit (16510, 16511) while it is out or climbing out, jumping or dropping in (76 to 78), as `SetCond` 2 and 1 light and darken it. The hover highlight (kin 0x19) is not used.
+  - **Its words:** climbing out (76), its breed's description (`GiveBreedDescriptions`, strings 0x233d + its basket) is shown above the stage, and cleared back in the baskets (73).
   - **The kitten:** begun 100 above and left of the stage's corner.
   - **Made again:** put in a basket, it is made again as that basket's breed: its file averaged with its kitten's by the slider, its brains made as the Kit makes them (`initCatzBrains`, `kit`). The body is made again too (`CatzBody.rebreed`) and seated on the basket's place.
   - **Clicks:** a click on a basket is its command (message 0x16 + n).
   - **The mouse:** hidden in its hole, it is told to the cat as in it (state 1), whatever its machine has yet. Before, its first tick's state 0 had the cat see it out and play at once.
-  - **Run so:** the kitten began, peeked from its baskets and went back, climbed out (76) and played or was affectionate. Its own basket clicked once it was out, it walked back to above it, jumped in (77) and was in the baskets again. The screenshot had a yellow kitten in basket 4 and, jumping in, coming down into it.
+  - **Run so:** the kitten began, peeked from its baskets and went back, climbed out (76) and played or was affectionate. Its own basket clicked once it was out, it walked back to above it, jumped in (77) and was in the baskets again. The screenshot had a yellow kitten in basket 4 and, jumping in, coming down into it. Climbing out of basket 2 it showed "The proud Sophisto is an elegant breed."
 
 ## CatNapz
 

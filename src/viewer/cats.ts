@@ -79,6 +79,7 @@ const playButton = element<HTMLButtonElement>('play');
 const liveButton = element<HTMLButtonElement>('live');
 const thingSelect = element<HTMLSelectElement>('thing');
 const kitInput = element<HTMLInputElement>('kit');
+const kitText = element<HTMLParagraphElement>('kit-text');
 const canvas = element<HTMLCanvasElement>('stage');
 const context = canvas.getContext('2d')!;
 
@@ -299,18 +300,21 @@ const KIT_BASKETS = [
   { x: 0x207, y: 0xaf },
 ];
 
-/** The basket's pictures (CATZDLL type 2): its back and handle (16500) and its front (16501). */
+/** The basket's pictures (CATZDLL type 2): its back and handle (16500) and its front (16501), and lit (16510, 16511). */
 let basketPictures: { dib: Dib; colours: number[]; green: number }[] = [];
 
-/** The five baskets, their backs (0) or fronts (1), each at its rectangle. */
-function drawBaskets(bitmap: IndexedBitmap, part: 0 | 1) {
-  const picture = basketPictures[part];
+/** Each basket's breed's words, shown as it climbs out of it (`GiveBreedDescriptions`, string 0x233d + n). */
+let kitDescriptions: string[] = [];
 
-  if (!picture) {
-    return;
-  }
+/** The five baskets, their backs (0) or fronts (1), each at its rectangle; the one lit (`SetCond` 2) drawn so. */
+function drawBaskets(bitmap: IndexedBitmap, part: 0 | 1, lit = -1) {
+  for (const [n, corner] of KIT_BASKETS.entries()) {
+    const picture = basketPictures[n === lit ? part + 2 : part] ?? basketPictures[part];
 
-  for (const corner of KIT_BASKETS) {
+    if (!picture) {
+      continue;
+    }
+
     drawPicture(
       bitmap,
       picture.dib,
@@ -692,7 +696,18 @@ function goLive() {
         y: Math.trunc((rect.top + rect.bottom) / 2),
       };
       pet.fields.x688 = body.facing;
-      drawLive(cat, shaped, placer, shown, mouse, kitMode);
+      /* Its basket lit (`SetCond` 2) from climbing out of it till it is back in the baskets. */
+      const out =
+        made.pet?.kit && (made.pet.global !== 22 || [76, 77, 78].includes(made.pet.state));
+      drawLive(
+        cat,
+        shaped,
+        placer,
+        shown,
+        mouse,
+        kitMode,
+        out ? (made.pet?.kit?.basket ?? -1) : -1
+      );
     }
 
     /* A command's message this tick. */
@@ -711,6 +726,13 @@ function goLive() {
 
     const { state, global } = pet.tick();
     livePressed = false;
+
+    /* Climbing out, its breed's words; back in the baskets, none (`SetText` of kin 0x11 ""). */
+    if (pet.kit && state === 76) {
+      kitText.textContent = kitDescriptions[pet.kit.basket] ?? '';
+    } else if (pet.kit && state === 73) {
+      kitText.textContent = '';
+    }
 
     /* Dangling, hung from the cursor by its ball 0x24 (`DoDangling`). */
     if (state === 33) {
@@ -744,7 +766,8 @@ function drawLive(
   placer: CatzPlacer,
   { step, rect, pose }: { step: CatzStep; rect: CatzPlaced['rect']; pose: CatzPose },
   mouse?: CatzMouseLive,
-  kitMode = false
+  kitMode = false,
+  litBasket = -1
 ) {
   const frame =
     step.layer && shaped[step.layer.first] && shaped[step.layer.frame]
@@ -786,7 +809,7 @@ function drawLive(
 
   /* The Adoption Kit's baskets: their backs and handles behind the kitten (16500). */
   if (kitMode) {
-    drawBaskets(bitmap, 0);
+    drawBaskets(bitmap, 0, litBasket);
   }
 
   /* The mouse, out of its hole, behind the cat. */
@@ -819,7 +842,7 @@ function drawLive(
 
   /* And their fronts over it, so it sits in its basket (16501). */
   if (kitMode) {
-    drawBaskets(bitmap, 1);
+    drawBaskets(bitmap, 1, litBasket);
   }
 
   const pixels = new ImageData(bitmap.toRgba(palette), bitmap.width, bitmap.height);
@@ -925,8 +948,26 @@ async function start(game: GameFiles) {
     }
   }
 
+  /* The breeds' words (`RT_STRING`, 0x233d to 0x2341: in a block of 16, each a length and its text). */
+  kitDescriptions = [0, 1, 2, 3, 4].map((n) => {
+    const id = 0x233d + n;
+    const block = engine.resources().find((r) => r.type === 6 && r.id === (id >> 4) + 1);
+
+    if (!block) {
+      return '';
+    }
+
+    let at = 0;
+
+    for (let k = 0; k < (id & 15); k++) {
+      at += 1 + block.data[at];
+    }
+
+    return new TextDecoder('latin1').decode(block.data.slice(at + 1, at + 1 + block.data[at]));
+  });
+
   /* The Adoption Kit's basket: its back and its front. */
-  basketPictures = [16500, 16501].flatMap((want) => {
+  basketPictures = [16500, 16501, 16510, 16511].flatMap((want) => {
     const found = engine.resources().find(({ type, id }) => type === 2 && id === want);
 
     if (!found) {
