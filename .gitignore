@@ -2,6 +2,7 @@
 # to publish: register-dogz.mjs reads it, and oracle/manifest.json records
 # only its hash, so a clone can tell whether it was given the same key.
 serial.txt
+catz-unlock.txt
 
 node_modules/
 dist/
