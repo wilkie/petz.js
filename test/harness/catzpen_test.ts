@@ -14,6 +14,7 @@
  * (`oracle/build/variants/catz-cd-registered`); skipped otherwise.
  */
 
+import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -50,6 +51,11 @@ import {
 
 const ROOT = process.cwd();
 const WINBOX = join(ROOT, '..', 'winbox.js', 'test', 'win16', 'run-probe.ts');
+/** winbox.js's Rust engine run on a program (its `trace` example, built `--release`; or as `WINBOX_TRACE` says), and the Windows it runs it over, installed for 256 colours. */
+const TRACE =
+  process.env.WINBOX_TRACE ??
+  join(ROOT, '..', 'winbox.js', 'target', 'release', 'examples', 'trace');
+const WINDOWS_256 = join(ROOT, '..', 'winbox.js', 'oracle', 'build', 'drive-c-vga256');
 const HARNESS = join(ROOT, 'oracle', 'build', 'harness');
 const DRIVE = join(ROOT, 'oracle', 'build', 'variants', 'catz-cd-registered');
 const PARAMS = join(HARNESS, 'catz-params.bin');
@@ -146,12 +152,73 @@ const TRACE_KIT_PARAMS = process.env.TRACE_KIT_PARAMS === '1';
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
 
-/* Reading saved traces again (`HARNESS_REUSE`) needs no engine to run them. */
-const ready = [
-  ...(process.env.HARNESS_REUSE ? [] : [WINBOX]),
-  join(HARNESS, 'CATZPEN.EXE'),
-  join(DRIVE, 'CATZ.DOG'),
-].every(existsSync);
+/* An engine to run the driver on: winbox.js's TypeScript probe where it still has one, else its Rust engine's `trace`. Reading saved traces again (`HARNESS_REUSE`) needs neither. */
+const engine = existsSync(WINBOX)
+  ? 'typescript'
+  : existsSync(TRACE) && existsSync(WINDOWS_256)
+    ? 'rust'
+    : undefined;
+const ready =
+  (!!process.env.HARNESS_REUSE || engine !== undefined) &&
+  [join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
+
+/**
+ * The driver run on a staged folder, as `C:\CORPUS\CATZPEN`, for so many
+ * seconds of its clock at most, on the 256-colour display: its output
+ * (`C:\CATZPEN.OUT`). On the Rust engine, the folder and the harness's
+ * extras are made a drive C: of their own over the installed Windows.
+ */
+async function runPen(name: string, directory: string, seconds: number): Promise<string> {
+  if (engine === 'typescript') {
+    const { runProbe } = await import(WINBOX);
+    const result = await runProbe(name, 1, false, true, seconds, {
+      display: 'vga256',
+      virtual: true,
+      program: { directory, file: 'CATZPEN.EXE', folder: 'CATZPEN' },
+      extras: EXTRAS,
+    });
+
+    expect(result.failure ?? null).toBeNull();
+    const file = await result.fileSystem.open(['CATZPEN.OUT']);
+    return new TextDecoder().decode(new Uint8Array(await file.read(0, file.info.size)));
+  }
+
+  const drive = join(HARNESS, `drive-${name}`);
+  rmSync(drive, { recursive: true, force: true });
+  mkdirSync(join(drive, 'CORPUS'), { recursive: true });
+  cpSync(directory, join(drive, 'CORPUS', 'CATZPEN'), { recursive: true });
+
+  for (const { parts, file } of EXTRAS) {
+    mkdirSync(join(drive, ...parts.slice(0, -1)), { recursive: true });
+    cpSync(file, join(drive, ...parts));
+  }
+
+  const run = spawnSync(
+    TRACE,
+    [
+      join(drive, 'CORPUS', 'CATZPEN', 'CATZPEN.EXE'),
+      '--drive',
+      drive,
+      '--path',
+      'C:\\CORPUS\\CATZPEN\\CATZPEN.EXE',
+      '--windows',
+      WINDOWS_256,
+      '--display',
+      'vga256',
+      '--seconds',
+      String(seconds),
+      '--budget',
+      '1000000000000',
+      '--summary',
+    ],
+    { encoding: 'latin1', maxBuffer: 1 << 26 }
+  );
+  const stopped = /stopped: (.*)/.exec(run.stdout ?? '')?.[1] ?? run.error?.message;
+
+  /* Ended as the driver ends it (`ExitWindows`), with its output. */
+  expect(stopped).toMatch(/^Ended/);
+  return readFileSync(join(drive, 'CATZPEN.OUT'), 'latin1');
+}
 const describeHarness = ready ? describe : describe.skip;
 
 /** A stage: the game's directory, and its libraries beside it. */
@@ -629,7 +696,8 @@ const CURIOUS_CASES = Array.from({ length: 128 }, (_, n) => {
 
 describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('keeps the parameters CATZ.EXE gives its playpen', async () => {
-    if (existsSync(PARAMS)) {
+    /* (Watching CATZ.EXE's calls needs the TypeScript probe.) */
+    if (existsSync(PARAMS) || engine !== 'typescript') {
       return;
     }
 
@@ -711,17 +779,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         BEHAVIOUR_CASES.map((line) => line.join(' ')).join('\r\n') + '\r\n'
       );
 
-      const { runProbe } = await import(WINBOX);
-      const result = await runProbe('catzpen', 1, false, true, 240, {
-        display: 'vga256',
-        virtual: true,
-        program: { directory, file: 'CATZPEN.EXE', folder: 'CATZPEN' },
-        extras: EXTRAS,
-      });
-
-      expect(result.failure ?? null).toBeNull();
-      const file = await result.fileSystem.open(['CATZPEN.OUT']);
-      text = new TextDecoder().decode(new Uint8Array(await file.read(0, file.info.size)));
+      text = await runPen('catzpen', directory, 240);
       writeFileSync(join(HARNESS, 'CATZPEN.OUT'), text);
     }
 
@@ -1639,24 +1697,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_MICE_HELD ? 67108864 : 0)
         }\r\n`
       );
-      const { runProbe } = await import(WINBOX);
-      const result = await runProbe(
-        'catztrace',
-        1,
-        false,
-        true,
-        7200 * Math.ceil(TRACE_FRAMES / 2000),
-        {
-          display: 'vga256',
-          virtual: true,
-          program: { directory, file: 'CATZPEN.EXE', folder: 'CATZPEN' },
-          extras: EXTRAS,
-        }
-      );
-
-      expect(result.failure ?? null).toBeNull();
-      const file = await result.fileSystem.open(['CATZPEN.OUT']);
-      text = new TextDecoder().decode(new Uint8Array(await file.read(0, file.info.size)));
+      text = await runPen('catztrace', directory, 7200 * Math.ceil(TRACE_FRAMES / 2000));
       writeFileSync(out, text);
     }
 
