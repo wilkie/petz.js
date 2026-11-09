@@ -358,6 +358,8 @@ export class CatzPet {
     inPhase: 0,
     dogX: undefined as number | undefined,
     mouseX: 0,
+    /** The dream sprite (kin 0x13) shown: what it shows (`SetDream`, `+0x35ec`) and where its target point is; none where put away. */
+    shown: undefined as { kind: number; at: { x: number; y: number } } | undefined,
   };
 
   /** A tick of the dream's stand-ins: the ticks in its phase, the dog and the mouse on their way. */
@@ -367,7 +369,22 @@ export class CatzPet {
 
     if (this.global !== 21) {
       dream.dogX = undefined;
+      dream.shown = undefined;
       return;
+    }
+
+    /* Dreaming well, cued (7): the dream sprite put above it by its height, showing what it dreams of, and shown; cued (6), put away (`DoCatGoodDream`, seg18:0a55 on). */
+    const cues = this.cues();
+
+    if (this.state === 66 && cues.includes(7)) {
+      dream.shown = {
+        kind: dream.kind,
+        at: { x: this.point.x, y: this.point.y - (this.options.size?.height ?? 104) },
+      };
+    }
+
+    if (cues.includes(6)) {
+      dream.shown = undefined;
     }
 
     if (dream.dogX !== undefined) {

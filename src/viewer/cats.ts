@@ -381,6 +381,9 @@ let liveHand = false;
  */
 let liveDoubleClicked = false;
 
+/** Whether the live mouse is out as the cat's dream's (10). */
+let liveDreamMouse = false;
+
 /** Put the live cat to nap (CatNapz). */
 let liveNap: () => void = () => {};
 
@@ -455,6 +458,9 @@ function animateThings() {
 /** The shelf's things' bitmaps by id (CATZDLL.DLL's, and the retail CATZREZX.DLL's), and their definitions by kind. */
 const thingBitmaps = new Map<number, { dib: Dib; colours: number[]; green: number }>();
 let shelfThings = new Map<number, AptThing>();
+
+/** CatNapz's dream sprite's definition (CATZDLL type 32513, 4000): by what it dreams of (0 to 8), one of the pen's things. */
+let dreamThing: AptThing | undefined;
 
 /** A thing's pictures in the pen in its condition, at rest (its set 0's first frame), where the condition has its own and all are here; else none. */
 function condPictures(kind: number) {
@@ -804,7 +810,7 @@ function goLive() {
       const lit = kitPet
         ? [out || liveBasketLit ? kitPet.kit!.basket : -1, kitPet.kitHighlight]
         : [];
-      drawLive(cat, shaped, placer, shown, mouse, kitMode, lit);
+      drawLive(cat, shaped, placer, shown, mouse, kitMode, lit, made.pet?.dream.shown);
     }
 
     /* A command's message this tick. */
@@ -849,21 +855,41 @@ function goLive() {
       body.hang(0x24, liveCursor);
     }
 
-    /* The mouse's tick, the cat where it is. */
-    mouse?.tick({
-      cat: pet.point,
-      catGlobal: global,
-      catAge: pet.mind.brains[11],
-      x33b8: pet.x33b8,
-      cursor: liveCursor,
-      cheeseHeld: liveDragging === 8,
-      things: livePen,
-      shelfAt: (kind) => ({
-        x: LIVE_STAGE.left + Math.trunc(((LIVE_STAGE.right - LIVE_STAGE.left) * (kind + 1)) / 17),
-        y: LIVE_STAGE.top + 30,
-      }),
-      clock: Math.trunc(clock),
-    });
+    /* Dreamt of (10): the pen's own mouse is the dream's -- put above the cat, playing 0x22 and shown (`DoCatGoodDream`, seg18:0a6e on) -- its own machine paused the while; put away again (cued 6), back in its hole. */
+    const dreamt = pet.dream.shown?.kind === 10 ? pet.dream.shown : undefined;
+
+    if (mouse && dreamt && !liveDreamMouse) {
+      liveDreamMouse = true;
+      mouse.hidden = false;
+      mouse.body.drop();
+      mouse.body.moveTo(dreamt.at);
+      mouse.body.play(0x22);
+    } else if (mouse && !dreamt && liveDreamMouse) {
+      liveDreamMouse = false;
+      mouse.hidden = true;
+      mouse.body.drop();
+      mouse.body.moveTo(MOUSE_HOLE);
+    }
+
+    if (mouse && liveDreamMouse) {
+      mouse.body.next();
+    } else {
+      /* The mouse's tick, the cat where it is. */
+      mouse?.tick({
+        cat: pet.point,
+        catGlobal: global,
+        catAge: pet.mind.brains[11],
+        x33b8: pet.x33b8,
+        cursor: liveCursor,
+        cheeseHeld: liveDragging === 8,
+        things: livePen,
+        shelfAt: (kind) => ({
+          x: LIVE_STAGE.left + Math.trunc(((LIVE_STAGE.right - LIVE_STAGE.left) * (kind + 1)) / 17),
+          y: LIVE_STAGE.top + 30,
+        }),
+        clock: Math.trunc(clock),
+      });
+    }
     ticks++;
     status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}, at ${pet.point.x}, ${pet.point.y}${body.queue.length ? `, ${body.queue.length} frames to play` : ''}${pet.kit ? `; in the Adoption Kit, basket ${pet.kit.basket}` : ''}${mouse ? `; the mouse ${mouse.hidden ? 'in its hole' : 'out'} (${mouse.mouse.fields.global}/${mouse.mouse.fields.state}) at ${mouse.at.x}, ${mouse.at.y}` : ''}.`;
   }, 100);
@@ -877,7 +903,8 @@ function drawLive(
   { step, rect, pose }: { step: CatzStep; rect: CatzPlaced['rect']; pose: CatzPose },
   mouse?: CatzMouseLive,
   kitMode = false,
-  litBaskets: number[] = []
+  litBaskets: number[] = [],
+  dream?: { kind: number; at: { x: number; y: number } }
 ) {
   const frame =
     step.layer && shaped[step.layer.first] && shaped[step.layer.frame]
@@ -966,6 +993,27 @@ function drawLive(
   /* And their fronts over it, so it sits in its basket (16501). */
   if (kitMode) {
     drawBaskets(bitmap, 1, litBaskets);
+  }
+
+  /* Napping, its dream sprite over all (kin 0x13): what it dreams of, its target point above the cat. (Its mouse, for 10, not drawn yet.) */
+  const offset = dream && dreamThing ? aptTargetOffset(dreamThing, dream.kind) : undefined;
+
+  if (dream && dreamThing && offset) {
+    for (const { rect, bitmap: id } of aptRestingPictures(dreamThing, dream.kind)) {
+      const picture = thingBitmaps.get(id);
+
+      if (picture) {
+        drawPicture(
+          bitmap,
+          picture.dib,
+          picture.colours,
+          dream.at.x - offset.x + rect[0],
+          dream.at.y - offset.y + rect[1],
+          false,
+          picture.green
+        );
+      }
+    }
   }
 
   const pixels = new ImageData(bitmap.toRgba(palette), bitmap.width, bitmap.height);
@@ -1083,6 +1131,10 @@ async function start(game: GameFiles) {
   }
 
   const shelf = engine.resources().find(({ type, id }) => type === 32513 && id === 1000);
+  const dreamText = engine.resources().find(({ type, id }) => type === 32513 && id === 4000);
+  dreamThing = dreamText
+    ? parseAptThings(new TextDecoder('latin1').decode(dreamText.data))[0]
+    : undefined;
   shelfThings = shelf
     ? aptShelfKinds(parseAptThings(new TextDecoder('latin1').decode(shelf.data)))
     : new Map();
