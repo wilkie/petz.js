@@ -302,6 +302,11 @@ export class CatzBody {
       return;
     }
 
+    /* Its cues raised in the tick it is popped in with the next (`IsCued` asks of the tick's), so the next shown has them too. */
+    if (this.held?.cues?.length) {
+      step = { ...step, cues: [...this.held.cues, ...(step.cues ?? [])] };
+    }
+
     const pose = catzPoseOf(step);
 
     /* A layered action whose frames these files lack (the demo's) not layered. */

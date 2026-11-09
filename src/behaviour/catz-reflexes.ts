@@ -520,6 +520,10 @@ export interface CatzMessageDone {
   head?: boolean;
   ignored?: { kin: number; x35b4?: number };
 
+  /** Food or catnip just brought out, full (`SetupSpriteJustBroughtOut`, seg23:315f): the bowl's `+0x35d2` or the catnip's `+0x35d4` 100. */
+  x35d2?: number;
+  x35d4?: number;
+
   /** Words shown on the Kit's text bar (`TextStatusBar`, the cat's slot `0x158`): a string of CATZDLL's. */
   words?: number;
 }
@@ -720,7 +724,11 @@ export function catzMessage(
       const kin = message === 1 ? 0xc : 4;
 
       if (message === 1) {
-        return catzMessage(mind, 2, seen, random);
+        return { ...catzMessage(mind, 2, seen, random), x35d2: 100 };
+      }
+
+      if (message === 7) {
+        return { ...catzMessage(mind, 8, seen, random), x35d4: 100 };
       }
 
       if (age === 0) {

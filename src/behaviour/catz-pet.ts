@@ -387,6 +387,21 @@ export class CatzPet {
         }
       }
 
+      /* Eating from a bowl or nibbling catnip, mid-script: its bites as they are cued (`DoCatEatFromBowl`, `DoCatNibbleCatnip` ask every tick); the catnip moved or held, after it again. */
+      if (this.state === 40 || this.state === 43) {
+        const ticked = catzStateTick(
+          this.state,
+          this.mind,
+          { ...this.world(false), cues: this.cues(), done: false },
+          this.options.random
+        );
+        this.take(ticked);
+
+        if (ticked.state !== undefined || ticked.global !== undefined) {
+          this.change(ticked.global, ticked.state, 0);
+        }
+      }
+
       /* Dangling, let go mid-script: it falls (`DoDangling` asks every tick). */
       if (this.state === 33) {
         const ticked = catzStateTick(
@@ -735,6 +750,14 @@ export class CatzPet {
 
     if (done.x35d6 !== undefined) {
       f.x35d6 = done.x35d6;
+    }
+
+    if (done.x35d2 !== undefined) {
+      f.x35d2 = done.x35d2;
+    }
+
+    if (done.x35d4 !== undefined) {
+      f.x35d4 = done.x35d4;
     }
 
     if (done.ignored) {
@@ -1603,6 +1626,9 @@ export class CatzPet {
     }
 
     if (ticked.count !== undefined) f.count = ticked.count;
+    if (ticked.x35d2 !== undefined) f.x35d2 = ticked.x35d2;
+    if (ticked.x35d4 !== undefined) f.x35d4 = ticked.x35d4;
+
     for (const [kind, cond] of ticked.conds ?? []) {
       this.catSetCond(kind, cond);
     }

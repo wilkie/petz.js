@@ -574,6 +574,10 @@ export interface CatzStateTick {
   /** The conditions it set its things to (`XApt::CatSetCond`, seg2:02ce): each kind and its condition, in turn. */
   conds?: [number, number][];
 
+  /** What is left in the food bowl (`+0x35d2`) and of the catnip (`+0x35d4`), where a bite took some. */
+  x35d2?: number;
+  x35d4?: number;
+
   state?: number;
   global?: number;
   pushed?: number;
@@ -903,9 +907,16 @@ export function catzStateTick(
         percent();
       }
 
+      const x35d4 = world.cues?.includes(5) ? left : undefined;
+
+      /* Mid-script, only the catnip moved and its bites; what follows waits on its script. */
+      if (world.done === false) {
+        return done({ conds, x35d4 });
+      }
+
       return left === 0
-        ? done({ global: 6, conds })
-        : done({ passed: 1, pushed: left! > 70 ? 0x279 : 0x2d2, conds });
+        ? done({ global: 6, conds, x35d4 })
+        : done({ passed: 1, pushed: left! > 70 ? 0x279 : 0x2d2, conds, x35d4 });
     }
     case CATZ_STATE.stayAway:
     case CATZ_STATE.scaredWatch:
@@ -2832,6 +2843,7 @@ function catzEatBowl(
   /* Cued to bite (5), 5 less, the food bowl shown by what is left (seg22:1c7c): 2 over 95, then 3, 4, 5, 6, 7 over 0, else 8; else the water bowl, cued 1, 3, and cued 0, 2 (`CatSetCond`). */
   if (world.cues?.includes(5)) {
     left = Math.max(0, left - 5);
+    tick.x35d2 = left;
 
     if (food === 0xc) {
       tick.conds = [[0xc, catzLeftCond(left, [95, 80, 60, 40, 20, 0])]];
@@ -2840,6 +2852,11 @@ function catzEatBowl(
     tick.conds = [[0xd, 3]];
   } else if (food === 0xd && world.cues?.includes(0)) {
     tick.conds = [[0xd, 2]];
+  }
+
+  /* Mid-script, only its cues (seg22:1beb on): what follows waits on its script. */
+  if (world.done === false) {
+    return tick;
   }
 
   const go = (fields: Partial<CatzStateTick>) => {

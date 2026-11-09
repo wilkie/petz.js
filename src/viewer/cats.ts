@@ -50,9 +50,15 @@ import {
   type Script,
   SCRIPTS,
 } from '../formats/script.ts';
-import { initCatzBrains, updateCatzBrain } from '../behaviour/catz-brain.ts';
+import { CATZ_BRAIN, initCatzBrains, updateCatzBrain } from '../behaviour/catz-brain.ts';
 import { CatzBody } from '../behaviour/catz-body.ts';
 import { CatzPet } from '../behaviour/catz-pet.ts';
+import {
+  type AptThing,
+  aptRestingPictures,
+  aptShelfKinds,
+  parseAptThings,
+} from '../formats/apt.ts';
 import { catzKitLocked } from '../behaviour/catz-reflexes.ts';
 import { catzBasketHit } from '../behaviour/catz-states.ts';
 import { CatzMouseLive, readMouseFactors } from '../behaviour/catz-mouse-live.ts';
@@ -407,6 +413,22 @@ const livePen = new Map<number, { x: number; y: number }>();
  */
 const penPictures = new Map<number, { dib: Dib; colours: number[]; green: number }>();
 
+/** The shelf's things' bitmaps by id (CATZDLL.DLL's, and the retail CATZREZX.DLL's), and their definitions by kind. */
+const thingBitmaps = new Map<number, { dib: Dib; colours: number[]; green: number }>();
+let shelfThings = new Map<number, AptThing>();
+
+/** A thing's pictures in the pen in its condition, at rest (its set 0's first frame), where the condition has its own and all are here; else none. */
+function condPictures(kind: number) {
+  const cond = liveConds.get(kind) ?? 1;
+  const pictures =
+    cond >= 2 && shelfThings.get(kind) ? aptRestingPictures(shelfThings.get(kind)!, cond) : [];
+  const found = pictures.map((picture) => ({
+    ...picture,
+    image: thingBitmaps.get(picture.bitmap),
+  }));
+  return found.length && found.every((picture) => picture.image) ? found : [];
+}
+
 /**
  * The pen's things moving, struck: each by the playpen's physics
  * (`catzToyTick`), its friction and rebound the engine's -- the cheese 50,
@@ -530,7 +552,6 @@ function goLive() {
     centres: brains?.map((brain) => brain.centre) ?? LIVE_CENTRES,
     stage: LIVE_STAGE,
     cursor: () => liveCursor,
-    /* (Petting, the hand down, the cursor is not about: `DoGSPetting` ends petting each tick it is.) */
     doubleClicked: () => liveDoubleClicked,
     /* The pen's things, and the mouse hole (0xe) where the mouse lives, at its hole. */
     pen: () => (mouseFiles ? new Map([...livePen, [0xe, MOUSE_HOLE]]) : livePen),
@@ -682,6 +703,13 @@ function goLive() {
     mouse.mouse.fields.brains[1] = 20;
   }
 
+  /* `?full=N`: the cat's fullness (brain 4) to begin with; low, it is hungry and eats what is put out. */
+  const full = new URLSearchParams(location.search).get('full');
+
+  if (full !== null && !Number.isNaN(Number(full))) {
+    pet.mind.brains[CATZ_BRAIN.fullness] = Number(full);
+  }
+
   liveButton.textContent = 'Stop';
   live = window.setInterval(() => {
     /* Its brains drawn back toward their centres by the engine's clock
@@ -804,8 +832,23 @@ function drawLive(
   /* The pen's things with pictures first, the cat in front: each about its point. */
   for (const [kind, { x, y }] of livePen) {
     const picture = penPictures.get(kind);
+    const layers = condPictures(kind);
 
-    if (picture) {
+    /* In a condition of its own (a bowl part eaten, the catnip nibbled), its pictures for it, each by its rectangle, about the same point. */
+    if (picture && layers.length) {
+      for (const { rect, image } of layers) {
+        const { dib, colours, green } = image!;
+        drawPicture(
+          bitmap,
+          dib,
+          colours,
+          x - Math.trunc(picture.dib.width / 2) + rect[0],
+          y - Math.trunc(picture.dib.height / 2) + rect[1],
+          false,
+          green
+        );
+      }
+    } else if (picture) {
       const { dib, colours, green } = picture;
       drawPicture(
         bitmap,
@@ -957,16 +1000,32 @@ async function start(game: GameFiles) {
   }
 
   const engine = parseNe(await game.read('WINDOWS/SYSTEM/CATZDLL.DLL'));
+  /* The retail game keeps most of its things' bitmaps in CATZREZX.DLL. */
+  const rezx = await game
+    .read('WINDOWS/SYSTEM/CATZREZX.DLL')
+    .then(parseNe)
+    .catch(() => undefined);
   penPictures.clear();
+  thingBitmaps.clear();
 
-  for (const { type, id, data } of engine.resources()) {
-    if (type === 2 && typeof id === 'number' && id % 1000 === 200 && id < 16000) {
+  for (const { type, id, data } of [...engine.resources(), ...(rezx?.resources() ?? [])]) {
+    if (type === 2 && typeof id === 'number' && id >= 1000 && id < 18000 && !thingBitmaps.has(id)) {
       const dib = parseDib(data);
       /* Transparent where bright green, as the engine's pictures are made. */
       const green = dib.colours.findIndex(([r, g, b]) => r === 0 && g === 255 && b === 0);
-      penPictures.set((id - 200) / 1000, { dib, colours: mapColours(dib, palette), green });
+      const picture = { dib, colours: mapColours(dib, palette), green };
+      thingBitmaps.set(id, picture);
+
+      if (id % 1000 === 200 && id < 16000) {
+        penPictures.set((id - 200) / 1000, picture);
+      }
     }
   }
+
+  const shelf = engine.resources().find(({ type, id }) => type === 32513 && id === 1000);
+  shelfThings = shelf
+    ? aptShelfKinds(parseAptThings(new TextDecoder('latin1').decode(shelf.data)))
+    : new Map();
 
   const strings = engine.resources().filter((r) => r.type === 6);
   catzString = (id) => {
@@ -1184,8 +1243,9 @@ canvas.addEventListener('click', (event) => {
     return;
   }
 
-  /* Taken off the shelf and dragged (3, the user's), then let go (1) in the pen. */
+  /* Taken off the shelf and dragged (3, the user's), then let go (1) in the pen; its condition 1 again (`ShelfToPlaypen`). */
   livePen.set(kind, stageAt(event));
+  liveConds.delete(kind);
   liveNotices.push([kind, 1, 3, true], [kind, 1, 1, false]);
 });
 canvas.addEventListener('dblclick', (event) => {

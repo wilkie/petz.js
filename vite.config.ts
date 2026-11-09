@@ -20,7 +20,8 @@ const DRIVES = [
     drive: existsSync(resolve('oracle/build/catz-retail-drive-c/CATZ.DOG'))
       ? resolve('oracle/build/catz-retail-drive-c')
       : resolve('oracle/build/catz-drive-c'),
-    served: [/^CATZ\.DOG\//i, /^WINDOWS\/SYSTEM\/CATZDLL\.DLL$/i],
+    /* (The retail engine keeps most of its things' pictures in CATZREZX.DLL.) */
+    served: [/^CATZ\.DOG\//i, /^WINDOWS\/SYSTEM\/CATZ(DLL|REZX)\.DLL$/i],
   },
 ];
 
