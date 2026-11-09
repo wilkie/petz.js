@@ -232,7 +232,7 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  3, 4, 8, 14, 25, 38, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52,
+  1, 3, 4, 8, 14, 20, 25, 38, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52,
   54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
 ]);
 
