@@ -702,6 +702,9 @@ export interface CatzStateTick {
   x35ac?: number;
   x35ee?: number;
 
+  /** Where it is put, its target point there (its slot `0x44`); the dog with it, where `dog`. */
+  place?: { x: number; y: number; dog?: boolean };
+
   /** Dreaming: its phase, what it dreams of, `+0x35d8`, and where the float has it, where they changed. */
   dream?: Partial<Pick<CatzDream, 'phase' | 'kind' | 'x35d8' | 'at'>>;
 }
@@ -2049,12 +2052,16 @@ function catzArrive(
         return;
       }
 
+      /* Chasing the dog: three times in four it turns its way and is put 500 past the side it ran to, where it waits for the dog (0x47, seg25:1e1c); else, `+0x35ee` 0xb, it walks to the stage's middle -- and there, so, ends the chase (0x47). */
       if (percent() > 24) {
-        tick.explore = world.x35a8 === 1 ? 2 : 1;
+        const right = world.x35a8 !== 1;
+        tick.explore = right ? 1 : 2;
+        tick.place = { x: right ? stage.right + 500 : stage.left - 500, y: world.point!.y };
         tick.state = 0x47;
         return;
       }
 
+      tick.x35ee = 0xb;
       tick.goal = middle;
       tick.explore = world.x35a8;
       tick.x35a6 = 0;
@@ -4932,10 +4939,10 @@ function catzDream(
  * - the chase (71; `DoCatDogChase`, seg18:1853): entering where `+0x35ee` is
  *   not 10, the dog put away and 0x2a3. Each tick, chasing (`+0x35ee` 10),
  *   the dog's script done and it not yet 100 past the stage on the side the
- *   cat runs to, within 200 of the middle across three times in ten it
+ *   cat ran to, within 200 of the middle across three times in ten it
  *   pushes 7, else the cat makes a sound (2), and the dog pushes 1. Its
- *   script done: the dog past the stage, it and the dog are put 200 past
- *   that side of it and it runs back -- way 1, to 200 left of the stage,
+ *   script done: the dog not yet past, it waits; past, it and the dog are
+ *   put 200 past that side of it (`place`) and it runs back -- way 1, to 200 left of the stage,
  *   `+0x688` 0x40 (its and the dog's); else to 200 right of it, -0x40 --
  *   and walks (22); not chasing, it idles (6).
  */
@@ -4985,7 +4992,16 @@ function catzDogChase(state: number, mind: CatzMind, world: CatzStateWorld): Cat
     return tick;
   }
 
+  /* The dog not yet 100 past the stage on the side the cat ran to (right for way 1, left for 2): it waits for it. (The dog's own scripts as it goes -- 7 or 1, and the cat's sound -- are not reimplemented.) */
   const left = world.x35a8 === 1;
+  const past = left ? dream.dogX > stage.right + 100 : dream.dogX < stage.left - 100;
+
+  if (!past) {
+    return tick;
+  }
+
+  /* It and the dog put 200 past that side, and it runs back across. */
+  tick.place = { x: left ? stage.right + 200 : stage.left - 200, y: middle, dog: true };
   tick.goal = { x: left ? stage.left - 200 : stage.right + 200, y: middle };
   tick.x688 = left ? 0x40 : -0x40;
   return run();

@@ -146,7 +146,12 @@ const TRACE_KIT_PARAMS = process.env.TRACE_KIT_PARAMS === '1';
 /** `TRACE_FOND_MOVING=1`, with `TRACE_FOND=1`: every other 200 frames the cursor just left of the stage, off it, where the cat lacks affection. */
 const TRACE_FOND_MOVING = process.env.TRACE_FOND_MOVING === '1';
 
-const ready = [WINBOX, join(HARNESS, 'CATZPEN.EXE'), join(DRIVE, 'CATZ.DOG')].every(existsSync);
+/* Reading saved traces again (`HARNESS_REUSE`) needs no engine to run them. */
+const ready = [
+  ...(process.env.HARNESS_REUSE ? [] : [WINBOX]),
+  join(HARNESS, 'CATZPEN.EXE'),
+  join(DRIVE, 'CATZ.DOG'),
+].every(existsSync);
 const describeHarness = ready ? describe : describe.skip;
 
 /** A stage: the game's directory, and its libraries beside it. */
@@ -2349,7 +2354,22 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
   let frames = 0;
   let enteredNow: { as: number[]; after?: number[] }[] = [];
 
-  for (const line of lines) {
+  /* Where the dog is as the next tick begins, by each tick's line: the dog's script popped in the tick moves it before the chase looks (`DoCatDogChase`), so where it is then. */
+  const dogAfter = new Map<number, number>();
+  let lastTick: number | undefined;
+
+  lines.forEach((line, index) => {
+    if (line.startsWith('tick ')) {
+      if (lastTick !== undefined) {
+        dogAfter.set(lastTick, Number(line.split(' ')[1 + 259]));
+      }
+
+      lastTick = index;
+    }
+  });
+  let dogNow: number | undefined;
+
+  for (const [index, line] of lines.entries()) {
     const [kind, ...rest] = line.split(' ');
     const values = rest.map(Number);
 
@@ -2378,6 +2398,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
 
     if (kind === 'tick') {
       before = values;
+      dogNow = dogAfter.get(index);
       enteredNow = [];
 
       /* The bookkeeping: what the model said the tick before wrote, against
@@ -2798,7 +2819,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
                   at: { x: double(b.slice(246, 250)), y: double(b.slice(250, 254)) },
                   stage: box(254),
                   mouseX: b[258],
-                  dogX: b[259],
+                  dogX: dogNow === undefined || Number.isNaN(dogNow) ? b[259] : dogNow,
                 },
           bottle:
             b[168] === undefined || b[168] === -1

@@ -122,6 +122,9 @@ export interface CatzPetOptions {
   /** A purr played or stopped (`HandlePurring`): its sound. */
   purr?: (sound: number) => void;
 
+  /** Put with its target point at a point (its slot `0x44`, as the dog's chase puts it past the stage), by whoever places it. */
+  moveTo?: (at: { x: number; y: number }) => void;
+
   /** Where one of its balls is drawn on the stage, as whoever places it says: ball 2 for the scruff. */
   ballAt?: (ball: number) => { x: number; y: number } | undefined;
 
@@ -357,6 +360,8 @@ export class CatzPet {
     at: { x: 0, y: 0 },
     inPhase: 0,
     dogX: undefined as number | undefined,
+    /** How far the dog's stand-in runs a tick: right as it starts, then the way it is put facing. */
+    dogStep: 10,
     mouseX: 0,
     /** The dream sprite (kin 0x13) shown: what it shows (`SetDream`, `+0x35ec`) and where its target point is; none where put away. */
     shown: undefined as { kind: number; at: { x: number; y: number } } | undefined,
@@ -388,7 +393,7 @@ export class CatzPet {
     }
 
     if (dream.dogX !== undefined) {
-      dream.dogX += 10;
+      dream.dogX += dream.dogStep;
     }
 
     if (this.state === 68) {
@@ -1683,6 +1688,7 @@ export class CatzPet {
       this.dream.inPhase = 0;
     } else if (state === 70) {
       this.dream.dogX = this.options.stage.left - 200;
+      this.dream.dogStep = 10;
     } else if (state === 68) {
       this.dream.mouseX = this.options.stage.left - 200;
     }
@@ -1806,6 +1812,29 @@ export class CatzPet {
       if (ticked.dream.kind !== undefined) this.dream.kind = ticked.dream.kind;
       if (ticked.dream.x35d8 !== undefined) this.dream.x35d8 = ticked.dream.x35d8;
       if (ticked.dream.at !== undefined) this.dream.at = ticked.dream.at;
+    }
+    /* Put elsewhere (the chase's ends): its rectangle and point moved there; the dog put with it, its stand-in sets off the way it now faces. */
+    if (ticked.place) {
+      const { x, y } = ticked.place;
+
+      if (this.rect) {
+        const dx = x - this.point.x;
+        const dy = y - this.point.y;
+        this.rect = {
+          left: this.rect.left + dx,
+          top: this.rect.top + dy,
+          right: this.rect.right + dx,
+          bottom: this.rect.bottom + dy,
+        };
+      }
+
+      this.point = { x, y };
+      this.options.moveTo?.({ x, y });
+
+      if (ticked.place.dog) {
+        this.dream.dogX = x;
+        this.dream.dogStep = ticked.x688 === 0x40 ? -10 : 10;
+      }
     }
     if (ticked.swatFields) Object.assign(this.swatFields, ticked.swatFields);
     if (ticked.calmsMouse) this.options.mouseFear?.(-50);

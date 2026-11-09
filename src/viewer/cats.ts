@@ -618,6 +618,7 @@ function goLive() {
     head: (look) => body.look(look),
     strike: strikeToy,
     found: () => !!body.shown?.there,
+    moveTo: (at) => body.moveTo(at),
     /* The pen's mouse, out of its hole or in it. */
     mouse: () =>
       made.mouse

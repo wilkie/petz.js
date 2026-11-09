@@ -498,11 +498,14 @@ export class CatzBody {
       bottom: r.bottom + dy,
     });
 
+    /* Whether each frame found what it walked to was looked for where it was: moved, not yet looked for. */
     if (this.shown) {
-      this.shown = { ...this.shown, rect: move(this.shown.rect) };
+      this.shown = { ...this.shown, rect: move(this.shown.rect), there: undefined };
     }
 
-    this.queue.forEach((shown, n) => (this.queue[n] = { ...shown, rect: move(shown.rect) }));
+    this.queue.forEach(
+      (shown, n) => (this.queue[n] = { ...shown, rect: move(shown.rect), there: undefined }),
+    );
 
     if (this.tail) {
       this.tail = { ...this.tail, rect: move(this.tail.rect) };
