@@ -14,7 +14,7 @@
  * beginning is not reimplemented is idled instead, and counted.
  */
 
-import { type CatzMind, catzBehavior } from './catz-behavior.ts';
+import { type CatzMind, catzBehavior, catzSound } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 import { catzGlobalBegin, catzGlobalTick } from './catz-global.ts';
 import { catzMomentBegin, type CatzMomentState, catzMomentTick } from './catz-moment.ts';
@@ -121,6 +121,22 @@ export interface CatzPetOptions {
 
   /** A purr played or stopped (`HandlePurring`): its sound. */
   purr?: (sound: number) => void;
+
+  /**
+   * CatNapz's dog (kin 0x1a, `DogSprite`), played by its own scripts where
+   * whoever shows it has one: where its target point is across, as its
+   * frame this tick leaves it (none where it is put away); whether its
+   * script is done; an action pushed for it; put with its target point at
+   * a point, facing so (`+0x688`), let go and shown; put away (its slot
+   * `0x7c`). Without one, a stand-in runs across (`dream.dogX`).
+   */
+  dog?: {
+    at: () => number | undefined;
+    done: () => boolean;
+    push: (action: number) => void;
+    put: (at: { x: number; y: number }, facing: number) => void;
+    away: () => void;
+  };
 
   /** Put with its target point at a point (its slot `0x44`, as the dog's chase puts it past the stage), by whoever places it. */
   moveTo?: (at: { x: number; y: number }) => void;
@@ -373,6 +389,11 @@ export class CatzPet {
     dream.inPhase++;
 
     if (this.global !== 21) {
+      /* (Leaving CatNapz puts its dog away.) */
+      if (dream.dogX !== undefined) {
+        this.options.dog?.away();
+      }
+
       dream.dogX = undefined;
       dream.shown = undefined;
       return;
@@ -401,6 +422,46 @@ export class CatzPet {
     }
   }
 
+  /**
+   * The dog's part of its chase (71, chasing: `DoCatDogChase`, seg18:18f2),
+   * each tick before the cat's own, where it has a dog of its own: the
+   * dog's script done and it not yet 100 past the stage on the side the
+   * cat ran to, within 200 of the stage's middle across, three times in
+   * ten it barks (7), else the cat makes a sound (2, drawn, not played);
+   * and it runs on (1).
+   */
+  private dogChases() {
+    const dog = this.options.dog;
+    const x = dog?.at();
+
+    if (
+      !dog ||
+      x === undefined ||
+      this.global !== 21 ||
+      this.state !== 71 ||
+      this.fields.x35ee !== 10
+    ) {
+      return;
+    }
+
+    const { stage, random } = this.options;
+    const past = this.fields.x35a8 === 1 ? x > stage.right + 100 : x < stage.left - 100;
+
+    if (!dog.done() || past) {
+      return;
+    }
+
+    const middle = Math.trunc((stage.right - stage.left) / 2) + stage.left;
+
+    if (Math.abs(x - middle) < 200 && random(101) < 30) {
+      dog.push(7);
+    } else {
+      catzSound(this.mind, 2, random);
+    }
+
+    dog.push(1);
+  }
+
   /** The dream's world, for its states (`catzDream`, `catzDogChase`). */
   private dreamWorld() {
     const dream = this.dream;
@@ -412,7 +473,7 @@ export class CatzPet {
       at: dream.at,
       stage: this.options.stage,
       mouseX: dream.mouseX,
-      dogX: dream.dogX,
+      dogX: dream.dogX === undefined ? undefined : (this.options.dog?.at() ?? dream.dogX),
     };
   }
 
@@ -436,6 +497,8 @@ export class CatzPet {
     if (this.globalTick()) {
       return { state: this.state, global: this.global, pushes: this.pushed };
     }
+
+    this.dogChases();
 
     if (this.left > 0) {
       this.left--;
@@ -1687,8 +1750,16 @@ export class CatzPet {
       this.dream.phase = 0;
       this.dream.inPhase = 0;
     } else if (state === 70) {
-      this.dream.dogX = this.options.stage.left - 200;
+      const { stage } = this.options;
+      this.dream.dogX = stage.left - 200;
       this.dream.dogStep = 10;
+      this.options.dog?.put(
+        { x: stage.left - 200, y: Math.trunc((stage.bottom - stage.top) / 2) + stage.top },
+        -0x40
+      );
+    } else if (state === 71 && this.fields.x35ee !== 10) {
+      /* The chase over, entering it: its dog put away (and 0x2a3, its own). */
+      this.options.dog?.away();
     } else if (state === 68) {
       this.dream.mouseX = this.options.stage.left - 200;
     }
@@ -1834,6 +1905,7 @@ export class CatzPet {
       if (ticked.place.dog) {
         this.dream.dogX = x;
         this.dream.dogStep = ticked.x688 === 0x40 ? -10 : 10;
+        this.options.dog?.put({ x, y }, ticked.x688 ?? -0x40);
       }
     }
     if (ticked.swatFields) Object.assign(this.swatFields, ticked.swatFields);

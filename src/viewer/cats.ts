@@ -63,6 +63,7 @@ import {
 import { catzKitLocked } from '../behaviour/catz-reflexes.ts';
 import { catzBasketHit } from '../behaviour/catz-states.ts';
 import { CatzMouseLive, readMouseFactors } from '../behaviour/catz-mouse-live.ts';
+import { CatzDogLive } from '../behaviour/catz-dog.ts';
 import {
   type CatzJingleBall,
   catzJingleTick,
@@ -407,6 +408,19 @@ let mouseFiles:
     }
   | undefined;
 
+/** CatNapz's dog's own files, where the game has them (`PTZFILES/DOG`): its frames, its file, its scripts. */
+let dogFiles:
+  | {
+      header: AnimationHeader;
+      frames: Frame[];
+      lnz: Breed;
+      shaped: Frame[];
+      scripts: Script[];
+      positions: CatzPositions;
+      order: number[];
+    }
+  | undefined;
+
 /** The pen's things put off the shelf into the pen, by kind, and where each is. */
 const livePen = new Map<number, { x: number; y: number }>();
 
@@ -580,7 +594,7 @@ function goLive() {
    * `PopScript` places it, a walk steered each tick and what it walks to
    * looked for in its focus box. */
   /* The pet, made after its body: where what its head tracks is, once there is one. */
-  const made: { pet?: CatzPet; mouse?: CatzMouseLive } = {};
+  const made: { pet?: CatzPet; mouse?: CatzMouseLive; dog?: CatzDogLive } = {};
   const body = new CatzBody({
     scripts,
     positions,
@@ -619,6 +633,16 @@ function goLive() {
     strike: strikeToy,
     found: () => !!body.shown?.there,
     moveTo: (at) => body.moveTo(at),
+    /* CatNapz's dog, its body its own, where it has its files. */
+    dog: dogFiles
+      ? {
+          at: () => made.dog?.at(),
+          done: () => made.dog?.done() ?? true,
+          push: (action) => made.dog?.push(action),
+          put: (at, facing) => made.dog?.put(at, facing),
+          away: () => made.dog?.away(),
+        }
+      : undefined,
     /* The pen's mouse, out of its hole or in it. */
     mouse: () =>
       made.mouse
@@ -756,6 +780,19 @@ function goLive() {
     : undefined;
   made.mouse = mouse;
 
+  /* CatNapz's dog, put away till its chase. */
+  made.dog = dogFiles
+    ? new CatzDogLive({
+        scripts: dogFiles.scripts,
+        positions: dogFiles.positions,
+        flags: (frame) => dogFiles!.frames[frame]?.tag ?? 3,
+        shaped: dogFiles.shaped,
+        placer: new CatzPlacer(dogFiles.lnz, dogFiles.header, dogFiles.shaped, {}),
+        stage: LIVE_STAGE,
+        random,
+      })
+    : undefined;
+
   /* `?mouse=bold`: the mouse unafraid (20) and restless (100) to begin with,
    * as the pen harness makes it, that it comes out soon; else its fear, made
    * 50 to 99, keeps it in its hole till it draws back under 50. */
@@ -788,6 +825,9 @@ function goLive() {
     /* The frame this tick shows, as `PopScript` pops it before the state's own tick. */
     let shown = body.next();
 
+    /* And the dog's, popped before the chase looks where it is. */
+    made.dog?.next();
+
     /* Made again in a basket: seated on its place once placed (`MoveDrawPt`). */
     if (seat && shown) {
       body.moveTo(seat);
@@ -811,7 +851,7 @@ function goLive() {
       const lit = kitPet
         ? [out || liveBasketLit ? kitPet.kit!.basket : -1, kitPet.kitHighlight]
         : [];
-      drawLive(cat, shaped, placer, shown, mouse, kitMode, lit, made.pet?.dream.shown);
+      drawLive(cat, shaped, placer, shown, mouse, kitMode, lit, made.pet?.dream.shown, made.dog);
     }
 
     /* A command's message this tick. */
@@ -905,7 +945,8 @@ function drawLive(
   mouse?: CatzMouseLive,
   kitMode = false,
   litBaskets: number[] = [],
-  dream?: { kind: number; at: { x: number; y: number } }
+  dream?: { kind: number; at: { x: number; y: number } },
+  dog?: CatzDogLive
 ) {
   const frame =
     step.layer && shaped[step.layer.first] && shaped[step.layer.frame]
@@ -978,6 +1019,23 @@ function drawLive(
       order: mouseFiles.order,
       translate,
       ...poseOf(shownMouse.step.fudged),
+    });
+  }
+
+  /* CatNapz's dog, shown, behind the cat. */
+  const shownDog = dog && !dog.hidden ? dog.body.shown : undefined;
+
+  if (dogFiles && shownDog) {
+    const dogBounds = new CatzPlacer(dogFiles.lnz, dogFiles.header, dogFiles.shaped, {}).bounds(
+      shownDog.pose
+    );
+    drawPet(bitmap, dogFiles.lnz, dogFiles.header, dogFiles.shaped[shownDog.step.frame], {
+      colours: 256,
+      originX: shownDog.rect.left - dogBounds.left,
+      originY: shownDog.rect.top - dogBounds.top,
+      order: dogFiles.order,
+      translate,
+      ...poseOf(shownDog.step.fudged),
     });
   }
 
@@ -1211,6 +1269,38 @@ async function start(game: GameFiles) {
     };
   } catch {
     /* No mouse: the cat alone. */
+  }
+
+  /* And CatNapz's dog's, where they are. */
+  dogFiles = undefined;
+
+  try {
+    const DOG = 'CATZ.DOG/PTZFILES/DOG/RESOURCE';
+    const dogHeader = parseBhd(await game.read(`${DOG}/DOG.BHD`));
+    const dogFrames: Frame[] = [];
+
+    for (let n = 0; n < dogHeader.animations.length; n++) {
+      try {
+        dogFrames.push(...parseAnimation(dogHeader, n, await game.read(`${DOG}/DOG${n}.BDT`)));
+      } catch {
+        /* (An animation it does not ship.) */
+      }
+    }
+
+    const lnz = parseLnz(await text(`${DOG}/DOG.LNZ`), dogHeader.ballCount);
+    const dogData = await game.read(`${DOG}/DOG.SCP`);
+    const dogPreamble = new DataView(dogData.buffer, dogData.byteOffset + dogData.indexOf(0) + 1);
+    dogFiles = {
+      header: dogHeader,
+      frames: dogFrames,
+      lnz,
+      shaped: extendFrames(dogFrames, lnz),
+      scripts: parseScripts(dogData, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz),
+      positions: { count: dogPreamble.getUint16(0, true), neutral: dogPreamble.getUint16(2, true) },
+      order: [],
+    };
+  } catch {
+    /* No dog: its stand-in runs unseen. */
   }
 
   /* Only the scripts the demo's frames will play, as far as a few tries tell. */

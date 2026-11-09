@@ -6,6 +6,7 @@ import { averageBreed, parseLnz } from '../../src/formats/lnz.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import { catzArity, parseScripts, readCatzOpcodes, SCRIPTS } from '../../src/formats/script.ts';
 import { CatzBody } from '../../src/behaviour/catz-body.ts';
+import { CatzDogLive } from '../../src/behaviour/catz-dog.ts';
 import { makeCatzFudgers, resetCatzEyelids } from '../../src/behaviour/catz-fudger.ts';
 import { CatzPet } from '../../src/behaviour/catz-pet.ts';
 import { CatzMouseLive, readMouseFactors } from '../../src/behaviour/catz-mouse-live.ts';
@@ -471,4 +472,141 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
     expect(pet.stoodIn.deep).toBe(0);
     expect(states['7/50']).toBeGreaterThan(0);
   });
+});
+
+/** CatNapz's dog's scripts, frames and placer, from its own files (`PTZFILES/DOG`). */
+function loadDog() {
+  const dir = join(PETZ, 'DOG', 'RESOURCE');
+  const read = (name: string) => new Uint8Array(readFileSync(join(dir, name)));
+  const header = parseBhd(read('DOG.BHD'));
+  const frames = header.animations.flatMap((_, n) =>
+    existsSync(join(dir, `DOG${n}.BDT`)) ? parseAnimation(header, n, read(`DOG${n}.BDT`)) : []
+  );
+  const lnz = parseLnz(new TextDecoder('latin1').decode(read('DOG.LNZ')), header.ballCount);
+  const shaped = extendFrames(frames, lnz);
+  const engine = parseNe(new Uint8Array(readFileSync(ENGINE)));
+  const data = read('DOG.SCP');
+  const scripts = parseScripts(data, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz);
+  const preamble = new DataView(data.buffer, data.byteOffset + data.indexOf(0) + 1);
+  return {
+    scripts,
+    positions: { count: preamble.getUint16(0, true), neutral: preamble.getUint16(2, true) },
+    flags: (frame: number) => frames[frame]?.tag ?? 3,
+    shaped,
+    placer: new CatzPlacer(lnz, header, shaped, {}),
+  };
+}
+
+describe('a Catz cat napping, chasing CatNapz’s dog, each played by its own frames', () => {
+  /* Grown cats put to nap, each day by C's `rand` from a seed, put to nap again as each leaves it: of those days with a chase, each runs across, waits off the stage for the dog to run past, is put back past the stage with it and runs back; none is held at the stage's edge. */
+  it('runs across and back, the dog after it', () => {
+    const { scripts, positions, frames, shaped, breed, header, neck, butt } = load();
+    const dogFiles = loadDog();
+    const tally = { chases: 0, puts: 0, ranPast: 0, barks: 0, longest: 0 };
+
+    for (let seed = 1; seed <= 30; seed++) {
+      const rand = borlandRand(seed);
+      const random = (n: number) => rand() % n;
+      const fudgers = makeCatzFudgers();
+      resetCatzEyelids(fudgers);
+      [fudgers[6].value, fudgers[7].value] = [20, 20];
+      const made: { pet?: CatzPet } = {};
+      const body = new CatzBody({
+        scripts,
+        positions,
+        flags: (frame) => frames[frame]?.tag ?? 3,
+        shaped,
+        placer: new CatzPlacer(breed, header, shaped, { age: 100 }),
+        angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
+        stage: STAGE,
+        fudgers,
+        random,
+        trackAt: (kind) => made.pet?.kinAt(kind),
+      });
+      const dog = new CatzDogLive({ ...dogFiles, stage: STAGE, random });
+      const pet = new CatzPet({
+        brains: [...BRAINS.slice(0, 11), 60],
+        centres: CENTRES,
+        stage: STAGE,
+        random,
+        moves: false,
+        play: (action, steer) => body.play(action, steer),
+        dropped: () => body.drop(),
+        entered: (state) => body.entered(state),
+        head: (look) => body.look(look),
+        found: () => !!body.shown?.there,
+        cues: () => body.shown?.step.cues ?? [],
+        moveTo: (at) => body.moveTo(at),
+        dog: {
+          at: () => dog.at(),
+          done: () => dog.done(),
+          push: (action) => {
+            tally.barks += action === 7 ? 1 : 0;
+            dog.push(action);
+          },
+          put: (at, facing) => {
+            tally.puts++;
+            dog.put(at, facing);
+          },
+          away: () => dog.away(),
+        },
+      });
+      made.pet = pet;
+      let still = 0;
+      let lastX = 0;
+      let wasChasing = false;
+      let dogWas: number | undefined;
+
+      for (let n = 0; n < 4000; n++) {
+        const shown = body.next();
+        dog.next();
+
+        if (shown) {
+          const { rect } = shown;
+          pet.rect = rect;
+          pet.point = {
+            x: Math.trunc((rect.left + rect.right) / 2),
+            y: Math.trunc((rect.top + rect.bottom) / 2),
+          };
+          pet.fields.x688 = body.facing;
+        }
+
+        if (n === 50 || (n > 50 && pet.global !== 21 && n % 400 === 0)) {
+          pet.nap();
+        }
+
+        const { state, global } = pet.tick();
+        const chasing = global === 21 && pet.fields.x35ee === 10;
+        tally.chases += chasing && !wasChasing ? 1 : 0;
+        wasChasing = chasing;
+
+        /* The dog run past the line, either way. */
+        const dogAt = dog.at();
+
+        if (dogAt !== undefined && dogWas !== undefined) {
+          tally.ranPast +=
+            (dogWas <= 570 && dogAt > 570) || (dogWas >= -100 && dogAt < -100) ? 1 : 0;
+        }
+
+        dogWas = dogAt;
+
+        /* Held still on the stage, chasing, in its walk. */
+        if (chasing && state === 23 && pet.point.x === lastX) {
+          still++;
+          tally.longest = Math.max(tally.longest, still);
+        } else {
+          still = 0;
+        }
+
+        lastX = pet.point.x;
+      }
+    }
+
+    console.log(`napping with the dog: ${JSON.stringify(tally)}`);
+    expect(tally.chases).toBeGreaterThan(0);
+    expect(tally.ranPast).toBeGreaterThan(0);
+    /* Put at its start and again with the cat at each end it ran past. */
+    expect(tally.puts).toBeGreaterThan(tally.chases);
+    expect(tally.longest).toBeLessThan(100);
+  }, 600000);
 });
