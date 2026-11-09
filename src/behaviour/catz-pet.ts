@@ -235,9 +235,9 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  1, 2, 3, 4, 8, 14, 19, 20, 25, 27, 28, 29, 30, 35, 36, 37, 38, 39, 40, 41, 43, 56, 57, 53, 62, 15,
-  16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55, 58, 59, 60, 61,
-  63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 19, 20, 25, 27, 28, 29, 30, 35, 36, 37, 38, 39, 40, 41, 43, 56,
+  57, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55,
+  58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -1558,6 +1558,11 @@ export class CatzPet {
       this.fields.curiosities = catzCuriosities(this.mind, this.isShelved, this.options.random);
       this.fields.count = 0;
       this.fields.ticks = 0;
+    }
+
+    /* Its victim captured or wrestled (`DoCatVictimCaptured`, seg19:06bd; `DoCatVictimWrestle`, 0ac6), entering: had by its ball 0x42, its eyelids reset, nothing done yet (`+0x34ca` 0; `+0x35be` 0 too, captured), the mouse's fear 100 (stilled, above) and its prey kept (`+0x35c0`); then on into their ticks. Carrying it (7) and after snagging (10) enter doing nothing; snagging (9) pushes its words and has what it snags. */
+    if (state === 5 || state === 6) {
+      this.fields.passed = 0;
     }
 
     /* Begging (`DoCatBegging`, seg22:0697), waiting for a treat (`DoCatWaitForTreat`, 0a67) and nibbling it (`DoCatNibbleTreat`, 108c), entering: `+0x34ca` 0 for the first two, `+0x3504` 0 and its count 0 for the last two (`+0x3504` the second only), its head on what it plays with (2500 begging, else 3000); then on into their ticks, nothing pushed. */
