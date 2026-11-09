@@ -279,6 +279,28 @@ export const CATZ_BASKETS = [
   { x: 0x242, y: 0x119 },
 ];
 
+/**
+ * The baskets as `XApt::BasketHitTest` (seg6:30ca) hits them, from the Kit's
+ * origin, each edge within: a point less (0xa5, 0x64) tested against bounds
+ * built of 7, 8 and 9. Narrower than their pictures.
+ */
+export const CATZ_BASKET_HITS = [
+  { left: 0xae, top: 0xb2, right: 0x10b, bottom: 0x143 },
+  { left: 0x111, top: 0xc1, right: 0x163, bottom: 0x152 },
+  { left: 0x16a, top: 0xc6, right: 0x1bc, bottom: 0x157 },
+  { left: 0x1c2, top: 0xbc, right: 0x214, bottom: 0x14d },
+  { left: 0x21b, top: 0xb7, right: 0x271, bottom: 0x148 },
+];
+
+/** The basket a point hits (`BasketHitTest`), the first of them; -1 none. */
+export function catzBasketHit(at: { x: number; y: number }, origin: { x: number; y: number }) {
+  const x = at.x - origin.x;
+  const y = at.y - origin.y;
+  return CATZ_BASKET_HITS.findIndex(
+    (box) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
+  );
+}
+
 /** The cat's bottle (kin 0xf), as the tick begins. */
 export interface CatzBottle {
   /** Whether the user holds it (`+0xfc`), its `+0x1da`, and whether it is on the shelf. */

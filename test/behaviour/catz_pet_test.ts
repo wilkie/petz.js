@@ -1,4 +1,5 @@
 import { CatzPet } from '../../src/behaviour/catz-pet.ts';
+import { CATZ_BASKET_HITS } from '../../src/behaviour/catz-states.ts';
 import { borlandRand } from '../../src/behaviour/random.ts';
 
 /** The brains and centres of the playpen's cat as the 2,000 frames' day began (CATZTRACE.OUT). */
@@ -132,5 +133,57 @@ describe('a Catz kitten in the Adoption Kit', () => {
       expect(states[state]).toBeGreaterThan(0);
     }
     expect(remade.length).toBeGreaterThan(0);
+  });
+  /* `BasketHitTest`: a basket pressed is held and highlighted; let go in it, its message; elsewhere, nothing. */
+  it('has its baskets pressed and let go, as the playpen hits them', () => {
+    const rand = borlandRand(5);
+    const pet = new CatzPet({
+      brains: BRAINS,
+      centres: CENTRES,
+      stage: { left: 0, top: 0, right: 640, bottom: 480 },
+      kit: { origin: { x: 0, y: 40 }, ca: 1 },
+      play: () => 10,
+      random: (n) => rand() % n,
+    });
+    const middle = (n: number) => {
+      const box = CATZ_BASKET_HITS[n];
+      return { x: (box.left + box.right) >> 1, y: ((box.top + box.bottom) >> 1) + 40 };
+    };
+    const none = { x: 5, y: 5 };
+
+    for (let tick = 0; tick < 50 && ![73, 74, 75].includes(pet.state); tick++) {
+      pet.tick();
+    }
+    const own = pet.kit!.basket;
+    const other = (own + 2) % 5;
+
+    /* Another basket pressed: held (0xb + n), highlighted. */
+    expect(pet.basketHitTest({ down: true, downAt: middle(other), upAt: none })).toBe(false);
+    expect(pet.kit!.rootCount).toBe(0xb + other);
+    expect(pet.kitHighlight).toBe(other);
+
+    /* Let go elsewhere: none held, hidden, no message. */
+    pet.basketHitTest({ down: false, downAt: middle(other), upAt: none });
+    expect(pet.kit!.rootCount).toBe(0);
+    expect(pet.kitHighlight).toBe(-1);
+
+    /* Pressed and let go in it: its message, and the kitten changes to it and climbs out of it. */
+    pet.basketHitTest({ down: true, downAt: middle(other), upAt: none });
+    pet.basketHitTest({ down: false, downAt: middle(other), upAt: middle(other) });
+    expect(pet.kit!.rootCount).toBe(0);
+    expect(pet.kitHighlight).toBe(other);
+    const seen: number[] = [];
+
+    for (let tick = 0; tick < 200 && pet.state !== 76; tick++) {
+      seen.push(pet.tick().state);
+    }
+    expect(pet.state).toBe(76);
+    expect(pet.kit!.basket).toBe(other);
+    expect(pet.kitHighlight).toBe(-1);
+
+    /* Its own basket pressed climbing out: lit, and let go, only words (0x2a). */
+    expect(pet.basketHitTest({ down: true, downAt: middle(other), upAt: none })).toBe(true);
+    pet.basketHitTest({ down: false, downAt: middle(other), upAt: middle(other) });
+    expect((pet as unknown as { x33c0: number }).x33c0).toBe(0x2a);
   });
 });

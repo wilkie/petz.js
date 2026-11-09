@@ -33,6 +33,7 @@ import {
 } from './catz-reflexes.ts';
 import {
   CATZ_BASKETS,
+  catzBasketHit,
   type CatzBox,
   type CatzKit,
   catzCuriosities,
@@ -503,6 +504,78 @@ export class CatzPet {
     const origin = this.options.kit?.origin ?? { x: 0, y: 0 };
     const place = CATZ_BASKETS[basket] ?? CATZ_BASKETS[0];
     return { x: place.x + origin.x, y: place.y + origin.y };
+  }
+
+  /** The Kit's highlight (kin 0x19, `baskhi.apt`): the basket it is shown over, -1 hidden. */
+  kitHighlight = -1;
+
+  /** Climbing out or on its way back (`IsBasketExitOrReturn`, seg13:16be, its slot `0x118`): `+0x35fc` or `+0x35fa`. */
+  exitOrReturn() {
+    return !!(this.x35fc || this.kit?.out);
+  }
+
+  /**
+   * The Kit's baskets pressed (`XApt::BasketHitTest`, seg6:30ca, run each
+   * frame by the playpen's root where none of its sprites took the mouse).
+   * The button down (`PetParams` `+0x1e`) and its press (`m_ptDown`) in
+   * basket n: the basket held (the root's `+0x1e0`, 0xb + n), the highlight
+   * shown over it where it is not the cat's own (`+0x35f6`), else the cat's
+   * lit (`SetCond` 2). The button up with a basket held: let go (`m_ptUp`) in
+   * that basket, none held, and its command (`DoCommand` 0x821 + n, which
+   * leaves message 0x16 + n) or, climbing out or on its way back, message
+   * 0x2a (its words, "wait for the kitten"); the highlight hidden but in the
+   * Kit (global 22) neither. Let go elsewhere, none held and it hidden.
+   * Whether it lit the cat's basket.
+   */
+  basketHitTest(button: {
+    down: boolean;
+    downAt: { x: number; y: number };
+    upAt: { x: number; y: number };
+  }) {
+    const kit = this.kit;
+
+    if (!kit) {
+      return false;
+    }
+
+    if (button.down) {
+      const n = catzBasketHit(button.downAt, kit.origin ?? { x: 0, y: 0 });
+
+      if (n < 0) {
+        return false;
+      }
+
+      kit.rootCount = 0xb + n;
+
+      if (kit.basket !== n) {
+        this.kitHighlight = n;
+        return false;
+      }
+
+      return true;
+    }
+
+    if (kit.rootCount < 0xb) {
+      return false;
+    }
+
+    const n = catzBasketHit(button.upAt, kit.origin ?? { x: 0, y: 0 });
+
+    if (n < 0 || kit.rootCount !== 0xb + n) {
+      kit.rootCount = 0;
+      this.kitHighlight = -1;
+      return false;
+    }
+
+    kit.rootCount = 0;
+    const back = this.exitOrReturn();
+    this.x33c0 = back ? 0x2a : 0x16 + n;
+
+    if (this.global !== 22 || back) {
+      this.kitHighlight = -1;
+    }
+
+    return false;
   }
 
   /** Ticks to its next layering (`+0x358a`). */
@@ -1271,6 +1344,11 @@ export class CatzPet {
     /* In the baskets, no longer on its way to one (`DoCatInBaskets`). */
     if (state === 73) {
       this.x35fc = 0;
+    }
+
+    /* The highlight hidden: a basket picked, held or not (`PickANewBasket`, or `DoCatInBaskets` with one), or the cat's own chosen (76). */
+    if (state === 73 || state === 76) {
+      this.kitHighlight = -1;
     }
 
     /* Its victim, the mouse, stilled (its fear 100) as it is held; the

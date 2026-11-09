@@ -53,6 +53,7 @@ import {
 import { initCatzBrains, updateCatzBrain } from '../behaviour/catz-brain.ts';
 import { CatzBody } from '../behaviour/catz-body.ts';
 import { CatzPet } from '../behaviour/catz-pet.ts';
+import { catzBasketHit } from '../behaviour/catz-states.ts';
 import { CatzMouseLive, readMouseFactors } from '../behaviour/catz-mouse-live.ts';
 import {
   type CatzJingleBall,
@@ -306,10 +307,14 @@ let basketPictures: { dib: Dib; colours: number[]; green: number }[] = [];
 /** Each basket's breed's words, shown as it climbs out of it (`GiveBreedDescriptions`, string 0x233d + n). */
 let kitDescriptions: string[] = [];
 
-/** The five baskets, their backs (0) or fronts (1), each at its rectangle; the one lit (`SetCond` 2) drawn so. */
-function drawBaskets(bitmap: IndexedBitmap, part: 0 | 1, lit = -1) {
+/**
+ * The five baskets, their backs (0) or fronts (1), each at its rectangle;
+ * those lit drawn so: the cat's (kin 0x18, `SetCond` 2) and the highlight
+ * (kin 0x19, `baskhi.apt`, its pictures the lit ones).
+ */
+function drawBaskets(bitmap: IndexedBitmap, part: 0 | 1, lit: number[] = []) {
   for (const [n, corner] of KIT_BASKETS.entries()) {
-    const picture = basketPictures[n === lit ? part + 2 : part] ?? basketPictures[part];
+    const picture = basketPictures[lit.includes(n) ? part + 2 : part] ?? basketPictures[part];
 
     if (!picture) {
       continue;
@@ -327,17 +332,6 @@ function drawBaskets(bitmap: IndexedBitmap, part: 0 | 1, lit = -1) {
   }
 }
 
-/** Which basket a point on the stage is in, -1 none. */
-function basketAt(at: { x: number; y: number }) {
-  return KIT_BASKETS.findIndex(
-    ({ x, y }) =>
-      at.x >= x + KIT_ORIGIN.x &&
-      at.x < x + KIT_ORIGIN.x + 118 &&
-      at.y >= y + KIT_ORIGIN.y &&
-      at.y < y + KIT_ORIGIN.y + 145
-  );
-}
-
 /** The stage the cat lives on, in the engine's pixels, drawn whole on the canvas. */
 const LIVE_STAGE = { left: 0, top: 0, right: 640, bottom: 480 };
 
@@ -352,6 +346,10 @@ let liveCursor = { x: 235, y: 300 };
 let livePressed = false;
 let liveHeld = false;
 let liveScruffed = false;
+/** Where the button last went down and up (`XApt::m_ptDown`, `m_ptUp`); and whether pressing the cat's own basket lit it. */
+let liveDownAt = { x: 0, y: 0 };
+let liveUpAt = { x: 0, y: 0 };
+let liveBasketLit = false;
 
 /**
  * What the playpen tells the cat of the pen's things, a notice a tick (`XApt::ParentNotify`):
@@ -697,17 +695,12 @@ function goLive() {
       };
       pet.fields.x688 = body.facing;
       /* Its basket lit (`SetCond` 2) from climbing out of it till it is back in the baskets. */
-      const out =
-        made.pet?.kit && (made.pet.global !== 22 || [76, 77, 78].includes(made.pet.state));
-      drawLive(
-        cat,
-        shaped,
-        placer,
-        shown,
-        mouse,
-        kitMode,
-        out ? (made.pet?.kit?.basket ?? -1) : -1
-      );
+      const kitPet = made.pet?.kit ? made.pet : undefined;
+      const out = kitPet && (kitPet.global !== 22 || [76, 77, 78].includes(kitPet.state));
+      const lit = kitPet
+        ? [out || liveBasketLit ? kitPet.kit!.basket : -1, kitPet.kitHighlight]
+        : [];
+      drawLive(cat, shaped, placer, shown, mouse, kitMode, lit);
     }
 
     /* A command's message this tick. */
@@ -726,6 +719,17 @@ function goLive() {
 
     const { state, global } = pet.tick();
     livePressed = false;
+
+    /* The Kit's baskets pressed, as the playpen's root has them after its sprites: none where the press took the cat or a thing. */
+    if (pet.kit) {
+      liveBasketLit =
+        pet.basketHitTest({
+          down: liveHeld && !liveScruffed && !liveGrabbed,
+          downAt: liveDownAt,
+          upAt: liveUpAt,
+        }) ||
+        (liveBasketLit && liveHeld);
+    }
 
     /* Climbing out, its breed's words; back in the baskets, none (`SetText` of kin 0x11 ""). */
     if (pet.kit && state === 76) {
@@ -767,7 +771,7 @@ function drawLive(
   { step, rect, pose }: { step: CatzStep; rect: CatzPlaced['rect']; pose: CatzPose },
   mouse?: CatzMouseLive,
   kitMode = false,
-  litBasket = -1
+  litBaskets: number[] = []
 ) {
   const frame =
     step.layer && shaped[step.layer.first] && shaped[step.layer.frame]
@@ -809,7 +813,7 @@ function drawLive(
 
   /* The Adoption Kit's baskets: their backs and handles behind the kitten (16500). */
   if (kitMode) {
-    drawBaskets(bitmap, 0, litBasket);
+    drawBaskets(bitmap, 0, litBaskets);
   }
 
   /* The mouse, out of its hole, behind the cat. */
@@ -842,7 +846,7 @@ function drawLive(
 
   /* And their fronts over it, so it sits in its basket (16501). */
   if (kitMode) {
-    drawBaskets(bitmap, 1, litBasket);
+    drawBaskets(bitmap, 1, litBaskets);
   }
 
   const pixels = new ImageData(bitmap.toRgba(palette), bitmap.width, bitmap.height);
@@ -1102,6 +1106,7 @@ canvas.addEventListener('mousedown', (event) => {
   liveGrabbed = false;
   liveScruffed = false;
   const at = stageAt(event);
+  liveDownAt = at;
   const near = live
     ? [...livePen].find(([, p]) => Math.hypot(p.x - at.x, p.y - at.y) < 16)
     : undefined;
@@ -1126,6 +1131,7 @@ canvas.addEventListener('mouseup', (event) => {
   }
 
   liveHeld = false;
+  liveUpAt = stageAt(event);
 
   /* A thing let go: on the shelf, back on it (condition 0, which nothing answers); else let go (1) in the pen. */
   if (liveDragging !== undefined) {
@@ -1148,11 +1154,8 @@ canvas.addEventListener('click', (event) => {
     return;
   }
 
-  /* In the Adoption Kit, a basket clicked: its command (`BasketHitTest`, `DoCommand` 0x821 + n), message 0x16 + n. */
-  const basket = kitInput.checked ? basketAt(stageAt(event)) : -1;
-
-  if (basket >= 0) {
-    liveCommands.push(0x16 + basket);
+  /* In the Adoption Kit, a basket clicked is the pet's (`basketHitTest`). */
+  if (kitInput.checked && catzBasketHit(stageAt(event), KIT_ORIGIN) >= 0) {
     return;
   }
 
