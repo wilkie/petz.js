@@ -235,13 +235,14 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 19, 20, 25, 27, 28, 29, 30, 35, 36, 37, 38, 39, 40, 41, 43, 56,
-  57, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55,
-  58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 19, 20, 25, 27, 28, 29, 30, 35, 36, 37, 38, 39, 40, 41,
+  43, 47, 56, 57, 66, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50,
+  51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+  81,
 ]);
 
-/** How deep entering may go on into entering, before it is cut short (and counted). */
-const DEPTH = 8;
+/** How deep entering may go on into entering, before it is cut short (and counted). The engine has no limit: a state whose tick runs as it is entered may change state at once, and pre-exploring off the stage and idling went nine deep before a walk began. */
+const DEPTH = 20;
 
 export class CatzPet {
   readonly mind: CatzMind;
@@ -1562,6 +1563,11 @@ export class CatzPet {
 
     /* Its victim captured or wrestled (`DoCatVictimCaptured`, seg19:06bd; `DoCatVictimWrestle`, 0ac6), entering: had by its ball 0x42, its eyelids reset, nothing done yet (`+0x34ca` 0; `+0x35be` 0 too, captured), the mouse's fear 100 (stilled, above) and its prey kept (`+0x35c0`); then on into their ticks. Carrying it (7) and after snagging (10) enter doing nothing; snagging (9) pushes its words and has what it snags. */
     if (state === 5 || state === 6) {
+      this.fields.passed = 0;
+    }
+
+    /* A good dream (`DoCatGoodDream`, seg18:091b), entering: `+0x34ca` 0 and a sound (0x89, drawing nothing); then on into its tick. The suckle attempt (47; `DoSuckleAttempt`, seg33:026c) does nothing at all. */
+    if (state === 66) {
       this.fields.passed = 0;
     }
 

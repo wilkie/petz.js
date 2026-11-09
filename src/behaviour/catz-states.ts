@@ -1137,6 +1137,38 @@ export function catzStateTick(
       return world.enter ? done({ pushed: 0x20d, pushes: [0x20d] }) : done({ global: 3 });
     case CATZ_STATE.sniffMouseHole:
       /* `DoCatSniffMouseHole`, seg14:1850: entering, it tracks what it plays with with its head (3000); inclined to behaviour 7, the mouse in (kin 0x1b's slot `0x110`), under its age, it aims at the hole, a quarter of its width and height past its target point, faces 0x40, sniffs (0x123, 0x1cf, 0x125, 0x2b8), and keeps where kin 0xe is (`+0x35c2`, `+0x34ca` 1); else 0x2a4. Each tick, that kin moved, or its script done, it readies its moment (`PreMoment`, after it idling, 0x93 meanwhile) and has it (8). */
+      if (world.enter) {
+        const head = {
+          head: ['track' as const],
+          headTrack: { kind: world.x35a4 ?? 0, speed: 3000 },
+        };
+        const reaches =
+          catzBehavior(mind, 7, random) !== 0 &&
+          (world.mouseState ?? 1) === 1 &&
+          percent() < mind.brains[CATZ_BRAIN.age] &&
+          world.prey;
+
+        if (!reaches) {
+          return done({ ...head, passed: 0, pushed: 0x2a4, pushes: [0x2a4] });
+        }
+
+        /* Its paw (0x16) to a quarter of its width and height past the hole's point, facing 0x40 (seg14:18fe on). */
+        const { width, height } = world.size!;
+        const goal = {
+          x: world.prey!.x + Math.trunc(width / 4),
+          y: world.prey!.y + Math.trunc(height / 4),
+        };
+        return done({
+          ...head,
+          goal,
+          passed: 1,
+          x35c2: { ...world.prey! },
+          pushes: [0x123, 0x1cf, 0x125, 0x2b8],
+          pushed: 0x123,
+          leap: { ball: 0x16, to: 'goal', at: goal, turn: 0x40, before: 1 },
+        });
+      }
+
       return done({
         moment: catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random),
         global: 8,
@@ -1348,6 +1380,11 @@ export function catzStateTick(
       return { ...walked, pushed: walked.pushes?.[0] };
     }
     case CATZ_STATE.preExplore: {
+      /* `DoCatPreExplore`, seg24:05e0, entering: under a third of its energy, not in the Kit (`PetParams` `+0xc4`), 0x13e, its script then to play; else on into its tick. */
+      if (world.enter && percent() < Math.trunc(mind.brains[CATZ_BRAIN.energy] / 3) && !world.c4) {
+        return done({ pushed: 0x13e, pushes: [0x13e] });
+      }
+
       const stage = world.stage!;
       const { width, height } = world.size!;
       const point = world.point!;
