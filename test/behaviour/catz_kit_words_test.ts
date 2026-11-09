@@ -1,7 +1,9 @@
 import {
   catzKitMessage,
+  catzKitText,
   catzKitWords,
   type CatzMessaged,
+  makeCatzKitText,
 } from '../../src/behaviour/catz-reflexes.ts';
 
 /** A kitten out in the pen in the Kit: its basket 2, every thing on the shelf but the food bowl. */
@@ -69,5 +71,75 @@ describe("the Catz Adoption Kit's words", () => {
 
   it('climbing out (`+0x35fa`), reads nothing', () => {
     expect(catzKitMessage(MIND, 42, seen({ x35fa: 1 }), never)).toEqual({});
+  });
+});
+
+/** `HandleKitContextSensitiveText`: its hints in its baskets, its breed's tip and the adverts out of them. */
+describe("the Catz Adoption Kit's text", () => {
+  const run = (
+    ticks: number,
+    world: Parameters<typeof catzKitText>[1],
+    text = makeCatzKitText()
+  ) => {
+    const shown: [number, number][] = [];
+
+    for (let tick = 0; tick < ticks; tick++) {
+      const words = catzKitText(text, world);
+
+      if (words !== undefined) {
+        shown.push([tick, words]);
+      }
+    }
+
+    return { shown, text };
+  };
+
+  it('in its baskets: click, pick up, pet, and round again', () => {
+    const text = { ...makeCatzKitText(), x35fe: 0 };
+    const { shown } = run(1000, { state: 74, global: 22, basket: 1, age: 0, xca: 1, xea: 1 }, text);
+    expect(shown.slice(0, 4)).toEqual([
+      [0, 0x233c],
+      [0x8e, 0x235a],
+      [0x11b, 0x235b],
+      [0x1a9, 0x233c],
+    ]);
+  });
+
+  it('in its baskets, without `+0xea` or an age, nothing', () => {
+    expect(run(500, { state: 74, global: 22, basket: 1, age: 0, xca: 1, xea: 0 }).shown).toEqual(
+      []
+    );
+  });
+
+  /* The first advert, "On-Line Help" (0x2371), is a tip: set the tick after the breed's tip, it is not shown (`+0x3606` under 0x1c). */
+  it("out of the Kit: its breed's tip at 0x54, then the adverts in turn", () => {
+    const text = { ...makeCatzKitText(), x35fe: 0, x3602: 0 };
+    const { shown } = run(0x800, { state: 22, global: 6, basket: 3, age: 0, xca: 1, xea: 0 }, text);
+    expect(shown.map(([, words]) => words)).toEqual([
+      0x2375, 0x236a, 0x236b, 0x236c, 0x236d, 0x236e, 0x236f, 0x2370, 0x2371, 0x236a,
+    ]);
+    expect(shown[0][0]).toBe(0x54);
+  });
+
+  it('with `+0xc8` alone, "Soon …" in place of the adverts that have one', () => {
+    const text = { ...makeCatzKitText(), x35fe: 0x60, x3602: 0 };
+    const world = {
+      state: 22,
+      global: 6,
+      basket: 3,
+      age: 0,
+      xca: 1,
+      xea: 0,
+      edition: { xc6: 0, xc8: 1 },
+    };
+    expect(run(0x700, world, text).shown.map(([, words]) => words)).toEqual([
+      0x2386, 0x2381, 0x236b, 0x236c, 0x2382, 0x2383, 0x2384, 0x2385, 0x2386,
+    ]);
+  });
+
+  it('in the Kit but out of its baskets, nothing', () => {
+    expect(run(300, { state: 76, global: 22, basket: 3, age: 0, xca: 1, xea: 1 }).shown).toEqual(
+      []
+    );
   });
 });

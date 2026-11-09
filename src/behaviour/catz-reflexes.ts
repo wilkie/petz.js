@@ -1102,3 +1102,159 @@ export function catzLayering(
 
   return { x358a: random(200) + 60, layer };
 }
+
+/** The Kit's text: its basket hint (`+0x360a`) and advert (`+0x360c`), their counts (`+0x35fe`, `+0x3602`), and ticks since words were shown (`+0x3606`). */
+export interface CatzKitText {
+  x360a: number;
+  x360c: number;
+  x35fe: number;
+  x3602: number;
+  x3606: number;
+}
+
+/** As the cat is made (seg16:150c): its counts -1, words long since shown; its hint and advert none. */
+export function makeCatzKitText(): CatzKitText {
+  return { x360a: 0x2380, x360c: 0x2380, x35fe: -1, x3602: -1, x3606: 1000 };
+}
+
+/** The tips (`TextStatusBar`, seg23:574c, and its table at seg23:580a), shown only 28 ticks or more after the last words. */
+function catzTip(string: number) {
+  return (
+    string === 0x233c ||
+    string === 0x235a ||
+    string === 0x235b ||
+    (string >= 0x236a && string <= 0x2371) ||
+    (string >= 0x2381 && string <= 0x2386)
+  );
+}
+
+/**
+ * Words on the Kit's text bar (`TextStatusBar`, seg23:573b, the cat's slot
+ * `0x158`): a tip only where `+0x3606` has reached 0x1c, anything else at
+ * once; shown, `+0x3606` is 0. The string shown, if any.
+ */
+export function catzShowWords(text: CatzKitText, string: number) {
+  if (text.x3606 < 0x1c && catzTip(string)) {
+    return undefined;
+  }
+
+  text.x3606 = 0;
+  return string;
+}
+
+/** The adverts in turn (`+0x360c`): each its next, and how long `+0x3602` must pass before it ("Soon you can …" where `+0xc6` is clear and `+0xc8` set). */
+const CATZ_KIT_ADVERTS: { from: number[]; after: number; to: number; soon?: number }[] = [
+  { from: [0x2371, 0x2386], after: 0xd2, to: 0x236a, soon: 0x2381 },
+  { from: [0x236a, 0x2381], after: 0x1a4, to: 0x236b },
+  { from: [0x236b], after: 0x276, to: 0x236c },
+  { from: [0x236c], after: 0x348, to: 0x236d, soon: 0x2382 },
+  { from: [0x236d, 0x2382], after: 0x41a, to: 0x236e, soon: 0x2383 },
+  { from: [0x236e, 0x2383], after: 0x4ec, to: 0x236f, soon: 0x2384 },
+  { from: [0x236f, 0x2384], after: 0x5be, to: 0x2370, soon: 0x2385 },
+];
+
+/**
+ * The Kit's text each tick (`HandleKitContextSensitiveText`, seg23:5141,
+ * the cat's slot `0x144`; `CatSprite::Update` runs it in the Kit before its
+ * other gates). In its baskets (73 to 75), `PetParams` `+0xca` set, and
+ * `+0xea` set or an age: its hint goes "Click on a basket…" (0x233c, at once,
+ * `+0x3606` 1000), past 0x8c "To pick up kittenz…" (0x235a), past 0x118 "To
+ * pet kittenz…" (0x235b), past 0x1a4 none again (0x2380, `+0x35fe` 0); else
+ * `+0x35fe` and `+0x3606` count on. Else out of the Kit (global not 22): at
+ * 0x54 of `+0x35fe`, its breed's tip (0x2372 on by its basket), counting on
+ * to past it; after, the adverts in turn by `+0x3602` (from none, "On-Line
+ * Help", 0x2371, or 0x2386; past 0x690 none again, `+0x3602` 0), else
+ * counting on. Changed, its words go to `TextStatusBar`. The words shown, if
+ * any.
+ */
+export function catzKitText(
+  text: CatzKitText,
+  world: {
+    state: number;
+    global: number;
+    basket: number;
+    age: number;
+    xca: number;
+    xea: number;
+    edition?: { xc6: number; xc8: number };
+  }
+): number | undefined {
+  const soon = !world.edition?.xc6 && !!world.edition?.xc8;
+
+  if (world.state >= 73 && world.state <= 75 && world.xca && (world.xea || world.age)) {
+    const steps: [number, number, number][] = [
+      [0x233c, 0x8c, 0x235a],
+      [0x235a, 0x118, 0x235b],
+    ];
+
+    if (text.x360a === 0x2380) {
+      text.x360a = 0x233c;
+      text.x3606 = 1000;
+      return catzShowWords(text, text.x360a);
+    }
+
+    for (const [from, after, to] of steps) {
+      if (text.x360a === from && text.x35fe >>> 0 > after) {
+        text.x360a = to;
+        return catzShowWords(text, to);
+      }
+    }
+
+    if (text.x360a === 0x235b && text.x35fe >>> 0 > 0x1a4) {
+      text.x360a = 0x2380;
+      text.x35fe = 0;
+      return undefined;
+    }
+
+    text.x35fe++;
+    text.x3606++;
+    return undefined;
+  }
+
+  if (world.global === 22) {
+    return undefined;
+  }
+
+  /* (Its counts are unsigned: -1, as the cat is made, is past every mark.) */
+  const x35fe = text.x35fe >>> 0;
+
+  if (x35fe <= 0x54) {
+    let shown: number | undefined;
+
+    if (x35fe === 0x54) {
+      if (world.basket >= 0 && world.basket <= 4) {
+        text.x360a = 0x2372 + world.basket;
+      }
+
+      shown = catzShowWords(text, text.x360a);
+    }
+
+    text.x35fe++;
+    text.x3606++;
+    return shown;
+  }
+
+  if (text.x360c === 0x2380) {
+    text.x360c = soon ? 0x2386 : 0x2371;
+    return catzShowWords(text, text.x360c);
+  }
+
+  const x3602 = text.x3602 >>> 0;
+
+  for (const advert of CATZ_KIT_ADVERTS) {
+    if (advert.from.includes(text.x360c) && x3602 > advert.after) {
+      text.x360c = soon && advert.soon !== undefined ? advert.soon : advert.to;
+      return catzShowWords(text, text.x360c);
+    }
+  }
+
+  if ((text.x360c === 0x2370 || text.x360c === 0x2385) && x3602 > 0x690) {
+    text.x360c = 0x2380;
+    text.x3602 = 0;
+    return undefined;
+  }
+
+  text.x3602++;
+  text.x3606++;
+  return undefined;
+}

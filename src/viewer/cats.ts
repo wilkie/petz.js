@@ -342,16 +342,17 @@ const LIVE_CENTRES = [12, 7, 96, 86, 13, 88, 16, 30, 0, 0, 0, 0];
 let live = 0;
 let liveCursor = { x: 235, y: 300 };
 
-/** The button: pressed since the last tick (`PetParams` `+0xa`), and held (`+0xc`); and whether this press picked the cat up. */
+/**
+ * The right button: pressed since the last tick (`PetParams` `+0xa`), and
+ * held (`+0xc`), as `CATZ.WAD` reads it each frame (`GetAsyncKeyState` of
+ * the secondary button, this frame's and the last's).
+ */
 let livePressed = false;
 let liveHeld = false;
-let liveScruffed = false;
 /** Where the button last went down and up (`XApt::m_ptDown`, `m_ptUp`); and whether pressing the cat's own basket lit it. */
 let liveDownAt = { x: 0, y: 0 };
 let liveUpAt = { x: 0, y: 0 };
 let liveBasketLit = false;
-/** The cat's state last tick, so its breed's words show as it begins to climb out. */
-let liveKitState = 0;
 
 /**
  * What the playpen tells the cat of the pen's things, a notice a tick (`XApt::ParentNotify`):
@@ -362,7 +363,7 @@ const liveNotices: [number, number, number, boolean][] = [];
 /** Messages the playpen's commands leave the cat (`XApt::DoCommand`), read in turn: 19 its window resized, 21 the camera. */
 const liveCommands: number[] = [];
 
-/** The hand down, to pet the cat: the right button held (the viewer's choice; the engine's host gives `PetParams` `+0x1e`). */
+/** The left button held (`PetParams` `+0x1e`: `CATZ.WAD` sets it on `WM_LBUTTONDOWN` and clears it on its release): the hand that pets, and the baskets' press. */
 let liveHand = false;
 
 /**
@@ -371,6 +372,9 @@ let liveHand = false;
  * `WM_LBUTTONDBLCLK`, and each frame takes it and clears it).
  */
 let liveDoubleClicked = false;
+
+/** Whether the cursor is on one of the live cat's balls. */
+let liveOverCat: () => boolean = () => false;
 
 /** The mouse's hole, where the harness's pen has it scaled to the stage: its target point. */
 const MOUSE_HOLE = { x: 206, y: 403 };
@@ -574,9 +578,10 @@ function goLive() {
     /* The Adoption Kit: its kitten in the baskets, from the Kit's origin, coming out of itself (`PetParams` `+0xca` 1). */
     ...(kitMode
       ? {
-          kit: { origin: KIT_ORIGIN, ca: 1 },
+          /* `PetParams` `+0xea` is the host's; set here, so its baskets' hints show. */
+          kit: { origin: KIT_ORIGIN, ca: 1, xea: 1 },
           /* The Kit's text bar. */
-          words: (id: number) => (kitText.textContent = catzString(id)),
+          words: (id?: number) => (kitText.textContent = id === undefined ? '' : catzString(id)),
           /* Put in a basket, made again as its breed (`SetupNewBasket`), its brains the Kit's. */
           remade: (basket: number) => {
             const files_ = files.get(KIT_BREEDS[basket]);
@@ -615,9 +620,6 @@ function goLive() {
     buttons: () => ({ pressed: livePressed, held: liveHeld && !livePressed }),
     ballAt: (ball) =>
       body.shown ? placer.ballOnStage(body.shown.rect, body.shown.pose, ball) : undefined,
-    scruffed: () => {
-      liveScruffed = true;
-    },
     /* Petted: the hand, the ball under the cursor, the rectangle grown by 10 holding it, and the frames left. */
     hand: () => liveHand,
     holding: () => liveDragging,
@@ -637,6 +639,8 @@ function goLive() {
     cues: () => body.shown?.step.cues ?? [],
   });
   made.pet = pet;
+  liveOverCat = () =>
+    !!body.shown && placer.ballAt(body.shown.rect, body.shown.pose, liveCursor) >= 0;
 
   /* The mouse in its hole, its body its own, at scales of 200 (`InitMouseSprite`). */
   const mouseScales = { pet: 200, ball: 200 };
@@ -733,21 +737,12 @@ function goLive() {
     if (pet.kit) {
       liveBasketLit =
         pet.basketHitTest({
-          down: liveHeld && !liveScruffed && !liveGrabbed,
+          down: liveHand && !liveGrabbed,
           downAt: liveDownAt,
           upAt: liveUpAt,
         }) ||
-        (liveBasketLit && liveHeld);
+        (liveBasketLit && liveHand);
     }
-
-    /* Climbing out, its breed's words (`GiveBreedDescriptions`, 0x233d + its basket); back in the baskets, none (`SetText` of kin 0x11 ""). */
-    if (pet.kit && state === 76 && liveKitState !== 76) {
-      kitText.textContent = catzString(0x233d + pet.kit.basket);
-    } else if (pet.kit && state === 73) {
-      kitText.textContent = '';
-    }
-
-    liveKitState = state;
 
     /* Dangling, hung from the cursor by its ball 0x24 (`DoDangling`). */
     if (state === 33) {
@@ -1107,14 +1102,14 @@ let liveDragging: number | undefined;
 let liveGrabbed = false;
 
 canvas.addEventListener('mousedown', (event) => {
-  /* The right button the hand, to pet it; the left to pick up a thing or the cat. */
+  /* The right button picks up the cat by the scruff; the left is the hand, and picks up a thing. */
   if (event.button === 2) {
-    liveHand = true;
+    livePressed = true;
+    liveHeld = true;
     return;
   }
 
   liveGrabbed = false;
-  liveScruffed = false;
   const at = stageAt(event);
   liveDownAt = at;
   const near = live
@@ -1131,16 +1126,15 @@ canvas.addEventListener('mousedown', (event) => {
     return;
   }
 
-  livePressed = true;
-  liveHeld = true;
+  liveHand = true;
 });
 canvas.addEventListener('mouseup', (event) => {
   if (event.button === 2) {
-    liveHand = false;
+    liveHeld = false;
     return;
   }
 
-  liveHeld = false;
+  liveHand = false;
   liveUpAt = stageAt(event);
 
   /* A thing let go: on the shelf, back on it (condition 0, which nothing answers); else let go (1) in the pen. */
@@ -1159,8 +1153,8 @@ canvas.addEventListener('mouseup', (event) => {
 });
 canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 canvas.addEventListener('click', (event) => {
-  /* (A press that picked up the cat, or a thing, puts nothing in the pen.) */
-  if (!live || liveScruffed || liveGrabbed) {
+  /* (A press that picked up a thing, or on the cat, petting it, puts nothing in the pen.) */
+  if (!live || liveGrabbed || liveOverCat()) {
     return;
   }
 

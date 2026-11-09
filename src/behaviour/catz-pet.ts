@@ -28,6 +28,10 @@ import {
   catzMessage,
   catzPurring,
   catzScruff,
+  catzShowWords,
+  catzKitText,
+  type CatzKitText,
+  makeCatzKitText,
   catzSeesMouse,
   type CatzWiggle,
 } from './catz-reflexes.ts';
@@ -89,10 +93,12 @@ export interface CatzPetOptions {
     ca: number;
     /** Which Kit it is (`PetParams` `+0xc6`, `+0xc8`), picking its things' words: 0 by default. */
     edition?: { xc6: number; xc8: number };
+    /** `PetParams` `+0xea`, the host's: set (or an age), its baskets' hints show. 0 by default. */
+    xea?: number;
   };
 
-  /** Words for the Kit's text bar (`TextStatusBar`): a string of CATZDLL's (`RT_STRING`). */
-  words?: (string: number) => void;
+  /** Words for the Kit's text bar (`TextStatusBar`): a string of CATZDLL's (`RT_STRING`); none, cleared. */
+  words?: (string: number | undefined) => void;
 
   /** Put in a basket, the kitten made again as that basket's breed (`SetupNewBasket`): its brains and centres as made. */
   remade?: (basket: number) => { brains: number[]; centres: number[] } | undefined;
@@ -517,6 +523,18 @@ export class CatzPet {
   /** The Kit's highlight (kin 0x19, `baskhi.apt`): the basket it is shown over, -1 hidden. */
   kitHighlight = -1;
 
+  /** The Kit's text bar: its hint, advert and counts (`catzKitText`). */
+  readonly kitText: CatzKitText = makeCatzKitText();
+
+  /** Words to the Kit's text bar (`TextStatusBar`): a tip only once enough ticks have passed. */
+  private say(string: number) {
+    const shown = catzShowWords(this.kitText, string);
+
+    if (shown !== undefined) {
+      this.options.words?.(shown);
+    }
+  }
+
   /** Climbing out or on its way back (`IsBasketExitOrReturn`, seg13:16be, its slot `0x118`): `+0x35fc` or `+0x35fa`. */
   exitOrReturn() {
     return !!(this.x35fc || this.kit?.out);
@@ -686,7 +704,7 @@ export class CatzPet {
     }
 
     if (done.words !== undefined) {
-      this.options.words?.(done.words);
+      this.say(done.words);
     }
 
     if (done.x35a4 !== undefined) {
@@ -773,8 +791,26 @@ export class CatzPet {
    * ticks.
    */
   private reflexes() {
-    /* The playpen's messages first (`HandleCatAptMessages`). */
-    if (this.messaged()) {
+    /* The playpen's messages first (`HandleCatAptMessages`); then, in the Kit, its text (`HandleKitContextSensitiveText`). */
+    const changed = this.messaged();
+
+    if (this.kit) {
+      const words = catzKitText(this.kitText, {
+        state: this.state,
+        global: this.global,
+        basket: this.kit.basket,
+        age: this.mind.brains[CATZ_BRAIN.age],
+        xca: this.kit.ca,
+        xea: this.options.kit?.xea ?? 0,
+        edition: this.options.kit?.edition,
+      });
+
+      if (words !== undefined) {
+        this.options.words?.(words);
+      }
+    }
+
+    if (changed) {
       return;
     }
 
@@ -807,9 +843,10 @@ export class CatzPet {
       if (scruff.dangles && this.kit && scruff.x35f6 !== undefined) {
         this.kit.basket = scruff.x35f6;
         this.kit.baskets[scruff.x35f6] = 1;
+        this.kitText.x35fe = 0;
 
         if (scruff.outOfBasket) {
-          this.options.words?.(0x233d + scruff.x35f6);
+          this.say(0x233d + scruff.x35f6);
         }
       }
 
@@ -1233,6 +1270,17 @@ export class CatzPet {
       this.options.random
     );
 
+    /* The Kit entered (`DoGSAdoptionKit`, seg13:0033 on): beginning it, its text's hint, advert and counts none; jumping or dropping in, its hint and count. */
+    if (global === 22 && this.kit && this.x33be !== 2) {
+      this.kitText.x35fe = 0;
+      this.kitText.x360a = 0x2380;
+
+      if (this.x33be === 1) {
+        this.kitText.x3602 = 0;
+        this.kitText.x360c = 0x2380;
+      }
+    }
+
     if (begun.mode !== undefined) {
       this.fields.mode = begun.mode;
     }
@@ -1367,6 +1415,11 @@ export class CatzPet {
       this.options.mouseHeld?.('thrown');
     }
 
+    /* Into its baskets from jumping or dropping in, its text cleared (`SetText` of kin 0x11, seg13:0e5c and 101a). */
+    if (state === 73 && (this.state === 77 || this.state === 78) && this.kit) {
+      this.options.words?.(undefined);
+    }
+
     this.state = state;
     this.mind.state = state;
 
@@ -1376,6 +1429,12 @@ export class CatzPet {
     }
 
     /* The highlight hidden: a basket picked, held or not (`PickANewBasket`, or `DoCatInBaskets` with one), or the cat's own chosen (76). */
+    /* Climbing out (`DoCatExitBasket`): its breed's words (`GiveBreedDescriptions`, 0x233d on by its basket), its hint's count 0. */
+    if (state === 76 && this.kit) {
+      this.kitText.x35fe = 0;
+      this.say(0x233d + this.kit.basket);
+    }
+
     if (state === 73 || state === 76) {
       this.kitHighlight = -1;
     }

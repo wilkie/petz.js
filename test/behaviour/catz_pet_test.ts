@@ -201,7 +201,11 @@ describe('a Catz kitten in the Adoption Kit', () => {
       buttons: () => ({ pressed, held: false }),
       cursor: () => ({ x: 300, y: 300 }),
       ballAt: () => ({ x: 300, y: 300 }),
-      words: (id) => words.push(id),
+      words: (id) => {
+        if (id !== undefined) {
+          words.push(id);
+        }
+      },
     });
 
     for (let tick = 0; tick < 50 && pet.state !== 74; tick++) {
