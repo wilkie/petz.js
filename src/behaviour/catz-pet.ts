@@ -23,6 +23,7 @@ import {
   catzCursorWiggling,
   catzChildRespond,
   catzExtremeSituations,
+  catzKitMessage,
   catzLayering,
   catzMessage,
   catzPurring,
@@ -31,7 +32,9 @@ import {
   type CatzWiggle,
 } from './catz-reflexes.ts';
 import {
+  CATZ_BASKETS,
   type CatzBox,
+  type CatzKit,
   catzCuriosities,
   catzFaceForward,
   catzPreMoment,
@@ -74,6 +77,16 @@ export interface CatzPetOptions {
   /** A layered action pushed (`PushLayeredAction`), and whether one plays (`GetLayeredFramesRemaining`). */
   layer?: (action: number) => void;
   layering?: () => boolean;
+
+  /**
+   * The Adoption Kit (`PetParams` `+0xc4`), where the cat lives in it: where
+   * the Kit is (`+0xdc`, `+0xde`), from which its baskets lie, and `+0xca`,
+   * whether its kittens come out of themselves.
+   */
+  kit?: { origin: { x: number; y: number }; ca: number };
+
+  /** Put in a basket, the kitten made again as that basket's breed (`SetupNewBasket`): its brains and centres as made. */
+  remade?: (basket: number) => { brains: number[]; centres: number[] } | undefined;
 
   /** A purr played or stopped (`HandlePurring`): its sound. */
   purr?: (sound: number) => void;
@@ -179,7 +192,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([1, 2, 3, 6, 7, 8, 9, 11, 12, 15, 16, 18, 19, 20]);
+const BEGUN = new Set([1, 2, 3, 6, 7, 8, 9, 11, 12, 15, 16, 18, 19, 20, 22]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -192,7 +205,7 @@ const REIMPLEMENTED = new Set([
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
   3, 4, 8, 14, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54, 55,
-  58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 76, 77, 78, 79, 80, 81,
+  58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -268,7 +281,26 @@ export class CatzPet {
       x688: 0,
       x35b8: -1,
     };
-    this.beginGlobal(6, 0);
+    /* In the Adoption Kit, its kitten in the Kit (`SetupCatForAdoption`: basket 0, `+0x33be` 1, global 22). */
+    if (options.kit) {
+      (this as { kit?: CatzKit }).kit = {
+        peekMode: 0,
+        peeks: 0,
+        wait: 0,
+        basket: 0,
+        baskets: [0, 0, 0, 0, 0],
+        ca: options.kit.ca,
+        rootCount: 0,
+        mouseState: 1,
+        origin: options.kit.origin,
+        last: -1,
+        out: 0,
+      };
+      this.x33be = 1;
+      this.beginGlobal(22, 0);
+    } else {
+      this.beginGlobal(6, 0);
+    }
   }
 
   /** How many ticks are left of what it plays: a viewer keeps as many frames, a new state having dropped what was left. */
@@ -310,6 +342,21 @@ export class CatzPet {
         this.take(
           catzStateTick(50, this.mind, { ...this.world(false), done: false }, this.options.random)
         );
+      }
+
+      /* Peeking from its basket or climbing out, mid-script: the cursor about, it climbs out; cued, it has been in its basket (seg13). */
+      if (this.kit && (this.state === 74 || this.state === 76)) {
+        const ticked = catzStateTick(
+          this.state,
+          this.mind,
+          { ...this.world(false), cues: this.cues(), done: false },
+          this.options.random
+        );
+        this.take(ticked);
+
+        if (ticked.state !== undefined || ticked.global !== undefined) {
+          this.change(ticked.global, ticked.state, 0);
+        }
       }
 
       /* Dangling, let go mid-script: it falls (`DoDangling` asks every tick). */
@@ -440,6 +487,24 @@ export class CatzPet {
   };
   x3574 = 0;
 
+  /**
+   * In the Adoption Kit: its fields (`CatzKit`: its peek's mode, peeks, wait,
+   * basket, the baskets been in, the last it was in, whether it is out);
+   * how the Kit's entering takes it (`+0x33be`: 1 beginning, 2 back to its
+   * basket, 3 jumping in, 4 dropping in); and on its way to its basket
+   * (`+0x35fc`).
+   */
+  readonly kit?: CatzKit;
+  x33be = 1;
+  x35fc = 0;
+
+  /** Its basket's place (`GetBasketLocation`): the basket's from the Kit's origin. */
+  basketAt(basket: number) {
+    const origin = this.options.kit?.origin ?? { x: 0, y: 0 };
+    const place = CATZ_BASKETS[basket] ?? CATZ_BASKETS[0];
+    return { x: place.x + origin.x, y: place.y + origin.y };
+  }
+
   /** Ticks to its next layering (`+0x358a`). */
   private x358a = 0;
 
@@ -503,7 +568,14 @@ export class CatzPet {
     }
 
     const f = this.fields;
-    const done = catzMessage(
+
+    /* In the Kit on its way to its basket (`+0x35fc`), none is read. */
+    if (this.kit && this.x35fc) {
+      return false;
+    }
+
+    const answer = this.kit ? catzKitMessage : catzMessage;
+    const done = answer(
       this.mind,
       message,
       {
@@ -517,6 +589,16 @@ export class CatzPet {
         rect: this.rect,
         spray: this.thingAt(2),
         flea: this.thingAt(3),
+        x35f6: this.kit?.basket,
+        ...(this.kit
+          ? {
+              shelved: Array.from({ length: 16 }, (_, kind) => this.isShelved(kind)),
+              x361e: 0,
+              stage: this.options.stage,
+              x35fa: this.kit.out ?? 0,
+              x35f8: this.kit.last ?? -1,
+            }
+          : {}),
       },
       this.options.random
     );
@@ -548,6 +630,17 @@ export class CatzPet {
 
     if (done.pushes?.length) {
       this.push(done.pushes);
+    }
+
+    /* In its baskets, another basket clicked: that its basket, to be made as its breed and come out of it. */
+    if (this.kit && done.state === 75 && message >= 0x16 && message <= 0x1a) {
+      this.kit.basket = message - 0x16;
+    }
+
+    /* Its own basket clicked: back to it (`MakeCatReturnToBasket`: `+0x33be` 2, `+0x35fc` 1, the Kit). */
+    if (done.global === 22 && message >= 0x16 && message <= 0x1a) {
+      this.x33be = 2;
+      this.x35fc = 1;
     }
 
     if (done.global !== undefined || done.state !== undefined) {
@@ -890,7 +983,7 @@ export class CatzPet {
         {
           shelf: true,
           screenSaver: false,
-          c4: 0,
+          c4: this.kit ? 1 : 0,
           x35d2: 0,
           x3516: this.readied?.after ?? 0,
           area3: this.screenArea(0x1d) === 3,
@@ -979,6 +1072,15 @@ export class CatzPet {
       return;
     }
 
+    /* The Kit: entering, its peeks none; leaving, no longer out (`+0x35fa`). */
+    if (this.kit) {
+      if (global === 22) {
+        this.kit.peeks = 0;
+      } else if (this.global === 22) {
+        this.kit.out = 0;
+      }
+    }
+
     if (this.beginOwn(global, depth)) {
       return;
     }
@@ -1024,6 +1126,7 @@ export class CatzPet {
         preyAt: this.fields.x35a4 === 0x17 ? this.cursorAt() : this.walkedToAt(),
         /* The mouse in its hole in an empty pen, after nothing. */
         mouseAfterCursor: false,
+        kit: this.kit ? { x33be: this.x33be, basket: this.basketAt(this.kit.basket) } : undefined,
       },
       this.options.random
     );
@@ -1165,6 +1268,11 @@ export class CatzPet {
     this.state = state;
     this.mind.state = state;
 
+    /* In the baskets, no longer on its way to one (`DoCatInBaskets`). */
+    if (state === 73) {
+      this.x35fc = 0;
+    }
+
     /* Its victim, the mouse, stilled (its fear 100) as it is held; the
      * catch forgotten once it is past pouncing and its victim; and, the cat
      * itself picked up (0x21, 0x22), the mouse free. */
@@ -1236,6 +1344,24 @@ export class CatzPet {
     /* After petting, resting at once (`DoCatAfterPetting` entering): not to be petted again so soon (`+0x3574`). */
     if (this.state === 52 && ticked.global === 9) {
       this.x3574 = 1;
+    }
+
+    /* What it wrote of the Kit; put in a basket, made again as its breed (`SetupNewBasket`). */
+    if (ticked.kit && this.kit) {
+      Object.assign(this.kit, ticked.kit);
+    }
+
+    if (ticked.remade !== undefined) {
+      const made = this.options.remade?.(ticked.remade);
+
+      if (made) {
+        this.mind.brains = [...made.brains];
+        this.mind.centres = [...made.centres];
+      }
+    }
+
+    if (ticked.x33be !== undefined) {
+      this.x33be = ticked.x33be;
     }
 
     /* What it wrote of its petting; resting after it, not to be petted again so soon. */
@@ -1371,6 +1497,12 @@ export class CatzPet {
       enter,
       inReach: this.options.inReach?.() ?? false,
       preyArea3: this.screenArea(this.fields.x35a4 ?? 0) === 3,
+      ...(this.kit
+        ? {
+            kit: { ...this.kit, mouseState: this.options.mouse?.()?.state ?? 1 },
+            cursorAbout: this.options.cursorAbout?.(this.ticks) ?? false,
+          }
+        : {}),
       petting: this.pettingNow(),
       ...(this.options.buttons
         ? {
@@ -1396,7 +1528,7 @@ export class CatzPet {
       area1: this.screenArea(0x1d) === 1,
       area3: this.screenArea(0x1d) === 3,
       inShelf: this.isShelved,
-      c4: 0,
+      c4: this.kit ? 1 : 0,
       goal: this.fields.goal ?? this.point,
       cursorAt: this.cursorAt(),
       /* What it plays with, where it is: the cursor, or a thing in the pen. */

@@ -40,6 +40,9 @@ export interface CatzGlobalWorld {
    */
   stage?: { left: number; top: number; right: number; bottom: number };
   size?: { width: number; height: number };
+
+  /** In the Adoption Kit: how its entering takes it (`+0x33be`) and its basket's place (`GetBasketLocation`). */
+  kit?: { x33be: number; basket: { x: number; y: number } };
   preyAt?: { x: number; y: number };
   mouseAfterCursor?: boolean;
 }
@@ -165,6 +168,28 @@ export function catzGlobalBegin(
         begun.state = 22;
       } else {
         begun.state = 0x14;
+      }
+      break;
+    }
+    case 22: {
+      /* The Adoption Kit (`DoGSAdoptionKit`, seg13:0000), by `+0x33be`: 1
+       * beginning it (0x48); 2 back to its basket, walking to 150 above it
+       * (0x16, `+0x35a6` 0, `+0x35ac` 1); 3 jumping in (0x4d); 4 dropping in
+       * (0x4e). No effects of its own. */
+      begun.effects = [0, 0, 0, 0];
+      const how = world.kit?.x33be ?? 1;
+
+      if (how === 1) {
+        begun.state = 0x48;
+      } else if (how === 2 && world.kit) {
+        begun.x35a6 = 0;
+        begun.x35ac = 1;
+        begun.goal = { x: world.kit.basket.x, y: world.kit.basket.y - 150 };
+        begun.state = 0x16;
+      } else if (how === 3) {
+        begun.state = 0x4d;
+      } else if (how === 4) {
+        begun.state = 0x4e;
       }
       break;
     }

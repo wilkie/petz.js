@@ -88,3 +88,49 @@ describe('a Catz cat told of the pen’s things', () => {
     expect(Object.keys(answers).some((key) => /^(3|15|12)\//.test(key))).toBe(true);
   });
 });
+
+describe('a Catz kitten in the Adoption Kit', () => {
+  /* Its baskets, each a breed: it begins, sits in one, peeks, and with the cursor about now and then, comes out; clicked, its own basket sends it back. */
+  it('begins, peeks from its baskets, comes out and goes back', () => {
+    const states: Record<number, number> = {};
+    const remade: number[] = [];
+
+    for (const seed of [1, 2, 3]) {
+      const rand = borlandRand(seed);
+      let tick = 0;
+      const pet = new CatzPet({
+        brains: BRAINS,
+        centres: CENTRES,
+        stage: { left: 0, top: 0, right: 640, bottom: 480 },
+        kit: { origin: { x: 0, y: 0 }, ca: 1 },
+        cursorAbout: () => tick % 400 < 20,
+        remade: (basket) => {
+          remade.push(basket);
+          return undefined;
+        },
+        play: () => 10,
+        random: (n) => rand() % n,
+      });
+
+      for (; tick < 3000; tick++) {
+        /* Out, its own basket clicked now and then. */
+        if (tick % 700 === 600 && pet.kit && pet.global !== 22) {
+          pet.leave(0x16 + pet.kit.basket);
+        }
+
+        const { state } = pet.tick();
+        states[state] = (states[state] ?? 0) + 1;
+      }
+
+      expect(pet.stoodIn.errors).toBe(0);
+      expect(pet.stoodIn.deep).toBe(0);
+    }
+
+    console.log(`in the Kit: ${JSON.stringify(states)}; made as baskets ${remade}`);
+    /* Begun (72), in its baskets (73), peeking (74), out of one (76), jumping back in (77). */
+    for (const state of [72, 73, 74, 76, 77]) {
+      expect(states[state]).toBeGreaterThan(0);
+    }
+    expect(remade.length).toBeGreaterThan(0);
+  });
+});
