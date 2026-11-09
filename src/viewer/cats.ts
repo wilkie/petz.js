@@ -358,6 +358,11 @@ const JINGLE = { x138: 13, x140: 64 };
 function strikeToy({ kind, v }: { kind: number; v: { x: number; y: number } }) {
   const at = livePen.get(kind);
 
+  /* Struck, the thing let go (`StrikeToy`'s `SetState` 1): the playpen tells the cat so. */
+  if (at) {
+    liveNotices.push([kind, 1, 1, false]);
+  }
+
   /* The Cat Dancer is not sent rolling: its speed only kept (`CatDancerSprite::SetSpeed`), its spring its own (`Update`). */
   if (!at || kind === 5) {
     return;

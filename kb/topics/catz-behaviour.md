@@ -495,4 +495,4 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 ## Not yet
 
-Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`). Of the pen's own sprites, the dog (0x1a). Of the playpen, what its commands leave the cat (19, its window resized; 21, the camera) and the Adoption Kit's baskets in the viewer. Pressing a locked thing (the Kit's `DoUpdate`) and a swat's or the cat's taking a thing telling it so (`StrikeToy`, `ForceRelease`, (kind, its condition, 1, 0)).
+Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`). Of the pen's own sprites, the dog (0x1a). Of the playpen, what its commands leave the cat (19, its window resized; 21, the camera) and the Adoption Kit's baskets in the viewer. Pressing a locked thing (the Kit's `DoUpdate`), and the cat's taking a thing from the user telling the cat so (`ForceRelease`); a swat's does (`StrikeToy`, (kind, 1, 1, 0)), in the viewer.
