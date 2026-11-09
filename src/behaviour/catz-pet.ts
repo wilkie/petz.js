@@ -146,7 +146,8 @@ export interface CatzPetOptions {
    * on (`+0x2518` 1); whether the frame it shows is cued so; its draw point
    * (`GetDrawPt`); moved, its target point at a point; let go and playing 1
    * (the dream's end); put away (`0x7c`); off (`+0x2518` 0). Without one,
-   * it is stood in for, come 20 ticks after it is sent.
+   * it is stood in for, come 283 ticks after it is sent, as the engine's
+   * own cloud comes (its 284 frames).
    */
   cloud?: {
     size: () => { width: number; height: number };
@@ -392,8 +393,8 @@ export class CatzPet {
    * dreams of, `+0x35d8`, the float's doubles `+0x35dc`, `+0x35e4`), and
    * what the screen saver's other scripts would do, standing in as the
    * harness's driver does: its own script's cue to dream (6) on the second
-   * tick of phase 0, the cloud's that it has come (4) on the twentieth of
-   * phase 1; the dog and the dream's mouse each set off 200 left of the
+   * tick of phase 0, the cloud's that it has come (4) on the 283rd of
+   * phase 1, where it has no cloud of its own; the dog and the dream's mouse each set off 200 left of the
    * stage and run across, 10 and 8 a tick.
    */
   readonly dream = {
@@ -555,7 +556,7 @@ export class CatzPet {
       cloudCome:
         this.state === 65 &&
         dream.phase === 1 &&
-        (this.options.cloud ? this.options.cloud.cued(4) : dream.inPhase >= 20),
+        (this.options.cloud ? this.options.cloud.cued(4) : dream.inPhase >= 283),
       at: dream.at,
       stage: this.options.stage,
       mouseX: dream.mouseX,

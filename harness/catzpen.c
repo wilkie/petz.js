@@ -540,7 +540,8 @@ static int cloudCued, cloudTicks;
  * ticks: the cloud's cue that it has come (4), answered for it. */
 static int cloudComing(unsigned char __far *cat)
 {
-    return forcing & 512 && *(int __far *)(cat + 0x2552) == 65 &&
+    /* (Its visitors run (134217728): the cloud cues itself.) */
+    return forcing & 512 && !(forcing & 134217728L) && *(int __far *)(cat + 0x2552) == 65 &&
            *(int __far *)(cat + 0x35da) == 1 && cloudTicks + 1 >= 20;
 }
 
