@@ -545,8 +545,8 @@ export function catzCornerToAvoid(
 
 /** What a tick of a global state reads, beyond what its beginning does. */
 export interface CatzGlobalTickWorld extends CatzGlobalWorld {
-  /** Whether the cursor is about (`PetParams` `+0x46`). */
-  cursorAbout: boolean;
+  /** Whether the left button was double-clicked (`PetParams` `+0x46`). */
+  doubleClicked: boolean;
 
   /** `+0x35a6`, `+0x34ca` (minding the cursor), whether it is placed so (`GetSpriteScreenArea` of 0x1d, 1), and the mouse's own state (its machine's `+0x3a`). */
   x35a6?: number;
@@ -573,7 +573,7 @@ export interface CatzGlobalTicked {
 
 /**
  * A tick of a global state, its handler neither entering nor leaving: for
- * most, the cursor about (`PetParams` `+0x46`), its moment readied
+ * most, a double-click (`PetParams` `+0x46`), its moment readied
  * (`PreMoment` 6, 0x93, watching) and had (8, begun as its beginning goes):
  *
  * - idling (6, seg24:01d7), resting (9, seg30:00b5), affectionate (14,
@@ -585,11 +585,11 @@ export interface CatzGlobalTicked {
  * - attacking (1, seg14:024e): after the mouse, the mouse's own state 1,
  *   inclined to behaviour 7 and under its age, it runs to the mouse hole
  *   (`+0x35a4`, `+0x35a6` 0xe, `+0x35ac` 1, `+0x35a2` 0, 22), else its
- *   moment readied not watching; after anything else, the cursor about and
+ *   moment readied not watching; after anything else, a double-click and
  *   not inclined to behaviour 14, its moment.
  *
  * - having its victim (2, `DoGSHasVictim`, seg33:154e), and petted (7,
- *   `DoGSPetting`): the cursor about, its moment, watching.
+ *   `DoGSPetting`): a double-click, its moment, watching.
  *
  * Others are not reimplemented: nothing. Where whoever ticks it begins the
  * global state asked itself (`begin` false), it is given as `global`.
@@ -609,7 +609,7 @@ export function catzGlobalTick(
       ? { moment: ready, pushes, begun: catzGlobalBegin(8, mind, world, random) }
       : { moment: ready, pushes, global: 8 };
   };
-  const about = world.cursorAbout;
+  const about = world.doubleClicked;
 
   switch (global) {
     case 6:

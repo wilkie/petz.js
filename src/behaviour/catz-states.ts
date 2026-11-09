@@ -217,9 +217,9 @@ export interface CatzStateWorld {
   /** Its bottle (kin 0xf): see `CatzBottle`. */
   bottle?: CatzBottle;
 
-  /** In the Adoption Kit: see `CatzKit`; and whether the cursor is about (`PetParams` `+0x46`). */
+  /** In the Adoption Kit: see `CatzKit`; and whether the left button was double-clicked (`PetParams` `+0x46`). */
   kit?: CatzKit;
-  cursorAbout?: boolean;
+  doubleClicked?: boolean;
 
   /** Dreaming: see `CatzDream`. */
   dream?: CatzDream;
@@ -3970,7 +3970,7 @@ function catzTreat(
  * `DoCatPeekFromBasket`): entering, three times in four or never yet, it
  * peeks plainly (`+0x3610` 0: 0x1c4, then by temperament, 24 0x1c5, 27
  * 0x2ce, 25 0x2d0, 26 0x2d1, else 0x2cf), else boldly (1: 0x1ca, 0x1c8),
- * counting peeks where `PetParams` `+0xca`; each tick, the cursor about and
+ * counting peeks where `PetParams` `+0xca`; each tick, a double-click and
  * the apt's root holding fewer than ten, it climbs out (0x4c); cued (6), it
  * watches the mouse unless still and one time in two makes a sound (7); its
  * script done, by a draw of 2 to 7 over its peeks (unless its basket is 3 and
@@ -4076,8 +4076,8 @@ function catzKit(
         return push(0x1ca, 0x1c8);
       }
 
-      /* Each tick, the cursor about and no basket held, it climbs out (`+0x3612` kept). */
-      if (world.cursorAbout && kit.rootCount < 10) {
+      /* Each tick, a double-click and no basket held, it climbs out (`+0x3612` kept). */
+      if (world.doubleClicked && kit.rootCount < 10) {
         tick.state = 0x4c;
         return tick;
       }

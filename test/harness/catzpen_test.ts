@@ -100,7 +100,7 @@ const TRACE_BOTTLE = process.env.TRACE_BOTTLE === '1';
 /** `TRACE_TREAT=1`: the user holding out a treat at the cat's mouth, each 600 frames 400 of them, and the cat put to wait for it on every tenth tick of looking at things, passing the time, its moment, walking or grooming, a day of its own. */
 const TRACE_TREAT = process.env.TRACE_TREAT === '1';
 
-/** `TRACE_KIT=1`: the Adoption Kit, set up at frame 10 as the module's command 5 asks, the cursor about 20 frames of each 400, and at the 350th, in turn, the cat sent back to its basket, dropped into it and put in its fail-safe, a day of its own. */
+/** `TRACE_KIT=1`: the Adoption Kit, set up at frame 10 as the module's command 5 asks, a double-click 20 frames of each 400, and at the 350th, in turn, the cat sent back to its basket, dropped into it and put in its fail-safe, a day of its own. */
 const TRACE_KIT = process.env.TRACE_KIT === '1';
 
 /** `TRACE_NAP=1`: on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put in global state 21, CatNapz, a day of its own; starting a dream, cued to dream (6) once, and its cloud, which runs no script in the pen, cued that it has come (4) after 20 ticks; the second time, the dog's chase; 20 ticks into each dream's float, a bad dream, its breed kept at 2, and every other one the dream's mouse 300 ticks in. */
@@ -281,7 +281,7 @@ const ENTER_CASES = Array.from({ length: 60 }, (_, n) => [
   n % 4 === 0 ? 1 : 0,
 ]);
 
-/** Cases of the cursor about the cat in its moment: a seed, the brains' values and centres, its looks before it may go, idle action and sound owed. */
+/** Cases of a double-click with the cat in its moment: a seed, the brains' values and centres, its looks before it may go, idle action and sound owed. */
 const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
   (n * 22695477 + 99991) % 2147483648,
   ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 9 + b * 5 + ((n * b) % 5)) % LEVELS.length]),
@@ -352,7 +352,7 @@ const GLOBAL_CASES = Array.from({ length: 342 }, (_, n) => {
         : playing || chasing
           ? [0x17, 0x1b, 5, 6, 7, 9, 0xc, 0xe][n % 8]
           : -1,
-    /* The cursor about for the tick after, every other case. */
+    /* A double-click for the tick after, every other case. */
     n % 2,
     out,
   ];
@@ -957,7 +957,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
 
     expect(entered).toBe(ENTER_CASES.length);
 
-    /* And the cursor about: how the cat reacted, by what it left -- the
+    /* And a double-click: how the cat reacted, by what it left -- the
      * first global state it was put in, attacking or affectionate; what it
      * is after (`+0x35a6` 0x17, chasing; `+0x35a2` 1, running) -- or, none,
      * the tick it lingered on. */
@@ -1178,7 +1178,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             count: 0,
           },
           {
-            cursorAbout: about !== 0,
+            doubleClicked: about !== 0,
             /* (The case's cursor, moved or not, still so as it ticks.) */
             cursorMoved: c[26] !== 0,
             area3: place === 3,
@@ -2542,7 +2542,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           x35d2: b[89],
           x3516: field(18),
           area3: area === 3,
-          cursorAbout: b[90] !== 0,
+          doubleClicked: b[90] !== 0,
           minded: field(2) !== 0,
           soundPlaying: b[81] > 0,
         },
@@ -2686,7 +2686,7 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
                   mouseState: b[240],
                   origin: b[266] === undefined ? undefined : { x: b[265], y: b[266] },
                 },
-          cursorAbout: b[90] !== 0,
+          doubleClicked: b[90] !== 0,
           dream:
             b[258] === undefined
               ? undefined

@@ -50,7 +50,7 @@
  *   mode, its brains' effects, `+0x35a4`, `+0x35a6`, `+0x35d2` and the last
  *   ten actions pushed;
  * * for each case in `CURSOR.TXT`, `cursor seed`, and after a tick of the
- *   moment with the cursor about, `cursored` and the cat's state, the global
+ *   moment with a double-click, `cursored` and the cat's state, the global
  *   machine's history, `+0x35a2`, `+0x35a4`, `+0x35a6` and mode, then as
  *   `lingered`;
  * * for each case in `LINGER.TXT`, `linger seed`, and after a tick of the
@@ -1085,7 +1085,7 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
     /* And the moment's box (`+0x350c` to `+0x3512`), whether its mind is
      * made up (`+0x3514`), the sound owed (`+0x35a0`), `+0x35d2`, and
-     * whether the cursor is about (`PetParams` `+0x46`). */
+     * whether the left button was double-clicked (`PetParams` `+0x46`). */
     say(" %d %d %d %d %d %d %d %d", *(int __far *)(cat + 0x350c), *(int __far *)(cat + 0x350e),
         *(int __far *)(cat + 0x3510), *(int __far *)(cat + 0x3512), *(int __far *)(cat + 0x3514),
         *(int __far *)(cat + 0x35a0), *(int __far *)(cat + 0x35d2), *(int *)(params + 0x46));
@@ -2312,7 +2312,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     /* Each case in `CURSOR.TXT`: a line `seed`, the 12 brains' values and
      * their centres, then the moment's looks before it may go (`+0x3506`),
      * what it does meanwhile and a sound owed: the cat in its moment (21),
-     * minding the cursor (`+0x34ca`), the cursor about (`PetParams` `+0x46`),
+     * minding the cursor (`+0x34ca`), a double-click (`PetParams` `+0x46`),
      * its script done and no layered action playing, nothing it is after
      * (`+0x35a2`, `+0x35a4`, `+0x35a6`), the global machine's history marked;
      * a tick of the moment (612); and `cursored` and its state, the global
@@ -2514,7 +2514,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             quiet = 0;
 
             /* And a tick of the global state it is in (`GlobalCatStateMachine::Dispatch`, 491), C's
-             * `rand` from the seed again, the cursor about (`PetParams` `+0x46`) as the case says:
+             * `rand` from the seed again, a double-click (`PetParams` `+0x46`) as the case says:
              * `globaltick` and what it reads -- its global state, `+0x35a4`, `+0x35a6`, `+0x34ca`,
              * its place (0x1d) and the mouse's own state -- and `globalticked`, the two histories
              * marked again, what `PreMoment` readies (`+0x3516`, `+0x350a`, `+0x3506`), and
@@ -2963,7 +2963,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         if (forcing & 256) {
             *(int *)(params + 0) = n == 10 ? 5 : 0;
 
-            /* And the cursor about (`+0x46`) 20 frames of each 400, which
+            /* And a double-click (`+0x46`) 20 frames of each 400, which
              * has the cat climb out as it peeks; and at the 350th, out of
              * the Kit's state, in turn: the cat sent back to its basket
              * (`MakeCatReturnToBasket`, its slot `0x15c`), as its button

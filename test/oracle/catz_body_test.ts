@@ -92,7 +92,7 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
         y: 100 + ((Math.trunc(tick / 300) * 89) % 340),
       }),
       /* And about the pen every other minute. */
-      cursorAbout: (tick) => Math.trunc(tick / 600) % 2 === 1,
+      doubleClicked: (tick) => Math.trunc(tick / 600) % 2 === 1,
       /* And, on two days, the food bowl, the water bowl and the Cat Dancer off the shelf in the pen. */
       pen: () => (seed % 2 ? PEN : NONE),
       random,

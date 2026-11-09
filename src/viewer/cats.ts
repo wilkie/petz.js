@@ -304,8 +304,8 @@ const KIT_BASKETS = [
 /** The basket's pictures (CATZDLL type 2): its back and handle (16500) and its front (16501), and lit (16510, 16511). */
 let basketPictures: { dib: Dib; colours: number[]; green: number }[] = [];
 
-/** Each basket's breed's words, shown as it climbs out of it (`GiveBreedDescriptions`, string 0x233d + n). */
-let kitDescriptions: string[] = [];
+/** CATZDLL's strings (`RT_STRING`: in blocks of 16, each a length and its text), by id; '' where none. */
+let catzString: (id: number) => string = () => '';
 
 /**
  * The five baskets, their backs (0) or fronts (1), each at its rectangle;
@@ -350,6 +350,8 @@ let liveScruffed = false;
 let liveDownAt = { x: 0, y: 0 };
 let liveUpAt = { x: 0, y: 0 };
 let liveBasketLit = false;
+/** The cat's state last tick, so its breed's words show as it begins to climb out. */
+let liveKitState = 0;
 
 /**
  * What the playpen tells the cat of the pen's things, a notice a tick (`XApt::ParentNotify`):
@@ -363,8 +365,12 @@ const liveCommands: number[] = [];
 /** The hand down, to pet the cat: the right button held (the viewer's choice; the engine's host gives `PetParams` `+0x1e`). */
 let liveHand = false;
 
-/** Whether the cursor is about the pen (`PetParams` `+0x46`): the mouse over the stage. */
-let liveCursorAbout = false;
+/**
+ * Whether the left button was double-clicked since the last tick
+ * (`PetParams` `+0x46`: `CATZ.WAD`'s window procedure sets it on
+ * `WM_LBUTTONDBLCLK`, and each frame takes it and clears it).
+ */
+let liveDoubleClicked = false;
 
 /** The mouse's hole, where the harness's pen has it scaled to the stage: its target point. */
 const MOUSE_HOLE = { x: 206, y: 403 };
@@ -520,7 +526,7 @@ function goLive() {
     stage: LIVE_STAGE,
     cursor: () => liveCursor,
     /* (Petting, the hand down, the cursor is not about: `DoGSPetting` ends petting each tick it is.) */
-    cursorAbout: () => liveCursorAbout && !liveHand,
+    doubleClicked: () => liveDoubleClicked,
     /* The pen's things, and the mouse hole (0xe) where the mouse lives, at its hole. */
     pen: () => (mouseFiles ? new Map([...livePen, [0xe, MOUSE_HOLE]]) : livePen),
     random,
@@ -569,6 +575,8 @@ function goLive() {
     ...(kitMode
       ? {
           kit: { origin: KIT_ORIGIN, ca: 1 },
+          /* The Kit's text bar. */
+          words: (id: number) => (kitText.textContent = catzString(id)),
           /* Put in a basket, made again as its breed (`SetupNewBasket`), its brains the Kit's. */
           remade: (basket: number) => {
             const files_ = files.get(KIT_BREEDS[basket]);
@@ -719,6 +727,7 @@ function goLive() {
 
     const { state, global } = pet.tick();
     livePressed = false;
+    liveDoubleClicked = false;
 
     /* The Kit's baskets pressed, as the playpen's root has them after its sprites: none where the press took the cat or a thing. */
     if (pet.kit) {
@@ -731,12 +740,14 @@ function goLive() {
         (liveBasketLit && liveHeld);
     }
 
-    /* Climbing out, its breed's words; back in the baskets, none (`SetText` of kin 0x11 ""). */
-    if (pet.kit && state === 76) {
-      kitText.textContent = kitDescriptions[pet.kit.basket] ?? '';
+    /* Climbing out, its breed's words (`GiveBreedDescriptions`, 0x233d + its basket); back in the baskets, none (`SetText` of kin 0x11 ""). */
+    if (pet.kit && state === 76 && liveKitState !== 76) {
+      kitText.textContent = catzString(0x233d + pet.kit.basket);
     } else if (pet.kit && state === 73) {
       kitText.textContent = '';
     }
+
+    liveKitState = state;
 
     /* Dangling, hung from the cursor by its ball 0x24 (`DoDangling`). */
     if (state === 33) {
@@ -952,10 +963,9 @@ async function start(game: GameFiles) {
     }
   }
 
-  /* The breeds' words (`RT_STRING`, 0x233d to 0x2341: in a block of 16, each a length and its text). */
-  kitDescriptions = [0, 1, 2, 3, 4].map((n) => {
-    const id = 0x233d + n;
-    const block = engine.resources().find((r) => r.type === 6 && r.id === (id >> 4) + 1);
+  const strings = engine.resources().filter((r) => r.type === 6);
+  catzString = (id) => {
+    const block = strings.find((r) => r.id === (id >> 4) + 1);
 
     if (!block) {
       return '';
@@ -968,7 +978,7 @@ async function start(game: GameFiles) {
     }
 
     return new TextDecoder('latin1').decode(block.data.slice(at + 1, at + 1 + block.data[at]));
-  });
+  };
 
   /* The Adoption Kit's basket: its back and its front. */
   basketPictures = [16500, 16501, 16510, 16511].flatMap((want) => {
@@ -1164,9 +1174,12 @@ canvas.addEventListener('click', (event) => {
   livePen.set(kind, stageAt(event));
   liveNotices.push([kind, 1, 3, true], [kind, 1, 1, false]);
 });
-canvas.addEventListener('mouseenter', () => (liveCursorAbout = true));
+canvas.addEventListener('dblclick', (event) => {
+  if (event.button === 0) {
+    liveDoubleClicked = true;
+  }
+});
 canvas.addEventListener('mouseleave', () => {
-  liveCursorAbout = false;
   liveHeld = false;
   liveHand = false;
 
@@ -1177,7 +1190,6 @@ canvas.addEventListener('mouseleave', () => {
   }
 });
 canvas.addEventListener('mousemove', (event) => {
-  liveCursorAbout = true;
   liveCursor = stageAt(event);
 
   /* A thing dragged goes with the cursor. */

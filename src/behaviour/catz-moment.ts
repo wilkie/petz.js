@@ -268,11 +268,11 @@ export function catzMomentBegin(
   }
 }
 
-/** What the cursor about makes a cat in its moment do: chase it, be affectionate, run away, attack, or none. */
+/** What a double-click makes a cat in its moment do: chase it, be affectionate, run away, attack, or none. */
 export type CatzCursorReaction = 'chase' | 'affectionate' | 'run' | 'attack';
 
 /**
- * The cursor about while the cat minds it (`PetParams` `+0x46`, `+0x34ca`;
+ * A double-click while the cat minds it (`PetParams` `+0x46`, `+0x34ca`;
  * `DoCatMoment`, seg25:2f36 to 314f): it watches hard (mode 3) and will look
  * about at once, as though it had looked enough. Then, under its energy --
  * and, independent, one time in ten -- it chases the cursor (`locomote`)
@@ -314,8 +314,8 @@ export function catzMomentCursor(
 
 /** What the moment readied by `catzMomentTick` reads besides its own fields and `CatzMomentWorld`. */
 export interface CatzMomentTickWorld extends CatzMomentWorld {
-  /** Whether the cursor is about (`PetParams` `+0x46`), and whether the cat minds it (`+0x34ca`, set once its first script is done). */
-  cursorAbout: boolean;
+  /** Whether the left button was double-clicked (`PetParams` `+0x46`), and whether the cat minds it (`+0x34ca`, set once its first script is done). */
+  doubleClicked: boolean;
   minded: boolean;
 
   /** Whether a layered action plays (`GetLayeredFramesRemaining`), so that no sound is made. */
@@ -332,7 +332,7 @@ export interface CatzMomentTicked {
 
 /**
  * A tick of the moment (`DoCatMoment`, seg25:2ce9), not begun, its script
- * done: placed so (3), it walks to the stage's middle; the cursor about and
+ * done: placed so (3), it walks to the stage's middle; a double-click and
  * minded, it reacts to it (`catzMomentCursor`) -- chasing it or running
  * away, it walks off; turning affectionate or attacking, global states 14
  * and 1 -- and otherwise lingers on (`catzMomentLinger`); and then, its mind
@@ -349,7 +349,7 @@ export function catzMomentTick(
     return { state: 22, x35a6: 0 };
   }
 
-  if (world.cursorAbout && world.minded) {
+  if (world.doubleClicked && world.minded) {
     const reaction = catzMomentCursor(mind, moment, random);
 
     switch (reaction) {

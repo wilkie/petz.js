@@ -84,7 +84,15 @@ export interface CatzPetOptions {
    * the Kit is (`+0xdc`, `+0xde`), from which its baskets lie, and `+0xca`,
    * whether its kittens come out of themselves.
    */
-  kit?: { origin: { x: number; y: number }; ca: number };
+  kit?: {
+    origin: { x: number; y: number };
+    ca: number;
+    /** Which Kit it is (`PetParams` `+0xc6`, `+0xc8`), picking its things' words: 0 by default. */
+    edition?: { xc6: number; xc8: number };
+  };
+
+  /** Words for the Kit's text bar (`TextStatusBar`): a string of CATZDLL's (`RT_STRING`). */
+  words?: (string: number) => void;
 
   /** Put in a basket, the kitten made again as that basket's breed (`SetupNewBasket`): its brains and centres as made. */
   remade?: (basket: number) => { brains: number[]; centres: number[] } | undefined;
@@ -144,8 +152,8 @@ export interface CatzPetOptions {
   /** The things off the shelf in the pen, by kind, and where each is (its target point): none by default. */
   pen?: () => ReadonlyMap<number, { x: number; y: number }>;
 
-  /** Whether the cursor is about (`PetParams` `+0x46`), by the ticks gone: by default never. */
-  cursorAbout?: (tick: number) => boolean;
+  /** Whether the left button was double-clicked (`PetParams` `+0x46`), by the ticks gone: by default never. */
+  doubleClicked?: (tick: number) => boolean;
 
   /**
    * Where its head looks, as its states turn it (`SetHeadTracking`, the
@@ -345,7 +353,7 @@ export class CatzPet {
         );
       }
 
-      /* Peeking from its basket or climbing out, mid-script: the cursor about, it climbs out; cued, it has been in its basket (seg13). */
+      /* Peeking from its basket or climbing out, mid-script: a double-click, it climbs out; cued, it has been in its basket (seg13). */
       if (this.kit && (this.state === 74 || this.state === 76)) {
         const ticked = catzStateTick(
           this.state,
@@ -397,7 +405,7 @@ export class CatzPet {
   }
 
   /**
-   * A tick of its global state (`catzGlobalTick`): the cursor about, most
+   * A tick of its global state (`catzGlobalTick`): a double-click, most
    * ready its moment and have it; attacking after the mouse may run to the
    * catnip. Whether it went on to another state, so this tick is done.
    */
@@ -406,7 +414,7 @@ export class CatzPet {
       this.global,
       this.mind,
       {
-        cursorAbout: this.options.cursorAbout?.(this.ticks) ?? false,
+        doubleClicked: this.options.doubleClicked?.(this.ticks) ?? false,
         cursorMoved: false,
         area3: this.screenArea(0x1d) === 3,
         area1: this.screenArea(0x1d) === 1,
@@ -619,7 +627,7 @@ export class CatzPet {
    * the one read.
    */
   notify(kind: number, cond: number, state: number, flag: boolean) {
-    const message = catzChildRespond(kind, cond, state, flag);
+    const message = catzChildRespond(kind, cond, state, flag, !!this.kit);
 
     if (message !== undefined) {
       this.x33c0 = message;
@@ -642,11 +650,6 @@ export class CatzPet {
 
     const f = this.fields;
 
-    /* In the Kit on its way to its basket (`+0x35fc`), none is read. */
-    if (this.kit && this.x35fc) {
-      return false;
-    }
-
     const answer = this.kit ? catzKitMessage : catzMessage;
     const done = answer(
       this.mind,
@@ -663,6 +666,7 @@ export class CatzPet {
         spray: this.thingAt(2),
         flea: this.thingAt(3),
         x35f6: this.kit?.basket,
+        x35fc: this.x35fc,
         ...(this.kit
           ? {
               shelved: Array.from({ length: 16 }, (_, kind) => this.isShelved(kind)),
@@ -670,6 +674,7 @@ export class CatzPet {
               stage: this.options.stage,
               x35fa: this.kit.out ?? 0,
               x35f8: this.kit.last ?? -1,
+              edition: this.options.kit?.edition,
             }
           : {}),
       },
@@ -678,6 +683,10 @@ export class CatzPet {
 
     if (!done) {
       return false;
+    }
+
+    if (done.words !== undefined) {
+      this.options.words?.(done.words);
     }
 
     if (done.x35a4 !== undefined) {
@@ -1060,7 +1069,7 @@ export class CatzPet {
           x35d2: 0,
           x3516: this.readied?.after ?? 0,
           area3: this.screenArea(0x1d) === 3,
-          cursorAbout: this.options.cursorAbout?.(this.ticks) ?? false,
+          doubleClicked: this.options.doubleClicked?.(this.ticks) ?? false,
           minded: this.minded,
           soundPlaying: false,
         },
@@ -1578,7 +1587,7 @@ export class CatzPet {
       ...(this.kit
         ? {
             kit: { ...this.kit, mouseState: this.options.mouse?.()?.state ?? 1 },
-            cursorAbout: this.options.cursorAbout?.(this.ticks) ?? false,
+            doubleClicked: this.options.doubleClicked?.(this.ticks) ?? false,
           }
         : {}),
       petting: this.pettingNow(),

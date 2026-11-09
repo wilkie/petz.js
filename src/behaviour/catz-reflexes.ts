@@ -487,6 +487,12 @@ export interface CatzMessaged {
   x35f6?: number;
   x35f8?: number;
 
+  /** On its way to its basket (`+0x35fc`): the pen's own messages, 1 to 21, not read. */
+  x35fc?: number;
+
+  /** Which Kit it is (`PetParams` `+0xc6`, `+0xc8`), which picks the words its things show. */
+  edition?: { xc6: number; xc8: number };
+
   /** Its draw rectangle, and the spray's (kin 2) and flea spray's (kin 3) target points. */
   rect?: CatzBox;
   spray?: { x: number; y: number };
@@ -513,6 +519,9 @@ export interface CatzMessageDone {
   pushes?: number[];
   head?: boolean;
   ignored?: { kin: number; x35b4?: number };
+
+  /** Words shown on the Kit's text bar (`TextStatusBar`, the cat's slot `0x158`): a string of CATZDLL's. */
+  words?: number;
 }
 
 /**
@@ -622,6 +631,11 @@ export function catzMessage(
   const asleep = state === 0x1c;
   const age = mind.brains[CATZ_BRAIN.age];
   const liveliness = mind.brains[CATZ_BRAIN.liveliness];
+
+  /* On its way to its basket, only a basket's message is read (seg23:1e6c). */
+  if (seen.x35fc && (message < 22 || message > 26)) {
+    return {};
+  }
 
   switch (message) {
     case 2: {
@@ -833,7 +847,10 @@ export function catzMessage(
         return undefined;
       }
 
-      return seen.x35f6 === message - 22 ? { global: 22 } : {};
+      /* Going back, "… is returning to its basket" (`GiveReturningKittenMessage`, its slot `0x168`); else "… please put … away" (seg23:31ae): 0x2355 and 0x2350 on by its basket. */
+      return seen.x35f6 === message - 22
+        ? { global: 22, words: 0x2355 + seen.x35f6 }
+        : { words: 0x2350 + seen.x35f6 };
     case 18:
       if (global === 19) {
         return {};
@@ -875,6 +892,55 @@ export function catzMessage(
 }
 
 /** The Adoption Kit's own messages (28 to 42), each the kind of sprite it asks of the shelf and the pen's message it is, off it. */
+/**
+ * The Kit's own messages' words (seg23:14e8 on, a jump table at seg23:311c
+ * by the message less 0x1c): each its thing's line where `PetParams`
+ * `+0xc6` is set; else, where it has them, "Soon you can …" with `+0xc8`
+ * and "Adopt Now …" without. The paint bucket, the jingle ball and the
+ * squeaky toy have their line with either set; the Cat Dancer, the yarn,
+ * the cheese and the milk bottle always. 42 is "Please wait for the kitten
+ * to return.", with a sound (0x9f).
+ */
+const CATZ_KIT_WORDS: Record<
+  number,
+  { line: number; soon?: number; adopt?: number; either?: boolean }
+> = {
+  28: { line: 0x2342, adopt: 0x2367, either: true },
+  29: { line: 0x2343, soon: 0x2377, adopt: 0x2362 },
+  30: { line: 0x2344, soon: 0x2378, adopt: 0x2363 },
+  31: { line: 0x2345, soon: 0x2379, adopt: 0x2364 },
+  32: { line: 0x2346 },
+  33: { line: 0x234c, adopt: 0x2369, either: true },
+  34: { line: 0x2347 },
+  35: { line: 0x2348, adopt: 0x2368, either: true },
+  36: { line: 0x2349 },
+  37: { line: 0x234a, soon: 0x237a, adopt: 0x2365 },
+  38: { line: 0x234b, soon: 0x237b, adopt: 0x2366 },
+  39: { line: 0x234d, soon: 0x237c, adopt: 0x237e },
+  40: { line: 0x234e, soon: 0x237d, adopt: 0x237f },
+  41: { line: 0x234f },
+  42: { line: 0x235c },
+};
+
+/** A Kit message's words, by which Kit it is. */
+export function catzKitWords(message: number, edition = { xc6: 0, xc8: 0 }) {
+  const words = CATZ_KIT_WORDS[message];
+
+  if (!words) {
+    return undefined;
+  }
+
+  if (words.adopt === undefined || edition.xc6) {
+    return words.line;
+  }
+
+  if (edition.xc8) {
+    return words.either ? words.line : (words.soon ?? words.line);
+  }
+
+  return words.adopt;
+}
+
 const CATZ_KIT_MESSAGES: Record<number, [number, number]> = {
   29: [2, 15],
   31: [4, 7],
@@ -899,8 +965,8 @@ const CATZ_KIT_MESSAGES: Record<number, [number, number]> = {
  * (`CATZ_KIT_MESSAGES`); 28, 30, 37 and 42 only show them. Then, in its
  * baskets, only 22 to 26 -- a basket chosen: a sound (0xe7), it lets go,
  * `+0x35fa` 1, its basket `+0x35f8` where none, the same cat coming out or
- * another -- and else as the pen's (`catzMessage`). Its words, and the
- * baskets' answers, are not reimplemented.
+ * another -- and else as the pen's (`catzMessage`). Its own show their
+ * words (`catzKitWords`), even on the shelf.
  */
 export function catzKitMessage(
   mind: CatzMind,
@@ -930,16 +996,30 @@ export function catzKitMessage(
 
   let asked = message;
 
+  let words: number | undefined;
+
   if (message >= 28 && message <= 42) {
+    words = catzKitWords(message, seen.edition);
     const goes = CATZ_KIT_MESSAGES[message];
 
     if (!goes || seen.shelved[goes[0]]) {
-      return {};
+      return { words };
     }
 
     asked = goes[1];
   }
 
+  const done = catzKitAsked(mind, asked, seen, random);
+  return done && words !== undefined ? { ...done, words: done.words ?? words } : done;
+}
+
+/** A Kit message after its words: a basket in its baskets, else as the pen's. */
+function catzKitAsked(
+  mind: CatzMind,
+  asked: number,
+  seen: CatzMessaged,
+  random: (n: number) => number
+): CatzMessageDone | undefined {
   const { state } = mind;
 
   if (state === 73 || state === 74 || state === 75) {
