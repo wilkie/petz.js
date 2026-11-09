@@ -778,6 +778,11 @@ export class CatzPet {
       return;
     }
 
+    /* In its baskets (73), no more (`CatSprite::Update`, seg16:26b5). */
+    if (this.state === 73) {
+      return;
+    }
+
     /* Picked up by the scruff (`catzScruff`): the button pressed, not held, within 100 of its ball 2. */
     const buttons = this.options.buttons?.();
 
@@ -792,17 +797,32 @@ export class CatzPet {
         point: this.point,
         x9e: 0,
         hidden: none,
-        x35fc: 0,
-        x35fa: 0,
-        x35f6: -1,
-        x35f8: 0,
+        x35fc: this.x35fc,
+        x35fa: this.kit?.out ?? 0,
+        x35f6: this.kit?.basket ?? -1,
+        x35f8: this.kit?.last ?? 0,
       });
+
+      /* In the Kit, its basket kept (`+0x35f8` where none) and marked been in; out of it from 73 to 76, its breed's words (`GiveBreedDescriptions`, its slot `0x3d8`). */
+      if (scruff.dangles && this.kit && scruff.x35f6 !== undefined) {
+        this.kit.basket = scruff.x35f6;
+        this.kit.baskets[scruff.x35f6] = 1;
+
+        if (scruff.outOfBasket) {
+          this.options.words?.(0x233d + scruff.x35f6);
+        }
+      }
 
       if (scruff.dangles) {
         this.options.scruffed?.();
         this.change(undefined, 33, 0);
         return;
       }
+    }
+
+    /* Peeking, ending a peek, climbing out, jumping or dropping in (74 to 78), or on its way to its basket (`+0x35fc`): no more (seg16:26d9 on). */
+    if ((this.state >= 74 && this.state <= 78) || this.x35fc) {
+      return;
     }
 
     const mouse = this.options.mouse?.();

@@ -186,4 +186,48 @@ describe('a Catz kitten in the Adoption Kit', () => {
     pet.basketHitTest({ down: false, downAt: middle(other), upAt: middle(other) });
     expect((pet as unknown as { x33c0: number }).x33c0).toBe(0x2a);
   });
+  /* `HandleScruff` in the Kit: picked up as it peeks, its breed's words; on its way back, not at all. */
+  it('is picked up from its basket by the scruff, and not on its way back', () => {
+    const rand = borlandRand(5);
+    const words: number[] = [];
+    let pressed = false;
+    const pet = new CatzPet({
+      brains: BRAINS,
+      centres: CENTRES,
+      stage: { left: 0, top: 0, right: 640, bottom: 480 },
+      kit: { origin: { x: 0, y: 40 }, ca: 1 },
+      play: () => 10,
+      random: (n) => rand() % n,
+      buttons: () => ({ pressed, held: false }),
+      cursor: () => ({ x: 300, y: 300 }),
+      ballAt: () => ({ x: 300, y: 300 }),
+      words: (id) => words.push(id),
+    });
+
+    for (let tick = 0; tick < 50 && pet.state !== 74; tick++) {
+      pet.tick();
+    }
+    expect(pet.state).toBe(74);
+    const basket = pet.kit!.basket;
+    const fields = pet as unknown as { x35fc: number };
+
+    /* On its way back to its basket (`+0x35fc`), a press does nothing. */
+    fields.x35fc = 1;
+    pressed = true;
+    pet.tick();
+    expect(pet.state).not.toBe(33);
+    fields.x35fc = 0;
+    pressed = false;
+
+    for (let tick = 0; tick < 50 && pet.state !== 74; tick++) {
+      pet.tick();
+    }
+    pressed = true;
+    pet.tick();
+    pressed = false;
+    expect(pet.state).toBe(33);
+    expect(words).toContain(0x233d + pet.kit!.basket);
+    expect(pet.kit!.baskets[pet.kit!.basket]).toBe(1);
+    expect(basket).toBeGreaterThanOrEqual(0);
+  });
 });
