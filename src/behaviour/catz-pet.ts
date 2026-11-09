@@ -232,8 +232,9 @@ const REIMPLEMENTED = new Set([
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  1, 3, 4, 8, 14, 20, 25, 38, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52,
-  54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  1, 3, 4, 8, 14, 20, 25, 38, 53, 62, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48,
+  49, 50, 51, 52, 54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
+  79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -1553,6 +1554,19 @@ export class CatzPet {
       this.fields.ticks = 0;
     }
 
+    /* Walking on (`DoCatPerformLocomote`, seg25:07d5): not there before (`+0x35aa`), not walked (`+0x34ca`), no strides (`+0x3502`), and its head on what it walks to (3000): what it plays with where it walks to a point (`+0x35a2`), else what it walks to. */
+    if (state === 23) {
+      const f = this.fields;
+      f.x35aa = 0;
+      f.passed = 0;
+      f.count = 0;
+      this.options.head?.({
+        kind: (f.x35a2 ? f.x35a4 : f.x35a6) ?? 0,
+        speed: 3000,
+        shelved: false,
+      });
+    }
+
     if (!ENTERED.has(state)) {
       return;
     }
@@ -1626,6 +1640,7 @@ export class CatzPet {
     }
 
     if (ticked.count !== undefined) f.count = ticked.count;
+    if (ticked.x35c2 !== undefined) f.x35c2 = ticked.x35c2;
     if (ticked.x35d2 !== undefined) f.x35d2 = ticked.x35d2;
     if (ticked.x35d4 !== undefined) f.x35d4 = ticked.x35d4;
 

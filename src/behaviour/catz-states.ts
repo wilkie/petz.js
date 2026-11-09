@@ -575,6 +575,9 @@ export interface CatzStateTick {
   /** The conditions it set its things to (`XApt::CatSetCond`, seg2:02ce): each kind and its condition, in turn. */
   conds?: [number, number][];
 
+  /** A point it keeps (`+0x35c2`, `+0x35c4`), where it kept one: arriving affectionate, the cursor's; at a treat the user holds, the treat's. */
+  x35c2?: { x: number; y: number };
+
   /** What is left in the food bowl (`+0x35d2`) and of the catnip (`+0x35d4`), where a bite took some. */
   x35d2?: number;
   x35d4?: number;
@@ -1395,10 +1398,12 @@ function catzWalkOn(
   const { width, height } = world.size!;
   const at = world.point!;
   const G = world.global;
+  /* Its script done, it has walked (`+0x34ca` 1). */
   const tick: CatzStateTick = {
     energy: brain(CATZ_BRAIN.energy),
     fullness: brain(CATZ_BRAIN.fullness),
     count: world.count,
+    passed: 1,
     pushes: [],
     head: [],
   };
@@ -1771,6 +1776,11 @@ function catzArrive(
       if (off && kind === 0xf) {
         tick.global = 5;
       } else if (off && kind === 0xb) {
+        /* The treat held, it keeps where it is (seg25:17e3) and waits for it. */
+        if (world.walkedToHeld && world.walkedToAt) {
+          tick.x35c2 = { ...world.walkedToAt };
+        }
+
         tick.state = world.walkedToHeld ? 0x24 : 0x26;
       } else {
         tick.state = off && !world.walkedToHeld ? 0x26 : 0x23;
@@ -1887,6 +1897,8 @@ function catzArrive(
           return;
         }
 
+        /* It keeps the cursor's point (seg25:1a85). */
+        tick.x35c2 = { ...at };
         tick.state = CATZ_STATE.alignToTarget;
         return;
       }
