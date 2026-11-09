@@ -1,4 +1,6 @@
 import {
+  catzChildRespond,
+  catzKitLocked,
   catzKitMessage,
   catzKitText,
   catzKitWords,
@@ -141,5 +143,24 @@ describe("the Catz Adoption Kit's text", () => {
     expect(run(300, { state: 76, global: 22, basket: 3, age: 0, xca: 1, xea: 1 }).shown).toEqual(
       []
     );
+  });
+});
+
+/** The Kit's shelf (`XApt::SetupToys`): what is locked, by its edition, and what a locked thing pressed says. */
+describe("the Catz Adoption Kit's shelf", () => {
+  it('locks all but the Cat Dancer, yarn, cheese, mouse hole and bottle; with +0xc8 fewer; with +0xc6 none', () => {
+    const open = (edition?: { xc6: number; xc8: number }) =>
+      Array.from({ length: 15 }, (_, n) => n + 1).filter((kind) => !catzKitLocked(kind, edition));
+    expect(open()).toEqual([5, 6, 8, 0xe, 0xf]);
+    expect(open({ xc6: 0, xc8: 1 })).toEqual([1, 5, 6, 7, 8, 9, 0xe, 0xf]);
+    expect(open({ xc6: 1, xc8: 0 })).toHaveLength(15);
+  });
+
+  it("a locked jingle ball pressed: the Kit's message, and its words, the ball still on the shelf", () => {
+    const message = catzChildRespond(7, 1, 3, true, true);
+    expect(message).toBe(35);
+    expect(catzKitMessage(MIND, message!, seen({ shelved: Array(16).fill(true) }), never)).toEqual({
+      words: 0x2368,
+    });
   });
 });

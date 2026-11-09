@@ -53,6 +53,7 @@ import {
 import { initCatzBrains, updateCatzBrain } from '../behaviour/catz-brain.ts';
 import { CatzBody } from '../behaviour/catz-body.ts';
 import { CatzPet } from '../behaviour/catz-pet.ts';
+import { catzKitLocked } from '../behaviour/catz-reflexes.ts';
 import { catzBasketHit } from '../behaviour/catz-states.ts';
 import { CatzMouseLive, readMouseFactors } from '../behaviour/catz-mouse-live.ts';
 import {
@@ -373,8 +374,8 @@ let liveHand = false;
  */
 let liveDoubleClicked = false;
 
-/** Whether the cursor is on one of the live cat's balls. */
-let liveOverCat: () => boolean = () => false;
+/** Whether a point on the stage is on one of the live cat's balls. */
+let liveOverCat: (at: { x: number; y: number }) => boolean = () => false;
 
 /** The mouse's hole, where the harness's pen has it scaled to the stage: its target point. */
 const MOUSE_HOLE = { x: 206, y: 403 };
@@ -639,8 +640,7 @@ function goLive() {
     cues: () => body.shown?.step.cues ?? [],
   });
   made.pet = pet;
-  liveOverCat = () =>
-    !!body.shown && placer.ballAt(body.shown.rect, body.shown.pose, liveCursor) >= 0;
+  liveOverCat = (at) => !!body.shown && placer.ballAt(body.shown.rect, body.shown.pose, at) >= 0;
 
   /* The mouse in its hole, its body its own, at scales of 200 (`InitMouseSprite`). */
   const mouseScales = { pet: 200, ball: 200 };
@@ -1154,7 +1154,7 @@ canvas.addEventListener('mouseup', (event) => {
 canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 canvas.addEventListener('click', (event) => {
   /* (A press that picked up a thing, or on the cat, petting it, puts nothing in the pen.) */
-  if (!live || liveGrabbed || liveOverCat()) {
+  if (!live || liveGrabbed || liveOverCat(stageAt(event))) {
     return;
   }
 
@@ -1163,8 +1163,15 @@ canvas.addEventListener('click', (event) => {
     return;
   }
 
-  /* Taken off the shelf and dragged (3, the user's), then let go (1) in the pen. */
   const kind = Number(thingSelect.value);
+
+  /* In the Kit, a locked thing only pressed on its shelf: it stays there and tells the cat so (kind, 1, 3, 1). */
+  if (kitInput.checked && catzKitLocked(kind)) {
+    liveNotices.push([kind, 1, 3, true]);
+    return;
+  }
+
+  /* Taken off the shelf and dragged (3, the user's), then let go (1) in the pen. */
   livePen.set(kind, stageAt(event));
   liveNotices.push([kind, 1, 3, true], [kind, 1, 1, false]);
 });

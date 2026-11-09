@@ -1258,3 +1258,22 @@ export function catzKitText(
   text.x3606++;
   return undefined;
 }
+
+/** The shelf's things the Kit leaves unlocked (`+0x1d0` 1): the Cat Dancer, yarn, cheese, mouse hole and milk bottle (`SetupToysLocked`, seg2:39c4); with `+0xc8`, the paint bucket, jingle ball and squeaky toy too (`SetupToysUnlocked`, seg2:3dc0). */
+const CATZ_KIT_UNLOCKED = [5, 6, 8, 0xe, 0xf];
+const CATZ_KIT_UNLOCKED_SOON = [1, 5, 6, 7, 8, 9, 0xe, 0xf];
+
+/**
+ * Whether a thing on the Kit's shelf is locked (`+0x1d0` 0), as
+ * `XApt::SetupToys` (seg2:2c17) has it: with `PetParams` `+0xc6` none
+ * (`SetupToysRetail`); else with `+0xc8` the fewer; else the more. Pressed,
+ * a locked thing stays on the shelf and only tells the root (kind, 1, 3, 1)
+ * (`XApt::DoUpdate`, seg6:03bb), so the cat shows its words.
+ */
+export function catzKitLocked(kind: number, edition = { xc6: 0, xc8: 0 }) {
+  if (edition.xc6) {
+    return false;
+  }
+
+  return !(edition.xc8 ? CATZ_KIT_UNLOCKED_SOON : CATZ_KIT_UNLOCKED).includes(kind);
+}
