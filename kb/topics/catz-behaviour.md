@@ -495,4 +495,4 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 ## Not yet
 
-The reflexes the pet does not yet run, though `catz-reflexes.ts` has them held against the engine: blinking (its own `blinkCatz` plays in the timeline),. The pen's own sprites besides the mouse: the dog, the toys' physics in the pet's world, the user holding things.
+Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`). Of the pen's own sprites, the dog (0x1a). Of the playpen, what its commands leave the cat (19, its window resized; 21, the camera) and the Adoption Kit's baskets in the viewer. Pressing a locked thing (the Kit's `DoUpdate`) and a swat's or the cat's taking a thing telling it so (`StrikeToy`, `ForceRelease`, (kind, its condition, 1, 0)).
