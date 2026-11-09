@@ -220,20 +220,20 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([1, 2, 3, 6, 7, 8, 9, 11, 12, 15, 16, 18, 19, 20, 22]);
+const BEGUN = new Set([1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 15, 16, 18, 19, 20, 22]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26, 27, 28,
-  29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52,
-  53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
-  77, 78, 79, 80, 81,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+  28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
+  52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,
+  76, 77, 78, 79, 80, 81,
 ]);
 
 /** The states whose entering is reimplemented (as the trace holds them); the rest are entered doing nothing until their first tick. */
 const ENTERED = new Set([
-  3, 4, 8, 14, 38, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52, 54,
-  55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  3, 4, 8, 14, 25, 38, 15, 16, 17, 18, 22, 24, 26, 31, 32, 33, 42, 44, 45, 46, 48, 49, 50, 51, 52,
+  54, 55, 58, 59, 60, 61, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
 ]);
 
 /** How deep entering may go on into entering, before it is cut short (and counted). */
@@ -387,8 +387,8 @@ export class CatzPet {
         }
       }
 
-      /* Eating from a bowl or nibbling catnip, mid-script: its bites as they are cued (`DoCatEatFromBowl`, `DoCatNibbleCatnip` ask every tick); the catnip moved or held, after it again. */
-      if (this.state === 40 || this.state === 43) {
+      /* Eating from a bowl, nibbling catnip or tripping, mid-script: what they are cued to (`DoCatEatFromBowl`, `DoCatNibbleCatnip`, `DoCatTripAndSkid` ask every tick); the catnip moved or held, after it again. */
+      if (this.state === 40 || this.state === 43 || this.state === 25) {
         const ticked = catzStateTick(
           this.state,
           this.mind,

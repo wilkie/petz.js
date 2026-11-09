@@ -137,6 +137,17 @@ export function catzGlobalBegin(
       begun.effects = [0, 0, 0, 0];
       begun.state = global === 18 ? 0x3f : 0x40;
       break;
+    case 4:
+      /* Catnip (`DoGSCatnip`, seg22:23e5), entering: liveliness, independence and seriousness 15; inclined to behaviour 21, one time in two a sound (1) and 0xdf; it walks to the catnip (22, `+0x35a6` and `+0x35a4` 4, `+0x35a2` 0). */
+      if (catzBehavior(mind, 21, random) !== 0 && percent() < 50) {
+        begun.sound = catzSound(mind, 1, random);
+        begun.pushes = [0xdf];
+      }
+
+      begun.kind = 4;
+      begun.x35a2 = 0;
+      begun.state = 22;
+      break;
     case 12:
       /* Ignoring something (`DoGSIgnore`, seg30:1964): no effects of its own; it ignores it (0x51). */
       begun.effects = [0, 0, 0, 0];

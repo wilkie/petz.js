@@ -66,6 +66,7 @@ export const CATZ_STATE = {
   afterPetting: 52,
   upsetPetting: 53,
   alignToTarget: 24,
+  tripAndSkid: 25,
   cursorLick: 54,
   lackingAffection: 55,
   sucklingUser: 44,
@@ -1103,6 +1104,42 @@ export function catzStateTick(
         headTrack: { kind: 0x16, speed: 2500 },
         pushed: 0xd7,
         pushes: [0xd7],
+      });
+    }
+    case CATZ_STATE.tripAndSkid: {
+      /* `DoCatTripAndSkid`, seg25:40f9 (running, walking on may trip so: one time in (100 less its age) / 20 + 1 in a hundred, with an age, placed 1): entering, `+0x34ca` 0 and 0x15b. Each tick, cued (4), a sound (8) and its rotation's fudger spun by `rand() % 8 - 4` (not played: the draw). Its script done the first time, `+0x34ca` 1 and its fudger stilled; under 50 liveliness a sound (2) and 0xe9. After, it readies its moment (`PreMoment`, after it idling, 0x93 meanwhile, not watching) and has it (8). Leaving, its fudger stilled. */
+      if (world.enter) {
+        return done({ passed: 0, pushed: 0x15b, pushes: [0x15b] });
+      }
+
+      let sound: number | undefined;
+
+      if (world.cues?.includes(4)) {
+        sound = catzSound(mind, 8, random);
+        random(8);
+      }
+
+      if (world.done === false) {
+        return done(sound === undefined ? {} : { sound });
+      }
+
+      if (world.passed === 0) {
+        if (mind.brains[CATZ_BRAIN.liveliness] < 50) {
+          return done({
+            passed: 1,
+            sound: catzSound(mind, 2, random),
+            pushed: 0xe9,
+            pushes: [0xe9],
+          });
+        }
+
+        return done({ passed: 1, ...(sound === undefined ? {} : { sound }) });
+      }
+
+      return done({
+        moment: catzPreMoment(mind, world.area3 ?? false, 6, 0x93, false, random),
+        global: 8,
+        ...(sound === undefined ? {} : { sound }),
       });
     }
     case CATZ_STATE.dangling:
