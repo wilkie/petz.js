@@ -635,6 +635,7 @@ export class CatzPet {
       }
 
       if (
+        this.state === 18 ||
         this.state === 40 ||
         this.state === 43 ||
         this.state === 25 ||

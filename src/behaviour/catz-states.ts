@@ -5498,7 +5498,12 @@ function catzJumping(
       );
     }
     default: {
+      /* Each tick (seg24:165c on), its script popped: cued 4, on what it jumped on (`+0x34ca` 1) -- what it is on moved since, cued 4 or 1, or on it and that moved, it goes with it or has its moment (none of its scripts cues 4 or 1, and the stage's shelf, kin 0x22, never moves: not reimplemented); its script done or cued 0, as 0x14f is halfway, its moment, not watching. */
       if (!world.enter) {
+        if (world.done === false) {
+          return world.cues?.includes(0) ? moment(false) : done({});
+        }
+
         return moment(false);
       }
 
