@@ -291,7 +291,13 @@ describe('a Catz cat on its own, placed and steered by its own frames', () => {
       found: () => !!body.shown?.there,
       cues: () => body.shown?.step.cues ?? [],
       mouse: () =>
-        made.mouse ? { state: made.mouse.mouse.fields.state, at: made.mouse.at } : undefined,
+        made.mouse
+          ? {
+              /* Hidden, in its hole (1), whatever its machine has yet. */
+              state: made.mouse.hidden ? 1 : made.mouse.mouse.fields.state,
+              at: made.mouse.at,
+            }
+          : undefined,
       inReach: () => {
         const prey = made.mouse?.rect;
         const shown = body.shown;

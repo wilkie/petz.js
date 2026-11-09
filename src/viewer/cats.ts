@@ -78,6 +78,7 @@ const yawInput = element<HTMLInputElement>('yaw');
 const playButton = element<HTMLButtonElement>('play');
 const liveButton = element<HTMLButtonElement>('live');
 const thingSelect = element<HTMLSelectElement>('thing');
+const kitInput = element<HTMLInputElement>('kit');
 const canvas = element<HTMLCanvasElement>('stage');
 const context = canvas.getContext('2d')!;
 
@@ -283,6 +284,56 @@ function placed(index: number) {
   return steps;
 }
 
+/** Where the Adoption Kit is on the stage (`PetParams` `+0xdc`, `+0xde`), from which its baskets lie. */
+const KIT_ORIGIN = { x: 0, y: 40 };
+
+/** Each basket's breed (`SetupNewBasket`'s files, seg13:1653): ASIAMESE, ACLOWN, APERSIAN, AHUNTER, ASCAREDY. */
+const KIT_BREEDS = ['SIAMESE', 'CLOWN', 'PERSIAN', 'HUNTER', 'SCAREDY'];
+
+/** Each basket's rectangle's corner from the Kit's origin (`GetBasketLocation`, seg13:113b), 118 by 145. */
+const KIT_BASKETS = [
+  { x: 0xa5, y: 0xaa },
+  { x: 0xfd, y: 0xb9 },
+  { x: 0x156, y: 0xbe },
+  { x: 0x1ae, y: 0xb4 },
+  { x: 0x207, y: 0xaf },
+];
+
+/** The basket's pictures (CATZDLL type 2): its back and handle (16500) and its front (16501). */
+let basketPictures: { dib: Dib; colours: number[]; green: number }[] = [];
+
+/** The five baskets, their backs (0) or fronts (1), each at its rectangle. */
+function drawBaskets(bitmap: IndexedBitmap, part: 0 | 1) {
+  const picture = basketPictures[part];
+
+  if (!picture) {
+    return;
+  }
+
+  for (const corner of KIT_BASKETS) {
+    drawPicture(
+      bitmap,
+      picture.dib,
+      picture.colours,
+      corner.x + KIT_ORIGIN.x,
+      corner.y + KIT_ORIGIN.y,
+      false,
+      picture.green
+    );
+  }
+}
+
+/** Which basket a point on the stage is in, -1 none. */
+function basketAt(at: { x: number; y: number }) {
+  return KIT_BASKETS.findIndex(
+    ({ x, y }) =>
+      at.x >= x + KIT_ORIGIN.x &&
+      at.x < x + KIT_ORIGIN.x + 118 &&
+      at.y >= y + KIT_ORIGIN.y &&
+      at.y < y + KIT_ORIGIN.y + 145
+  );
+}
+
 /** The stage the cat lives on, in the engine's pixels, drawn whole on the canvas. */
 const LIVE_STAGE = { left: 0, top: 0, right: 640, bottom: 480 };
 
@@ -426,10 +477,14 @@ function goLive() {
 
   const rand = borlandRand(Date.now() >>> 0);
   const random = (n: number) => rand() % n;
-  const cat = breed();
-  const shaped = extendFrames(frames, cat);
-  const { neck, butt } = skeletonOf(cat);
-  const placer = new CatzPlacer(cat, header, shaped, { age: 100 });
+  /* Its breed, frames and placer: in the Adoption Kit made again as each basket's kitten. */
+  let cat = breed();
+  let shaped = extendFrames(frames, cat);
+  let { neck, butt } = skeletonOf(cat);
+  let placer = new CatzPlacer(cat, header, shaped, { age: 100 });
+  const kitMode = kitInput.checked;
+  /* Where it is to be seated once its first frame is placed, made again in a basket. */
+  let seat: { x: number; y: number } | undefined;
   const fudgers = makeCatzFudgers();
   resetCatzEyelids(fudgers);
   [fudgers[6].value, fudgers[7].value] = [20, 20];
@@ -447,12 +502,13 @@ function goLive() {
     placer,
     angle: (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
     stage: LIVE_STAGE,
+    ...(kitMode ? { start: { x: LIVE_STAGE.left - 100, y: LIVE_STAGE.top - 100 } } : {}),
     fudgers,
     random,
     trackAt: (kind) => made.pet?.kinAt(kind),
   });
   /* Its brains as the engine makes them for its breed (`InitBrain`), its age by the slider. */
-  const brains = cat.catz?.factors
+  let brains = cat.catz?.factors
     ? initCatzBrains(cat.catz.factors, random, { age: Number(kittenInput.value) })
     : undefined;
   let clock = 0;
@@ -478,7 +534,13 @@ function goLive() {
     found: () => !!body.shown?.there,
     /* The pen's mouse, out of its hole or in it. */
     mouse: () =>
-      made.mouse ? { state: made.mouse.mouse.fields.state, at: made.mouse.at } : undefined,
+      made.mouse
+        ? {
+            /* Hidden, in its hole (1), whatever its machine has yet. */
+            state: made.mouse.hidden ? 1 : made.mouse.mouse.fields.state,
+            at: made.mouse.at,
+          }
+        : undefined,
     /* Its paws' reach (`IsSpriteCaught`): the box of balls 0x16 and 0x17, 70 wider and 40 taller each way, meeting the mouse's rectangle. */
     inReach: () => {
       const shown = body.shown;
@@ -501,6 +563,44 @@ function goLive() {
       );
     },
     mouseHeld: (how) => made.mouse?.catHolds(how),
+    /* The Adoption Kit: its kitten in the baskets, from the Kit's origin, coming out of itself (`PetParams` `+0xca` 1). */
+    ...(kitMode
+      ? {
+          kit: { origin: KIT_ORIGIN, ca: 1 },
+          /* Put in a basket, made again as its breed (`SetupNewBasket`), its brains the Kit's. */
+          remade: (basket: number) => {
+            const files_ = files.get(KIT_BREEDS[basket]);
+
+            if (!files_) {
+              return undefined;
+            }
+
+            cat = averageBreed(files_.adult, files_.kitten, Number(kittenInput.value), {
+              loseUp: FIDELITY.averageLosesUp,
+            });
+            shaped = extendFrames(frames, cat);
+            ({ neck, butt } = skeletonOf(cat));
+            placer = new CatzPlacer(cat, header, shaped, { age: 100 });
+            const at = made.pet?.basketAt(basket) ?? { x: 0, y: 0 };
+            body.rebreed(
+              shaped,
+              placer,
+              (frame) => (shaped[frame] ? catzFrameAngle(shaped[frame], neck, butt) : null),
+              at
+            );
+            seat = at;
+            brains = cat.catz?.factors
+              ? initCatzBrains(cat.catz.factors, random, {
+                  age: Number(kittenInput.value),
+                  kit: true,
+                })
+              : brains;
+            return brains
+              ? { brains: brains.map((b) => b.value), centres: brains.map((b) => b.centre) }
+              : undefined;
+          },
+        }
+      : {}),
     /* The button as the engine has it: pressed the tick it went down, held after. */
     buttons: () => ({ pressed: livePressed, held: liveHeld && !livePressed }),
     ballAt: (ball) =>
@@ -573,7 +673,14 @@ function goLive() {
     moveToys(random);
 
     /* The frame this tick shows, as `PopScript` pops it before the state's own tick. */
-    const shown = body.next();
+    let shown = body.next();
+
+    /* Made again in a basket: seated on its place once placed (`MoveDrawPt`). */
+    if (seat && shown) {
+      body.moveTo(seat);
+      shown = body.shown;
+      seat = undefined;
+    }
 
     /* Where it is, for its states: its rectangle, its target point the
      * middle of it, and which way it faces (`+0x688`). */
@@ -585,7 +692,7 @@ function goLive() {
         y: Math.trunc((rect.top + rect.bottom) / 2),
       };
       pet.fields.x688 = body.facing;
-      drawLive(cat, shaped, placer, shown, mouse);
+      drawLive(cat, shaped, placer, shown, mouse, kitMode);
     }
 
     /* A command's message this tick. */
@@ -626,7 +733,7 @@ function goLive() {
       clock: Math.trunc(clock),
     });
     ticks++;
-    status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}, at ${pet.point.x}, ${pet.point.y}${body.queue.length ? `, ${body.queue.length} frames to play` : ''}${mouse ? `; the mouse ${mouse.hidden ? 'in its hole' : 'out'} (${mouse.mouse.fields.global}/${mouse.mouse.fields.state}) at ${mouse.at.x}, ${mouse.at.y}` : ''}.`;
+    status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}, at ${pet.point.x}, ${pet.point.y}${body.queue.length ? `, ${body.queue.length} frames to play` : ''}${pet.kit ? `; in the Adoption Kit, basket ${pet.kit.basket}` : ''}${mouse ? `; the mouse ${mouse.hidden ? 'in its hole' : 'out'} (${mouse.mouse.fields.global}/${mouse.mouse.fields.state}) at ${mouse.at.x}, ${mouse.at.y}` : ''}.`;
   }, 100);
 }
 
@@ -636,7 +743,8 @@ function drawLive(
   shaped: Frame[],
   placer: CatzPlacer,
   { step, rect, pose }: { step: CatzStep; rect: CatzPlaced['rect']; pose: CatzPose },
-  mouse?: CatzMouseLive
+  mouse?: CatzMouseLive,
+  kitMode = false
 ) {
   const frame =
     step.layer && shaped[step.layer.first] && shaped[step.layer.frame]
@@ -676,6 +784,11 @@ function drawLive(
     }
   }
 
+  /* The Adoption Kit's baskets: their backs and handles behind the kitten (16500). */
+  if (kitMode) {
+    drawBaskets(bitmap, 0);
+  }
+
   /* The mouse, out of its hole, behind the cat. */
   const shownMouse = mouse?.body.shown;
 
@@ -703,6 +816,11 @@ function drawLive(
     translate,
     ...poseOf(step.fudged),
   });
+
+  /* And their fronts over it, so it sits in its basket (16501). */
+  if (kitMode) {
+    drawBaskets(bitmap, 1);
+  }
 
   const pixels = new ImageData(bitmap.toRgba(palette), bitmap.width, bitmap.height);
   const small = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -806,6 +924,19 @@ async function start(game: GameFiles) {
       penPictures.set((id - 200) / 1000, { dib, colours: mapColours(dib, palette), green });
     }
   }
+
+  /* The Adoption Kit's basket: its back and its front. */
+  basketPictures = [16500, 16501].flatMap((want) => {
+    const found = engine.resources().find(({ type, id }) => type === 2 && id === want);
+
+    if (!found) {
+      return [];
+    }
+
+    const dib = parseDib(found.data);
+    const green = dib.colours.findIndex(([r, g, b]) => r === 0 && g === 255 && b === 0);
+    return [{ dib, colours: mapColours(dib, palette), green }];
+  });
 
   const data = await game.read(`${RESOURCE}/CAT.SCP`);
   scripts = parseScripts(data, catzArity(readCatzOpcodes(engine)), SCRIPTS.catz);
@@ -973,6 +1104,14 @@ canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 canvas.addEventListener('click', (event) => {
   /* (A press that picked up the cat, or a thing, puts nothing in the pen.) */
   if (!live || liveScruffed || liveGrabbed) {
+    return;
+  }
+
+  /* In the Adoption Kit, a basket clicked: its command (`BasketHitTest`, `DoCommand` 0x821 + n), message 0x16 + n. */
+  const basket = kitInput.checked ? basketAt(stageAt(event)) : -1;
+
+  if (basket >= 0) {
+    liveCommands.push(0x16 + basket);
     return;
   }
 

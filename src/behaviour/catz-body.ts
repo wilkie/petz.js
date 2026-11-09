@@ -504,6 +504,28 @@ export class CatzBody {
     }
   }
 
+  /**
+   * Made again as another breed (the Adoption Kit's `SetupNewBasket`): its
+   * frames reshaped, placer and frames' angles its new breed's; what was
+   * queued dropped, and it put at a point, standing in its new shape.
+   */
+  rebreed(
+    shaped: Frame[],
+    placer: CatzPlacer,
+    angle: (frame: number) => number | null,
+    at: CatzPoint
+  ) {
+    Object.assign(this.options, { shaped, placer, angle, start: at });
+    this.queue.length = 0;
+    this.layered.length = 0;
+    this.shown = undefined;
+    this.tail = null;
+    this.held = undefined;
+    this.leaping = undefined;
+    this.leapFrom = undefined;
+    this.armed = undefined;
+  }
+
   /** A layered action pushed on its own (`PushLayeredAction`): its frames, one a tick, drawn over what is shown. */
   private readonly layered: { first: number; frame: number }[] = [];
 

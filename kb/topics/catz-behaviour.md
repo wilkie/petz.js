@@ -447,6 +447,14 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
   - **Messages:** read through `catzKitMessage` with the shelf, `+0x35fa`, its last basket and its stage, and none while on its way (`+0x35fc`). Its own basket clicked while out, it is sent back (`MakeCatReturnToBasket`: `+0x33be` 2, `+0x35fc` 1, the Kit). In the baskets, another basket clicked becomes its basket.
   - **Headless** (`test/behaviour/catz_pet_test.ts`), three days of 3,000 ticks, the cursor about 20 of each 400 and its own basket clicked now and then: it began, sat in its baskets, peeked, came out, was sent back, walked to above its basket and jumped in (77), made again as each basket it was put in (never the same twice running), without fault.
 
+- [[inferred]] The Kit in the viewer (an Adoption Kit box, then Live).
+  - **The baskets:** its origin is (0, 40). The five baskets are drawn at their rectangles from it, each the basket's back and handle (16500) behind the kitten and its woven front (16501) over it, so it sits in it. The lit pictures (16510, 16511) and the hover highlight (kin 0x19) are not used.
+  - **The kitten:** begun 100 above and left of the stage's corner.
+  - **Made again:** put in a basket, it is made again as that basket's breed: its file averaged with its kitten's by the slider, its brains made as the Kit makes them (`initCatzBrains`, `kit`). The body is made again too (`CatzBody.rebreed`) and seated on the basket's place.
+  - **Clicks:** a click on a basket is its command (message 0x16 + n).
+  - **The mouse:** hidden in its hole, it is told to the cat as in it (state 1), whatever its machine has yet. Before, its first tick's state 0 had the cat see it out and play at once.
+  - **Run so:** the kitten began, peeked from its baskets and went back, climbed out (76) and played or was affectionate. Its own basket clicked once it was out, it walked back to above it, jumped in (77) and was in the baskets again. The screenshot had a yellow kitten in basket 4 and, jumping in, coming down into it.
+
 ## CatNapz
 
 - [[read out]] CatNapz is global state 21 (`DoGSCatNapz`, seg18:0000). Entering, the cloud's offset (`+0x35f0`, `+0x35f2`) is 0; one time in ten (`rand() % 101` under 10) it chases the dog (0x46, `DoCatStartDogChase`); else `+0x35ee` is 0 and, one time in two, it pushes 0x2a6, has its energy put at 20 (`+0x302c`'s slot `0x10`), its slot `0x238` 0, `+0x35a6` 0, and walks (22); else it lies down tired (26). Leaving, its dream sprite (kin 0x13), cloud (kin 0x10) and kin 0x1a are put away (slot `0x7c`), `+0x3502` 100, and its slot `0x3a8` and brains' `+0x3360` and `+0x1f6` are set back. Its cloud (`CloudSprite`, seg32) and dream sprite (`DreamSprite`, seg32) are made by `InitPetModule` with the rest, so they are there in the playpen.
@@ -529,4 +537,4 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 ## Not yet
 
-Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`). Of the playpen, the Adoption Kit's baskets in the viewer. Pressing a locked thing (the Kit's `DoUpdate`), and the cat's taking a thing from the user telling the cat so (`ForceRelease`); a swat's does (`StrikeToy`, (kind, 1, 1, 0)), in the viewer.
+Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`). Pressing a locked thing (the Kit's `DoUpdate`), and the cat's taking a thing from the user telling the cat so (`ForceRelease`); a swat's does (`StrikeToy`, (kind, 1, 1, 0)), in the viewer.
