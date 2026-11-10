@@ -93,6 +93,7 @@ const liveButton = element<HTMLButtonElement>('live');
 const thingSelect = element<HTMLSelectElement>('thing');
 const kitInput = element<HTMLInputElement>('kit');
 const playpenSelect = element<HTMLSelectElement>('playpen');
+const soundInput = element<HTMLInputElement>('sound');
 const kitText = element<HTMLParagraphElement>('kit-text');
 const canvas = element<HTMLCanvasElement>('stage');
 const context = canvas.getContext('2d')!;
@@ -645,6 +646,8 @@ function goLive() {
     dropped: () => body.drop(),
     entered: (state) => body.entered(state),
     layer: (action) => body.layer(action),
+    /* A purr (`HandlePurring`): the one playing stopped, this one played (by its number, as the scripts' sounds). */
+    purr: (sound) => playSound(sound, true),
     layering: () => body.layering,
     head: (look) => body.look(look),
     strike: strikeToy,
@@ -887,6 +890,14 @@ function goLive() {
 
     /* And the dog's, popped before the chase looks where it is; and the cloud's own tick. */
     made.dog?.next();
+
+    /* What the cat's and the dog's new frames play. */
+    for (const sound of [
+      ...body.heard,
+      ...(made.dog && !made.dog.hidden ? made.dog.body.heard : []),
+    ]) {
+      playSound(sound);
+    }
     made.cloud?.tick();
 
     /* Made again in a basket: seated on its place once placed (`MoveDrawPt`). */
@@ -1000,6 +1011,14 @@ function goLive() {
         clock: Math.trunc(clock),
       });
     }
+
+    /* And the mouse's, out of its hole. */
+    if (mouse && !mouse.hidden) {
+      for (const sound of mouse.body.heard) {
+        playSound(sound);
+      }
+    }
+
     ticks++;
     status.textContent = `On its own, tick ${ticks}: state ${state}, global state ${global}, at ${pet.point.x}, ${pet.point.y}${body.queue.length ? `, ${body.queue.length} frames to play` : ''}${pet.kit ? `; in the Adoption Kit, basket ${pet.kit.basket}` : ''}${mouse ? `; the mouse ${mouse.hidden ? 'in its hole' : 'out'} (${mouse.mouse.fields.global}/${mouse.mouse.fields.state}) at ${mouse.at.x}, ${mouse.at.y}` : ''}.`;
   }, 100);
@@ -1424,6 +1443,17 @@ async function start(game: GameFiles) {
   const preamble = new DataView(data.buffer, data.byteOffset + data.indexOf(0) + 1);
   positions = { count: preamble.getUint16(0, true), neutral: preamble.getUint16(2, true) };
 
+  /* The sounds' list, where it is. */
+  soundFiles = game;
+  soundNames = await text(`${RESOURCE}/CATSND.TXT`)
+    .then((list) =>
+      list
+        .split(/\r?\n/)
+        .slice(1)
+        .map((line) => line.trim())
+    )
+    .catch(() => []);
+
   /* And the mouse's, where they are. */
   mouseFiles = undefined;
 
@@ -1556,6 +1586,14 @@ window.addEventListener('resize', () => {
 /** The game's files the playpens are read from. */
 let playpenFiles: GameFiles | undefined;
 
+/* Sound turned on: the browser lets it play now, on the click. */
+soundInput.addEventListener('change', () => {
+  if (soundInput.checked) {
+    audio ??= new AudioContext();
+    audio.resume().catch(() => undefined);
+  }
+});
+
 playpenSelect.addEventListener('change', () => {
   try {
     localStorage.setItem('catz-playpen', playpenSelect.value);
@@ -1588,6 +1626,54 @@ function stageAt(event: MouseEvent) {
     x: Math.round(((event.clientX - box.left) / box.width) * LIVE_STAGE.right),
     y: Math.round(((event.clientY - box.top) / box.height) * LIVE_STAGE.bottom),
   };
+}
+
+/** The sprites' sounds by number (`PTZFILES/CAT/RESOURCE/CATSND.TXT`, after its root path; the mouse's and dog's lists the same), and the files they are read from. */
+let soundNames: string[] = [];
+let soundFiles: GameFiles | undefined;
+let audio: AudioContext | undefined;
+const decodedSounds = new Map<string, Promise<AudioBuffer | undefined>>();
+
+/** The purr playing (`+0x3570`'s sound), stopped as the next is played. */
+let purring: AudioBufferSourceNode | undefined;
+
+/** A sound played by its number, where sound is on: its file (`SOUNDS`, a WAVE) read and decoded once, then played as it is; kept, where it is a purr. */
+function playSound(number: number, purr = false) {
+  const name = soundNames[number];
+
+  if (purr) {
+    purring?.stop();
+    purring = undefined;
+  }
+
+  if (!soundInput.checked || !soundFiles || !name) {
+    return;
+  }
+
+  audio ??= new AudioContext();
+  const context = audio;
+  let decoded = decodedSounds.get(name);
+
+  if (!decoded) {
+    decoded = soundFiles
+      .read(`CATZ.DOG/SOUNDS/${name}`)
+      .then((data) => context.decodeAudioData(data.slice().buffer))
+      .catch(() => undefined);
+    decodedSounds.set(name, decoded);
+  }
+
+  decoded.then((buffer) => {
+    if (buffer) {
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      source.start();
+
+      if (purr) {
+        purring = source;
+      }
+    }
+  });
 }
 
 /** The playpen's backdrop, built once: its tile (`PLAYPENZ`, as a cat's `playpenBitmap` names it) repeated across the stage, its colours the game's; none, the plain stage. */

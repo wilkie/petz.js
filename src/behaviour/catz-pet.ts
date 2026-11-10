@@ -1651,6 +1651,11 @@ export class CatzPet {
       this.fields.goal = begun.goal;
     }
 
+    /* Its sound made, beginning (`MapAndPlayCatSound`), as a layered action. */
+    if (begun.sound !== undefined && begun.sound > 0) {
+      this.options.layer?.(begun.sound);
+    }
+
     if (begun.pushes) {
       this.push(begun.pushes);
     }
@@ -1859,6 +1864,11 @@ export class CatzPet {
   /** What a tick wrote, kept. */
   private take(ticked: Partial<CatzStateTick>) {
     const f = this.fields;
+
+    /* Its sound made (`MapAndPlayCatSound`, seg15:11ae): the action its temperament answers, played as a layered action, unless one plays. */
+    if (ticked.sound !== undefined && ticked.sound > 0) {
+      this.options.layer?.(ticked.sound);
+    }
 
     /* After petting, resting at once (`DoCatAfterPetting` entering): not to be petted again so soon (`+0x3574`). */
     if (this.state === 52 && ticked.global === 9) {

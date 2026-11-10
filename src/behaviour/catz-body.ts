@@ -554,7 +554,10 @@ export class CatzBody {
   }
 
   /** A layered action pushed on its own (`PushLayeredAction`): its frames, one a tick, drawn over what is shown. */
-  private readonly layered: { first: number; frame: number }[] = [];
+  private readonly layered: { first: number; frame: number; sounds?: number[] }[] = [];
+
+  /** The sounds the frames newly shown this tick play (`HandleSoundVerb`'s, by their numbers): its own frame's, and its layered action's. */
+  heard: number[] = [];
 
   /** Whether a layered action pushed on its own plays (`GetLayeredFramesRemaining`). */
   get layering() {
@@ -586,15 +589,18 @@ export class CatzBody {
       return;
     }
 
-    this.layered.push(...steps.map(({ frame }) => ({ first, frame })));
+    this.layered.push(...steps.map(({ frame, sounds }) => ({ first, frame, sounds })));
   }
 
   /** The next frame shown, where there is one; else the last stays. A layered action pushed on its own drawn over it. */
   next() {
-    this.shown = this.queue.shift() ?? this.shown;
-    const layer = this.layered.shift();
+    const popped = this.queue.shift();
+    this.shown = popped ?? this.shown;
+    const played = this.layered.shift();
+    this.heard = [...(popped?.step.sounds ?? []), ...(played?.sounds ?? [])];
 
-    if (layer && this.shown && !this.shown.step.layer) {
+    if (played && this.shown && !this.shown.step.layer) {
+      const layer = { first: played.first, frame: played.frame };
       this.shown = {
         ...this.shown,
         step: { ...this.shown.step, layer },
