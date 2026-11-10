@@ -1024,8 +1024,8 @@ function drawLive(
     bitmap.pixels.set(backdrop.pixels);
   }
 
-  /* The shelf (kin 0x22) first, at the back: its picture (15000, at (4, 109) of it, as its definition's art has it), and the things on it, each its on-shelf condition's (0) resting picture at its place. */
-  const shelfPicture = thingBitmaps.get(15000);
+  /* The shelf (kin 0x22) first, at the back: its picture at (4, 109) of it, as its definition's art has it -- 15000, or, in the Adoption Kit, 15001, the locked things' outlines drawn in (`XApt::SetupToysLocked`; 15002 the later Kit's, `SetupToysUnlocked`) -- and the things on it, each its on-shelf condition's (0) resting picture at its place; a locked one not drawn at all (`XApt::Draw`, `+0x1d0` 0). */
+  const shelfPicture = thingBitmaps.get(kitMode ? 15001 : 15000);
 
   if (shelfRect && shelfPicture) {
     const { dib, colours, green } = shelfPicture;
@@ -1037,7 +1037,13 @@ function drawLive(
     const thing = shelfThings.get(kind)!;
     const held = liveDragging === kind;
 
-    if (!corner || livePen.has(kind) || held || (kind === 0xe && mouseFiles)) {
+    if (
+      !corner ||
+      livePen.has(kind) ||
+      held ||
+      (kind === 0xe && mouseFiles) ||
+      (kitMode && catzKitLocked(kind))
+    ) {
       continue;
     }
 
