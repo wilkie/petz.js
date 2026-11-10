@@ -144,6 +144,8 @@ const TRACE_MOUSE = process.env.TRACE_MOUSE === '1';
 const TRACE_SCRUFF = process.env.TRACE_SCRUFF === '1';
 /** `TRACE_MESSAGES=1`: every 50 frames a message left for the cat (`+0x33c0`), as the playpen leaves one: food, water, a treat, catnip, a toy, the milk bottle, the spray bottle, the spray and flea spray on it, 18, the window resized and the camera, in turn. */
 const TRACE_MESSAGES = process.env.TRACE_MESSAGES === '1';
+/** `TRACE_LIVELY=1`: the cat's liveliness held at 100. */
+const TRACE_LIVELY = process.env.TRACE_LIVELY === '1';
 /** `TRACE_FEARFUL=1`: the cat's fear held at 70. */
 const TRACE_FEARFUL = process.env.TRACE_FEARFUL === '1';
 /** `TRACE_AGELESS=1`: the cat's age held at 0, as an Adoption Kit cat's. */
@@ -1698,7 +1700,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_VISITORS ? '-VISITORS' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_CLIMB ? '-CLIMB' : ''}${TRACE_MICE ? '-MICE' : ''}${TRACE_MICE_HELD ? '-HELD' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FEARFUL ? '-FEARFUL' : ''}${TRACE_AGELESS ? '-AGELESS' : ''}${TRACE_KIT_PARAMS ? '-C4' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_VISITORS ? '-VISITORS' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_CLIMB ? '-CLIMB' : ''}${TRACE_MICE ? '-MICE' : ''}${TRACE_MICE_HELD ? '-HELD' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FEARFUL ? '-FEARFUL' : ''}${TRACE_LIVELY ? '-LIVELY' : ''}${TRACE_AGELESS ? '-AGELESS' : ''}${TRACE_KIT_PARAMS ? '-C4' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1738,7 +1740,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_CLIMB ? 16777216 : 0) |
           (TRACE_MICE ? 33554432 : 0) |
           (TRACE_MICE_HELD ? 67108864 : 0) |
-          (TRACE_VISITORS ? 134217728 : 0)
+          (TRACE_VISITORS ? 134217728 : 0) |
+          (TRACE_LIVELY ? 268435456 : 0)
         }\r\n`
       );
       text = await runPen('catztrace', directory, 7200 * Math.ceil(TRACE_FRAMES / 2000));

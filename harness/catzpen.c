@@ -757,7 +757,8 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             return;
         }
 
-        if (state == 5 && wrestledTicks++ % 4 == 3) {
+        /* (Lively (268435456), its victim left to it: let go, or done with, as it will.) */
+        if (state == 5 && !(forcing & 268435456L) && wrestledTicks++ % 4 == 3) {
             depth--;
             ((CATSTATE)ordinal(497))(cat, 6, p);
             return;
@@ -3111,6 +3112,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * Adoption Kit is, for the branches they take. */
         if (forcing & 2097152L && cat) {
             *(int __far *)(cat + 0x2fda + 0x52 * 7 + 0x3a) = 70;
+        }
+
+        /* And where it asks (268435456), its liveliness (brain 0) held at 100: lively, so that, with
+         * its victim and having done something, it lets go one time in three. */
+        if (forcing & 268435456L && cat) {
+            *(int __far *)(cat + 0x2fda + 0x3a) = 100;
         }
 
         if (forcing & 4194304L && cat) {
