@@ -35,6 +35,55 @@ export function mapColours(picture: Dib, palette: readonly Colour[]) {
   });
 }
 
+/** The screen's colour nearest each of the 4,096 colours of four bits a channel (each × 17), by the sum of squares, the first of equals: `XDrawPort::CreateITable` (Catz, seg44:1210), kept by palette. */
+const itables = new WeakMap<readonly Colour[], Uint8Array>();
+
+function itableOf(screen: readonly Colour[]) {
+  let table = itables.get(screen);
+
+  if (!table) {
+    table = new Uint8Array(4096);
+
+    for (let u = 0; u < 4096; u++) {
+      const [r, g, b] = [(u & 15) * 17, ((u >> 4) & 15) * 17, ((u >> 8) & 15) * 17];
+      let [best, distance] = [0, Infinity];
+
+      screen.forEach(([sr, sg, sb], n) => {
+        const d = (sr - r) ** 2 + (sg - g) ** 2 + (sb - b) ** 2;
+
+        if (d < distance) {
+          [best, distance] = [n, d];
+        }
+      });
+
+      table[u] = best;
+    }
+
+    itables.set(screen, table);
+  }
+
+  return table;
+}
+
+/** A colour's index in the screen's palette, as a Catz picture's colours are mapped (`mapColoursCatz`). */
+export function catzScreenIndex([r, g, b]: Colour, screen: readonly Colour[]) {
+  return itableOf(screen)[((b & 0xf0) << 4) | (g & 0xf0) | ((r & 0xf0) >> 4)];
+}
+
+/**
+ * A Catz picture's colours as indices into the screen's palette, as
+ * `XPicture::InternalLoadPicture` maps them: each colour cut to four bits a
+ * channel and through the inverse table (`CreateITable`,
+ * `ColorIndexTranslate`, seg44) -- so a grey of (114, 114, 114) comes out
+ * as the screen's (117, 117, 117), not a nearer 114 of its own.
+ */
+export function mapColoursCatz(picture: Dib, screen: readonly Colour[]) {
+  const table = itableOf(screen);
+  return picture.colours.map(
+    ([r, g, b]) => table[((b & 0xf0) << 4) | (g & 0xf0) | ((r & 0xf0) >> 4)]
+  );
+}
+
 /**
  * Draws a picture with its top left at a point, its transparent colour left
  * out; mirrored, left for right, as `XDrawPicture`'s last argument asks.

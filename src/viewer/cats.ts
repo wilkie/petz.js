@@ -26,7 +26,7 @@ import {
 import { ballAt, drawPet } from '../render/ballz.ts';
 import { extendFrames, layeredCatzFrame } from '../render/extend.ts';
 import { FIDELITY } from '../render/fidelity.ts';
-import { drawPicture, mapColours } from '../render/picture.ts';
+import { catzScreenIndex, drawPicture, mapColoursCatz } from '../render/picture.ts';
 import { IndexedBitmap } from '../render/raster.ts';
 import { skeletonOf } from '../render/skeleton.ts';
 import { chosenFiles, type GameFiles, oracleFiles } from '../files.ts';
@@ -1019,9 +1019,11 @@ function drawLive(
   const bounds = placer.bounds(pose);
   const bitmap = new IndexedBitmap(LIVE_STAGE.right, LIVE_STAGE.bottom);
 
-  /* The playpen's backdrop under all. */
+  /* The playpen's backdrop under all; none, its plain grey, (117, 117, 117) on the game's screen, as the palette has it (so a picture's own grey ground, the logo's, is the same). */
   if (backdrop) {
     bitmap.pixels.set(backdrop.pixels);
+  } else {
+    bitmap.pixels.fill(catzScreenIndex([117, 117, 117], palette));
   }
 
   /* In the Adoption Kit, the Catz logo above the baskets (15450, at (235, 4) of the stage, drawn into its background: `PetModule::DoDrawFrame`, seg34:2ea9, with `PetParams` `+0xc4`). */
@@ -1304,7 +1306,7 @@ async function start(game: GameFiles) {
       const dib = parseDib(data);
       /* Transparent where bright green, as the engine's pictures are made. */
       const green = dib.colours.findIndex(([r, g, b]) => r === 0 && g === 255 && b === 0);
-      const picture = { dib, colours: mapColours(dib, palette), green };
+      const picture = { dib, colours: mapColoursCatz(dib, palette), green };
       thingBitmaps.set(id, picture);
 
       if (id % 1000 === 200 && id < 16000) {
@@ -1382,7 +1384,7 @@ async function start(game: GameFiles) {
 
     const dib = parseDib(found.data);
     const green = dib.colours.findIndex(([r, g, b]) => r === 0 && g === 255 && b === 0);
-    return [{ dib, colours: mapColours(dib, palette), green }];
+    return [{ dib, colours: mapColoursCatz(dib, palette), green }];
   });
 
   const data = await game.read(`${RESOURCE}/CAT.SCP`);
@@ -1567,7 +1569,7 @@ async function makeBackdrop(game: GameFiles, path: string) {
 
   /* A `.BMP` file: its picture after the file's own 14-byte header. */
   const dib = parseDib((await game.read(path)).subarray(14));
-  const colours = mapColours(dib, palette);
+  const colours = mapColoursCatz(dib, palette);
   const made = new IndexedBitmap(LIVE_STAGE.right, LIVE_STAGE.bottom);
 
   for (let y = 0; y < made.height; y += dib.height) {
