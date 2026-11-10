@@ -532,7 +532,7 @@ static long forcing;
 static int forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
     fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks,
     ignoreTicks, sprayTicks, watchTicks, watches,
-    deepTicks, lackTicks, lacks, climbTicks, climbs, toyTicks;
+    deepTicks, lackTicks, lacks, climbTicks, climbs, toyTicks, toyAttacks;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -1032,22 +1032,26 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         }
     }
 
-    /* And where it asks (536870912), the yarn ball (6) off the shelf into the pen
-     * (`XApt::ShelfToPlaypen`, 151), and on every tenth tick of the same, not attacking
-     * already, the cat put to attack it (global 1, `+0x35a4` 6): with pouncing asked (2),
-     * so that a toy, not the mouse, is its victim. */
+    /* And where it asks (536870912), the yarn ball, jingle ball and squeaky toy (6, 7, 9) off
+     * the shelf into the pen (`XApt::ShelfToPlaypen`, 151), and on every tenth tick of the
+     * same, not attacking already, the cat put to attack one of them in turn (global 1,
+     * `+0x35a4`): with pouncing asked (2), so that a toy, not the mouse, is its victim. */
     if (forcing & 536870912L && !enter && !leave) {
-        int state = *(int __far *)(cat + 0x2552);
+        static const int toys[3] = {6, 7, 9};
+        int state = *(int __far *)(cat + 0x2552), k;
         unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
-        void __far *yarn = ((GETKIN)ordinal(18))(cat, 6);
 
-        if (yarn && ((INSHELF)ordinal(38))(cat, 6)) {
-            ((TOPEN)ordinal(151))(yarn, p);
+        for (k = 0; k < 3; k++) {
+            void __far *toy = ((GETKIN)ordinal(18))(cat, toys[k]);
+
+            if (toy && ((INSHELF)ordinal(38))(cat, toys[k])) {
+                ((TOPEN)ordinal(151))(toy, p);
+            }
         }
 
         if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
             *(int __far *)(global + 0x3a) != 1 && toyTicks++ % 10 == 9) {
-            *(int __far *)(cat + 0x35a4) = 6;
+            *(int __far *)(cat + 0x35a4) = toys[toyAttacks++ % 3];
             depth--;
             passGlobal(*(void __far *__far *)(cat + 0x2fba), 1, p);
             return;
