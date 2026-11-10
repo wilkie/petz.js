@@ -144,7 +144,7 @@ const TRACE_MOUSE = process.env.TRACE_MOUSE === '1';
 const TRACE_SCRUFF = process.env.TRACE_SCRUFF === '1';
 /** `TRACE_MESSAGES=1`: every 50 frames a message left for the cat (`+0x33c0`), as the playpen leaves one: food, water, a treat, catnip, a toy, the milk bottle, the spray bottle, the spray and flea spray on it, 18, the window resized and the camera, in turn. */
 const TRACE_MESSAGES = process.env.TRACE_MESSAGES === '1';
-/** `TRACE_TOY=1`: the yarn ball, jingle ball and squeaky toy in the pen, and on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put to attack one of them in turn -- with `TRACE_POUNCE`, so that a toy is its victim. */
+/** `TRACE_TOY=1`: the yarn ball, jingle ball, squeaky toy and cheese in the pen, and on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put to attack one of them in turn -- with `TRACE_POUNCE`, so that a toy is its victim. */
 const TRACE_TOY = process.env.TRACE_TOY === '1';
 /** `TRACE_LIVELY=1`: the cat's liveliness held at 100. */
 const TRACE_LIVELY = process.env.TRACE_LIVELY === '1';

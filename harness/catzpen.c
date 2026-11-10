@@ -1032,16 +1032,17 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         }
     }
 
-    /* And where it asks (536870912), the yarn ball, jingle ball and squeaky toy (6, 7, 9) off
+    /* And where it asks (536870912), the yarn ball, jingle ball, squeaky toy and cheese (6, 7, 9, 8) off
      * the shelf into the pen (`XApt::ShelfToPlaypen`, 151), and on every tenth tick of the
      * same, not attacking already, the cat put to attack one of them in turn (global 1,
-     * `+0x35a4`): with pouncing asked (2), so that a toy, not the mouse, is its victim. */
+     * `+0x35a4`): with pouncing asked (2), so that a toy, not the mouse, is its victim, and
+     * the cheese, snagged, is food it goes on with (10). */
     if (forcing & 536870912L && !enter && !leave) {
-        static const int toys[3] = {6, 7, 9};
+        static const int toys[4] = {6, 7, 9, 8};
         int state = *(int __far *)(cat + 0x2552), k;
         unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
 
-        for (k = 0; k < 3; k++) {
+        for (k = 0; k < 4; k++) {
             void __far *toy = ((GETKIN)ordinal(18))(cat, toys[k]);
 
             if (toy && ((INSHELF)ordinal(38))(cat, toys[k])) {
@@ -1051,7 +1052,7 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
 
         if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
             *(int __far *)(global + 0x3a) != 1 && toyTicks++ % 10 == 9) {
-            *(int __far *)(cat + 0x35a4) = toys[toyAttacks++ % 3];
+            *(int __far *)(cat + 0x35a4) = toys[toyAttacks++ % 4];
             depth--;
             passGlobal(*(void __far *__far *)(cat + 0x2fba), 1, p);
             return;
