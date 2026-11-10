@@ -148,7 +148,7 @@ const TRACE_MESSAGES = process.env.TRACE_MESSAGES === '1';
 const TRACE_TOY = process.env.TRACE_TOY === '1';
 /** `TRACE_FAR=1`, with `TRACE_POUNCE`: put to pounce on stalking's first tick, its prey still far, not its fourth. */
 const TRACE_FAR = process.env.TRACE_FAR === '1';
-/** `TRACE_LIVELY=1`: the cat's liveliness held at 100, its independence and seriousness at 20 (lively, as behaviour 28 asks). */
+/** `TRACE_LIVELY=1`: the cat's liveliness held at 100, its independence and seriousness at 20 (lively, as behaviour 28 asks), its sickness at 0. */
 const TRACE_LIVELY = process.env.TRACE_LIVELY === '1';
 /** `TRACE_FEARFUL=1`: the cat's fear held at 70. */
 const TRACE_FEARFUL = process.env.TRACE_FEARFUL === '1';
