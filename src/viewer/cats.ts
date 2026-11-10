@@ -91,6 +91,7 @@ const playButton = element<HTMLButtonElement>('play');
 const liveButton = element<HTMLButtonElement>('live');
 const thingSelect = element<HTMLSelectElement>('thing');
 const kitInput = element<HTMLInputElement>('kit');
+const playpenSelect = element<HTMLSelectElement>('playpen');
 const kitText = element<HTMLParagraphElement>('kit-text');
 const canvas = element<HTMLCanvasElement>('stage');
 const context = canvas.getContext('2d')!;
@@ -1018,6 +1019,11 @@ function drawLive(
   const bounds = placer.bounds(pose);
   const bitmap = new IndexedBitmap(LIVE_STAGE.right, LIVE_STAGE.bottom);
 
+  /* The playpen's backdrop under all. */
+  if (backdrop) {
+    bitmap.pixels.set(backdrop.pixels);
+  }
+
   /* The shelf (kin 0x22) first, at the back: its picture (15000, at (4, 109) of it, as its definition's art has it), and the things on it, each its on-shelf condition's (0) resting picture at its place. */
   const shelfPicture = thingBitmaps.get(15000);
 
@@ -1296,6 +1302,38 @@ async function start(game: GameFiles) {
     : new Map();
   shelfRect = shelf ? aptRectOf(new TextDecoder('latin1').decode(shelf.data), 'shelf') : undefined;
 
+  /* The playpens the game has, to choose among; the last chosen again, where the browser kept it. */
+  playpenSelect.length = 1;
+
+  for (const path of game
+    .list()
+    .filter((name) => /PLAYPENZ\/[^/]+\.BMP$/i.test(name))
+    .sort()) {
+    playpenSelect.add(
+      new Option(
+        path
+          .replace(/^.*\//, '')
+          .replace(/\.BMP$/i, '')
+          .toLowerCase(),
+        path
+      )
+    );
+  }
+
+  let kept = '';
+
+  try {
+    kept = localStorage.getItem('catz-playpen') ?? '';
+  } catch {
+    /* (No storage: plain.) */
+  }
+
+  playpenSelect.value = [...playpenSelect.options].some((option) => option.value === kept)
+    ? kept
+    : '';
+  playpenFiles = game;
+  backdrop = await makeBackdrop(game, playpenSelect.value).catch(() => undefined);
+
   const strings = engine.resources().filter((r) => r.type === 6);
   catzString = (id) => {
     const block = strings.find((r) => r.id === (id >> 4) + 1);
@@ -1460,6 +1498,23 @@ window.addEventListener('resize', () => {
   }
 });
 /* The camera: the playpen's command 0x7f2 (message 21; its sound not played). */
+/** The game's files the playpens are read from. */
+let playpenFiles: GameFiles | undefined;
+
+playpenSelect.addEventListener('change', () => {
+  try {
+    localStorage.setItem('catz-playpen', playpenSelect.value);
+  } catch {
+    /* (Not kept.) */
+  }
+
+  if (playpenFiles) {
+    makeBackdrop(playpenFiles, playpenSelect.value)
+      .then((made) => (backdrop = made))
+      .catch(() => (backdrop = undefined));
+  }
+});
+
 element<HTMLButtonElement>('nap').addEventListener('click', () => {
   if (live) {
     liveNap();
@@ -1478,6 +1533,29 @@ function stageAt(event: MouseEvent) {
     x: Math.round(((event.clientX - box.left) / box.width) * LIVE_STAGE.right),
     y: Math.round(((event.clientY - box.top) / box.height) * LIVE_STAGE.bottom),
   };
+}
+
+/** The playpen's backdrop, built once: its tile (`PLAYPENZ`, as a cat's `playpenBitmap` names it) repeated across the stage, its colours the game's; none, the plain stage. */
+let backdrop: IndexedBitmap | undefined;
+
+/** The backdrop made from a tile of the game's, by its path; none for none. */
+async function makeBackdrop(game: GameFiles, path: string) {
+  if (!path) {
+    return undefined;
+  }
+
+  /* A `.BMP` file: its picture after the file's own 14-byte header. */
+  const dib = parseDib((await game.read(path)).subarray(14));
+  const colours = mapColours(dib, palette);
+  const made = new IndexedBitmap(LIVE_STAGE.right, LIVE_STAGE.bottom);
+
+  for (let y = 0; y < made.height; y += dib.height) {
+    for (let x = 0; x < made.width; x += dib.width) {
+      drawPicture(made, dib, colours, x, y, false, -1);
+    }
+  }
+
+  return made;
 }
 
 /** The shelf's own rectangle (kin 0x22), as its definition has it: what the cat grooms beside and climbs onto. */
