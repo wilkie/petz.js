@@ -747,9 +747,20 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
      * that does: the tick it leaves and the one it enters in are followed. */
     if (forcing & 2 && !enter && !leave) {
         int state = *(int __far *)(cat + 0x2552);
+        /* Far (1073741824): on stalking's first tick, its prey still far, rather than its fourth. */
+        static int stalkedWas, stalkTicks;
+        int distant = (forcing & 1073741824L) != 0;
+
+        if (state != stalkedWas) {
+            stalkedWas = state;
+            stalkTicks = 0;
+        }
+
+        stalkTicks++;
 
         if ((state == 2 || state == 56 || state == 57) &&
-            ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4)) && pouncedTicks++ % 4 == 3) {
+            ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4)) &&
+            (distant ? stalkTicks == 1 : pouncedTicks++ % 4 == 3)) {
             int pounce = pounces++ % 3;
 
             depth--;

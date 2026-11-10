@@ -146,6 +146,8 @@ const TRACE_SCRUFF = process.env.TRACE_SCRUFF === '1';
 const TRACE_MESSAGES = process.env.TRACE_MESSAGES === '1';
 /** `TRACE_TOY=1`: the yarn ball, jingle ball, squeaky toy and cheese in the pen, and on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put to attack one of them in turn -- with `TRACE_POUNCE`, so that a toy is its victim. */
 const TRACE_TOY = process.env.TRACE_TOY === '1';
+/** `TRACE_FAR=1`, with `TRACE_POUNCE`: put to pounce on stalking's first tick, its prey still far, not its fourth. */
+const TRACE_FAR = process.env.TRACE_FAR === '1';
 /** `TRACE_LIVELY=1`: the cat's liveliness held at 100. */
 const TRACE_LIVELY = process.env.TRACE_LIVELY === '1';
 /** `TRACE_FEARFUL=1`: the cat's fear held at 70. */
@@ -1729,7 +1731,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_VISITORS ? '-VISITORS' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_CLIMB ? '-CLIMB' : ''}${TRACE_MICE ? '-MICE' : ''}${TRACE_MICE_HELD ? '-HELD' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FEARFUL ? '-FEARFUL' : ''}${TRACE_LIVELY ? '-LIVELY' : ''}${TRACE_TOY ? '-TOY' : ''}${TRACE_AGELESS ? '-AGELESS' : ''}${TRACE_KIT_PARAMS ? '-C4' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_VISITORS ? '-VISITORS' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_CLIMB ? '-CLIMB' : ''}${TRACE_MICE ? '-MICE' : ''}${TRACE_MICE_HELD ? '-HELD' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FEARFUL ? '-FEARFUL' : ''}${TRACE_LIVELY ? '-LIVELY' : ''}${TRACE_TOY ? '-TOY' : ''}${TRACE_FAR ? '-FAR' : ''}${TRACE_AGELESS ? '-AGELESS' : ''}${TRACE_KIT_PARAMS ? '-C4' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1771,7 +1773,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_MICE_HELD ? 67108864 : 0) |
           (TRACE_VISITORS ? 134217728 : 0) |
           (TRACE_LIVELY ? 268435456 : 0) |
-          (TRACE_TOY ? 536870912 : 0)
+          (TRACE_TOY ? 536870912 : 0) |
+          (TRACE_FAR ? 1073741824 : 0)
         }\r\n`
       );
       text = await runPen('catztrace', directory, 7200 * Math.ceil(TRACE_FRAMES / 2000));
