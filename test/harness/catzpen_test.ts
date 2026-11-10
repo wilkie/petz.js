@@ -381,10 +381,12 @@ const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
  * bowl or the bottle out, and 24 playing and chasing with 6, 7 or 9 out.
  */
 const OUT = [0xb, 0xb, 8, 0xc, 0xc, 0xd, 0xf, 0xb];
-const GLOBAL_CASES = Array.from({ length: 402 }, (_, n) => {
+const GLOBAL_CASES = Array.from({ length: 422 }, (_, n) => {
+  /* And the last 20 affectionate. */
+  const affectionate = n >= 402;
   /* The last 60 grooming: its fleas as the levels fall, one in five playing with the user (`+0x35a4` 1). */
-  const grooming = n >= 342;
-  const outside = n >= 270 && !grooming;
+  const grooming = n >= 342 && !affectionate;
+  const outside = n >= 270 && n < 342;
   const m = n - 270;
   /* Off the shelf: hungry with food, or playing or chasing with a toy. */
   const out = !outside ? -1 : m < 48 ? OUT[m % 8] : [6, 7, 9][m % 3];
@@ -417,7 +419,19 @@ const GLOBAL_CASES = Array.from({ length: 402 }, (_, n) => {
     (n * 134775813 + 1) % 2147483648,
     ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 3) % LEVELS.length]),
-    grooming ? 13 : attacking ? 1 : chasing ? 16 : playing ? 15 : eating ? 3 : [6, 8, 9][n % 3],
+    affectionate
+      ? 14
+      : grooming
+        ? 13
+        : attacking
+          ? 1
+          : chasing
+            ? 16
+            : playing
+              ? 15
+              : eating
+                ? 3
+                : [6, 8, 9][n % 3],
     Math.floor(n / 3) % 2,
     Math.floor(n / 6) % 2,
     eating && !outside ? [0, 0, 0, 1, 0, 0, 2, 0, 0, 3][k % 10] : 0,

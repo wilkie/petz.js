@@ -2394,6 +2394,255 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         _lclose(file);
     }
 
+    /* (The local cases run before the global ones: each case starts from where the last left the
+     * cat -- its place and frame, which walking pops on -- so global cases added after cannot
+     * move them.) */
+    /* Each case in `LOCAL.TXT`: a line `seed`, the 12 brains' values and
+     * their centres, a state of the cat's own, a global state, `+0x3502`,
+     * `+0x34ca`, `+0x3504`, `+0x1500`, the first 8 curiosities
+     * (`+0x362c` on, the rest 0) and the cursor's rectangle (`PetParams`
+     * `+0x104` on), whether it is entering, `+0x3508`, `+0x35fc`,
+     * `+0x35a6`, `+0x35a2`, `+0x35ac`, where it walks to (`+0x34cc`,
+     * `+0x34ce`; walking on, its marker put there), `+0x688`, `+0x35aa`,
+     * `+0x35a8`, `+0x35f4`, `+0x35ee`, `+0x35a4` and whether `PopScript` is
+     * to find its target: the cat in them as it is (`+0x2552`; `+0x3a` of the global
+     * machine), entering or not, its script done, no layered action playing,
+     * both machines' histories and the actions pushed marked; a tick of its
+     * state (its machine's slot 4, as `BaseNewState` calls it); and
+     * `localed` and the two histories, its energy, `+0x3502`, the action
+     * playing, the actions pushed, `+0x3504`, `+0x1500`, the layered
+     * frames begun, where it walks to (`+0x34cc`, `+0x34ce`) and how
+     * (`+0x35a8`), the calls to its head, the target point of its kin 0x16
+     * and `+0x35ac`, the first words pushed to its script (its slot `0xa4`),
+     * its fullness, `+0x688`, `+0x35aa` and `+0x33be`, `+0x34ca`, the
+     * moment's `+0x3516`, `+0x350a`,
+     * `+0x3506` and `+0x3508`, and `+0x35a6` and `+0x35a4`. */
+    file = _lopen(DIRECTORY "\\LOCAL.TXT", OF_READ);
+
+    if (cat && file != HFILE_ERROR) {
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+        unsigned char __far *machine = cat + 0x2518;
+        void __far *original, __far *globalOriginal, __far *localOriginal;
+        int done, enter, x35fc, x35a2, x35ac, x688, found, place[4];
+        DISPATCH dispatch = *(DISPATCH __far *)(*(unsigned char __far *__far *)machine + 4);
+
+        for (b = 0; b < 4; b++) {
+            place[b] = *(int __far *)(cat + 0x124 + 2 * b);
+        }
+
+        for (;;) {
+            long seed = number(file);
+
+            if (seed < 0) {
+                break;
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a) = (int)number(file);
+            }
+
+            for (b = 0; b < 12; b++) {
+                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42) = (int)number(file);
+            }
+
+            *(int __far *)(cat + 0x2552) = (int)number(file);
+            *(int __far *)(global + 0x3a) = (int)number(file);
+            *(int __far *)(cat + 0x3502) = (int)number(file);
+            *(int __far *)(cat + 0x34ca) = (int)number(file);
+            *(int __far *)(cat + 0x3504) = (int)number(file);
+            done = (int)number(file);
+
+            for (b = 0; b < 50; b++) {
+                *(int __far *)(cat + 0x362c + 2 * b) = b < 8 ? (int)number(file) : 0;
+            }
+
+            for (b = 0; b < 4; b++) {
+                *(int *)(params + 0x104 + 2 * b) = (int)number(file);
+            }
+
+            enter = (int)number(file);
+            *(int __far *)(cat + 0x3508) = (int)number(file);
+            x35fc = (int)number(file);
+            *(int __far *)(cat + 0x35a6) = (int)number(file);
+            x35a2 = (int)number(file);
+            x35ac = (int)number(file);
+            *(int __far *)(cat + 0x34cc) = (int)number(file);
+            *(int __far *)(cat + 0x34ce) = (int)number(file);
+            x688 = (int)number(file);
+            *(int __far *)(cat + 0x35aa) = (int)number(file);
+            *(int __far *)(cat + 0x35a8) = (int)number(file);
+            *(int __far *)(cat + 0x35f4) = (int)number(file);
+            *(int __far *)(cat + 0x35ee) = (int)number(file);
+            *(int __far *)(cat + 0x35a4) = (int)number(file);
+            found = (int)number(file);
+
+            /* Walking on (23), its marker (kin 0x16) put where it walks to
+             * (its method `0x44`, as `DoCatLocomote` puts it). */
+            if (*(int __far *)(cat + 0x2552) == 23) {
+                void __far *marker = ((GETKIN)ordinal(18))(cat, 0x16);
+
+                if (marker) {
+                    MOVETO move = *(MOVETO __far *)(*(unsigned char __far *__far *)marker + 0x44);
+
+                    move(marker, 0, (int __far *)(cat + 0x34cc));
+                }
+            }
+
+            ((RESETSTACK)ordinal(951))(cat, 2);
+            ((PLAIN_SPRITE)ordinal(957))(cat);
+            *(int __far *)(cat + 0x1502) = -1;
+            *(int __far *)(cat + 0x1500) = done;
+            *(int __far *)(cat + 0x35fc) = x35fc;
+            *(int __far *)(cat + 0x35a2) = x35a2;
+            *(int __far *)(cat + 0x35ac) = x35ac;
+            *(int __far *)(cat + 0x688) = x688;
+
+            /* No box to find a target in (`+0x250e`, `+0x2510`; its share,
+             * `+0x2512`, 1, which `MakeFocusRect` divides by), so that
+             * `PopScript` never finds one there from a case before; or,
+             * where it is to be found, the marker (kin 0x16) the target
+             * (`+0x1504`) and a box about the head so big, and moved ahead of
+             * it so little, that it holds the stage. */
+            *(int __far *)(cat + 0x250e) = found ? 2000 : 0;
+            *(int __far *)(cat + 0x2510) = found ? 2000 : 0;
+            *(int __far *)(cat + 0x2512) = found ? 2000 : 1;
+
+            if (found) {
+                *(void __far *__far *)(cat + 0x1504) = ((GETKIN)ordinal(18))(cat, 0x16);
+            }
+
+            /* Where it was at the first case (its rectangle, `+0x124` to
+             * `+0x12a`), as a target found moves it as it is popped. */
+            for (b = 0; b < 4; b++) {
+                *(int __far *)(cat + 0x124 + 2 * b) = place[b];
+            }
+
+            for (b = 0; b < 10; b++) {
+                *(int __far *)(cat + 0x14a8 + 2 * b) = -1;
+                *(int __far *)(global + 0x3e + 2 * b) = -2;
+                *(int __far *)(cat + 0x2556 + 2 * b) = -2;
+            }
+
+            say("local %ld %d\r\n", seed, ((AREA)ordinal(606))(cat, 0x1d));
+
+            /* What exploring reads: the stage (CATZDLL's `ds:2ba6` to
+             * `2bac`), the cat's width and height (`+0x33c4`, `+0x33c6`),
+             * its target point (`GetTargetPt`, 10, space 0) and the draw
+             * rectangle of its kin 0x22 (`GetKin`, 18; `GetDrawRect`, 15). */
+            {
+                long point = ((TARGETPT)ordinal(10))(cat, 0);
+                void __far *kin = ((GETKIN)ordinal(18))(cat, 0x22);
+                int rect[4] = {0, 0, 0, 0}, own[4];
+
+                if (kin) {
+                    ((DRAWRECT)ordinal(15))(rect, kin, 0);
+                }
+
+                ((DRAWRECT)ordinal(15))(own, cat, 0);
+                say("stage %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\r\n",
+                    *(int __far *)MK_FP(dgroup, 0x2ba6), *(int __far *)MK_FP(dgroup, 0x2ba8),
+                    *(int __far *)MK_FP(dgroup, 0x2baa), *(int __far *)MK_FP(dgroup, 0x2bac),
+                    *(int __far *)(cat + 0x33c4), *(int __far *)(cat + 0x33c6), (int)point,
+                    (int)(point >> 16), kin != 0, rect[0], rect[1], rect[2], rect[3], own[0], own[1],
+                    own[2], own[3]);
+            }
+            original = *(void __far *__far *)cat;
+            _fmemcpy(table, original, sizeof table);
+            push = *(PUSH *)(table + 0xb8);
+            *(PUSH *)(table + 0xb8) = record;
+            track = *(LOOK *)(table + 0xe0);
+            *(LOOK *)(table + 0xe0) = tracking;
+            lookAtUser = *(LOOK *)(table + 0x2e0);
+            *(LOOK *)(table + 0x2e0) = userward;
+            looked = 0;
+            words = *(WORDS *)(table + 0xa4);
+            *(WORDS *)(table + 0xa4) = wording;
+            wordings = 0;
+            *(void __far *__far *)cat = table;
+            pushes = 0;
+            globalOriginal = *(void __far *__far *)global;
+            _fmemcpy(globalTable, globalOriginal, sizeof globalTable);
+            *(GLOBALSTATE *)(globalTable + 0x1c) = keep;
+            *(void __far *__far *)global = globalTable;
+            globalled = 0;
+            localOriginal = *(void __far *__far *)machine;
+            _fmemcpy(localTable, localOriginal, sizeof localTable);
+            *(GLOBALSTATE *)(localTable + 0x14) = keepLocal;
+            *(void __far *__far *)machine = localTable;
+            localled = 0;
+
+            *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
+            dispatch(machine, params, enter, 0);
+            *(void __far *__far *)cat = original;
+            *(void __far *__far *)global = globalOriginal;
+            *(void __far *__far *)machine = localOriginal;
+
+            say("localed");
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(cat + 0x2556 + 2 * b));
+            }
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(global + 0x3e + 2 * b));
+            }
+
+            say(" %d %d %d", *(int __far *)(cat + 0x2fda + 0x52 + 0x3a),
+                *(int __far *)(cat + 0x3502), *(int __far *)(cat + 0x1502));
+
+            for (b = 0; b < 10; b++) {
+                say(" %d", *(int __far *)(cat + 0x14a8 + 2 * b));
+            }
+
+            say(" %d %d", globalled, globalled ? globals[0] : -1);
+            say(" %d %d", localled, localled ? locals[0] : -1);
+            say(" %d", pushes);
+
+            for (b = 0; b < 8; b++) {
+                say(" %d", b < pushes ? pushed[b] : -1);
+            }
+
+            say(" %d %d %d", *(int __far *)(cat + 0x3504), *(int __far *)(cat + 0x1500),
+                ((REMAINING)ordinal(954))(cat));
+            say(" %d %d %d", *(int __far *)(cat + 0x34cc), *(int __far *)(cat + 0x34ce),
+                *(int __far *)(cat + 0x35a8));
+
+            /* The calls to its head (`SetHeadTracking`, `LookAtUser`), the
+             * target point of its kin 0x16 (`GetTargetPt`), and `+0x35ac`. */
+            say(" %d", looked);
+
+            for (b = 0; b < 8; b++) {
+                say(" %d", b < 2 * looked ? looks[b] : -1);
+            }
+
+            {
+                void __far *marker = ((GETKIN)ordinal(18))(cat, 0x16);
+                long point = marker ? ((TARGETPT)ordinal(10))(marker, 0) : 0;
+
+                say(" %d %d %d %d", marker != 0, (int)point, (int)(point >> 16),
+                    *(int __far *)(cat + 0x35ac));
+            }
+
+            /* The words that first steered it through slot `0xa4`, its
+             * fullness, `+0x688` and `+0x35aa`. */
+            say(" %d", wordings);
+
+            for (b = 0; b < 6; b++) {
+                say(" %d", wordings ? worded[b] : -1);
+            }
+
+            say(" %d %d %d %d", *(int __far *)(cat + 0x2fda + 4 * 0x52 + 0x3a),
+                *(int __far *)(cat + 0x688), *(int __far *)(cat + 0x35aa), *(int __far *)(cat + 0x33be));
+            say(" %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x34ca),
+                *(int __far *)(cat + 0x3516),
+                *(int __far *)(cat + 0x350a), *(int __far *)(cat + 0x3506),
+                *(int __far *)(cat + 0x3508), *(int __far *)(cat + 0x35a6),
+                *(int __far *)(cat + 0x35a4));
+        }
+
+        _lclose(file);
+    }
+
     /* Each case in `GLOBAL.TXT`: a line `seed`, the 12 brains' values and
      * their centres, a global state to put the cat in, whether the cursor
      * has moved (`PetParams` `+0x104` on), `+0x3574`, `+0x35ce`, `+0x35d2`
@@ -2700,251 +2949,6 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         _lclose(file);
     }
 
-    /* Each case in `LOCAL.TXT`: a line `seed`, the 12 brains' values and
-     * their centres, a state of the cat's own, a global state, `+0x3502`,
-     * `+0x34ca`, `+0x3504`, `+0x1500`, the first 8 curiosities
-     * (`+0x362c` on, the rest 0) and the cursor's rectangle (`PetParams`
-     * `+0x104` on), whether it is entering, `+0x3508`, `+0x35fc`,
-     * `+0x35a6`, `+0x35a2`, `+0x35ac`, where it walks to (`+0x34cc`,
-     * `+0x34ce`; walking on, its marker put there), `+0x688`, `+0x35aa`,
-     * `+0x35a8`, `+0x35f4`, `+0x35ee`, `+0x35a4` and whether `PopScript` is
-     * to find its target: the cat in them as it is (`+0x2552`; `+0x3a` of the global
-     * machine), entering or not, its script done, no layered action playing,
-     * both machines' histories and the actions pushed marked; a tick of its
-     * state (its machine's slot 4, as `BaseNewState` calls it); and
-     * `localed` and the two histories, its energy, `+0x3502`, the action
-     * playing, the actions pushed, `+0x3504`, `+0x1500`, the layered
-     * frames begun, where it walks to (`+0x34cc`, `+0x34ce`) and how
-     * (`+0x35a8`), the calls to its head, the target point of its kin 0x16
-     * and `+0x35ac`, the first words pushed to its script (its slot `0xa4`),
-     * its fullness, `+0x688`, `+0x35aa` and `+0x33be`, `+0x34ca`, the
-     * moment's `+0x3516`, `+0x350a`,
-     * `+0x3506` and `+0x3508`, and `+0x35a6` and `+0x35a4`. */
-    file = _lopen(DIRECTORY "\\LOCAL.TXT", OF_READ);
-
-    if (cat && file != HFILE_ERROR) {
-        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
-        unsigned char __far *machine = cat + 0x2518;
-        void __far *original, __far *globalOriginal, __far *localOriginal;
-        int done, enter, x35fc, x35a2, x35ac, x688, found, place[4];
-        DISPATCH dispatch = *(DISPATCH __far *)(*(unsigned char __far *__far *)machine + 4);
-
-        for (b = 0; b < 4; b++) {
-            place[b] = *(int __far *)(cat + 0x124 + 2 * b);
-        }
-
-        for (;;) {
-            long seed = number(file);
-
-            if (seed < 0) {
-                break;
-            }
-
-            for (b = 0; b < 12; b++) {
-                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x3a) = (int)number(file);
-            }
-
-            for (b = 0; b < 12; b++) {
-                *(int __far *)(cat + 0x2fda + 0x52 * b + 0x42) = (int)number(file);
-            }
-
-            *(int __far *)(cat + 0x2552) = (int)number(file);
-            *(int __far *)(global + 0x3a) = (int)number(file);
-            *(int __far *)(cat + 0x3502) = (int)number(file);
-            *(int __far *)(cat + 0x34ca) = (int)number(file);
-            *(int __far *)(cat + 0x3504) = (int)number(file);
-            done = (int)number(file);
-
-            for (b = 0; b < 50; b++) {
-                *(int __far *)(cat + 0x362c + 2 * b) = b < 8 ? (int)number(file) : 0;
-            }
-
-            for (b = 0; b < 4; b++) {
-                *(int *)(params + 0x104 + 2 * b) = (int)number(file);
-            }
-
-            enter = (int)number(file);
-            *(int __far *)(cat + 0x3508) = (int)number(file);
-            x35fc = (int)number(file);
-            *(int __far *)(cat + 0x35a6) = (int)number(file);
-            x35a2 = (int)number(file);
-            x35ac = (int)number(file);
-            *(int __far *)(cat + 0x34cc) = (int)number(file);
-            *(int __far *)(cat + 0x34ce) = (int)number(file);
-            x688 = (int)number(file);
-            *(int __far *)(cat + 0x35aa) = (int)number(file);
-            *(int __far *)(cat + 0x35a8) = (int)number(file);
-            *(int __far *)(cat + 0x35f4) = (int)number(file);
-            *(int __far *)(cat + 0x35ee) = (int)number(file);
-            *(int __far *)(cat + 0x35a4) = (int)number(file);
-            found = (int)number(file);
-
-            /* Walking on (23), its marker (kin 0x16) put where it walks to
-             * (its method `0x44`, as `DoCatLocomote` puts it). */
-            if (*(int __far *)(cat + 0x2552) == 23) {
-                void __far *marker = ((GETKIN)ordinal(18))(cat, 0x16);
-
-                if (marker) {
-                    MOVETO move = *(MOVETO __far *)(*(unsigned char __far *__far *)marker + 0x44);
-
-                    move(marker, 0, (int __far *)(cat + 0x34cc));
-                }
-            }
-
-            ((RESETSTACK)ordinal(951))(cat, 2);
-            ((PLAIN_SPRITE)ordinal(957))(cat);
-            *(int __far *)(cat + 0x1502) = -1;
-            *(int __far *)(cat + 0x1500) = done;
-            *(int __far *)(cat + 0x35fc) = x35fc;
-            *(int __far *)(cat + 0x35a2) = x35a2;
-            *(int __far *)(cat + 0x35ac) = x35ac;
-            *(int __far *)(cat + 0x688) = x688;
-
-            /* No box to find a target in (`+0x250e`, `+0x2510`; its share,
-             * `+0x2512`, 1, which `MakeFocusRect` divides by), so that
-             * `PopScript` never finds one there from a case before; or,
-             * where it is to be found, the marker (kin 0x16) the target
-             * (`+0x1504`) and a box about the head so big, and moved ahead of
-             * it so little, that it holds the stage. */
-            *(int __far *)(cat + 0x250e) = found ? 2000 : 0;
-            *(int __far *)(cat + 0x2510) = found ? 2000 : 0;
-            *(int __far *)(cat + 0x2512) = found ? 2000 : 1;
-
-            if (found) {
-                *(void __far *__far *)(cat + 0x1504) = ((GETKIN)ordinal(18))(cat, 0x16);
-            }
-
-            /* Where it was at the first case (its rectangle, `+0x124` to
-             * `+0x12a`), as a target found moves it as it is popped. */
-            for (b = 0; b < 4; b++) {
-                *(int __far *)(cat + 0x124 + 2 * b) = place[b];
-            }
-
-            for (b = 0; b < 10; b++) {
-                *(int __far *)(cat + 0x14a8 + 2 * b) = -1;
-                *(int __far *)(global + 0x3e + 2 * b) = -2;
-                *(int __far *)(cat + 0x2556 + 2 * b) = -2;
-            }
-
-            say("local %ld %d\r\n", seed, ((AREA)ordinal(606))(cat, 0x1d));
-
-            /* What exploring reads: the stage (CATZDLL's `ds:2ba6` to
-             * `2bac`), the cat's width and height (`+0x33c4`, `+0x33c6`),
-             * its target point (`GetTargetPt`, 10, space 0) and the draw
-             * rectangle of its kin 0x22 (`GetKin`, 18; `GetDrawRect`, 15). */
-            {
-                long point = ((TARGETPT)ordinal(10))(cat, 0);
-                void __far *kin = ((GETKIN)ordinal(18))(cat, 0x22);
-                int rect[4] = {0, 0, 0, 0}, own[4];
-
-                if (kin) {
-                    ((DRAWRECT)ordinal(15))(rect, kin, 0);
-                }
-
-                ((DRAWRECT)ordinal(15))(own, cat, 0);
-                say("stage %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\r\n",
-                    *(int __far *)MK_FP(dgroup, 0x2ba6), *(int __far *)MK_FP(dgroup, 0x2ba8),
-                    *(int __far *)MK_FP(dgroup, 0x2baa), *(int __far *)MK_FP(dgroup, 0x2bac),
-                    *(int __far *)(cat + 0x33c4), *(int __far *)(cat + 0x33c6), (int)point,
-                    (int)(point >> 16), kin != 0, rect[0], rect[1], rect[2], rect[3], own[0], own[1],
-                    own[2], own[3]);
-            }
-            original = *(void __far *__far *)cat;
-            _fmemcpy(table, original, sizeof table);
-            push = *(PUSH *)(table + 0xb8);
-            *(PUSH *)(table + 0xb8) = record;
-            track = *(LOOK *)(table + 0xe0);
-            *(LOOK *)(table + 0xe0) = tracking;
-            lookAtUser = *(LOOK *)(table + 0x2e0);
-            *(LOOK *)(table + 0x2e0) = userward;
-            looked = 0;
-            words = *(WORDS *)(table + 0xa4);
-            *(WORDS *)(table + 0xa4) = wording;
-            wordings = 0;
-            *(void __far *__far *)cat = table;
-            pushes = 0;
-            globalOriginal = *(void __far *__far *)global;
-            _fmemcpy(globalTable, globalOriginal, sizeof globalTable);
-            *(GLOBALSTATE *)(globalTable + 0x1c) = keep;
-            *(void __far *__far *)global = globalTable;
-            globalled = 0;
-            localOriginal = *(void __far *__far *)machine;
-            _fmemcpy(localTable, localOriginal, sizeof localTable);
-            *(GLOBALSTATE *)(localTable + 0x14) = keepLocal;
-            *(void __far *__far *)machine = localTable;
-            localled = 0;
-
-            *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
-            dispatch(machine, params, enter, 0);
-            *(void __far *__far *)cat = original;
-            *(void __far *__far *)global = globalOriginal;
-            *(void __far *__far *)machine = localOriginal;
-
-            say("localed");
-
-            for (b = 0; b < 10; b++) {
-                say(" %d", *(int __far *)(cat + 0x2556 + 2 * b));
-            }
-
-            for (b = 0; b < 10; b++) {
-                say(" %d", *(int __far *)(global + 0x3e + 2 * b));
-            }
-
-            say(" %d %d %d", *(int __far *)(cat + 0x2fda + 0x52 + 0x3a),
-                *(int __far *)(cat + 0x3502), *(int __far *)(cat + 0x1502));
-
-            for (b = 0; b < 10; b++) {
-                say(" %d", *(int __far *)(cat + 0x14a8 + 2 * b));
-            }
-
-            say(" %d %d", globalled, globalled ? globals[0] : -1);
-            say(" %d %d", localled, localled ? locals[0] : -1);
-            say(" %d", pushes);
-
-            for (b = 0; b < 8; b++) {
-                say(" %d", b < pushes ? pushed[b] : -1);
-            }
-
-            say(" %d %d %d", *(int __far *)(cat + 0x3504), *(int __far *)(cat + 0x1500),
-                ((REMAINING)ordinal(954))(cat));
-            say(" %d %d %d", *(int __far *)(cat + 0x34cc), *(int __far *)(cat + 0x34ce),
-                *(int __far *)(cat + 0x35a8));
-
-            /* The calls to its head (`SetHeadTracking`, `LookAtUser`), the
-             * target point of its kin 0x16 (`GetTargetPt`), and `+0x35ac`. */
-            say(" %d", looked);
-
-            for (b = 0; b < 8; b++) {
-                say(" %d", b < 2 * looked ? looks[b] : -1);
-            }
-
-            {
-                void __far *marker = ((GETKIN)ordinal(18))(cat, 0x16);
-                long point = marker ? ((TARGETPT)ordinal(10))(marker, 0) : 0;
-
-                say(" %d %d %d %d", marker != 0, (int)point, (int)(point >> 16),
-                    *(int __far *)(cat + 0x35ac));
-            }
-
-            /* The words that first steered it through slot `0xa4`, its
-             * fullness, `+0x688` and `+0x35aa`. */
-            say(" %d", wordings);
-
-            for (b = 0; b < 6; b++) {
-                say(" %d", wordings ? worded[b] : -1);
-            }
-
-            say(" %d %d %d %d", *(int __far *)(cat + 0x2fda + 4 * 0x52 + 0x3a),
-                *(int __far *)(cat + 0x688), *(int __far *)(cat + 0x35aa), *(int __far *)(cat + 0x33be));
-            say(" %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x34ca),
-                *(int __far *)(cat + 0x3516),
-                *(int __far *)(cat + 0x350a), *(int __far *)(cat + 0x3506),
-                *(int __far *)(cat + 0x3508), *(int __far *)(cat + 0x35a6),
-                *(int __far *)(cat + 0x35a4));
-        }
-
-        _lclose(file);
-    }
 
     /* Following its day: as many frames as `TRACE.TXT` says. */
     file = _lopen(DIRECTORY "\\TRACE.TXT", OF_READ);
