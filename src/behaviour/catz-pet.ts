@@ -1252,6 +1252,11 @@ export class CatzPet {
       this.options.purr?.(purred.sound);
     }
 
+    /* Its purr begun (0xe6) is played by `XPlayStereoSound` (seg23:36a2), which draws its loudness (seg10:0d5d). */
+    if (purred.sound === 0xe6) {
+      this.options.random(1);
+    }
+
     const done = catzExtremeSituations(this.mind, this.x358c, false, this.options.random);
     this.x358c = done.x358c;
 

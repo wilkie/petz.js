@@ -2874,11 +2874,19 @@ function catzVictim(
   };
 
   if (world.cues?.includes(7)) {
-    if (percent() < 75 && (kind === 9 || kind === 0x1b)) {
-      random(2);
+    /* The victim's sound (`PlaySpriteContactSound`, seg16:45d5): the mouse's and 9's one of two (`rand() % 2`, seg48:1afb), 6's and 7's set, the rest none; each played by `XPlayStereoSound`, which draws its loudness (seg10:0d5d). */
+    if (percent() < 75) {
+      if (kind === 9 || kind === 0x1b) {
+        random(2);
+      }
+
+      if (kind === 6 || kind === 7 || kind === 9 || kind === 0x1b) {
+        random(1);
+      }
     }
 
-    if (percent() < 20) {
+    /* Its own sound: caught, one time in five (seg19:0853); wrestling, one time in two (seg19:0c4f). */
+    if (percent() < (state === CATZ_STATE.victimWrestle ? 50 : 20)) {
       tick.sound = catzSound(mind, percent() < 50 ? 10 : 3, random);
     }
   }

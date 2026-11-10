@@ -382,7 +382,8 @@ const CATZ_PURRS: Record<number, [number, number]> = {
  * 0xe4 and none (-1), still asked; else the sound stopped and -- none
  * playing, asked 1, 0xe6 and 0x9c, else nothing -- 1 the next purr, 2 the
  * one before (`CATZ_PURRS`), 3 the same, queued (its slot `0x174`) and
- * asked no more (0). It draws nothing.
+ * asked no more (0). It draws nothing itself: a purr begun (0xe6) is played
+ * by `XPlayStereoSound`, which draws its loudness (the pet draws so).
  */
 export function catzPurring(
   x3570: number,
