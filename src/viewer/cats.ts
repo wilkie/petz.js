@@ -316,6 +316,14 @@ const KIT_BASKETS = [
   { x: 0x207, y: 0xaf },
 ];
 
+/**
+ * Each basket's breed's name's indent from its corner, by breed, as the Kit
+ * draws them under the baskets (`PetModule::DoDrawFrame`, seg34:2cdf on: its
+ * loop takes the baskets in its own order, 0, 4, 1, 3 and 2, with 0x20,
+ * 0x21, 0x26, 0x21 and 0x19).
+ */
+const KIT_NAME_INDENTS = [0x20, 0x26, 0x19, 0x21, 0x21];
+
 /** The basket's pictures (CATZDLL type 2): its back and handle (16500) and its front (16501), and lit (16510, 16511). */
 let basketPictures: { dib: Dib; colours: number[]; green: number }[] = [];
 
@@ -1210,6 +1218,26 @@ function drawLive(
   context.imageSmoothingEnabled = false;
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.drawImage(small, 0, 0, canvas.width, canvas.height);
+
+  /* In the Kit, each basket's breed's name under it (CATZDLL's strings 9053 to 9057), its box from its corner and indent, 5 above its foot to 20 below, drawn black (`XDrawText`, seg34:3154). (The game draws them into the playpen's background, behind the kitten; here they are drawn over all.) */
+  if (kitMode) {
+    const [sx, sy] = [canvas.width / LIVE_STAGE.right, canvas.height / LIVE_STAGE.bottom];
+    context.save();
+    context.fillStyle = '#000';
+    context.textBaseline = 'top';
+    context.font = `${Math.round(13 * sy)}px "Courier New", Courier, monospace`;
+
+    for (const [n, corner] of KIT_BASKETS.entries()) {
+      context.fillText(
+        catzString(9053 + n),
+        (KIT_ORIGIN.x + corner.x + KIT_NAME_INDENTS[n]) * sx,
+        (KIT_ORIGIN.y + corner.y + 145 - 5) * sy
+      );
+    }
+
+    context.restore();
+  }
+
   /* (Over it: the stage's bitmap is drawn whole, its ground and all.) */
   drawPen();
 }
