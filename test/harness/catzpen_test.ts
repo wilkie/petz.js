@@ -144,6 +144,8 @@ const TRACE_MOUSE = process.env.TRACE_MOUSE === '1';
 const TRACE_SCRUFF = process.env.TRACE_SCRUFF === '1';
 /** `TRACE_MESSAGES=1`: every 50 frames a message left for the cat (`+0x33c0`), as the playpen leaves one: food, water, a treat, catnip, a toy, the milk bottle, the spray bottle, the spray and flea spray on it, 18, the window resized and the camera, in turn. */
 const TRACE_MESSAGES = process.env.TRACE_MESSAGES === '1';
+/** `TRACE_TOY=1`: the yarn ball in the pen, and on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put to attack it -- with `TRACE_POUNCE`, so that a toy is its victim. */
+const TRACE_TOY = process.env.TRACE_TOY === '1';
 /** `TRACE_LIVELY=1`: the cat's liveliness held at 100. */
 const TRACE_LIVELY = process.env.TRACE_LIVELY === '1';
 /** `TRACE_FEARFUL=1`: the cat's fear held at 70. */
@@ -1700,7 +1702,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
   it('follows a cat through its day, each tick of its own states as the engine', async () => {
     const out = join(
       HARNESS,
-      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_VISITORS ? '-VISITORS' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_CLIMB ? '-CLIMB' : ''}${TRACE_MICE ? '-MICE' : ''}${TRACE_MICE_HELD ? '-HELD' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FEARFUL ? '-FEARFUL' : ''}${TRACE_LIVELY ? '-LIVELY' : ''}${TRACE_AGELESS ? '-AGELESS' : ''}${TRACE_KIT_PARAMS ? '-C4' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
+      `CATZTRACE${TRACE_CUES ? '-CUES' : ''}${TRACE_POUNCE ? '-POUNCE' : ''}${TRACE_EAT ? '-EAT' : ''}${TRACE_FEAR ? '-FEAR' : ''}${TRACE_PET ? '-PET' : ''}${TRACE_PET_DEEP ? '-DEEP' : ''}${TRACE_FOND ? '-FOND' : ''}${TRACE_FOND_MOVING ? '-MOVING' : ''}${TRACE_FOND_LACKING ? '-LACKING' : ''}${TRACE_BOTTLE ? '-BOTTLE' : ''}${TRACE_TREAT ? '-TREAT' : ''}${TRACE_KIT ? '-KIT' : ''}${TRACE_NAP ? '-NAP' : ''}${TRACE_VISITORS ? '-VISITORS' : ''}${TRACE_GROOM ? '-GROOM' : ''}${TRACE_CLIMB ? '-CLIMB' : ''}${TRACE_MICE ? '-MICE' : ''}${TRACE_MICE_HELD ? '-HELD' : ''}${TRACE_IGNORE ? '-IGNORE' : ''}${TRACE_SPRAY ? '-SPRAY' : ''}${TRACE_DIET ? '-DIET' : ''}${TRACE_WIGGLE ? '-WIGGLE' : ''}${TRACE_MOUSE ? '-MOUSE' : ''}${TRACE_SCRUFF ? '-SCRUFF' : ''}${TRACE_MESSAGES ? '-MESSAGES' : ''}${TRACE_FEARFUL ? '-FEARFUL' : ''}${TRACE_LIVELY ? '-LIVELY' : ''}${TRACE_TOY ? '-TOY' : ''}${TRACE_AGELESS ? '-AGELESS' : ''}${TRACE_KIT_PARAMS ? '-C4' : ''}${TRACE_FRAMES === 2000 ? '' : `-${TRACE_FRAMES}`}.OUT`
     );
     let text: string;
 
@@ -1741,7 +1743,8 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           (TRACE_MICE ? 33554432 : 0) |
           (TRACE_MICE_HELD ? 67108864 : 0) |
           (TRACE_VISITORS ? 134217728 : 0) |
-          (TRACE_LIVELY ? 268435456 : 0)
+          (TRACE_LIVELY ? 268435456 : 0) |
+          (TRACE_TOY ? 536870912 : 0)
         }\r\n`
       );
       text = await runPen('catztrace', directory, 7200 * Math.ceil(TRACE_FRAMES / 2000));
@@ -2871,6 +2874,8 @@ function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
           cues,
           /* Its script done as popped this tick (the first pop's 1), where the trace keeps it. */
           done: values[201] > 0 ? (values[202] & 1) !== 0 : undefined,
+          /* A layered action still playing as the tick began (newer traces): no sound made. */
+          layering: b[274] === undefined ? undefined : b[274] > 0,
           caught: b[116] !== 0,
           released: b[117] === undefined ? undefined : b[117] !== 0,
           x35b6: b[118],

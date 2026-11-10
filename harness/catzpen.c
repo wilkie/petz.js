@@ -532,7 +532,7 @@ static long forcing;
 static int forcedTicks, pouncedTicks, pounces, wrestledTicks, eatTicks, eats, fearTicks,
     fondTicks, suckTicks, treatTicks, napTicks, naps, badTicks, badDreams, groomTicks,
     ignoreTicks, sprayTicks, watchTicks, watches,
-    deepTicks, lackTicks, lacks, climbTicks, climbs;
+    deepTicks, lackTicks, lacks, climbTicks, climbs, toyTicks;
 static unsigned long forced, forcedNow;
 static int cloudCued, cloudTicks;
 
@@ -1032,6 +1032,28 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
         }
     }
 
+    /* And where it asks (536870912), the yarn ball (6) off the shelf into the pen
+     * (`XApt::ShelfToPlaypen`, 151), and on every tenth tick of the same, not attacking
+     * already, the cat put to attack it (global 1, `+0x35a4` 6): with pouncing asked (2),
+     * so that a toy, not the mouse, is its victim. */
+    if (forcing & 536870912L && !enter && !leave) {
+        int state = *(int __far *)(cat + 0x2552);
+        unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
+        void __far *yarn = ((GETKIN)ordinal(18))(cat, 6);
+
+        if (yarn && ((INSHELF)ordinal(38))(cat, 6)) {
+            ((TOPEN)ordinal(151))(yarn, p);
+        }
+
+        if ((state == 12 || state == 19 || state == 21 || state == 23 || state == 31) &&
+            *(int __far *)(global + 0x3a) != 1 && toyTicks++ % 10 == 9) {
+            *(int __far *)(cat + 0x35a4) = 6;
+            depth--;
+            passGlobal(*(void __far *__far *)(cat + 0x2fba), 1, p);
+            return;
+        }
+    }
+
     /* And where it asks (32768) too, on the 5th tick of every other walk
      * on to the cursor, affectionate, the cat lacks affection (55), as
      * walking on's arrival puts it where its marker was pulled back onto
@@ -1302,6 +1324,9 @@ static void __cdecl __far __loadds tracing(void __far *machine, void __far *p, i
             *(int __far *)(cat + 0x3592), *(int __far *)(cat + 0x3594),
             *(int __far *)(cat + 0x3596), *(int __far *)(cat + 0x35d2),
             *(int __far *)(cat + 0x35d4));
+
+        /* And the layered frames it has left (954), as the tick begins: a sound is made only where none are. */
+        say(" %d", ((REMAINING)ordinal(954))(cat));
 
         say("\r\n");
         outside = outsideGlobal = 0;

@@ -2094,6 +2094,8 @@ export class CatzPet {
       x1500: !this.posed && (this.state === 2 || this.state === 3) ? 0x14 : this.fields.x1500,
       global: this.global,
       enter,
+      /* A layered action still playing: no sound made (`MapAndPlayCatSound`). */
+      layering: this.options.layering?.() ?? false,
       inReach: this.options.inReach?.() ?? false,
       preyArea3: this.screenArea(this.fields.x35a4 ?? 0) === 3,
       ...(this.kit

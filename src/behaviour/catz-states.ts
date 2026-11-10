@@ -11,6 +11,21 @@ import { catzStrikeSpeed } from './catz-toys.ts';
 import { catzBehaviorChange } from './catz-reflexes.ts';
 
 /** The cat's own states these model, by CATZDLL.DLL's numbers (`eKatState_…`). */
+/**
+ * A sound made (`MapAndPlayCatSound`, seg15:11ae): the action the cat's
+ * temperament answers (`catzSound`, drawing as it chooses) -- unless a
+ * layered action is still playing (its slot `0xa8`), when it neither
+ * chooses nor plays, and draws nothing.
+ */
+function catzMapAndPlay(
+  world: { layering?: boolean },
+  mind: CatzMind,
+  sound: number,
+  random: (n: number) => number
+) {
+  return world.layering ? -1 : catzSound(mind, sound, random);
+}
+
 export const CATZ_STATE = {
   mightJump: 14,
   jumpToEdge: 15,
@@ -230,6 +245,9 @@ export interface CatzStateWorld {
 
   /** Dreaming: see `CatzDream`. */
   dream?: CatzDream;
+
+  /** Whether a layered action is still playing as the tick begins (`GetLayeredFramesRemaining`, its slot `0xa8`): no sound is made then. */
+  layering?: boolean;
 }
 
 /** A dream in CatNapz, as the tick begins. */
@@ -1107,7 +1125,7 @@ export function catzStateTick(
       }
 
       if (mind.brains[CATZ_BRAIN.fleas] > catzBehavior(mind, 13, random)) {
-        return done({ sound: catzSound(mind, 1, random), pushed: 0x26b, pushes: [0x26b] });
+        return done({ sound: catzMapAndPlay(world, mind, 1, random), pushed: 0x26b, pushes: [0x26b] });
       }
 
       const pushes = [catzBehavior(mind, 24, random) !== 0 && percent() < 50 ? 0x267 : 0x126];
@@ -1215,7 +1233,7 @@ export function catzStateTick(
       let sound: number | undefined;
 
       if (world.cues?.includes(4)) {
-        sound = catzSound(mind, 8, random);
+        sound = catzMapAndPlay(world, mind, 8, random);
         random(8);
       }
 
@@ -1227,7 +1245,7 @@ export function catzStateTick(
         if (mind.brains[CATZ_BRAIN.liveliness] < 50) {
           return done({
             passed: 1,
-            sound: catzSound(mind, 2, random),
+            sound: catzMapAndPlay(world, mind, 2, random),
             pushed: 0xe9,
             pushes: [0xe9],
           });
@@ -1327,7 +1345,7 @@ export function catzStateTick(
         }
 
         if (percent() < Math.trunc((100 - brain(CATZ_BRAIN.seriousness)) / 4)) {
-          tick.sound = catzSound(mind, 7, random);
+          tick.sound = catzMapAndPlay(world, mind, 7, random);
         }
       }
 
@@ -1767,13 +1785,13 @@ function catzWalkOn(
     world.area1 &&
     percent() < Math.trunc((100 - age) / 5) + 5
   ) {
-    tick.sound = catzSound(mind, 10, random);
+    tick.sound = catzMapAndPlay(world, mind, 10, random);
     push(age === 0 ? 0x2aa : 0xf1);
     return tick;
   }
 
   if (brain(CATZ_BRAIN.fear) >= 50 && percent() < 15 && G !== 22 && G !== 17 && world.area1) {
-    tick.sound = catzSound(mind, 10, random);
+    tick.sound = catzMapAndPlay(world, mind, 10, random);
     push(age === 0 ? 0x2ab : 0x296);
     return tick;
   }
@@ -2247,7 +2265,7 @@ function catzSwatting(
   const action = swat.side ? right : left;
 
   if (percent() < Math.trunc(brain(CATZ_BRAIN.energy) / 3)) {
-    tick.sound = catzSound(mind, 10, random);
+    tick.sound = catzMapAndPlay(world, mind, 10, random);
   }
 
   tick.pushes!.push(...before, action);
@@ -2887,8 +2905,13 @@ function catzVictim(
 
     /* Its own sound: caught, one time in five (seg19:0853); wrestling, one time in two (seg19:0c4f). */
     if (percent() < (state === CATZ_STATE.victimWrestle ? 50 : 20)) {
-      tick.sound = catzSound(mind, percent() < 50 ? 10 : 3, random);
+      tick.sound = catzMapAndPlay(world, mind, percent() < 50 ? 10 : 3, random);
     }
+  }
+
+  /* Its script not yet done, nothing more (seg19:0c81, and so caught). */
+  if (world.done === false) {
+    return tick;
   }
 
   if (state === CATZ_STATE.victimWrestle) {
@@ -3002,7 +3025,7 @@ function catzLanding(
   let hard = false;
   const done = () => {
     if (hard) {
-      tick.sound = catzSound(mind, [8, 11, 1][random(3)], random);
+      tick.sound = catzMapAndPlay(world, mind, [8, 11, 1][random(3)], random);
     }
 
     if (pushes.length) {
@@ -3569,7 +3592,7 @@ function catzFear(
   switch (state) {
     case CATZ_STATE.stayAway:
       if (world.enter) {
-        tick.sound = catzSound(mind, 2, random);
+        tick.sound = catzMapAndPlay(world, mind, 2, random);
         return pushes([0xdc, ...(percent() < 30 ? [age === 0 ? 0x2ab : 0x296] : []), 0x254]);
       }
 
@@ -3578,7 +3601,7 @@ function catzFear(
       return tick;
     case CATZ_STATE.scaredWatch:
       if (world.enter) {
-        tick.sound = catzSound(mind, 2, random);
+        tick.sound = catzMapAndPlay(world, mind, 2, random);
         return pushes([0xdc]);
       }
 
@@ -3613,7 +3636,7 @@ function catzFear(
       }
 
       if (percent() < 30) {
-        tick.sound = catzSound(mind, 2, random);
+        tick.sound = catzMapAndPlay(world, mind, 2, random);
       }
 
       if (age === 0) {
@@ -3712,7 +3735,7 @@ function catzPetRegionSwitch(
         case 3:
           return upset([0x6d]);
         case 4:
-          tick.sound = catzSound(mind, 2, random);
+          tick.sound = catzMapAndPlay(world, mind, 2, random);
           return upset([0xd7]);
         default:
           return upset([]);
@@ -3884,7 +3907,7 @@ function catzPetting(
     tick.count = 0;
 
     if (percent() < 30) {
-      tick.sound = catzSound(mind, 5, random);
+      tick.sound = catzMapAndPlay(world, mind, 5, random);
     }
   }
 
@@ -3957,7 +3980,7 @@ function catzPetting(
   if (petting.x3570 === -1) {
     if (percent() >= 10) {
       if ((catzBehavior(mind, 26, random) !== 0 && percent() < 50) || percent() < 30) {
-        tick.sound = catzSound(mind, percent() < 50 ? 5 : 3, random);
+        tick.sound = catzMapAndPlay(world, mind, percent() < 50 ? 5 : 3, random);
       }
     } else {
       written.x3572 = 1;
@@ -4053,7 +4076,7 @@ function catzPetting(
               tick.headTrack = { kind: 0x17, speed: 2500 };
               return tick;
             case 4:
-              tick.sound = catzSound(mind, 4, random);
+              tick.sound = catzMapAndPlay(world, mind, 4, random);
               return push(0xce);
             default:
               return tick;
@@ -4444,9 +4467,9 @@ function catzTreat(
     }
 
     if (percent() < 100 - brain(CATZ_BRAIN.fullness) && percent() < 50) {
-      tick.sound = catzSound(mind, 6, random);
+      tick.sound = catzMapAndPlay(world, mind, 6, random);
     } else if (percent() < Math.trunc((100 - brain(CATZ_BRAIN.seriousness)) / 4)) {
-      tick.sound = catzSound(mind, 7, random);
+      tick.sound = catzMapAndPlay(world, mind, 7, random);
     }
   }
 
@@ -4627,7 +4650,7 @@ function catzKit(
       }
 
       if (world.cues?.includes(6) && percent() < 50) {
-        tick.sound = catzSound(mind, 7, random);
+        tick.sound = catzMapAndPlay(world, mind, 7, random);
       }
 
       if (world.done === false) {
@@ -5075,7 +5098,7 @@ function catzSprayed(
     if (world.enter) {
       tick.x35a4 = 2;
       tick.head = ['track'];
-      tick.sound = catzSound(mind, 8, random);
+      tick.sound = catzMapAndPlay(world, mind, 8, random);
       return push(percent() < 50 || age === 0 ? 0x122 : 0x107);
     }
 
@@ -5110,7 +5133,7 @@ function catzSprayed(
 
     tick.passed = mind.brains[fleas] >= 50 ? 1 : 0;
     tick.head = ['track'];
-    tick.sound = catzSound(sprayed, 4, random);
+    tick.sound = catzMapAndPlay(world, sprayed, 4, random);
 
     const now = Math.min(sickness + 25, 100);
 
@@ -5180,7 +5203,7 @@ function catzDangling(
   };
 
   if (world.enter) {
-    tick.sound = catzSound(mind, 9, random);
+    tick.sound = catzMapAndPlay(world, mind, 9, random);
     percent();
     random(2);
     tick.count = 0;
@@ -5236,7 +5259,7 @@ function catzDangling(
 
   if (afraid || (independent && count > 10) || world.mouseState === 6) {
     if (percent() < 50) {
-      tick.sound = catzSound(mind, 11, random);
+      tick.sound = catzMapAndPlay(world, mind, 11, random);
     }
 
     return push(...pushes, 0xdc, 0x89);
@@ -5244,7 +5267,7 @@ function catzDangling(
 
   if (independent || count > 10) {
     if (percent() < 30) {
-      tick.sound = catzSound(mind, 11, random);
+      tick.sound = catzMapAndPlay(world, mind, 11, random);
     }
 
     return push(...pushes, 0xdf, 0x88);
