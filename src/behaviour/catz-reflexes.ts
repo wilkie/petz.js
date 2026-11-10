@@ -1,5 +1,5 @@
 /**
- * A Catz cat's reflexes (CATZDLL.DLL seg23; kb/topics/catz-behaviour.md,
+ * A Catz cat's reflexes (CATZDLL.DLL seg23; kb/topics/catz-reflexes.md,
  * "Reflexes"): the methods `CatSprite::Update` (seg16:23da) calls each tick,
  * after its brains move on and before its state machines.
  */
