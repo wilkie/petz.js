@@ -593,7 +593,7 @@ static int popped, pop;
 
 static void popJump(void);
 
-static unsigned char __far *tracedMouse;
+static unsigned char __far *tracedMouse, __far *tracedDog;
 
 static int __cdecl __far __loadds popping(void __far *sprite, void __far *params)
 {
@@ -614,6 +614,15 @@ static int __cdecl __far __loadds popping(void __far *sprite, void __far *params
 
         say("mpop %lu %d %lu %d %d\r\n", seed, answer,
             *(unsigned long __far *)MK_FP(traceData, 0x28ba), (int)at, (int)(at >> 16));
+    }
+
+    /* The dog's, followed (134217728): the seed before, what it answered
+     * (bit 1, its script done), the seed after, and its target point
+     * across, placed by its new frame. */
+    if (tracedDog && sprite == tracedDog) {
+        say("dpop %lu %d %lu %d\r\n", seed, answer,
+            *(unsigned long __far *)MK_FP(traceData, 0x28ba),
+            (int)((TARGETPT)ordinal(10))(sprite, 0));
     }
 
     if (sprite == traced && !popped++) {
@@ -1949,6 +1958,28 @@ static void __cdecl __far __loadds mouseGlobalTracing(void __far *machine, void 
     mouseDispatch(mouseGlobalHandle, 'g', machine, p, enter, leave);
 }
 
+/* And CatNapz's dog (kin 0x1a), its own table copied, its pushes (slot
+ * `0xb8`) each written as made (`dogpush`: the action, and C's `rand` seed
+ * after), which the chase's handler makes in the cat's tick. */
+static unsigned char dogTable[0x180];
+static PUSH dogPush;
+
+static void __cdecl __far __loadds dogPushing(void __far *dog, int action, int variant)
+{
+    dogPush(dog, action, variant);
+    say("dogpush %d %lu\r\n", action,
+        traceData ? *(unsigned long __far *)MK_FP(traceData, 0x28ba) : 0ul);
+}
+
+static void installDog(unsigned char __far *dog)
+{
+    tracedDog = dog;
+    _fmemcpy(dogTable, *(void __far *__far *)dog, sizeof dogTable);
+    dogPush = *(PUSH *)(dogTable + 0xb8);
+    *(PUSH *)(dogTable + 0xb8) = dogPushing;
+    *(void __far *__far *)dog = dogTable;
+}
+
 static void installMouse(unsigned char __far *mouse)
 {
     unsigned char __far *machine = mouse + 0x2518;
@@ -3008,6 +3039,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
                 if (mouse) {
                     installMouse(mouse);
+                }
+            }
+
+            if (forcing & 134217728L) {
+                unsigned char __far *dog = ((GETKIN)ordinal(18))(cat, 0x1a);
+
+                if (dog) {
+                    installDog(dog);
                 }
             }
         }

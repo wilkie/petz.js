@@ -14,7 +14,7 @@
  * beginning is not reimplemented is idled instead, and counted.
  */
 
-import { type CatzMind, catzSound } from './catz-behavior.ts';
+import type { CatzMind } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 import { catzGlobalBegin, catzGlobalTick } from './catz-global.ts';
 import { catzMomentBegin, type CatzMomentState, catzMomentTick } from './catz-moment.ts';
@@ -42,6 +42,7 @@ import {
   type CatzKit,
   catzCuriosities,
   catzFaceForward,
+  catzDogsPart,
   catzPreMoment,
   type CatzPetting,
   catzPtToPtAngle,
@@ -483,21 +484,20 @@ export class CatzPet {
     }
 
     const { stage, random } = this.options;
-    const past = this.fields.x35a8 === 1 ? x > stage.right + 100 : x < stage.left - 100;
+    const part = catzDogsPart(
+      { x, done: dog.done() },
+      { x35a8: this.fields.x35a8 ?? 0, stage, layering: this.options.layering?.() },
+      this.mind,
+      random
+    );
 
-    if (!dog.done() || past) {
-      return;
+    for (const action of part?.pushes ?? []) {
+      dog.push(action);
     }
 
-    const middle = Math.trunc((stage.right - stage.left) / 2) + stage.left;
-
-    if (Math.abs(x - middle) < 200 && random(101) < 30) {
-      dog.push(7);
-    } else {
-      catzSound(this.mind, 2, random);
+    if (part?.sound !== undefined && part.sound > 0) {
+      this.options.layer?.(part.sound);
     }
-
-    dog.push(1);
   }
 
   /** The dream's end (69; `DoCatDreamEnd`, seg18:151d), each tick: its cloud cued (0) at the end of what it plays, put away and off. */

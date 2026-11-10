@@ -245,4 +245,4 @@ Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`
 - Going with what it is on, on the shelf: none of the jump's scripts cues it on (4 or 1), so it may never be met.
 - Grooming by ways 4, 5, 8 and 9, which compare `+0x688` with what nothing set.
 
-Reimplemented but not held against a trace: the dog's part of its chase in the pet (its barks and runs, 7 and 1, and the cat's sound, 2), the replay comparing the cat's pushes, not the dog's. Not reimplemented: the shelf as a window of its own, and its bevelled frame.
+Not reimplemented: the shelf as a window of its own, and its bevelled frame.

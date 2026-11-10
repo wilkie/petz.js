@@ -26,6 +26,38 @@ function catzMapAndPlay(
   return world.layering ? -1 : catzSound(mind, sound, random);
 }
 
+/**
+ * The dog's part of the chase (71, `DoCatDogChase`, seg18:1853), each tick
+ * chasing (`+0x35ee` 10), before the cat's own: the dog's script popped,
+ * where that leaves it across (`x`) and whether its script is done. Not
+ * past the line on the side the cat runs to (100 past the stage, right for
+ * way 1, left for 2) and its script done: within 200 of the stage's middle
+ * and `rand() % 101` under 30, the dog pushes 7 (barking); else the cat
+ * makes a sound (`MapAndPlayCatSound`, 2); then the dog pushes 1 (running
+ * on). What it pushes, and the cat's sound; none where it does nothing.
+ */
+export function catzDogsPart(
+  dog: { x: number; done: boolean },
+  world: { x35a8: number; stage: { left: number; right: number }; layering?: boolean },
+  mind: CatzMind,
+  random: (n: number) => number
+): { pushes: number[]; sound?: number } | undefined {
+  const { stage } = world;
+  const past = world.x35a8 === 1 ? dog.x > stage.right + 100 : dog.x < stage.left - 100;
+
+  if (!dog.done || past) {
+    return undefined;
+  }
+
+  const middle = Math.trunc((stage.right - stage.left) / 2) + stage.left;
+
+  if (Math.abs(dog.x - middle) < 200 && random(101) < 30) {
+    return { pushes: [7, 1] };
+  }
+
+  return { pushes: [1], sound: catzMapAndPlay(world, mind, 2, random) };
+}
+
 export const CATZ_STATE = {
   mightJump: 14,
   jumpToEdge: 15,
@@ -5046,7 +5078,7 @@ function catzDogChase(state: number, mind: CatzMind, world: CatzStateWorld): Cat
     return tick;
   }
 
-  /* The dog not yet 100 past the stage on the side the cat ran to (right for way 1, left for 2): it waits for it. (The dog's own scripts as it goes -- 7 or 1, and the cat's sound -- are not reimplemented.) */
+  /* The dog not yet 100 past the stage on the side the cat ran to (right for way 1, left for 2): it waits for it. (The dog's own part, before, is `catzDogsPart`.) */
   const left = world.x35a8 === 1;
   const past = left ? dream.dogX > stage.right + 100 : dream.dogX < stage.left - 100;
 

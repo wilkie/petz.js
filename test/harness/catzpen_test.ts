@@ -23,6 +23,7 @@ import { catzGlobalBegin, catzGlobalTick } from '../../src/behaviour/catz-global
 import { catzJingleTick, catzToyTick } from '../../src/behaviour/catz-toys.ts';
 import {
   catzCuriosities,
+  catzDogsPart,
   catzStateBetween,
   catzStateTick,
   type CatzStateWorld,
@@ -112,7 +113,7 @@ const TRACE_KIT = process.env.TRACE_KIT === '1';
 
 /** `TRACE_NAP=1`: on every tenth tick of looking at things, passing the time, its moment, walking or grooming, the cat put in global state 21, CatNapz, a day of its own; starting a dream, cued to dream (6) once, and its cloud, which runs no script in the pen, cued that it has come (4) after 20 ticks; the second time, the dog's chase; 20 ticks into each dream's float, a bad dream, its breed kept at 2, and every other one the dream's mouse 300 ticks in. */
 const TRACE_NAP = process.env.TRACE_NAP === '1';
-/** `TRACE_VISITORS=1`, with `TRACE_NAP=1`: the cloud's cue that it has come (4) not answered for it -- the playpen's tree updates the cloud, which cues it itself, as it does the dog. */
+/** `TRACE_VISITORS=1`, with `TRACE_NAP=1`: the cloud's cue that it has come (4) not answered for it -- the playpen's tree updates the cloud, which cues it itself, as it does the dog; and the dog's pops and pushes written (`dpop`, `dogpush`), its part of the chase held (`followDog`). */
 const TRACE_VISITORS = process.env.TRACE_VISITORS === '1';
 
 /** `TRACE_GROOM=1`: on every tenth tick of looking at things, passing the time, its moment or walking on, the cat put to grooming (13), a day of its own. */
@@ -1803,6 +1804,17 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
     expect(held).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
 
+    /* The dog's part of the chase, where the trace keeps its pops and pushes. */
+    const dog = followDog(lines);
+
+    if (dog.ticks) {
+      console.log(
+        `the dog's part: ${dog.ticks} chasing ticks, ${dog.acted} acted (${dog.barked} barked), ${dog.held} held`
+      );
+      expect(dog.wrong).toEqual([]);
+      expect(dog.held).toBe(dog.ticks);
+    }
+
     console.log(
       `bookkeeping:\n${Object.entries(books)
         .filter(([, k]) => k.other)
@@ -2462,6 +2474,83 @@ const ENTERED_PUSHES = new Set([
  * only counted. Walking on, whether `PopScript` found what it walks to is
  * not known, and either will do.
  */
+/**
+ * The dog's part of the chase (`catzDogsPart`) against a trace that keeps
+ * the dog's pops (`dpop`: the seed before, what it answered, the seed
+ * after, where it is across) and pushes (`dogpush`: the action, the seed
+ * after) -- `TRACE_VISITORS=1`; bit 0 of what it answered, its script
+ * done -- each chasing tick (global 21, state 71,
+ * `+0x35ee` 10), from its first pop on, what the dog pushes, and C's
+ * `rand` seed as it pushes the last.
+ */
+function followDog(lines: string[]) {
+  let b: number[] | null = null;
+  let pops: number[][] = [];
+  let pushes: number[][] = [];
+  const result = { ticks: 0, acted: 0, barked: 0, held: 0, wrong: [] as string[] };
+
+  for (const line of lines) {
+    const [kind, ...rest] = line.split(' ');
+    const values = rest.map(Number);
+
+    if (kind === 'tick') {
+      b = values;
+      pops = [];
+      pushes = [];
+    } else if (kind === 'dpop') {
+      pops.push(values);
+    } else if (kind === 'dogpush' && pops.length) {
+      /* (Its script's own pushes, as it is popped, come before.) */
+      pushes.push(values);
+    } else if (kind === 'ticked' && b) {
+      const field = (n: number) => b![5 + n];
+
+      if (b[4] === 21 && field(0) === 71 && field(16) === 10 && pops.length) {
+        result.ticks++;
+        const [, answer, after, x] = pops[0];
+        let seed = BigInt(after);
+        const random = (n: number) => {
+          seed = (seed * 22695477n + 1n) & 0xffffffffn;
+          return Number((seed >> 16n) & 0x7fffn) % n;
+        };
+        const ours = catzDogsPart(
+          { x, done: (answer & 1) !== 0 },
+          {
+            x35a8: field(14),
+            stage: { left: b[63], right: b[65] },
+            layering: b[274] === undefined ? undefined : b[274] > 0,
+          },
+          { brains: b.slice(27, 39), centres: b.slice(39, 51) } as CatzMind,
+          random
+        );
+        const theirs = pushes.map(([action]) => action);
+        const want = ours?.pushes ?? [];
+        const seedHeld = !theirs.length || BigInt(pushes[pushes.length - 1][1]) === seed;
+
+        if (theirs.length) {
+          result.acted++;
+        }
+
+        if (theirs[0] === 7) {
+          result.barked++;
+        }
+
+        if (want.join(' ') === theirs.join(' ') && seedHeld) {
+          result.held++;
+        } else if (result.wrong.length < 20) {
+          result.wrong.push(
+            `dog at ${x} answered ${answer}: ${want.join(' ') || 'none'} not ${theirs.join(' ') || 'none'}${seedHeld ? '' : `, seed ${seed} not ${pushes[pushes.length - 1][1]}`}`
+          );
+        }
+      }
+
+      b = null;
+    }
+  }
+
+  return result;
+}
+
 function followTrace(lines: string[], inShelf: (kind: number) => boolean) {
   const wrong: string[] = [];
   const tally: Record<number, [number, number, number]> = {};
