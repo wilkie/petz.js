@@ -238,4 +238,11 @@ More of how a cat behaves, each on a page of its own:
 
 ## Not yet
 
-Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`).
+Every reflex runs in the pet but blinking, which the timeline plays (`blinkCatz`). Every state of the cat's own is reimplemented, and each has been met and held against the engine in a trace ([[topic:catz-traces]]) but for these paths, not yet met:
+
+- A pounce's side-on leap from afar (0x2c5): the cat facing, and its prey lying, 33 to 95 across, and farther than 200.
+- After a pounce, the cursor's moment, and the food it eats where cued.
+- Going with what it is on, on the shelf: none of the jump's scripts cues it on (4 or 1), so it may never be met.
+- Grooming by ways 4, 5, 8 and 9, which compare `+0x688` with what nothing set.
+
+Reimplemented but not held against a trace: the dog's part of its chase in the pet (its barks and runs, 7 and 1, and the cat's sound, 2), the replay comparing the cat's pushes, not the dog's. Not reimplemented: the shelf as a window of its own, and its bevelled frame.
