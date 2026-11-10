@@ -84,6 +84,10 @@ export interface CatzGlobalBegun {
 
   /** Grooming: the way it goes to groom (`+0x35a8`). */
   x35a8?: number;
+
+  /** Scared: how it flees (`+0x35f4`: 1 off the stage's right, 2 having let go) and its `+0x9e` (-20000 hiding). */
+  x35f4?: number;
+  x9e?: number;
   x33c2?: number;
   sound?: number;
   pushes?: number[];
@@ -225,6 +229,54 @@ export function catzGlobalBegin(
       } else {
         walk({ x: Math.trunc(reach + shelf.right), y: shelfMiddle });
       }
+      break;
+    }
+    case 17: {
+      /* Scared (`DoGSScared`, seg31:0000), entering: no effects of its own (`NewState` leaves them for 17). Afraid (fear 50 or more), `rand() % 101` under 50 and with an age, it jumps to the ceiling (0x3e). Else, `rand() % 101` under 10 and not after the mouse (`+0x35a4` 0x1b), it flees off the stage's right: `+0x35f4` 1, its goal 200 past the right at the stage's middle height, `+0x35a6` 0, `+0x35ac` 1, way 2, 0xdc, a sound (2) and walking (22). Else, `rand() % 101` under 10, or without an age under 75 fear, not after the mouse, it lets go of what it has and flees so: `+0x35f4` 2, `+0x35a4` and `+0x35a6` 0 (its slot `0x238` with 0), 0xdc, a sound (2) and walking. Else, `rand() % 101` under 25, not in the Adoption Kit's program (`+0xc4`), it walks to the shelf (kin 0x22) to hide: `+0x35a4` and `+0x35a6` 0x22, `+0x35ac` 1, `+0x9e` -20000. Else it stays away (0x3a). */
+      begun.effects = undefined;
+      const fear = mind.brains[CATZ_BRAIN.fear];
+      const prey = world.x35a4 ?? 0;
+      const flee = () => {
+        begun.pushes = [0xdc];
+        begun.sound = catzSound(mind, 2, random);
+        begun.state = 22;
+      };
+
+      if (fear >= 50 && percent() < 50 && age !== 0) {
+        begun.state = 0x3e;
+        break;
+      }
+
+      if (percent() < 10 && prey !== 0x1b) {
+        const stage = world.stage ?? { left: 0, top: 0, right: 640, bottom: 480 };
+        begun.x35f4 = 1;
+        begun.goal = {
+          x: stage.right + 200,
+          y: Math.trunc((stage.bottom - stage.top) / 2) + stage.top,
+        };
+        begun.x35a6 = 0;
+        begun.x35ac = 1;
+        begun.x35a8 = 2;
+        flee();
+        break;
+      }
+
+      if ((percent() < 10 || (age === 0 && fear < 75)) && prey !== 0x1b) {
+        begun.x35f4 = 2;
+        begun.kind = 0;
+        flee();
+        break;
+      }
+
+      if (percent() < 25 && !world.c4) {
+        begun.kind = 0x22;
+        begun.x35ac = 1;
+        begun.x9e = -20000;
+        begun.state = 22;
+        break;
+      }
+
+      begun.state = 0x3a;
       break;
     }
     case 14:

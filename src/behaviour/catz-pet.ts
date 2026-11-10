@@ -271,7 +271,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([1, 2, 3, 4, 6, 21, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18, 19, 20, 22]);
+const BEGUN = new Set([1, 2, 3, 4, 6, 21, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -1558,6 +1558,11 @@ export class CatzPet {
       this.petting.x3570 = -1;
     }
 
+    /* Leaving scared (17): how it fled and its `+0x9e` none (`DoGSScared`, seg31:0209). */
+    if (this.global === 17 && global !== 17) {
+      this.fields.x35f4 = 0;
+    }
+
     /* Leaving having its victim (2): the mouse free (`DoGSHasVictim`, seg33:1527). */
     if (this.global === 2 && global !== 2) {
       this.options.mouseHeld?.('free');
@@ -1642,6 +1647,10 @@ export class CatzPet {
     /* Attacking: walking to a point, the corner it made for. */
     if (begun.x35a8 !== undefined) {
       this.fields.x35a8 = begun.x35a8;
+    }
+
+    if (begun.x35f4 !== undefined) {
+      this.fields.x35f4 = begun.x35f4;
     }
 
     if (begun.x35ae !== undefined) {
