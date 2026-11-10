@@ -14,7 +14,7 @@
  * beginning is not reimplemented is idled instead, and counted.
  */
 
-import { type CatzMind, catzBehavior, catzSound } from './catz-behavior.ts';
+import { type CatzMind, catzSound } from './catz-behavior.ts';
 import { CATZ_BRAIN } from './catz-brain.ts';
 import { catzGlobalBegin, catzGlobalTick } from './catz-global.ts';
 import { catzMomentBegin, type CatzMomentState, catzMomentTick } from './catz-moment.ts';
@@ -271,7 +271,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([1, 2, 3, 4, 6, 21, 7, 8, 9, 11, 12, 13, 15, 16, 18, 19, 20, 22]);
+const BEGUN = new Set([1, 2, 3, 4, 6, 21, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18, 19, 20, 22]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -1537,10 +1537,6 @@ export class CatzPet {
       }
     }
 
-    if (this.beginOwn(global, depth)) {
-      return;
-    }
-
     if (!BEGUN.has(global)) {
       this.stoodIn.globals[global] = (this.stoodIn.globals[global] ?? 0) + 1;
       global = 6;
@@ -1549,10 +1545,12 @@ export class CatzPet {
     /* A new global state: it may see the mouse again (`GlobalCatStateMachine::NewState`). */
     this.x33bc = 0;
 
-    /* Petted (`DoGSPetting`): no sound of its own, its modes cleared. */
+    /* Petted (`DoGSPetting`): no sound of its own, its modes cleared. Affectionate (`DoGSAffectionate`): no sound of its own. */
     if (global === 7) {
       this.petting.x3570 = -1;
       this.petting.modes = Array(40).fill(0);
+    } else if (global === 14) {
+      this.petting.x3570 = -1;
     }
 
     /* Leaving having its victim (2): the mouse free (`DoGSHasVictim`, seg33:1527). */
@@ -1670,35 +1668,6 @@ export class CatzPet {
       this.global = last;
       this.mind.global = last;
       this.enter(begun.state, depth + 1);
-    }
-  }
-
-  /**
-   * The global states the pet begins itself, as far as they are read out --
-   * and where not, standing in, counted (grooming, 13, now `catzGlobalBegin`'s):
-   *
-   * - affectionate (14; `DoGSAffectionate`): no sound of its own
-   *   (`+0x3570`), and it walks to the cursor (22, `+0x35a6` 0x17).
-   *
-   * Attacking (1), playing (15) and chasing (16) begin as the engine begins
-   * them (`catzGlobalBegin`): walking to what it attacks or plays with, or
-   * making for a corner away from it first, or running to it.
-   */
-  private beginOwn(global: number, depth: number) {
-    const { random } = this.options;
-    const set = (to: number) => {
-      this.global = to;
-      this.mind.global = to;
-    };
-
-    switch (global) {
-      case 14:
-        set(14);
-        this.fields.x35a6 = 0x17;
-        this.enter(22, depth + 1);
-        return true;
-      default:
-        return false;
     }
   }
 

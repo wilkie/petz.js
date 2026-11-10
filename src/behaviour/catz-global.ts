@@ -227,6 +227,12 @@ export function catzGlobalBegin(
       }
       break;
     }
+    case 14:
+      /* Affectionate (`DoGSAffectionate`, seg30:0f31), entering: its effect on independence 15 (its slot `0x114`, 2), the rest none; no sound of its own (`+0x3570` -1, which the pet keeps as petting does); and it walks to the cursor (22, `+0x35a6` 0x17). */
+      begun.effects = [0, 15, 0, 0];
+      begun.x35a6 = 0x17;
+      begun.state = 22;
+      break;
     case 12:
       /* Ignoring something (`DoGSIgnore`, seg30:1964): no effects of its own; it ignores it (0x51). */
       begun.effects = [0, 0, 0, 0];
