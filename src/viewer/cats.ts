@@ -1024,6 +1024,21 @@ function drawLive(
     bitmap.pixels.set(backdrop.pixels);
   }
 
+  /* In the Adoption Kit, the Catz logo above the baskets (15450, at (235, 4) of the stage, drawn into its background: `PetModule::DoDrawFrame`, seg34:2ea9, with `PetParams` `+0xc4`). */
+  const logo = kitMode ? thingBitmaps.get(15450) : undefined;
+
+  if (logo) {
+    drawPicture(
+      bitmap,
+      logo.dib,
+      logo.colours,
+      LIVE_STAGE.left + 235,
+      LIVE_STAGE.top + 4,
+      false,
+      logo.green
+    );
+  }
+
   /* The shelf (kin 0x22) first, at the back: its picture at (4, 109) of it, as its definition's art has it -- 15000, or, in the Adoption Kit, 15001, the locked things' outlines drawn in (`XApt::SetupToysLocked`; 15002 the later Kit's, `SetupToysUnlocked`) -- and the things on it, each its on-shelf condition's (0) resting picture at its place; a locked one not drawn at all (`XApt::Draw`, `+0x1d0` 0). */
   const shelfPicture = thingBitmaps.get(kitMode ? 15001 : 15000);
 
