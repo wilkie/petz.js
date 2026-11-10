@@ -7,7 +7,7 @@
  * and then its own (`MouseSprite::Update`, seg27:0f21). Its four brains
  * (`+0x257e` on, 0x52 apart): restless (0, its wish to come out), fear (1),
  * fullness (2) and curiosity (3), by how they are used. See
- * kb/topics/catz-behaviour.md ("The mouse").
+ * kb/topics/catz-playpen.md ("The mouse").
  *
  * What it does to the world -- its script pushed and popped, put at its
  * hole, hidden and shown, its rotation aimed -- goes through `CatzMouseWorld`,

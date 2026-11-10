@@ -4580,7 +4580,7 @@ function catzKit(
     return tick;
   }
 
-  /* What it writes of the Kit's fields (seg13; kb/topics/catz-behaviour.md, "In the Adoption Kit"). */
+  /* What it writes of the Kit's fields (seg13; kb/topics/catz-adoption-kit.md, "In the Adoption Kit"). */
   const write = (fields: Partial<CatzKit>) => {
     tick.kit = { ...tick.kit, ...fields };
   };
@@ -4770,7 +4770,7 @@ function catzKit(
 const DREAM_SPIN = 0.0043633231299858265;
 
 /**
- * A dream in CatNapz (CATZDLL.DLL seg18; kb/topics/catz-behaviour.md,
+ * A dream in CatNapz (CATZDLL.DLL seg18; kb/topics/catz-catnapz.md,
  * "CatNapz"):
  *
  * - starting a dream (65; `DoCatStartDream`, seg18:0202): entering, it turns
@@ -4983,7 +4983,7 @@ function catzDream(
 }
 
 /**
- * The dog's chase in CatNapz (CATZDLL.DLL seg18; kb/topics/catz-behaviour.md,
+ * The dog's chase in CatNapz (CATZDLL.DLL seg18; kb/topics/catz-catnapz.md,
  * "CatNapz"), the way it runs (`+0x35a8`) 1 to the left, 2 to the right:
  *
  * - its start (70; `DoCatStartDogChase`, seg18:15fb): entering, the dog (kin

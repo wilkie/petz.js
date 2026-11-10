@@ -2,7 +2,7 @@
  * Catz's playpen in the harness (harness/catzpen.c): CATZDLL.DLL's own pet
  * module set up as CATZ.EXE sets it up, around a cat adopted on the oracle,
  * and run a frame at a time on winbox.js's virtual clock, so a run is the
- * same every time. See kb/topics/catz-behaviour.md, "The playpen harness".
+ * same every time. See kb/topics/catz-traces.md, "The playpen harness".
  *
  * The game's parameters (`PetParams`) are what CATZ.EXE itself filled in:
  * the first test runs the game on winbox.js to its playpen, and keeps them

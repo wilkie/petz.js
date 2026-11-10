@@ -1,7 +1,7 @@
 /**
  * The pen's things moving: a tick of a toy's physics, as the playpen moves
  * it (`XApt::ToyPhysics`, CATZDLL.DLL seg29:0140), and a swat's strike
- * (`XApt::StrikeToy`, seg29:073c). See kb/topics/catz-behaviour.md ("The
+ * (`XApt::StrikeToy`, seg29:073c). See kb/topics/catz-playpen.md ("The
  * pen's things").
  */
 

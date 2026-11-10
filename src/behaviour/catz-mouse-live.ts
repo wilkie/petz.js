@@ -4,7 +4,7 @@
  * `InitMouseSprite` makes it) in a pen given by whoever runs it -- the cat,
  * the cursor, the pen's things, its hole. Its brains made as `InitBrain`
  * makes them from MOUSE.LNZ's `[Default Factors]` and drawn back toward
- * their centres by the clock. See kb/topics/catz-behaviour.md ("The mouse").
+ * their centres by the clock. See kb/topics/catz-playpen.md ("The mouse").
  *
  * Its script popped as the engine pops it, within its handlers: a frame on,
  * and done where nothing is left of what was pushed. What layers over it

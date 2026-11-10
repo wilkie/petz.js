@@ -7,7 +7,7 @@
  * frames); each frame a header (its index, how many pictures); each picture
  * `3` and a rectangle and a bitmap's id. Set 0 is the thing at rest; the
  * others its states' animations (`XApt::SetState`). See
- * kb/topics/catz-behaviour.md ("The pen's things").
+ * kb/topics/catz-playpen.md ("The pen's things").
  *
  * Only the things are read: the shelf's own art has other kinds of
  * pictures, and a definition that does not read as a thing is skipped.

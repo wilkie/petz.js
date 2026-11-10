@@ -4,7 +4,7 @@
  * writes every tick, `catzStateBetween`), its global states begun
  * (`catzGlobalBegin`), the moment (`catzMomentBegin`, `catzMomentTick`) and
  * its extreme situations (`catzExtremeSituations`). See
- * kb/topics/catz-behaviour.md ("On its own").
+ * kb/topics/catz-pet.md ("On its own").
  *
  * What is not the engine's, and is said so where it stands in: how long an
  * action plays is given (`play`), not the script player's; walking moves

@@ -3,7 +3,7 @@
  * `PTZFILES/DOG`), as the cat's chase has it: a script sprite of its own
  * that plays only what it is pushed -- the chase's bark (7) and run (1) --
  * put where the chase puts it, facing so (`+0x688`), and put away. See
- * kb/topics/catz-behaviour.md ("CatNapz").
+ * kb/topics/catz-catnapz.md ("CatNapz").
  */
 
 import type { Frame } from '../formats/animation.ts';

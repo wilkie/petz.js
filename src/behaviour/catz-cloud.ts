@@ -8,7 +8,7 @@
  * and height (`+0x251e`, `+0x2520`) are its first frame's. On, each tick
  * (`Update`, seg32:31c4) its script is popped; one time in five each of
  * the three is aimed at 69 less `rand() % 11` (slot `0xc`); and its script
- * done, it pushes 0. See kb/topics/catz-behaviour.md ("CatNapz").
+ * done, it pushes 0. See kb/topics/catz-catnapz.md ("CatNapz").
  */
 
 import type { Frame } from '../formats/animation.ts';
