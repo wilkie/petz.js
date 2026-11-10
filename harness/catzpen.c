@@ -3155,10 +3155,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(int __far *)(cat + 0x2fda + 0x52 * 7 + 0x3a) = 70;
         }
 
-        /* And where it asks (268435456), its liveliness (brain 0) held at 100: lively, so that, with
-         * its victim and having done something, it lets go one time in three. */
+        /* And where it asks (268435456), its liveliness (brain 0) held at 100, its independence
+         * and seriousness (2, 3) at 20: lively, as behaviour 28 asks (liveliness 50 or more, the
+         * rest under 50), and so that, with its victim and having done something, it lets go one
+         * time in three. */
         if (forcing & 268435456L && cat) {
             *(int __far *)(cat + 0x2fda + 0x3a) = 100;
+            *(int __far *)(cat + 0x2fda + 0x52 * 2 + 0x3a) = 20;
+            *(int __far *)(cat + 0x2fda + 0x52 * 3 + 0x3a) = 20;
         }
 
         if (forcing & 4194304L && cat) {

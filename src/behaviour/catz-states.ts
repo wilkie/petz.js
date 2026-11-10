@@ -246,6 +246,9 @@ export interface CatzStateWorld {
   /** Dreaming: see `CatzDream`. */
   dream?: CatzDream;
 
+  /** Walking on: its target point after its script was popped this tick, where whoever plays it knows; scared, its stay-away measures from there. */
+  popped?: { x: number; y: number };
+
   /** Whether a layered action is still playing as the tick begins (`GetLayeredFramesRemaining`, its slot `0xa8`): no sound is made then. */
   layering?: boolean;
 }
@@ -1125,7 +1128,11 @@ export function catzStateTick(
       }
 
       if (mind.brains[CATZ_BRAIN.fleas] > catzBehavior(mind, 13, random)) {
-        return done({ sound: catzMapAndPlay(world, mind, 1, random), pushed: 0x26b, pushes: [0x26b] });
+        return done({
+          sound: catzMapAndPlay(world, mind, 1, random),
+          pushed: 0x26b,
+          pushes: [0x26b],
+        });
       }
 
       const pushes = [catzBehavior(mind, 24, random) !== 0 && percent() < 50 ? 0x267 : 0x126];
@@ -1653,7 +1660,13 @@ function catzWalkOn(
         break;
       }
 
-      if (world.x35a4 && world.prey && catzDist(world.prey, at) < width * 2 && world.area1) {
+      /* (Measured from where its script's pop left it, seg25:105c: `Dist` truncated, under twice its width.) */
+      if (
+        world.x35a4 &&
+        world.prey &&
+        catzDist(world.prey, world.popped ?? at) < width * 2 &&
+        world.area1
+      ) {
         tick.state = 0x3a;
         return tick;
       }
