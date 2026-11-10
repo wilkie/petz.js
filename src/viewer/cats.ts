@@ -1582,7 +1582,7 @@ window.addEventListener('resize', () => {
     liveCommands.push(19);
   }
 });
-/* The camera: the playpen's command 0x7f2 (message 21; its sound not played). */
+/* The camera: the playpen's command 0x7f2 -- its sound, 0x8f (`CAMERA.WAV`), then message 21 (`XApt::DoCommand`, seg12:0e2a). */
 /** The game's files the playpens are read from. */
 let playpenFiles: GameFiles | undefined;
 
@@ -1615,6 +1615,7 @@ element<HTMLButtonElement>('nap').addEventListener('click', () => {
 });
 element<HTMLButtonElement>('camera').addEventListener('click', () => {
   if (live) {
+    playSound(0x8f);
     liveCommands.push(21);
   }
 });

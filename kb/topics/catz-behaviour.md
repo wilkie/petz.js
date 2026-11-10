@@ -652,7 +652,7 @@ A Catz cat plays its actions as [[format:scp]] says ("How Catz plays them"): tha
 
 - [[read out]] The dog (kin 0x1a, `DogSprite`, seg21; its files in `PTZFILES/DOG`) is only a visitor. `InitDogSprite`, `Update` (`XApt::Update` and its draw rectangle), `Draw` and `RunAcrossScreen` (seg21:052f, its slot `0x110`) are all it has. Running across, it lets go (its slot `0x9c` 2), plays its run (action 1) fifty times (its words 0x7549 1 50, `playAction1`), and is put off the stage's left or right by `rand() % 2` -- its width and 50 beyond the edge, facing 0x40 or -0x40 (`+0x688`), halfway down the area (`PetParams` `+0xb2` and `ds:2ba8`) -- and shown. Its one caller is `PetModule::DoDrawFrame` (seg34:3942), only where the engine's debugging is on (`XApex::theirWantDebugStuff`) and the B and R keys are held down together. So in the playpen as it ships the dog never comes; the cat's chasing it (global 16 with 0x1a) is for that visit.
 
-- [[inferred]] The playpen's commands' messages live: `CatzPet.leave` leaves one. In the viewer, the browser's window resized leaves 19, as command 0x7f1 does (outside the Kit), and a Camera button 21, as 0x7f2 does (its sound not played). Resized, the cat looked about the window (20 in global 20).
+- [[inferred]] The playpen's commands' messages live: `CatzPet.leave` leaves one. In the viewer, the browser's window resized leaves 19, as command 0x7f1 does (outside the Kit), and a Camera button 21, as 0x7f2 does, with its sound first (0x8f, `CAMERA.WAV`, seg12:0e2a; played where Sound is on). Resized, the cat looked about the window (20 in global 20).
 
 ## Not yet
 
