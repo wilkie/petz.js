@@ -640,6 +640,7 @@ function goLive() {
     moveTo: (at) => body.moveTo(at),
     aimRate: (rate) => body.aimRate(rate),
     shelf: shelfRect,
+    shelfAt: (kind) => shelfPlace(kind).at,
     /* CatNapz's dog, its body its own, where it has its files. */
     dog: dogFiles
       ? {
@@ -983,10 +984,7 @@ function goLive() {
         cursor: liveCursor,
         cheeseHeld: liveDragging === 8,
         things: livePen,
-        shelfAt: (kind) => ({
-          x: LIVE_STAGE.left + Math.trunc(((LIVE_STAGE.right - LIVE_STAGE.left) * (kind + 1)) / 17),
-          y: LIVE_STAGE.top + 30,
-        }),
+        shelfAt: (kind) => shelfPlace(kind).at,
         clock: Math.trunc(clock),
       });
     }
@@ -1019,6 +1017,40 @@ function drawLive(
       : shaped[step.frame];
   const bounds = placer.bounds(pose);
   const bitmap = new IndexedBitmap(LIVE_STAGE.right, LIVE_STAGE.bottom);
+
+  /* The shelf (kin 0x22) first, at the back: its picture (15000, at (4, 109) of it, as its definition's art has it), and the things on it, each its on-shelf condition's (0) resting picture at its place. */
+  const shelfPicture = thingBitmaps.get(15000);
+
+  if (shelfRect && shelfPicture) {
+    const { dib, colours, green } = shelfPicture;
+    drawPicture(bitmap, dib, colours, shelfRect.left + 4, shelfRect.top + 109, false, green);
+  }
+
+  for (const kind of shelfThings.keys()) {
+    const { corner } = shelfPlace(kind);
+    const thing = shelfThings.get(kind)!;
+    const held = liveDragging === kind;
+
+    if (!corner || livePen.has(kind) || held || (kind === 0xe && mouseFiles)) {
+      continue;
+    }
+
+    for (const { rect, bitmap: id } of aptRestingPictures(thing, 0)) {
+      const image = thingBitmaps.get(id);
+
+      if (image) {
+        drawPicture(
+          bitmap,
+          image.dib,
+          image.colours,
+          corner.x + rect[0],
+          corner.y + rect[1],
+          false,
+          image.green
+        );
+      }
+    }
+  }
 
   /* The pen's things with pictures first, the cat in front: each with its target point (its condition's rectangle's middle, `GetTargetPt`) on its point; else centred there. */
   for (const [kind, { x, y }] of livePen) {
@@ -1451,8 +1483,46 @@ function stageAt(event: MouseEvent) {
 /** The shelf's own rectangle (kin 0x22), as its definition has it: what the cat grooms beside and climbs onto. */
 let shelfRect: { left: number; top: number; right: number; bottom: number } | undefined;
 
-/** The shelf: a strip along the stage's top, where a thing dropped goes back (`PlaypenToShelf`). */
+/** The shelf, where its definition has none: a strip along the stage's top, where a thing dropped goes back (`PlaypenToShelf`). */
 const SHELF_DEPTH = 40;
+
+/** Whether a point is on the shelf: within its rectangle, else in the strip along the top. */
+function onShelf(at: { x: number; y: number }) {
+  return shelfRect
+    ? at.x >= shelfRect.left &&
+        at.x < shelfRect.right &&
+        at.y >= shelfRect.top &&
+        at.y < shelfRect.bottom
+    : at.y < LIVE_STAGE.top + SHELF_DEPTH;
+}
+
+/**
+ * Where a thing on the shelf sits: its picture's corner at the shelf's
+ * draw point plus its rectangle's (the definition's), and its target point
+ * its on-shelf condition's (0) middle from there -- as the harness has the
+ * jingle ball's, (175, 234). Without the definition, standing in along the
+ * stage's top.
+ */
+function shelfPlace(kind: number) {
+  const thing = shelfThings.get(kind);
+  const offset = thing && aptTargetOffset(thing, 0);
+
+  if (shelfRect && thing && offset) {
+    return {
+      corner: { x: shelfRect.left + thing.numbers[0], y: shelfRect.top + thing.numbers[1] },
+      at: {
+        x: shelfRect.left + thing.numbers[0] + offset.x,
+        y: shelfRect.top + thing.numbers[1] + offset.y,
+      },
+    };
+  }
+
+  const at = {
+    x: LIVE_STAGE.left + Math.trunc(((LIVE_STAGE.right - LIVE_STAGE.left) * (kind + 1)) / 17),
+    y: LIVE_STAGE.top + 30,
+  };
+  return { corner: undefined, at };
+}
 
 /** The pen's things' conditions as the cat set them (`CatSetCond`), by kind; 1, in the pen, where it has not. */
 const liveConds = new Map<number, number>();
@@ -1501,7 +1571,7 @@ canvas.addEventListener('mouseup', (event) => {
   if (liveDragging !== undefined) {
     const at = stageAt(event);
 
-    if (at.y < LIVE_STAGE.top + SHELF_DEPTH) {
+    if (onShelf(at)) {
       livePen.delete(liveDragging);
     } else {
       livePen.set(liveDragging, at);
