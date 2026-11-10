@@ -1496,6 +1496,25 @@ function onShelf(at: { x: number; y: number }) {
     : at.y < LIVE_STAGE.top + SHELF_DEPTH;
 }
 
+/** The thing on the shelf under a point, by its on-shelf condition's (0) grab rectangle (its definition's, from its picture's corner); none where none is. */
+function shelfHit(at: { x: number; y: number }) {
+  return [...shelfThings.keys()].find((kind) => {
+    const { corner } = shelfPlace(kind);
+    const rect = shelfThings.get(kind)!.rects.get(0);
+
+    return (
+      corner &&
+      rect &&
+      !livePen.has(kind) &&
+      !(kind === 0xe && mouseFiles) &&
+      at.x >= corner.x + rect[0] &&
+      at.x < corner.x + rect[2] &&
+      at.y >= corner.y + rect[1] &&
+      at.y < corner.y + rect[3]
+    );
+  });
+}
+
 /**
  * Where a thing on the shelf sits: its picture's corner at the shelf's
  * draw point plus its rectangle's (the definition's), and its target point
@@ -1553,6 +1572,22 @@ canvas.addEventListener('mousedown', (event) => {
     /* Held, a toy rolling stops. */
     liveToys.delete(near[0]);
     liveNotices.push([near[0], 1, 4, false], [near[0], 1, 3, false]);
+    return;
+  }
+
+  /* A thing on the shelf pressed: taken off it and dragged (3, the user's; `ShelfToPlaypen`, its condition 1 again), let go where the press ends -- in the Kit, a locked one only telling the cat so, staying. */
+  const shelved = live ? shelfHit(at) : undefined;
+
+  if (shelved !== undefined) {
+    liveGrabbed = true;
+    liveNotices.push([shelved, 1, 3, true]);
+
+    if (!(kitInput.checked && catzKitLocked(shelved))) {
+      livePen.set(shelved, at);
+      liveConds.delete(shelved);
+      liveDragging = shelved;
+    }
+
     return;
   }
 
