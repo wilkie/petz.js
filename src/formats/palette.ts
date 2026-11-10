@@ -118,6 +118,20 @@ export function screenPalette(
 }
 
 /**
+ * A palette as the VGA's six bits a channel show it: each channel's top six
+ * bits, d, shown as (d << 2) | (d >> 4) -- as the oracle's screens of Catz
+ * have its greys, (118, 118, 118) as (117, 117, 117), 128 as 130, 64 as 65,
+ * 192 as 195 and 255 as 255.
+ */
+export function vgaShown(palette: readonly Colour[]): Colour[] {
+  const shown = (value: number) => {
+    const d = value >> 2;
+    return (d << 2) | (d >> 4);
+  };
+  return palette.map(([r, g, b]): Colour => [shown(r), shown(g), shown(b)]);
+}
+
+/**
  * The 16 colours as the oracle's Windows VGA driver shows them, after the
  * VGA's six bits a channel: measured, each of a dog's balls given one in
  * turn (`--display vga`). The bright eight are Windows' own; the dark ones

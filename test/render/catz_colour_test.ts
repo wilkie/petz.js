@@ -1,4 +1,4 @@
-import { type Colour, catzTranslation } from '../../src/formats/palette.ts';
+import { type Colour, catzTranslation, vgaShown } from '../../src/formats/palette.ts';
 import { catzShade } from '../../src/render/ballz.ts';
 
 describe('Catz’s depth shading', () => {
@@ -26,5 +26,14 @@ describe('Catz’s colour translation', () => {
 
   it('collapses the shades four bits cannot tell apart', () => {
     expect(translate(0x41)).toBe(translate(0x4e));
+  });
+});
+
+describe("the VGA's six bits a channel, as the oracle's screens show Catz's colours", () => {
+  it('shows each channel as its top six bits, d, made (d << 2) | (d >> 4)', () => {
+    const greys = [118, 114, 110, 103, 83, 128, 64, 192, 255, 0];
+    expect(vgaShown(greys.map((v): Colour => [v, v, v])).map(([v]) => v)).toEqual([
+      117, 113, 109, 101, 81, 130, 65, 195, 255, 0,
+    ]);
   });
 });

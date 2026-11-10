@@ -19,6 +19,7 @@ import {
   CATZ_PALETTE_TYPE,
   type Colour,
   catzIdealPalette,
+  vgaShown,
   catzTranslation,
   PALETTE_256,
   readPalette,
@@ -101,6 +102,8 @@ const RESOURCE = 'CATZ.DOG/PTZFILES/CAT/RESOURCE';
 let header: AnimationHeader;
 let frames: Frame[] = [];
 let palette: Colour[] = [];
+/** The palette as the screen shows it, after the VGA's six bits a channel (`vgaShown`). */
+let shownPalette: Colour[] = [];
 let translate: (colour: number) => number = (colour) => colour;
 const files = new Map<string, { adult: Breed; kitten: Breed }>();
 let order: number[] = [];
@@ -169,7 +172,7 @@ function draw() {
 
   frameNumber.textContent = String(at);
   kittenValue.textContent = `${kittenInput.value}%`;
-  const pixels = new ImageData(bitmap.toRgba(palette), bitmap.width, bitmap.height);
+  const pixels = new ImageData(bitmap.toRgba(shownPalette), bitmap.width, bitmap.height);
   const small = new OffscreenCanvas(bitmap.width, bitmap.height);
   small.getContext('2d')!.putImageData(pixels, 0, 0);
   context.imageSmoothingEnabled = false;
@@ -1201,7 +1204,7 @@ function drawLive(
     }
   }
 
-  const pixels = new ImageData(bitmap.toRgba(palette), bitmap.width, bitmap.height);
+  const pixels = new ImageData(bitmap.toRgba(shownPalette), bitmap.width, bitmap.height);
   const small = new OffscreenCanvas(bitmap.width, bitmap.height);
   small.getContext('2d')!.putImageData(pixels, 0, 0);
   context.imageSmoothingEnabled = false;
@@ -1266,6 +1269,7 @@ async function start(game: GameFiles) {
     CATZ_PALETTE_TYPE
   );
   palette = catzIdealPalette(own);
+  shownPalette = vgaShown(palette);
   translate = catzTranslation(own);
 
   const text = async (path: string) => new TextDecoder('latin1').decode(await game.read(path));
