@@ -381,8 +381,10 @@ const CURSOR_CASES = Array.from({ length: 80 }, (_, n) => [
  * bowl or the bottle out, and 24 playing and chasing with 6, 7 or 9 out.
  */
 const OUT = [0xb, 0xb, 8, 0xc, 0xc, 0xd, 0xf, 0xb];
-const GLOBAL_CASES = Array.from({ length: 342 }, (_, n) => {
-  const outside = n >= 270;
+const GLOBAL_CASES = Array.from({ length: 402 }, (_, n) => {
+  /* The last 60 grooming: its fleas as the levels fall, one in five playing with the user (`+0x35a4` 1). */
+  const grooming = n >= 342;
+  const outside = n >= 270 && !grooming;
   const m = n - 270;
   /* Off the shelf: hungry with food, or playing or chasing with a toy. */
   const out = !outside ? -1 : m < 48 ? OUT[m % 8] : [6, 7, 9][m % 3];
@@ -415,18 +417,22 @@ const GLOBAL_CASES = Array.from({ length: 342 }, (_, n) => {
     (n * 134775813 + 1) % 2147483648,
     ...brains,
     ...Array.from({ length: 12 }, (_, b) => LEVELS[(n * 5 + b * 3) % LEVELS.length]),
-    attacking ? 1 : chasing ? 16 : playing ? 15 : eating ? 3 : [6, 8, 9][n % 3],
+    grooming ? 13 : attacking ? 1 : chasing ? 16 : playing ? 15 : eating ? 3 : [6, 8, 9][n % 3],
     Math.floor(n / 3) % 2,
     Math.floor(n / 6) % 2,
     eating && !outside ? [0, 0, 0, 1, 0, 0, 2, 0, 0, 3][k % 10] : 0,
     eating ? [0, 5, 30, -1][Math.floor(k / 2) % 4] : 0,
-    outside && !eating
-      ? out
-      : attacking
-        ? [0x17, 0x1b, 0xe, 0xc, 0xd, 5, 0x22, 6, 9][n % 9]
-        : playing || chasing
-          ? [0x17, 0x1b, 5, 6, 7, 9, 0xc, 0xe][n % 8]
-          : -1,
+    grooming
+      ? n % 5 === 0
+        ? 1
+        : 0
+      : outside && !eating
+        ? out
+        : attacking
+          ? [0x17, 0x1b, 0xe, 0xc, 0xd, 5, 0x22, 6, 9][n % 9]
+          : playing || chasing
+            ? [0x17, 0x1b, 5, 6, 7, 9, 0xc, 0xe][n % 8]
+            : -1,
     /* A double-click for the tick after, every other case. */
     n % 2,
     out,
@@ -1164,6 +1170,12 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
             mouseAfterCursor: mouseWay === 0x17,
             stage: { left: room[0], top: room[1], right: room[2], bottom: room[3] },
             size: { width: room[4], height: room[5] },
+            /* Grooming: its own target point and the shelf's rectangle, where the trace has them. */
+            point: room[6] === undefined ? undefined : { x: room[6], y: room[7] },
+            shelf:
+              room[8] === undefined
+                ? undefined
+                : { left: room[8], top: room[9], right: room[10], bottom: room[11] },
           },
           random
         );
@@ -1179,7 +1191,15 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
         /* Eating and playing: what it goes to, and what it pushed, held too. */
         const eating = global === 3 || global === 15 || global === 16 || global === 1;
         /* Attacking: `+0x35a2`, and the corner it made for, which, and how it is to face there. */
-        const [x35a2, goalX, goalY, x35ae, x33c2] = values.slice(39, 44);
+        const [x35a2, goalX, goalY, x35ae, x33c2, x35a8] = values.slice(39, 45);
+        /* Grooming: its way and goal, not the corner's -- its goal kept on the stage by walking's entering (22). */
+        const grooming = global === 13;
+        const onStage = (goal: { x: number; y: number }) => ({
+          x: Math.min(room[2], Math.max(room[0], goal.x)),
+          y: Math.min(room[3], Math.max(room[1], goal.y)),
+        });
+        const groomedTo =
+          ours.goal && grooming && ours.state === 22 ? onStage(ours.goal) : ours.goal;
         /* Eating's effects stand where nothing after sets its own: walking
          * to its food, or idling; playing, attacking and eating from the bowl
          * or at hand, entered after, set theirs. */
@@ -1197,7 +1217,10 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           ],
           eating && (ours.pushes ?? []).join(','),
           ours.x35a2,
-          ours.goal && [ours.goal.x, ours.goal.y, ours.x35ae, ours.x33c2],
+          ours.goal &&
+            (grooming
+              ? [groomedTo!.x, groomedTo!.y, ours.x35a8 ?? x35a8]
+              : [ours.goal.x, ours.goal.y, ours.x35ae, ours.x33c2]),
         ].join(' ');
         /* As far as the model goes: a state of its own begun may put it in
          * another global state again, as exploring does idling. */
@@ -1210,7 +1233,7 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
           eating && [x35a4, x35a6, bowl],
           eating && pushed.slice(0, (ours.pushes ?? []).length).join(','),
           ours.x35a2 === undefined ? undefined : x35a2,
-          ours.goal && [goalX, goalY, x35ae, x33c2],
+          ours.goal && (grooming ? [goalX, goalY, x35a8] : [goalX, goalY, x35ae, x33c2]),
         ].join(' ');
 
         if (said !== theirs) {
@@ -1567,7 +1590,11 @@ describeHarness('Catz’s playpen, held to CATZDLL.DLL', () => {
               : pushes
                 ? values[38]
                 : undefined,
-          state === 19 || state === 35 || (jumping && !changed && !(state === 18 && enter))
+          /* (Walking on, its script done, it has walked: as the engine left it.) */
+          state === 19 ||
+          state === 35 ||
+          walkingOn ||
+          (jumping && !changed && !(state === 18 && enter))
             ? theirPassed
             : jumping
               ? (ours.passed ?? passed)
@@ -2353,7 +2380,8 @@ function double(words: number[]): number {
 const FOLLOWED = new Set([
   1, 2, 3, 5, 6, 7, 12, 13, 19, 21, 22, 23, 26, 27, 28, 29, 30, 32, 34, 35, 56, 57, 8, 9, 10, 11,
   38, 39, 40, 41, 31, 80, 4, 58, 59, 60, 61, 62, 42, 43, 49, 50, 51, 52, 53, 24, 54, 55, 44, 45, 46,
-  47, 48, 36, 37, 18, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69, 70, 71, 81, 63, 64, 33, 20,
+  47, 48, 36, 37, 18, 72, 73, 74, 75, 76, 77, 78, 79, 65, 66, 67, 68, 69, 70, 71, 81, 63, 64, 33,
+  20,
 ]);
 
 /** The states whose entering is reimplemented, and those of them whose entered ticks are held only by what they push, their scripts popped at once. */

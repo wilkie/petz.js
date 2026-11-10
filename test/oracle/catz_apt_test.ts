@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   aptRestingPictures,
+  aptRectOf,
   aptShelfKinds,
   aptTargetOffset,
   parseAptThings,
@@ -19,6 +20,15 @@ describe('the Catz shelf’s things', () => {
   const things = aptShelfKinds(parseAptThings(new TextDecoder('latin1').decode(shelf.data)));
   const resting = (kind: number, cond: number) =>
     aptRestingPictures(things.get(kind)!, cond).map(({ bitmap }) => bitmap);
+
+  it("reads the shelf's own rectangle (kin 0x22), as the playpen's trace has it", () => {
+    expect(aptRectOf(new TextDecoder('latin1').decode(shelf.data), 'shelf')).toEqual({
+      left: 34,
+      top: 24,
+      right: 201,
+      bottom: 357,
+    });
+  });
 
   it('reads the fifteen things, kinds 1 to 15 in order', () => {
     expect([...things.values()].map(({ name }) => name)).toEqual([

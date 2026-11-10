@@ -45,6 +45,11 @@ export interface CatzGlobalWorld {
   kit?: { x33be: number; basket: { x: number; y: number } };
   preyAt?: { x: number; y: number };
   mouseAfterCursor?: boolean;
+
+  /** Grooming: its own target point, the shelf's draw rectangle (kin 0x22), and whether in the Adoption Kit's program (`PetParams` `+0xc4`). */
+  point?: { x: number; y: number };
+  shelf?: { left: number; top: number; right: number; bottom: number };
+  c4?: boolean;
 }
 
 /** What a global state begun did: the global states the cat was put in, in turn, and the state of its own it began in. */
@@ -76,6 +81,9 @@ export interface CatzGlobalBegun {
   x35a2?: number;
   goal?: { x: number; y: number };
   x35ae?: number;
+
+  /** Grooming: the way it goes to groom (`+0x35a8`). */
+  x35a8?: number;
   x33c2?: number;
   sound?: number;
   pushes?: number[];
@@ -172,6 +180,53 @@ export function catzGlobalBegin(
       begun.x35a2 = 0;
       begun.state = 22;
       break;
+    case 13: {
+      /* Grooming (`DoGSGrooming`, seg30:07d3), entering: its fleas (brain 6) over what behaviour 13 answers, kept; its effect on grooming 15 (its slot `0x114`, 5), the rest none; its head let go (`0xe0`, 2500). In the Adoption Kit (`+0xc4`), it walks to a point at random on the stage, half its width and its height (as twice half of it) in from each edge. Else, one time in two, or playing with the user (`+0x35a4` 1), or with fleas, it grooms where it is (0x1f; facing the user first where it has no fleas, its slot `0x16c`, drawing nothing); else by its way (`rand() % 5` of 1, 2, 3, 6 and 7, `+0x35a8`) it walks to groom (22, `+0x35a6` 0): 1 and 2, its width times 0.75 (`ds:0x3ae`, a single; walking's arrival has 0.55, `ds:0x372`, a double) in from the stage's left or right, at its own height; 3, 250 below where it is, or, past the stage's bottom less its height, its height below the top; 6 and 7, its width times 0.75 beside the shelf's left or right (kin 0x22), at the shelf's middle down. */
+      const fleas = mind.brains[CATZ_BRAIN.fleas] > catzBehavior(mind, 13, random);
+      begun.effects = [0, 0, 0, 15];
+      const stage = world.stage ?? { left: 0, top: 0, right: 640, bottom: 480 };
+      const size = world.size ?? { width: 137, height: 104 };
+      const across = Math.trunc(size.width / 2);
+      const down = Math.trunc(size.height / 2) * 2;
+      const walk = (goal: { x: number; y: number }) => {
+        begun.goal = goal;
+        begun.x35a6 = 0;
+        begun.state = 22;
+      };
+
+      if (world.c4) {
+        const x = random(stage.right - stage.left - across * 2 || 1) + across + stage.left;
+        const y =
+          random(stage.bottom - stage.top - down || 1) + Math.trunc(size.height / 2) + stage.top;
+        walk({ x, y });
+        break;
+      }
+
+      if (percent() < 50 || world.x35a4 === 1 || fleas) {
+        begun.state = 0x1f;
+        break;
+      }
+
+      const way = [1, 2, 3, 6, 7][random(5)];
+      begun.x35a8 = way;
+      const reach = size.width * Math.fround(0.75);
+      const shelf = world.shelf ?? { left: 0, top: 0, right: 0, bottom: 0 };
+      const shelfMiddle = Math.trunc((shelf.bottom - shelf.top) / 2) + shelf.top;
+      const { x, y } = world.point ?? { x: 0, y: 0 };
+
+      if (way === 1) {
+        walk({ x: Math.trunc(reach + stage.left), y });
+      } else if (way === 2) {
+        walk({ x: Math.trunc(stage.right - reach), y });
+      } else if (way === 3) {
+        walk({ x, y: y + 250 > stage.bottom - down ? down + stage.top : y + 250 });
+      } else if (way === 6) {
+        walk({ x: Math.trunc(shelf.left - reach), y: shelfMiddle });
+      } else {
+        walk({ x: Math.trunc(reach + shelf.right), y: shelfMiddle });
+      }
+      break;
+    }
     case 12:
       /* Ignoring something (`DoGSIgnore`, seg30:1964): no effects of its own; it ignores it (0x51). */
       begun.effects = [0, 0, 0, 0];
@@ -649,6 +704,7 @@ export function catzGlobalTick(
   switch (global) {
     case 6:
     case 9:
+    case 13:
     case 14:
     case 3:
     case 2:

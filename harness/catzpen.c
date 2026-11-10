@@ -2485,12 +2485,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 unsigned char __far *prey = ((GETKIN)ordinal(18))(cat, *(int __far *)(cat + 0x35a4));
                 unsigned char __far *mouse = ((GETKIN)ordinal(18))(cat, 0x1b);
                 long at = prey ? ((TARGETPT)ordinal(10))(prey, 0) : 0;
+                /* And, for grooming, its own target point and the shelf's (kin 0x22) draw rectangle. */
+                long own = ((TARGETPT)ordinal(10))(cat, 0);
+                int shelf[4];
 
-                say("global %ld %d %d %d %d %d %d %d %d %d %d\r\n", seed, area, (int)at,
-                    (int)(at >> 16), mouse ? *(int __far *)(mouse + 0x26ca) : -1,
+                ((DRAWRECT)ordinal(15))(shelf, ((GETKIN)ordinal(18))(cat, 0x22), 0);
+                say("global %ld %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\r\n", seed, area,
+                    (int)at, (int)(at >> 16), mouse ? *(int __far *)(mouse + 0x26ca) : -1,
                     *(int __far *)MK_FP(dgroup, 0x2ba6), *(int __far *)MK_FP(dgroup, 0x2ba8),
                     *(int __far *)MK_FP(dgroup, 0x2baa), *(int __far *)MK_FP(dgroup, 0x2bac),
-                    *(int __far *)(cat + 0x33c4), *(int __far *)(cat + 0x33c6));
+                    *(int __far *)(cat + 0x33c4), *(int __far *)(cat + 0x33c6), (int)own,
+                    (int)(own >> 16), shelf[0], shelf[1], shelf[2], shelf[3]);
             }
             *(unsigned long __far *)MK_FP(dgroup, 0x28ba) = seed;
             ((GLOBALSTATE)ordinal(488))(global, state, params);
@@ -2518,9 +2523,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 say(" %d", *(int __far *)(cat + 0x14a8 + 2 * b));
             }
 
-            say(" %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x35ac), *(int __far *)(cat + 0x35a2),
+            say(" %d %d %d %d %d %d %d\r\n", *(int __far *)(cat + 0x35ac), *(int __far *)(cat + 0x35a2),
                 *(int __far *)(cat + 0x34cc), *(int __far *)(cat + 0x34ce), *(int __far *)(cat + 0x35ae),
-                *(int __far *)(cat + 0x33c2));
+                *(int __far *)(cat + 0x33c2), *(int __far *)(cat + 0x35a8));
 
             quiet = 0;
 

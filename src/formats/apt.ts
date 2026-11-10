@@ -107,6 +107,16 @@ function readThing(lines: string[], at: number): { thing: AptThing; next: number
   return { thing: { name, label, numbers, conds, rects, loops }, next: n };
 }
 
+/** A sprite's own rectangle in a definition, by its name: the first four of the numbers on the line after its name and label (the shelf's, `shelf`, kin 0x22's draw rectangle). */
+export function aptRectOf(text: string, name: string) {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+  const at = lines.findIndex((line, n) => line.trim() === name && lines[n + 1]?.trim() === name);
+  const numbers = at < 0 ? undefined : numbersOf(lines[at + 2] ?? '');
+  return numbers && numbers.length >= 4
+    ? { left: numbers[0], top: numbers[1], right: numbers[2], bottom: numbers[3] }
+    : undefined;
+}
+
 /** The things a definition holds, in order, each read whole. */
 export function parseAptThings(text: string): AptThing[] {
   const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');

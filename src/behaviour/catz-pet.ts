@@ -161,6 +161,9 @@ export interface CatzPetOptions {
     off: () => void;
   };
 
+  /** The shelf's draw rectangle (kin 0x22; its definition's, 1000's first line): what it grooms beside and climbs onto. None, an empty one. */
+  shelf?: { left: number; top: number; right: number; bottom: number };
+
   /** Its rotation's fudger's aim rate set (`SetAimRate`), by whoever plays its body. */
   aimRate?: (rate: number) => void;
 
@@ -268,7 +271,7 @@ export interface CatzPetTicked {
 }
 
 /** The global states whose beginning is reimplemented. */
-const BEGUN = new Set([1, 2, 3, 4, 6, 21, 7, 8, 9, 11, 12, 15, 16, 18, 19, 20, 22]);
+const BEGUN = new Set([1, 2, 3, 4, 6, 21, 7, 8, 9, 11, 12, 13, 15, 16, 18, 19, 20, 22]);
 
 /** The states of its own `catzStateTick` reimplements (as the trace follows them, test/harness/catzpen_test.ts); the rest -- might it jump (14), jumping and crawling about the edges and shelf (15 to 18) -- are idled instead, and counted. */
 const REIMPLEMENTED = new Set([
@@ -1577,6 +1580,9 @@ export class CatzPet {
         stage: this.options.stage,
         size: this.options.size ?? { width: 137, height: 104 },
         preyAt: this.fields.x35a4 === 0x17 ? this.cursorAt() : this.walkedToAt(),
+        point: this.point,
+        shelf: this.options.shelf,
+        c4: !!this.kit,
         /* The mouse in its hole in an empty pen, after nothing. */
         mouseAfterCursor: false,
         kit: this.kit ? { x33be: this.x33be, basket: this.basketAt(this.kit.basket) } : undefined,
@@ -1631,6 +1637,10 @@ export class CatzPet {
     }
 
     /* Attacking: walking to a point, the corner it made for. */
+    if (begun.x35a8 !== undefined) {
+      this.fields.x35a8 = begun.x35a8;
+    }
+
     if (begun.x35ae !== undefined) {
       this.fields.x35ae = begun.x35ae;
     }
@@ -1665,15 +1675,8 @@ export class CatzPet {
 
   /**
    * The global states the pet begins itself, as far as they are read out --
-   * and where not, standing in, counted:
+   * and where not, standing in, counted (grooming, 13, now `catzGlobalBegin`'s):
    *
-   * - grooming (13; `DoGSGrooming`, seg30:07d3): with fleas over what
-   *   behaviour 13 answers, or one time in two, or playing with the user
-   *   (`+0x35a4` 1), it grooms where it is (31; facing the user first where
-   *   it has no fleas, not reimplemented); else it walks somewhere to groom,
-   *   its way drawn as the engine draws it (`rand() % 5` of 1, 2, 3, 6 and 7,
-   *   `+0x35a8`), its goal -- by that way, beside it, along an edge or by
-   *   its hiding place -- standing in at random on the stage;
    * - affectionate (14; `DoGSAffectionate`): no sound of its own
    *   (`+0x3570`), and it walks to the cursor (22, `+0x35a6` 0x17).
    *
@@ -1689,25 +1692,6 @@ export class CatzPet {
     };
 
     switch (global) {
-      case 13: {
-        const fleas = this.mind.brains[CATZ_BRAIN.fleas] > catzBehavior(this.mind, 13, random);
-        set(13);
-
-        if (random(101) < 50 || this.fields.x35a4 === 1 || fleas) {
-          this.enter(31, depth + 1);
-          return true;
-        }
-
-        this.fields.x35a8 = [1, 2, 3, 6, 7][random(5)];
-        const { stage } = this.options;
-        this.fields.goal = {
-          x: stage.left + random(Math.max(1, stage.right - stage.left)),
-          y: stage.top + random(Math.max(1, stage.bottom - stage.top)),
-        };
-        this.fields.x35a6 = 0;
-        this.enter(22, depth + 1);
-        return true;
-      }
       case 14:
         set(14);
         this.fields.x35a6 = 0x17;
@@ -2145,7 +2129,7 @@ export class CatzPet {
         : {}),
       curiosities: this.fields.curiosities ?? [],
       cursor: none,
-      kin: none,
+      kin: this.options.shelf ?? none,
       stage: this.options.stage,
       size,
       point: this.point,

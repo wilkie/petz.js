@@ -56,6 +56,7 @@ import { CatzPet } from '../behaviour/catz-pet.ts';
 import {
   type AptThing,
   aptRestingPictures,
+  aptRectOf,
   aptShelfKinds,
   aptTargetOffset,
   parseAptThings,
@@ -638,6 +639,7 @@ function goLive() {
     found: () => !!body.shown?.there,
     moveTo: (at) => body.moveTo(at),
     aimRate: (rate) => body.aimRate(rate),
+    shelf: shelfRect,
     /* CatNapz's dog, its body its own, where it has its files. */
     dog: dogFiles
       ? {
@@ -1260,6 +1262,7 @@ async function start(game: GameFiles) {
   shelfThings = shelf
     ? aptShelfKinds(parseAptThings(new TextDecoder('latin1').decode(shelf.data)))
     : new Map();
+  shelfRect = shelf ? aptRectOf(new TextDecoder('latin1').decode(shelf.data), 'shelf') : undefined;
 
   const strings = engine.resources().filter((r) => r.type === 6);
   catzString = (id) => {
@@ -1444,6 +1447,9 @@ function stageAt(event: MouseEvent) {
     y: Math.round(((event.clientY - box.top) / box.height) * LIVE_STAGE.bottom),
   };
 }
+
+/** The shelf's own rectangle (kin 0x22), as its definition has it: what the cat grooms beside and climbs onto. */
+let shelfRect: { left: number; top: number; right: number; bottom: number } | undefined;
 
 /** The shelf: a strip along the stage's top, where a thing dropped goes back (`PlaypenToShelf`). */
 const SHELF_DEPTH = 40;
