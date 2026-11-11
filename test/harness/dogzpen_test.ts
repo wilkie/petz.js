@@ -1569,7 +1569,8 @@ function followWobbles(lines: string[]) {
         restLubes(lubes);
         rested = true;
       }
-    } else if (kind === 'head') {
+    } else if (kind === 'head' && values.length >= 16) {
+      /* (Where the trace keeps each placing's clock: newer traces.) */
       pending.push(values);
     } else if (kind === 'state') {
       tracking = values[16] !== 0;
