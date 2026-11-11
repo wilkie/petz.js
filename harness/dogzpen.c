@@ -37,7 +37,8 @@
  *   and `spotted` for each spot it wants petting on, `grabbable` for
  *   each time it is asked whether it can grab the ball, `ballstop` as the
  *   ball is stopped, `moved` for each way the dog's rectangle is moved,
- *   and `grab` and `release` for what it takes up and lets go of.
+ *   `grab` and `release` for what it takes up and lets go of, and `head`
+ *   for each placing of a head turned.
  */
 #include <dos.h>
 #include <string.h>
@@ -330,8 +331,32 @@ static void __cdecl __far __loadds released(void __far *module, int slot)
     releaseOn(module, slot);
 }
 
+/* And the head's place for drawing (`Ballz::HeadTrackPrep`, 45): after it,
+ * where the state it is given has its head tracking (`+0x1e`), `head dog
+ * turn nod roll offset-x offset-y offset-z pivot-x pivot-y pivot-z draws` --
+ * the block it fills (`HeadTrackRenderBlock`, six words and three longs),
+ * and whether the state is the dog's own (its sprite's `+0x51a`). */
+typedef void(__cdecl __far *HEADPREP)(void __far *ballz, int __far *block, unsigned char __far *state);
+static HEADPREP headOn;
+static unsigned char __far *dogSprite;
+
+static void __cdecl __far __loadds heading(void __far *ballz, int __far *block,
+                                           unsigned char __far *state)
+{
+    headOn(ballz, block, state);
+
+    if (*(int __far *)(state + 0x1e)) {
+        long __far *pivot = (long __far *)(block + 6);
+
+        say("head %d %d %d %d %d %d %d %ld %ld %ld %d\r\n", dogSprite && state == dogSprite + 0x51a,
+            block[0], block[1], block[2], block[3], block[4], block[5], pivot[0], pivot[1],
+            pivot[2], draws);
+    }
+}
+
 static void hookPushes(void)
 {
+    headOn = (HEADPREP)hookPrologue(45, (void __far *)heading);
     grabOn = (HOLDING)hookPrologue(340, (void __far *)grabbed);
     releaseOn = (HOLDING)hookPrologue(341, (void __far *)released);
     placingOn[0] = (PLACING)hookPrologue(199, (void __far *)plainly);
@@ -480,6 +505,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * sprite (`+0x58`) keeps (`+0xb2`, 45 ms after its last; with
          * `PetParams` `+0x16` -1, as the game has it): waited for. */
         unsigned char __far *sprite = *(unsigned char __far *__far *)(module + 0x58);
+
+        dogSprite = sprite;
 
         while (sprite && GetTickCount() < *(unsigned long __far *)(sprite + 0xb2)) {
         }
