@@ -13,8 +13,8 @@
  * clock lets the dog move on; and, as `FRAMES.TXT`'s second number asks,
  * the dog's idle plans cut short (1), its excitement put low (2), its
  * sleep cut short (4), the dog petted (8), a treat held out to it and
- * put down (16), a bowl of food put down (32), the ball thrown (64), or
- * the shoe waved (128).
+ * put down (16), a bowl of food put down (32), the ball thrown (64), the
+ * shoe waved (128), or the spray held over the dog (256).
  *
  * * `made`: the library and the module;
  * * `segments`: each code segment's selector, by an export of it;
@@ -609,6 +609,22 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * 6) taken out the same way and put down at (146, 200) at the
          * 110th; else no slot (-1) and not dragged, as DOGZ.WAD leaves them
          * after each frame. */
+        /* 256, the spray (slot 3) taken out the same way at the 100th frame
+         * and held, the button down, over the middle of the dog, to the
+         * 160th, then let go. */
+        if (forcing & 256) {
+            *(int *)(params + 0x16) = n == 100 ? 3 : -1;
+            *(int *)(params + 0x18) = n == 100;
+            *(int *)(params + 0xe) = n >= 100 && n < 160 ? 0x8000 : 0;
+
+            if (n >= 100 && n <= 160 && sprite) {
+                *(int *)(params + 0x12) =
+                    (*(int __far *)(sprite + 0x58) + *(int __far *)(sprite + 0x5c)) / 2;
+                *(int *)(params + 0x14) =
+                    (*(int __far *)(sprite + 0x5a) + *(int __far *)(sprite + 0x5e)) / 2;
+            }
+        }
+
         /* 128, the shoe (slot 5) taken out the same way at the 100th frame
          * and held, waved 40 either side of (146, 120) every 20 frames, to
          * the 700th, then let go. */

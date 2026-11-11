@@ -164,6 +164,9 @@ const BALL = process.env.DOGZ_BALL === '1';
 /** `DOGZ_SHOE=1`: the shoe taken out of the toy box at frame 100 and waved over the pen to frame 700. */
 const SHOE = process.env.DOGZ_SHOE === '1';
 
+/** `DOGZ_SPRAY=1`: the spray taken out of the toy box at frame 100 and held over the dog, the button down, to frame 160. */
+const SPRAY = process.env.DOGZ_SPRAY === '1';
+
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
   (PLAN_DONE ? 1 : 0) |
@@ -173,8 +176,9 @@ const FORCING =
   (TREAT ? 16 : 0) |
   (FOOD ? 32 : 0) |
   (BALL ? 64 : 0) |
-  (SHOE ? 128 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}-${FRAMES}`;
+  (SHOE ? 128 : 0) |
+  (SPRAY ? 256 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
