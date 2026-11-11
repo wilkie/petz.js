@@ -24,6 +24,8 @@ import { join } from 'node:path';
 
 import {
   begWaitLoops,
+  chaseOrCharge,
+  lungeChance,
   bowlPlan,
   fillBowl,
   idleEnd,
@@ -159,6 +161,9 @@ const FOOD = process.env.DOGZ_FOOD === '1';
 /** `DOGZ_BALL=1`: the ball taken out of the toy box at frame 100, held over the pen, and thrown at frame 300. */
 const BALL = process.env.DOGZ_BALL === '1';
 
+/** `DOGZ_SHOE=1`: the shoe taken out of the toy box at frame 100 and waved over the pen to frame 700. */
+const SHOE = process.env.DOGZ_SHOE === '1';
+
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
   (PLAN_DONE ? 1 : 0) |
@@ -167,8 +172,9 @@ const FORCING =
   (PET ? 8 : 0) |
   (TREAT ? 16 : 0) |
   (FOOD ? 32 : 0) |
-  (BALL ? 64 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}-${FRAMES}`;
+  (BALL ? 64 : 0) |
+  (SHOE ? 128 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -267,7 +273,8 @@ function readTrace(lines: string[]) {
     } else if (kind === 'tick') {
       open = {
         holding: holds > 0,
-        heldSlot: holds === 1 ? slot : undefined,
+        /* (By what it is asked to take; the ball's own marks, below, where kept.) */
+        heldSlot: holds === 1 && (slot === 0 || slot === 1) ? slot : undefined,
         tick: values,
         changes: [],
         stored: [],
@@ -303,12 +310,13 @@ function readTrace(lines: string[]) {
     } else if (kind === 'stored' && open) {
       open.stored.push({ sprite: values[0], script: values[1], draws: values[3] });
     } else if (kind === 'grab' && open) {
-      holds++;
+      /* (One thing held at a time: asked again, it holds the one.) */
+      holds = 1;
       slot = values[0];
       open.holding = true;
       open.heldSlot = undefined;
     } else if (kind === 'release' && open) {
-      holds = Math.max(0, holds - 1);
+      holds = 0;
       open.holding = true;
       open.heldSlot = undefined;
     } else if (kind === 'slide' && open) {
@@ -340,6 +348,11 @@ function readTrace(lines: string[]) {
    * where the trace keeps it: which, rather than asked (`grab` may take
    * nothing), it is held by. */
   frames.forEach((frame, n) => {
+    /* (Without the ball's marks, what it holds is not known to be the ball: not boxed.) */
+    if (!frame.ball) {
+      frame.heldSlot = undefined;
+    }
+
     const [now, next] = [frame.ball, frames[n + 1]?.ball];
 
     if (now && next && now.length >= 10 && next.length >= 10) {
@@ -1507,6 +1520,13 @@ function followWobbles(lines: string[]) {
   /* A frame's lines come in order, its draws after: the placings wait for them. */
   const settle = (draws: number[]) => {
     for (const head of pending) {
+      /* (Put back to rest by a placing not tracking, where the trace says.) */
+      if (head[0] === -1) {
+        restLubes(lubes);
+        rested = true;
+        continue;
+      }
+
       const [, yaw, pitch, roll, ox, oy, oz, px, py, pz, , clock, wobble, frame, blend, reference] =
         head;
       const values = draws.splice(0, draws.length);
@@ -1569,6 +1589,8 @@ function followWobbles(lines: string[]) {
         restLubes(lubes);
         rested = true;
       }
+    } else if (kind === 'headrest') {
+      pending.push([-1]);
     } else if (kind === 'head' && values.length >= 16) {
       /* (Where the trace keeps each placing's clock: newer traces.) */
       pending.push(values);
@@ -1584,6 +1606,52 @@ function followWobbles(lines: string[]) {
   }
 
   settle(draws);
+  return result;
+}
+
+/**
+ * The shoe waved: each choice between chasing and charging the cursor
+ * (`DecideChasingChargingCursor`, the draw returning to seg3:1d96) against
+ * `chaseOrCharge`, the state gone to next; and each chance of a lunge
+ * (`DoChasingChargingCursor`, seg3:0436) against `lungeChance`, a lunge
+ * (18) next in the frame only where it passes.
+ */
+function followShoe(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { choices: 0, chances: 0, lunges: 0, held: 0, wrong: [] as string[] };
+  const excitementOf = (tick: number[]) => Math.min(100, Math.max(1, tick[4]));
+
+  for (const { tick, changes, drawn } of frames) {
+    drawn.forEach(({ seed, segment, offset }, k) => {
+      if (segment !== 3) {
+        return;
+      }
+
+      const next = changes.find((change) => change.draws > k)?.to;
+
+      if (offset === 0x1d96) {
+        result.choices++;
+        const ours = chaseOrCharge(excitementOf(tick), randFrom(seed).rand);
+
+        if (next === undefined || ours === next) {
+          result.held++;
+        } else {
+          result.wrong.push(`frame ${tick[0]}: chose ${ours}, not ${next}`);
+        }
+      } else if (offset === 0x436) {
+        result.chances++;
+        const lunged = next === 0x12 && changes.find((change) => change.draws > k)!.draws === k + 1;
+        result.lunges += lunged ? 1 : 0;
+
+        if (!lunged || lungeChance(excitementOf(tick), randFrom(seed).rand)) {
+          result.held++;
+        } else {
+          result.wrong.push(`frame ${tick[0]}: lunged, its chance not passed`);
+        }
+      }
+    });
+  }
+
   return result;
 }
 
@@ -1798,6 +1866,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     if (wobbles.wrong.length) {
       console.log(`head wobbles, not as the model's:\n  ${wobbles.wrong.join('\n  ')}`);
     }
+
+    const shoe = followShoe(lines);
+    console.log(
+      `the shoe: ${shoe.choices} chases or charges chosen, ${shoe.chances} chances of a lunge (${shoe.lunges} lunged), ${shoe.held} held`
+    );
+    expect(shoe.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

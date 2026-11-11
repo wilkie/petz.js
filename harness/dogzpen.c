@@ -13,7 +13,8 @@
  * clock lets the dog move on; and, as `FRAMES.TXT`'s second number asks,
  * the dog's idle plans cut short (1), its excitement put low (2), its
  * sleep cut short (4), the dog petted (8), a treat held out to it and
- * put down (16), a bowl of food put down (32), or the ball thrown (64).
+ * put down (16), a bowl of food put down (32), the ball thrown (64), or
+ * the shoe waved (128).
  *
  * * `made`: the library and the module;
  * * `segments`: each code segment's selector, by an export of it;
@@ -345,6 +346,12 @@ static unsigned char __far *dogSprite;
 static void __cdecl __far __loadds heading(void __far *ballz, int __far *block,
                                            unsigned char __far *state)
 {
+    /* Not tracking, with the wobbles not yet put back (`Lube::curtime`
+     * `+0xc`), they are put back now: `headrest draws`. */
+    if (!*(int __far *)(state + 0x1e) && *(int __far *)((char __far *)ordinal(49) + 0xc)) {
+        say("headrest %d\r\n", draws);
+    }
+
     headOn(ballz, block, state);
 
     if (*(int __far *)(state + 0x1e)) {
@@ -602,6 +609,20 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * 6) taken out the same way and put down at (146, 200) at the
          * 110th; else no slot (-1) and not dragged, as DOGZ.WAD leaves them
          * after each frame. */
+        /* 128, the shoe (slot 5) taken out the same way at the 100th frame
+         * and held, waved 40 either side of (146, 120) every 20 frames, to
+         * the 700th, then let go. */
+        if (forcing & 128) {
+            *(int *)(params + 0x16) = n == 100 ? 5 : -1;
+            *(int *)(params + 0x18) = n == 100;
+            *(int *)(params + 0xe) = n >= 100 && n < 700 ? 0x8000 : 0;
+
+            if (n >= 100 && n <= 700) {
+                *(int *)(params + 0x12) = 146 + (n / 20 & 1 ? 40 : -40);
+                *(int *)(params + 0x14) = 120;
+            }
+        }
+
         /* 64, the ball (slot 8) taken out the same way at the 100th frame,
          * held at (146, 80), swept from x 60 to 240 over frames 280 to 300,
          * 9 a frame, and let go at the 300th: thrown. */

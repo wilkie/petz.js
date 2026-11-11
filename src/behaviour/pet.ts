@@ -908,6 +908,16 @@ export function wobbleHead(
   return { yaw, pitch, roll, offset: { x: offsetX, y: offsetY, z: offsetZ }, drift };
 }
 
+/** Chasing the cursor or charging it (`DecideChasingChargingCursor`, seg3:1d71): `rand() % 175` over the dog's excitement, chasing (13); else charging (14). */
+export function chaseOrCharge(excitement: number, rand: Rand): number {
+  return excitement < rand() % 175 ? STATE.chasingCursor : STATE.chargingCursor;
+}
+
+/** Whether a dog chasing the shoe may lunge at it (`DoChasingChargingCursor`, seg3:0431): `rand() % 1000` under its excitement, the shoe then in reach. */
+export function lungeChance(excitement: number, rand: Rand): boolean {
+  return rand() % 1000 < excitement;
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -3989,7 +3999,7 @@ export class Pet {
 
   /** `DecideChasingChargingCursor` (seg3:1d71): charges, the more excited the likelier. */
   private decideChasingCharging() {
-    return this.factor(0) < this.rand() % 175 ? STATE.chasingCursor : STATE.chargingCursor;
+    return chaseOrCharge(this.factor(0), this.rand);
   }
 
   /**
@@ -4059,7 +4069,7 @@ export class Pet {
       return this.pop().step;
     }
 
-    if (this.rand() % 1000 < this.factor(0) && Pet.within(this.lungeRect(), shoe)) {
+    if (lungeChance(this.factor(0), this.rand) && Pet.within(this.lungeRect(), shoe)) {
       this.resetScript();
       this.newState(STATE.lungingCursor);
       return this.pop().step;
