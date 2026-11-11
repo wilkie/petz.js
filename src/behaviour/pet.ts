@@ -673,6 +673,65 @@ export function pettingEyes(rand: Rand): Omit<Step, 'frame'>[] {
   return rand() % 5 ? [{ look: 'random' }, blink()] : [{ look: 'random' }];
 }
 
+/**
+ * A dog's pants waiting for the treat after a trick, or for the ball
+ * (`PetModule::PushBegWaitLoops`, seg18:25e0): `(100 - e) / 20 + 1`, e its
+ * excitement -- at play `(130 - keen) / 20 + 1`, keen its excitement and 30
+ * more for a ball held, none when that is under 1 -- and as many again at
+ * random; sitting if `rand() % 85` is over e, or sitting already; then that
+ * many and as many again at random, each maybe sitting from then on (`rand()
+ * % 85` over e and `rand() % 10` 0), every other one or two a look -- at the
+ * user (0), the cursor (1) or what is held (2), by `rand() % 3`, never the
+ * last again -- and one time in ten a longer pant after.
+ */
+export function begWaitLoops(
+  excitement: number,
+  keen: number | undefined,
+  sitting: boolean,
+  rand: Rand
+): { sitting: boolean; pants: { sitting: boolean; look?: number; longer: boolean }[] } | undefined {
+  let loops: number;
+
+  if (keen !== undefined) {
+    loops = Math.trunc((130 - keen) / 20) + 1;
+
+    if (loops < 1) {
+      return undefined;
+    }
+  } else {
+    loops = Math.trunc((100 - excitement) / 20) + 1;
+  }
+
+  loops += rand() % loops;
+  let sits = excitement < rand() % 85 || sitting;
+  const first = sits;
+  const pants: { sitting: boolean; look?: number; longer: boolean }[] = [];
+  let looks = 0;
+  let lastLook = 1;
+
+  for (let left = loops + (rand() % loops); left > 0; left--) {
+    if (excitement < rand() % 85 && rand() % 10 === 0) {
+      sits = true;
+    }
+
+    let look: number | undefined;
+
+    if (looks-- < 0) {
+      looks = rand() % 2;
+
+      do {
+        look = rand() % 3;
+      } while (look === lastLook);
+
+      lastLook = look;
+    }
+
+    pants.push({ sitting: sits, look, longer: rand() % 10 === 0 });
+  }
+
+  return { sitting: first, pants };
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -3278,47 +3337,34 @@ export class Pet {
   /** `PetModule::PushBegWaitLoops` (seg18:25e0): pants, waiting for the treat after a trick. */
   private pushBegWaitLoops() {
     const excitement = this.factor(0);
-    let loops: number;
-
-    if (this.reducedGlobal() === GLOBAL.fetch) {
+    const fetch = this.reducedGlobal() === GLOBAL.fetch;
+    const plan = begWaitLoops(
+      excitement,
       /* At play, a held ball makes the dog keener: fewer pants, maybe none. */
-      const keen = excitement + (this.world.ball?.held ? 30 : 0);
-      loops = Math.trunc((130 - keen) / 20) + 1;
+      fetch ? excitement + (this.world.ball?.held ? 30 : 0) : undefined,
+      this.position === SITTING,
+      this.rand
+    );
 
-      if (loops < 1) {
-        return;
-      }
+    if (!plan) {
+      return;
+    }
 
-      loops += this.rand() % loops;
+    if (fetch) {
       this.pushBallReleaseAction();
-    } else {
-      loops = Math.trunc((100 - excitement) / 20) + 1;
-      loops += this.rand() % loops;
     }
 
     this.push({ glue: CHEST });
-    let sitting = excitement < this.rand() % 85 || this.position === SITTING;
-    this.pushTransition(this.data.scripts[sitting ? SCRIPT.sitPant : SCRIPT.pant].from, BELLY);
+    this.pushTransition(this.data.scripts[plan.sitting ? SCRIPT.sitPant : SCRIPT.pant].from, BELLY);
     this.push({ cue: 0 });
 
-    let looks = 0;
+    /* (Its looks, at the user, the cursor or what is held -- `0x8afb`,
+     * `0x8afe 6`, `0x8afe 7` -- are not yet played.) */
+    for (const pant of plan.pants) {
+      this.pushStored(pant.sitting ? SCRIPT.sitPant : SCRIPT.pant);
 
-    for (let left = loops + (this.rand() % loops); left > 0; left--) {
-      if (excitement < this.rand() % 85 && this.rand() % 10 === 0) {
-        sitting = true;
-      }
-
-      /* Now and then the engine has the dog look at the user or about
-       * (`0x8afb`, `0x8afe`); not yet played, but its choices are made. */
-      if (looks-- < 0) {
-        looks = this.rand() % 2;
-        this.rand();
-      }
-
-      this.pushStored(sitting ? SCRIPT.sitPant : SCRIPT.pant);
-
-      if (this.rand() % 10 === 0) {
-        this.pushStored(sitting ? SCRIPT.sitPantLonger : SCRIPT.pantLonger);
+      if (pant.longer) {
+        this.pushStored(pant.sitting ? SCRIPT.sitPantLonger : SCRIPT.pantLonger);
       }
     }
 

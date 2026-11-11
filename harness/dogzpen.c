@@ -12,10 +12,13 @@
  * 119), as many as `FRAMES.TXT` says (300 without it), each when the
  * clock lets the dog move on; and, as `FRAMES.TXT`'s second number asks,
  * the dog's idle plans cut short (1), its excitement put low (2), its
- * sleep cut short (4), or the dog petted (8).
+ * sleep cut short (4), the dog petted (8), or a treat held out to it and
+ * put down (16).
  *
  * * `made`: the library and the module;
  * * `segments`: each code segment's selector, by an export of it;
+ * * at the fifth frame, `sprite k`, each of the stage's sprites (its first
+ *   far word, and its rectangle; the toy box's things, not out, empty);
  * * `trick n` and its 12 words, for each of the library's 59, and
  *   `weights`, the sum of their idle weights;
  * * for each frame, `tick n state global seed`, the dog's 11 factors, the
@@ -423,6 +426,42 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                                            *(int __far *)(sprite + 0x5c)) / 2 + (n & 1 ? 6 : -6);
                 *(int *)(params + 0x14) =
                     (*(int __far *)(sprite + 0x5a) + *(int __far *)(sprite + 0x5e)) / 2;
+            }
+        }
+
+        /* At frame 5, the stage's sprites (ds:0x3144; their count `+0x3c`,
+         * their far pointers `+0x34` of what `+0x3e` points to): `sprite k
+         * table-segment table-offset left top right bottom` (`+0x58` on). */
+        if (n == 5) {
+            unsigned char __far *stage = *(unsigned char __far *__far *)MK_FP(dgroup, 0x3144);
+            unsigned char __far *list = *(unsigned char __far *__far *)(stage + 0x3e);
+            unsigned char __far *__far *all = *(unsigned char __far *__far *__far *)(list + 0x34);
+            int k, count = *(int __far *)(stage + 0x3c);
+
+            for (k = 0; k < count; k++) {
+                unsigned char __far *one = all[k];
+
+                say("sprite %d %u %u %d %d %d %d\r\n", k, FP_SEG(*(void __far *__far *)one),
+                    FP_OFF(*(void __far *__far *)one), *(int __far *)(one + 0x58),
+                    *(int __far *)(one + 0x5a), *(int __far *)(one + 0x5c),
+                    *(int __far *)(one + 0x5e));
+            }
+        }
+
+        /* 16, the blue treat (the toy box's slot 9, as DOGZ.WAD's button
+         * 1090 sends it) taken out at the 100th frame -- command 0 (`+0x2`)
+         * with the slot (`+0x16`), dragged (`+0x18` 1) and the main button
+         * down (`+0xe`) -- held at (146, 80) in the pen to frame 380, moved
+         * to (146, 200) and let go at the 400th; else no slot (-1) and not
+         * dragged, as DOGZ.WAD leaves them after each frame. */
+        if (forcing & 16) {
+            *(int *)(params + 0x16) = n == 100 ? 9 : -1;
+            *(int *)(params + 0x18) = n == 100;
+            *(int *)(params + 0xe) = n >= 100 && n < 400 ? 0x8000 : 0;
+
+            if (n >= 100 && n <= 400) {
+                *(int *)(params + 0x12) = 146;
+                *(int *)(params + 0x14) = n < 380 ? 80 : 200;
             }
         }
 

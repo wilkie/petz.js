@@ -23,6 +23,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { join } from 'node:path';
 
 import {
+  begWaitLoops,
   idleEnd,
   idlePlan,
   keepsWalking,
@@ -136,9 +137,13 @@ const WAKE = process.env.DOGZ_WAKE === '1';
 /** `DOGZ_PET=1`: from the 100th frame to the 700th, the button held and the cursor moved back and forth over the middle of the dog. */
 const PET = process.env.DOGZ_PET === '1';
 
+/** `DOGZ_TREAT=1`: the blue treat taken out of the toy box at frame 100, held over the pen to frame 400, and let go lower down. */
+const TREAT = process.env.DOGZ_TREAT === '1';
+
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
-const FORCING = (PLAN_DONE ? 1 : 0) | (CALM ? 2 : 0) | (WAKE ? 4 : 0) | (PET ? 8 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}-${FRAMES}`;
+const FORCING =
+  (PLAN_DONE ? 1 : 0) | (CALM ? 2 : 0) | (WAKE ? 4 : 0) | (PET ? 8 : 0) | (TREAT ? 16 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -329,7 +334,8 @@ function followIdlePlans(lines: string[]) {
  * Each trick's script played again and again (`PushTrick`, the draw
  * returning to seg21:7849, for the tricks without a case of their own)
  * against `trickRepeats`, with the engine's table of the tricks' scripts
- * (`ds:0x216e`): as many pushes of it to the dog, after the draw.
+ * (`ds:0x216e`): as many pushes of it to the dog after the draw, in the
+ * frame (the moves between, `PushTransitionToNeutralPos`, may draw).
  */
 function followTrickRepeats(lines: string[]) {
   const { frames, dll } = readTrace(lines);
@@ -347,7 +353,7 @@ function followTrickRepeats(lines: string[]) {
       const { rand } = randFrom(seed);
       const ours = trickRepeats(trick, rand);
       const theirs = stored.filter(
-        (push) => push.sprite === frame[5] && push.draws === k + 1 && push.script === trick.script
+        (push) => push.sprite === frame[5] && push.draws > k && push.script === trick.script
       ).length;
       result.tricks++;
 
@@ -701,6 +707,47 @@ function followPettingEyes(lines: string[]) {
   return result;
 }
 
+/**
+ * Each wait for the treat after a trick (`PushBegWaitLoops`, its draws from
+ * the one returning to seg18:26a1 on, one after another, the treat's way)
+ * against `begWaitLoops`, with the dog's excitement as the frame began: as
+ * many draws, to the same seed.
+ */
+function followBegWaits(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { waits: 0, held: 0, wrong: [] as string[] };
+  const inWait = (draw: { segment: number | undefined; offset: number } | undefined) =>
+    draw?.segment === 18 && draw.offset >= 0x25e0 && draw.offset < 0x28f8;
+
+  for (const { tick, drawn, frame } of frames) {
+    drawn.forEach(({ seed, segment, offset }, k) => {
+      if (segment !== 18 || offset !== 0x26a1) {
+        return;
+      }
+
+      let end = k;
+
+      while (inWait(drawn[end])) {
+        end++;
+      }
+
+      result.waits++;
+      const { rand, state } = randFrom(seed);
+      let used = 0;
+      begWaitLoops(Math.min(100, Math.max(1, tick[4])), undefined, false, () => (used++, rand()));
+      const seedThen = end < drawn.length ? drawn[end].seed : frame[3];
+
+      if (used === end - k && state.seed === seedThen) {
+        result.held++;
+      } else {
+        result.wrong.push(`frame ${tick[0]}: ${used} draws, not ${end - k}`);
+      }
+    });
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -842,6 +889,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     const eyes = followPettingEyes(lines);
     console.log(`petting eyes: ${eyes.eyes} put, ${eyes.held} held`);
     expect(eyes.wrong).toEqual([]);
+
+    const waits = followBegWaits(lines);
+    console.log(`begging waits: ${waits.waits} made, ${waits.held} held`);
+    expect(waits.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);
