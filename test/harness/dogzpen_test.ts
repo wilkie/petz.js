@@ -25,7 +25,9 @@ import { join } from 'node:path';
 import {
   idleEnd,
   idlePlan,
+  keepsWalking,
   Pet,
+  pickGait,
   pickTarget,
   sleepPlan,
   trickRepeats,
@@ -123,9 +125,12 @@ const PLAN_DONE = process.env.DOGZ_PLAN_DONE === '1';
 /** `DOGZ_CALM=1`: the dog's excitement put at 20 as its day begins (`SetExcitement`). */
 const CALM = process.env.DOGZ_CALM === '1';
 
+/** `DOGZ_WAKE=1`: while the dog sleeps, its plan of sleep taken to its end, so it wakes as its script ends. */
+const WAKE = process.env.DOGZ_WAKE === '1';
+
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
-const FORCING = (PLAN_DONE ? 1 : 0) | (CALM ? 2 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}-${FRAMES}`;
+const FORCING = (PLAN_DONE ? 1 : 0) | (CALM ? 2 : 0) | (WAKE ? 4 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -156,6 +161,7 @@ interface Frame {
   tick: number[];
   changes: { from: number; to: number; draws: number }[];
   stored: { sprite: number; script: number; draws: number }[];
+  gaits: { pace: number; overrides: number; draws: number; answer?: number; after?: number }[];
   targets: {
     distance: number;
     x: number;
@@ -195,10 +201,24 @@ function readTrace(lines: string[]) {
     if (kind === 'trick') {
       tricks[values[0]] = trickOf(values.slice(1));
     } else if (kind === 'tick') {
-      open = { tick: values, changes: [], stored: [], targets: [], drawn: [], frame: [] };
+      open = {
+        tick: values,
+        changes: [],
+        stored: [],
+        gaits: [],
+        targets: [],
+        drawn: [],
+        frame: [],
+      };
       frames.push(open);
     } else if (kind === 'newstate' && open) {
       open.changes.push({ from: values[0], to: values[1], draws: values[2] });
+    } else if (kind === 'gait' && open) {
+      open.gaits.push({ pace: values[0], overrides: values[1], draws: values[2] });
+    } else if (kind === 'gaited' && open) {
+      const asked = open.gaits[open.gaits.length - 1];
+      asked.answer = values[0];
+      asked.after = values[1];
     } else if (kind === 'target' && open) {
       const [distance, x, y, draws] = values;
       open.targets.push({ distance, x, y, draws });
@@ -404,6 +424,69 @@ function followSleepPlans(lines: string[]) {
   return result;
 }
 
+/**
+ * How the dog went (`PickLocomotionAction`) against `pickGait`, with the
+ * engine's own walk, trot and run and the dog's excitement and ham as the
+ * frame began: the same action in as many draws. And each arrival walking
+ * (`DoLocomote`, the draw returning to seg16:1418) against `keepsWalking`:
+ * on to a new target, or stopping (7 to 8).
+ */
+function followWalking(lines: string[]) {
+  const { frames, dll } = readTrace(lines);
+  const { locomotion } = readEngineScripts(dll);
+  const result = { gaits: 0, arrivals: 0, held: 0, wrong: [] as string[] };
+  const factor = (tick: number[], n: number) => Math.min(100, Math.max(1, tick[4 + n]));
+
+  for (const { tick, changes, gaits, targets, drawn, frame } of frames) {
+    for (const { pace, overrides, draws, answer, after } of gaits) {
+      if (answer === undefined || after === undefined || after > drawn.length) {
+        continue;
+      }
+
+      result.gaits++;
+      const { rand } = randFrom(drawn[draws]?.seed ?? frame[3]);
+      let used = 0;
+      const ours = pickGait(
+        factor(tick, 0),
+        factor(tick, 5),
+        locomotion,
+        pace,
+        overrides !== 0,
+        () => (used++, rand())
+      );
+
+      if (ours === answer && used === after - draws) {
+        result.held++;
+      } else {
+        result.wrong.push(
+          `frame ${tick[0]}: gait ${ours} in ${used} draws, not ${answer} in ${after - draws}`
+        );
+      }
+    }
+
+    drawn.forEach(({ seed, segment, offset }, k) => {
+      if (segment !== 16 || offset !== 0x1418) {
+        return;
+      }
+
+      result.arrivals++;
+      const ours = keepsWalking(factor(tick, 0), randFrom(seed).rand);
+      const onward = targets.some((target) => target.draws === k + 1);
+      const stopped = changes.some(
+        (change) => change.draws === k + 1 && change.from === 7 && change.to === 8
+      );
+
+      if (onward !== stopped && ours === onward) {
+        result.held++;
+      } else {
+        result.wrong.push(`frame ${tick[0]}: walks on ${ours}, not ${onward} (stopped ${stopped})`);
+      }
+    });
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -517,6 +600,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     const sleeps = followSleepPlans(lines);
     console.log(`sleep plans: ${sleeps.plans} made, ${sleeps.held} held`);
     expect(sleeps.wrong).toEqual([]);
+
+    const walking = followWalking(lines);
+    console.log(
+      `walking: ${walking.gaits} gaits, ${walking.arrivals} arrivals, ${walking.held} held`
+    );
+    expect(walking.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

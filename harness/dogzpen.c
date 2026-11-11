@@ -11,7 +11,8 @@
  * (`OpenScreenDrawPort`, 118; `DoDrawFrame`, 485; `CloseScreenDrawPort`,
  * 119), as many as `FRAMES.TXT` says (300 without it), each when the
  * clock lets the dog move on; and, as `FRAMES.TXT`'s second number asks,
- * the dog's idle plans cut short (1) or its excitement put low (2).
+ * the dog's idle plans cut short (1), its excitement put low (2), or its
+ * sleep cut short (4).
  *
  * * `made`: the library and the module;
  * * `segments`: each code segment's selector, by an export of it;
@@ -26,8 +27,8 @@
  *   segment, the stage it is kept to and its rectangle -- and `drawn k
  *   seed selector offset` for each draw, the seed before it and where it
  *   returned to; and within it, `stored`, `neutral` and `script` for each
- *   script pushed to a sprite, and `target` and `targeted` for each point
- *   the dog is to walk to.
+ *   script pushed to a sprite, `target` and `targeted` for each point the
+ *   dog is to walk to, and `gait` and `gaited` for each way it goes.
  */
 #include <dos.h>
 #include <string.h>
@@ -209,8 +210,25 @@ static void __cdecl __far __loadds targeting(unsigned char __far *module, int __
     say("targeted %d %d %d\r\n", point[0], point[1], draws);
 }
 
+/* And `PetModule::PickLocomotionAction` (512, seg21:837c), how the dog
+ * goes: `gait pace overrides draws` as it is asked, and `gaited action
+ * draws` with what it answered. */
+typedef int(__cdecl __far *PICKGAIT)(void __far *module, int pace, int overrides);
+static PICKGAIT gaitOn;
+
+static int __cdecl __far __loadds gaiting(void __far *module, int pace, int overrides)
+{
+    int answer;
+
+    say("gait %d %d %d\r\n", pace, overrides, draws);
+    answer = gaitOn(module, pace, overrides);
+    say("gaited %d %d\r\n", answer, draws);
+    return answer;
+}
+
 static void hookPushes(void)
 {
+    gaitOn = (PICKGAIT)hookPrologue(512, (void __far *)gaiting);
     targetOn = (NEWTARGET)hookPrologue(368, (void __far *)targeting);
     newStateOn = (NEWSTATE)hookPrologue(496, (void __far *)changing);
     storedOn = (PUSHTWO)hookPrologue(75, (void __far *)storing);
@@ -348,6 +366,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * 2, at the first frame, its excitement put at 20 (`SetExcitement`,
          * 352), its cycle there. */
         if (forcing & 1 && *(int __far *)(module + 0xc0) == 4) {
+            *(int __far *)(module + 0x11c4) = *(int __far *)(module + 0x11c6);
+        }
+
+        /* 4, while the dog sleeps (5), its plan of sleep (the same two
+         * fields) taken to its end too, so it wakes as its script ends. */
+        if (forcing & 4 && *(int __far *)(module + 0xc0) == 5) {
             *(int __far *)(module + 0x11c4) = *(int __far *)(module + 0x11c6);
         }
 

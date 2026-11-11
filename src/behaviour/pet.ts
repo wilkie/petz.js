@@ -525,6 +525,56 @@ export function sleepPlan(
   return plan;
 }
 
+/**
+ * How the dog goes (`PetModule::PickLocomotionAction`, seg21:837c): walking,
+ * trotting or running by `((rand() % 21 + e - 10) * 3) / 100`, e its
+ * excitement, held to 0 to 2; or the pace asked; and, overrides asked,
+ * maybe a strut (241: e and ham over 70), a sad walk (220: both under 30)
+ * or a march (111: e over 60 and under 80, ham over 70), each one time in two.
+ */
+export function pickGait(
+  excitement: number,
+  ham: number,
+  paces: number[],
+  pace: number,
+  overrides: boolean,
+  rand: Rand
+): number {
+  const byExcitement = Math.min(
+    2,
+    Math.max(0, Math.trunc((((rand() % 21) + excitement - 10) * 3) / 100))
+  );
+
+  if (pace !== 0) {
+    return paces[pace];
+  }
+
+  let action = paces[byExcitement];
+
+  if (!overrides) {
+    return action;
+  }
+
+  if (excitement > 70 && ham > 70 && rand() % 2) {
+    action = 241;
+  }
+
+  if (excitement < 30 && ham < 30 && rand() % 2) {
+    action = 220;
+  }
+
+  if (excitement > 60 && excitement < 80 && ham > 70 && rand() % 2) {
+    action = 111;
+  }
+
+  return action;
+}
+
+/** Whether a walking dog, at its target, picks another (`DoLocomote`, seg16:1413): `rand() % 150` under its excitement; else it stops. */
+export function keepsWalking(excitement: number, rand: Rand): boolean {
+  return rand() % 150 < excitement;
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -1816,36 +1866,14 @@ export class Pet {
    * a sad walk or a march by ham.
    */
   private pickLocomotion(pace = 0, overrides = true) {
-    const excitement = this.factor(0);
-    const paces = this.data.engineScripts.locomotion;
-    const byExcitement = Math.min(
-      2,
-      Math.max(0, Math.trunc((((this.rand() % 21) + excitement - 10) * 3) / 100))
+    return pickGait(
+      this.factor(0),
+      this.factor(5),
+      this.data.engineScripts.locomotion,
+      pace,
+      overrides,
+      this.rand
     );
-
-    if (pace !== 0) {
-      return paces[pace];
-    }
-
-    let action = paces[byExcitement];
-
-    if (!overrides) {
-      return action;
-    }
-
-    if (excitement > 70 && this.factor(5) > 70 && this.rand() % 2) {
-      action = 241;
-    }
-
-    if (excitement < 30 && this.factor(5) < 30 && this.rand() % 2) {
-      action = 220;
-    }
-
-    if (excitement > 60 && excitement < 80 && this.factor(5) > 70 && this.rand() % 2) {
-      action = 111;
-    }
-
-    return action;
   }
 
   /** `PickFasterLocomotionAction` (seg21:84f4): a walk to a trot, the rest to a run, a sad walk to a walk. */
@@ -1917,7 +1945,7 @@ export class Pet {
     if (flags & 2) {
       this.setTargetLocation(null);
 
-      if (this.rand() % 150 >= this.factor(0)) {
+      if (!keepsWalking(this.factor(0), this.rand)) {
         this.newState(STATE.postLocomote);
         return step;
       }
