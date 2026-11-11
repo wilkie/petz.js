@@ -683,7 +683,8 @@ export function pettingEyes(rand: Rand): Omit<Step, 'frame'>[] {
  * % 85` is over e or it sits already; then that many pants and as many
  * again at random, each maybe sitting from then on (`rand() % 85` over e
  * and `rand() % 10` 0), every other one or two a look -- at the user (0),
- * the cursor (1) or what is held (2), `rand() % 3`, never the last again --
+ * the cursor (1) or what is held (2), `rand() % 3`, never the last again;
+ * after a look at the user, every other one --
  * and, after it, one time in ten a longer pant.
  */
 export function* begWaitLoops(
@@ -728,6 +729,11 @@ export function* begWaitLoops(
       } while (look === lastLook);
 
       lastLook = look;
+
+      /* A look at the user puts the count back to 0 (seg18:2827). */
+      if (look === 0) {
+        looks = 0;
+      }
     }
 
     yield { pant: sits, look };

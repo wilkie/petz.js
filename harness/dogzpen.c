@@ -13,7 +13,7 @@
  * clock lets the dog move on; and, as `FRAMES.TXT`'s second number asks,
  * the dog's idle plans cut short (1), its excitement put low (2), its
  * sleep cut short (4), the dog petted (8), a treat held out to it and
- * put down (16), or a bowl of food put down (32).
+ * put down (16), a bowl of food put down (32), or the ball thrown (64).
  *
  * * `made`: the library and the module;
  * * `segments`: each code segment's selector, by an export of it;
@@ -456,6 +456,20 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * 6) taken out the same way and put down at (146, 200) at the
          * 110th; else no slot (-1) and not dragged, as DOGZ.WAD leaves them
          * after each frame. */
+        /* 64, the ball (slot 8) taken out the same way at the 100th frame,
+         * held at (146, 80), swept from x 60 to 240 over frames 280 to 300,
+         * 9 a frame, and let go at the 300th: thrown. */
+        if (forcing & 64) {
+            *(int *)(params + 0x16) = n == 100 ? 8 : -1;
+            *(int *)(params + 0x18) = n == 100;
+            *(int *)(params + 0xe) = n >= 100 && n < 300 ? 0x8000 : 0;
+
+            if (n >= 100 && n <= 300) {
+                *(int *)(params + 0x12) = n < 280 ? 146 : 60 + 9 * (n - 280);
+                *(int *)(params + 0x14) = 80;
+            }
+        }
+
         if (forcing & 48) {
             int slot = forcing & 16 ? 9 : 6, until = forcing & 16 ? 400 : 110;
 
@@ -480,6 +494,18 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         say(" %ld", *(long __far *)MK_FP(dgroup, 0x3d94));
         hand(module);
+
+        /* With the ball (64): `ball held in-box left top right bottom` --
+         * the ball's sprite (`PetModule` `+0x78`), as the frame begins. */
+        if (forcing & 64) {
+            unsigned char __far *ball = *(unsigned char __far *__far *)(module + 0x78);
+
+            say("ball %d %d %d %d %d %d\r\n", *(int __far *)(ball + 0x16a),
+                *(int __far *)(ball + 0x16c), *(int __far *)(ball + 0x58),
+                *(int __far *)(ball + 0x5a), *(int __far *)(ball + 0x5c),
+                *(int __far *)(ball + 0x5e));
+        }
+
         draws = 0;
 
         /* (What opening the port answers the program does not ask.) */

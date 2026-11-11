@@ -145,6 +145,9 @@ const TREAT = process.env.DOGZ_TREAT === '1';
 /** `DOGZ_FOOD=1`: the bowl of food taken out of the toy box at frame 100 and put down at once. */
 const FOOD = process.env.DOGZ_FOOD === '1';
 
+/** `DOGZ_BALL=1`: the ball taken out of the toy box at frame 100, held over the pen, and thrown at frame 300. */
+const BALL = process.env.DOGZ_BALL === '1';
+
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
   (PLAN_DONE ? 1 : 0) |
@@ -152,8 +155,9 @@ const FORCING =
   (WAKE ? 4 : 0) |
   (PET ? 8 : 0) |
   (TREAT ? 16 : 0) |
-  (FOOD ? 32 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}-${FRAMES}`;
+  (FOOD ? 32 : 0) |
+  (BALL ? 64 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -196,6 +200,8 @@ interface Frame {
   }[];
   drawn: { seed: number; segment: number | undefined; offset: number }[];
   frame: number[];
+  /** The ball as the frame began (`ball`): held, in the box, its rectangle. */
+  ball?: number[];
 }
 
 /** A trace's lines read: its trick table, its frames, and each draw's segment by its selector. */
@@ -258,6 +264,8 @@ function readTrace(lines: string[]) {
       asked.after = values[2];
     } else if (kind === 'stored' && open) {
       open.stored.push({ sprite: values[0], script: values[1], draws: values[3] });
+    } else if (kind === 'ball' && open) {
+      open.ball = values;
     } else if (kind === 'frame' && open) {
       open.frame = values;
     } else if (kind === 'drawn' && open) {
@@ -358,7 +366,24 @@ function followTrickRepeats(lines: string[]) {
         return;
       }
 
-      const state = [...changes].reverse().find((change) => change.draws <= k)?.to ?? tick[1];
+      /* The trick it is: the state last gone to, a trick; or, begging, where
+       * the trick is pushed before the dog is put in it, the next. */
+      const isTrick = (state: number) => state >= FIRST_TRICK && !!scripts[state - FIRST_TRICK];
+      const before = [...changes].reverse().find((change) => change.draws <= k)?.to ?? tick[1];
+      /* Or, anticipating the ball, where tricks are played without their
+       * states, the trick whose script is pushed after the draw. */
+      const pushed = stored.find((push) => push.sprite === frame[5] && push.draws > k)?.script;
+      const byScript = scripts.findIndex((each) => each.script === pushed);
+      const state = isTrick(before)
+        ? before
+        : (changes.find((change) => change.draws > k && isTrick(change.to))?.to ??
+          (byScript < 0 ? undefined : byScript + FIRST_TRICK));
+
+      if (state === undefined) {
+        result.wrong.push(`frame ${tick[0]}: a trick's repeats drawn in state ${before}`);
+        return;
+      }
+
       const trick = scripts[state - FIRST_TRICK];
       const { rand } = randFrom(seed);
       const ours = trickRepeats(trick, rand);
@@ -718,46 +743,56 @@ function followPettingEyes(lines: string[]) {
 }
 
 /**
- * Each wait for the treat after a trick (`PushBegWaitLoops`, its draws from
- * the one returning to seg18:26a1 on, one after another, the treat's way)
- * against `begWaitLoops`, with the dog's excitement as the frame began: as
- * many draws, to the same seed.
+ * Each wait after a trick (`PushBegWaitLoops`, its draws from the first --
+ * returning to seg18:26a1 for a treat, 266b for the ball -- on, one after
+ * another) against `begWaitLoops`, with the dog's excitement and whether
+ * the ball was held as the frame began, given the engine's own values for
+ * its draws (a move pushed between may draw, and is passed over): as many
+ * draws.
  */
 function followBegWaits(lines: string[]) {
   const { frames } = readTrace(lines);
   const result = { waits: 0, held: 0, wrong: [] as string[] };
   const inWait = (draw: { segment: number | undefined; offset: number } | undefined) =>
     draw?.segment === 18 && draw.offset >= 0x25e0 && draw.offset < 0x28f8;
+  /* A move pushed between, which may draw (`PushTransitionToNeutralPos`). */
+  const moving = (draw: { segment: number | undefined; offset: number } | undefined) =>
+    draw?.segment === 7 && draw.offset === 0x40f1;
 
-  for (const { tick, drawn, frame } of frames) {
-    drawn.forEach(({ seed, segment, offset }, k) => {
-      if (segment !== 18 || offset !== 0x26a1) {
+  for (const { tick, drawn, ball } of frames) {
+    drawn.forEach(({ segment, offset }, k) => {
+      /* The treat's way (seg18:26a1), or the ball's (seg18:266b): keener by 30 for a ball held. */
+      const fetch = offset === 0x266b;
+
+      if (segment !== 18 || (offset !== 0x26a1 && !fetch)) {
         return;
       }
 
-      let end = k;
+      /* Its own draws, the engine's values, moves' draws between skipped. */
+      const values: number[] = [];
 
-      while (inWait(drawn[end])) {
-        end++;
+      for (let n = k; inWait(drawn[n]) || moving(drawn[n]); n++) {
+        if (inWait(drawn[n])) {
+          values.push(randFrom(drawn[n].seed).rand());
+        }
       }
 
       result.waits++;
-      const { rand, state } = randFrom(seed);
+      const excitement = Math.min(100, Math.max(1, tick[4]));
       let used = 0;
       [
         ...begWaitLoops(
-          Math.min(100, Math.max(1, tick[4])),
-          undefined,
+          excitement,
+          fetch ? excitement + (ball?.[0] ? 30 : 0) : undefined,
           false,
-          () => (used++, rand())
+          () => (used < values.length ? values[used++] : (used++, -1))
         ),
       ];
-      const seedThen = end < drawn.length ? drawn[end].seed : frame[3];
 
-      if (used === end - k && state.seed === seedThen) {
+      if (used === values.length) {
         result.held++;
       } else {
-        result.wrong.push(`frame ${tick[0]}: ${used} draws, not ${end - k}`);
+        result.wrong.push(`frame ${tick[0]}: ${used} draws, not ${values.length}`);
       }
     });
   }
