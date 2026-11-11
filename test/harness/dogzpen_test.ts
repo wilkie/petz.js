@@ -42,7 +42,7 @@ import {
   waitLook,
 } from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
-import { ballsBox, rollBall, Stage } from '../../src/behaviour/stage.ts';
+import { ballRect, ballsBox, rollBall, Stage } from '../../src/behaviour/stage.ts';
 import type { Step } from '../../src/behaviour/timeline.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { parseLnz } from '../../src/formats/lnz.ts';
@@ -213,6 +213,8 @@ interface Frame {
   moved: number[][];
   /** Whether the dog held anything at any time in the frame (`grab` to `release`). */
   holding?: boolean;
+  /** What it held all through the frame, by its slot (0 the mouth, 1 a paw), if it held one thing throughout. */
+  heldSlot?: number;
   /** The ball as the frame began (`ball`): held, in the box, its rectangle. */
   ball?: number[];
   /** Whether the ball was stopped in the frame (`BallSprite::Stop`). */
@@ -230,6 +232,7 @@ function readTrace(lines: string[]) {
   let open: Frame | undefined;
 
   let holds = 0;
+  let slot: number | undefined;
 
   for (const line of lines) {
     const [kind, ...rest] = line.split(' ');
@@ -252,6 +255,7 @@ function readTrace(lines: string[]) {
     } else if (kind === 'tick') {
       open = {
         holding: holds > 0,
+        heldSlot: holds === 1 ? slot : undefined,
         tick: values,
         changes: [],
         stored: [],
@@ -288,10 +292,13 @@ function readTrace(lines: string[]) {
       open.stored.push({ sprite: values[0], script: values[1], draws: values[3] });
     } else if (kind === 'grab' && open) {
       holds++;
+      slot = values[0];
       open.holding = true;
+      open.heldSlot = undefined;
     } else if (kind === 'release' && open) {
       holds = Math.max(0, holds - 1);
       open.holding = true;
+      open.heldSlot = undefined;
     } else if (kind === 'moved' && open) {
       open.moved.push(values);
     } else if (kind === 'state' && open) {
@@ -1030,9 +1037,17 @@ function followFrameBoxes(lines: string[]) {
     header.animations.flatMap((_, n) => parseAnimation(header, n, read(`DATA/${n}.BDT`))),
     breed
   );
-  const result = { frames: 0, turned: 0, mouthed: 0, held: 0, nearly: 0, wrong: [] as string[] };
+  const result = {
+    frames: 0,
+    turned: 0,
+    mouthed: 0,
+    holding: 0,
+    held: 0,
+    nearly: 0,
+    wrong: [] as string[],
+  };
 
-  for (const { tick, state, ball, holding } of frames) {
+  for (const { tick, state, holding, heldSlot } of frames) {
     if (!state || state.length < 25) {
       continue;
     }
@@ -1045,42 +1060,31 @@ function followFrameBoxes(lines: string[]) {
       continue;
     }
 
-    /* The ball in its mouth -- out, not held, still, and on the dog -- is
-     * boxed with it by the engine; not yet by the model. */
-    const onDog =
-      ball &&
-      !ball[0] &&
-      !ball[1] &&
-      !floatOf(ball[6]) &&
-      !floatOf(ball[7]) &&
-      ball[2] <= state[2] &&
-      ball[4] >= state[0] &&
-      ball[3] <= state[3] &&
-      ball[5] >= state[1];
-
-    if (onDog || holding) {
+    /* Held all through the frame, the ball is boxed with it, by the ball of
+     * the dog that holds it (chin 51, toe 45); taken up or let go in it, not
+     * followed. Only the ball is so held in the harness's days. */
+    if (holding && heldSlot === undefined) {
       result.mouthed++;
       continue;
     }
 
     result.frames++;
     const age = tick[14];
-    const box = ballsBox(
-      project(
-        breed,
-        header,
-        shapes[frame],
-        scalesForAge(breed, age),
-        rotation,
-        100 - age,
-        undefined,
-        {
-          tilt,
-          spin,
-          roll,
-        }
-      )
+    const placed = project(
+      breed,
+      header,
+      shapes[frame],
+      scalesForAge(breed, age),
+      rotation,
+      100 - age,
+      undefined,
+      { tilt, spin, roll }
     );
+    const box = ballsBox(
+      placed,
+      heldSlot === undefined ? undefined : ballRect(placed[[51, 45][heldSlot]])
+    );
+    result.holding += heldSlot === undefined ? 0 : 1;
     const ours = [box.left, box.top, box.right, box.bottom];
 
     const off = ours.map((edge, n) => Math.abs(edge - theirs[n]));
@@ -1127,19 +1131,20 @@ function followPlacing(lines: string[]) {
   const unturned = (state?: number[]) =>
     state && state.length >= 25 && !state[14] && !state[15] && state[17] === 100;
 
-  frames.forEach(({ tick, state, moved, holding }, n) => {
+  frames.forEach(({ tick, state, moved, holding, heldSlot }, n) => {
     const before = frames[n - 1]?.state;
 
-    /* (Not while it holds anything: what it holds is boxed with it, not yet by the model.) */
-    if (
-      !unturned(state) ||
-      !unturned(before) ||
-      moved.length !== 1 ||
-      moved[0][0] > 1 ||
-      holding ||
-      frames[n - 1]?.holding
-    ) {
-      result.holding += holding || frames[n - 1]?.holding ? 1 : 0;
+    /* (Not where it takes up or lets go: held throughout, the ball in its slot.) */
+    const changing =
+      (holding && heldSlot === undefined) ||
+      (frames[n - 1]?.holding && frames[n - 1]?.heldSlot !== heldSlot);
+
+    if (!unturned(state) || !unturned(before) || moved.length !== 1 || moved[0][0] > 1) {
+      return;
+    }
+
+    if (changing) {
+      result.holding++;
       return;
     }
 
@@ -1160,6 +1165,11 @@ function followPlacing(lines: string[]) {
     /* The model's dog put where the engine's was, then moved on, kept
      * touching the stage unless steering off it (`+0x2108`, `+0x2110`). */
     const stage = new Stage(292, 273, breed, header, shapes, tick[14]);
+
+    if (heldSlot !== undefined) {
+      stage.ball = { x: 0, y: 0, vx: 0, vy: 0, held: false, slot: heldSlot, recorded: null };
+    }
+
     stage.show(
       { frame: was.frame } as Step,
       was.rotation,
@@ -1374,13 +1384,13 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
 
     const boxes = followFrameBoxes(lines);
     console.log(
-      `frame boxes: ${boxes.frames} frames, ${boxes.held} held, ${boxes.nearly} a pixel out on one edge (${boxes.turned} with the head turned, ${boxes.mouthed} with something held, not followed)`
+      `frame boxes: ${boxes.frames} frames, ${boxes.held} held, ${boxes.nearly} a pixel out on one edge (${boxes.turned} with the head turned, ${boxes.mouthed} taking up or letting go, not followed; ${boxes.holding} with the ball held)`
     );
     expect(boxes.wrong).toEqual([]);
 
     const placing = followPlacing(lines);
     console.log(
-      `placing: ${placing.plain} moved plainly, ${placing.glued} glued, ${placing.held} held, ${placing.nearly} a pixel out (${placing.holding} holding something, ${placing.sliding} sliding, not followed)`
+      `placing: ${placing.plain} moved plainly, ${placing.glued} glued, ${placing.held} held, ${placing.nearly} a pixel out (${placing.holding} taking up or letting go, ${placing.sliding} sliding, not followed)`
     );
     expect(placing.wrong).toEqual([]);
 

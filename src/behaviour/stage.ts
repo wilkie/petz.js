@@ -222,14 +222,20 @@ export function rollBall(ball: Ball, width: number, height: number) {
 /**
  * The rectangle a frame's balls take, as the engine keeps it for the dog's
  * sprite (`BallState` `+0x38` to `+0x3e`, the sprite's `+0x60`): every ball
- * to its radius, and 2 more each way.
+ * to its radius, and what it holds -- the ball's own rectangle about the ball
+ * of the dog that holds it -- and 2 more each way.
  */
-export function ballsBox(placed: { x: number; y: number; diameter: number }[]) {
+export function ballsBox(
+  placed: { x: number; y: number; diameter: number }[],
+  held?: { left: number; top: number; right: number; bottom: number }
+) {
   return {
-    left: Math.min(...placed.map((ball) => ball.x - ball.diameter / 2)) - 2,
-    top: Math.min(...placed.map((ball) => ball.y - ball.diameter / 2)) - 2,
-    right: Math.max(...placed.map((ball) => ball.x + ball.diameter / 2)) + 2,
-    bottom: Math.max(...placed.map((ball) => ball.y + ball.diameter / 2)) + 2,
+    left: Math.min(...placed.map((ball) => ball.x - ball.diameter / 2), held?.left ?? Infinity) - 2,
+    top: Math.min(...placed.map((ball) => ball.y - ball.diameter / 2), held?.top ?? Infinity) - 2,
+    right:
+      Math.max(...placed.map((ball) => ball.x + ball.diameter / 2), held?.right ?? -Infinity) + 2,
+    bottom:
+      Math.max(...placed.map((ball) => ball.y + ball.diameter / 2), held?.bottom ?? -Infinity) + 2,
   };
 }
 
@@ -358,19 +364,18 @@ export class Stage implements PetWorld {
     angles = this.angles,
     blend = this.blend
   ) {
-    return ballsBox(
-      project(
-        this.breed,
-        this.header,
-        frame,
-        scalesForAge(this.breed, this.age),
-        rotation,
-        100 - this.age,
-        head,
-        angles,
-        this.blendOf(blend)
-      )
+    const placed = project(
+      this.breed,
+      this.header,
+      frame,
+      scalesForAge(this.breed, this.age),
+      rotation,
+      100 - this.age,
+      head,
+      angles,
+      this.blendOf(blend)
     );
+    return ballsBox(placed, this.heldRect(placed));
   }
 
   /** The blend as `project` takes it, its reference a frame. */
@@ -505,7 +510,14 @@ export class Stage implements PetWorld {
 
   /** The rectangle the dog is drawn in. */
   rect() {
-    return ballsBox(this.placed());
+    const placed = this.placed();
+    return ballsBox(placed, this.heldRect(placed));
+  }
+
+  /** What the dog holds, by the ball of its that holds it: the ball's own rectangle there. */
+  private heldRect(placed: { x: number; y: number }[]) {
+    const slot = this.ball?.slot;
+    return slot === null || slot === undefined ? undefined : ballRect(placed[HOLDERS[slot]]);
   }
 
   /**
