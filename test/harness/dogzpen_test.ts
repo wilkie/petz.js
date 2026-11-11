@@ -22,8 +22,9 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { idleEnd, idlePlan, Pet } from '../../src/behaviour/pet.ts';
+import { idleEnd, idlePlan, Pet, trickRepeats } from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
+import { readTrickScripts } from '../../src/formats/engine.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
 
@@ -137,6 +138,7 @@ function trickOf(words: number[]): Trick {
 interface Frame {
   tick: number[];
   changes: { from: number; to: number; draws: number }[];
+  stored: { sprite: number; script: number; draws: number }[];
   drawn: { seed: number; segment: number | undefined; offset: number }[];
   frame: number[];
 }
@@ -168,10 +170,12 @@ function readTrace(lines: string[]) {
     if (kind === 'trick') {
       tricks[values[0]] = trickOf(values.slice(1));
     } else if (kind === 'tick') {
-      open = { tick: values, changes: [], drawn: [], frame: [] };
+      open = { tick: values, changes: [], stored: [], drawn: [], frame: [] };
       frames.push(open);
     } else if (kind === 'newstate' && open) {
       open.changes.push({ from: values[0], to: values[1], draws: values[2] });
+    } else if (kind === 'stored' && open) {
+      open.stored.push({ sprite: values[0], script: values[1], draws: values[3] });
     } else if (kind === 'frame' && open) {
       open.frame = values;
     } else if (kind === 'drawn' && open) {
@@ -179,7 +183,7 @@ function readTrace(lines: string[]) {
     }
   }
 
-  return { tricks, frames };
+  return { tricks, frames, dll };
 }
 
 /** C's `rand` from a seed, and the seed it has reached. */
@@ -249,6 +253,43 @@ function followIdlePlans(lines: string[]) {
         }
       }
     }
+  }
+
+  return result;
+}
+
+/**
+ * Each trick's script played again and again (`PushTrick`, the draw
+ * returning to seg21:7849, for the tricks without a case of their own)
+ * against `trickRepeats`, with the engine's table of the tricks' scripts
+ * (`ds:0x216e`): as many pushes of it to the dog, after the draw.
+ */
+function followTrickRepeats(lines: string[]) {
+  const { frames, dll } = readTrace(lines);
+  const scripts = readTrickScripts(dll);
+  const result = { tricks: 0, held: 0, wrong: [] as string[] };
+
+  for (const { tick, changes, stored, drawn, frame } of frames) {
+    drawn.forEach(({ seed, segment, offset }, k) => {
+      if (segment !== 21 || offset !== 0x7849) {
+        return;
+      }
+
+      const state = [...changes].reverse().find((change) => change.draws <= k)?.to ?? tick[1];
+      const trick = scripts[state - FIRST_TRICK];
+      const { rand } = randFrom(seed);
+      const ours = trickRepeats(trick, rand);
+      const theirs = stored.filter(
+        (push) => push.sprite === frame[5] && push.draws === k + 1 && push.script === trick.script
+      ).length;
+      result.tricks++;
+
+      if (ours === theirs) {
+        result.held++;
+      } else {
+        result.wrong.push(`frame ${tick[0]}: trick ${state} played ${ours} times, not ${theirs}`);
+      }
+    });
   }
 
   return result;
@@ -355,6 +396,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     console.log(`idle tricks: ${idle.chosen} chosen, ${idle.held} held`);
     expect(idle.wrong).toEqual([]);
     expect(idle.held).toBeGreaterThan(0);
+
+    const repeats = followTrickRepeats(lines);
+    console.log(`trick repeats: ${repeats.tricks} drawn, ${repeats.held} held`);
+    expect(repeats.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

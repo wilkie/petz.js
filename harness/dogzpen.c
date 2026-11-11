@@ -21,9 +21,11 @@
  *   change of state within it; and after it `frame n state global seed
  *   draws` -- the dog's state (`PetModule` `+0xc0`, newest of the ten
  *   `NewState` keeps), its global state (`+0xd4`), C's `rand` seed
- *   (DOGZDLL ds:0x2d28) and how many times it was drawn -- and `drawn k
+ *   (DOGZDLL ds:0x2d28), how many times it was drawn, its sprite's
+ *   segment, the stage it is kept to and its rectangle -- and `drawn k
  *   seed selector offset` for each draw, the seed before it and where it
- *   returned to.
+ *   returned to; and within it, `stored`, `neutral` and `script` for each
+ *   script pushed to a sprite.
  */
 #include <dos.h>
 #include <string.h>
@@ -125,11 +127,30 @@ static void hookRand(void)
     FreeSelector(writable);
 }
 
-/* `PetModule::NewState` (496, seg21:5bb8), which may be called again within
- * itself, as a state entered asks for another: a far jump over its first
- * five bytes -- its prologue, `mov ax,DGROUP`, `inc bp`, `push bp` -- to
- * this, which writes each change (`newstate from to draws`, the draws of the
- * frame before it) and goes on through a copy of them that jumps back. */
+/* A function of the library's that begins, as most do, with five bytes
+ * of prologue -- `mov ax,DGROUP`, `inc bp`, `push bp` -- hooked: a far jump
+ * over them to `hook`, and a copy of them, jumping back past them, through
+ * which the hook goes on. So a call within it, to it, is hooked as well. */
+static void __far *hookPrologue(int number, void __far *hook)
+{
+    void __far *at = (void __far *)ordinal(number);
+    UINT writable = alias(170, FP_SEG(at));
+    unsigned char __far *code = (unsigned char __far *)MK_FP(writable, FP_OFF(at));
+    unsigned char __far *copy = (unsigned char __far *)GlobalLock(GlobalAlloc(GMEM_FIXED, 16));
+    int k;
+
+    for (k = 0; k < 5; k++) {
+        copy[k] = code[k];
+    }
+
+    jumpTo(copy + 5, (unsigned char __far *)at + 5);
+    jumpTo(code, hook);
+    FreeSelector(writable);
+    return MK_FP(alias(171, FP_SEG(copy)), FP_OFF(copy));
+}
+
+/* `PetModule::NewState` (496, seg21:5bb8): each change (`newstate from to
+ * draws`, the draws of the frame before it). */
 typedef int(__cdecl __far *NEWSTATE)(void __far *module, int state);
 static NEWSTATE newStateOn;
 
@@ -139,23 +160,40 @@ static int __cdecl __far __loadds changing(unsigned char __far *module, int stat
     return newStateOn(module, state);
 }
 
-static void hookNewState(void)
+/* And what a script sprite is given to play, by whom (its segment):
+ * `ScriptSprite::PushStoredScript` (75, seg7:4367; `stored sprite script
+ * how draws`), `PushTransitionToNeutralPos` (78, seg7:3d2f; `neutral sprite
+ * position glue draws`) and `PushScript` (81, seg7:47e8; `script sprite
+ * count how draws`, after its elements' far pointer). */
+typedef int(__cdecl __far *PUSHTWO)(void __far *sprite, int a, int b);
+typedef int(__cdecl __far *PUSHELEMENTS)(void __far *sprite, void __far *elements, int a, int b);
+static PUSHTWO storedOn, neutralOn;
+static PUSHELEMENTS scriptOn;
+
+static int __cdecl __far __loadds storing(void __far *sprite, int a, int b)
 {
-    void __far *at = (void __far *)ordinal(496);
-    UINT writable = alias(170, FP_SEG(at));
-    unsigned char __far *code = (unsigned char __far *)MK_FP(writable, FP_OFF(at));
-    HGLOBAL memory = GlobalAlloc(GMEM_FIXED, 16);
-    unsigned char __far *copy = (unsigned char __far *)GlobalLock(memory);
-    int k;
+    say("stored %u %d %d %d\r\n", FP_SEG(sprite), a, b, draws);
+    return storedOn(sprite, a, b);
+}
 
-    for (k = 0; k < 5; k++) {
-        copy[k] = code[k];
-    }
+static int __cdecl __far __loadds neutral(void __far *sprite, int a, int b)
+{
+    say("neutral %u %d %d %d\r\n", FP_SEG(sprite), a, b, draws);
+    return neutralOn(sprite, a, b);
+}
 
-    jumpTo(copy + 5, (unsigned char __far *)at + 5);
-    newStateOn = (NEWSTATE)MK_FP(alias(171, FP_SEG(copy)), FP_OFF(copy));
-    jumpTo(code, (void __far *)changing);
-    FreeSelector(writable);
+static int __cdecl __far __loadds scripting(void __far *sprite, void __far *elements, int a, int b)
+{
+    say("script %u %d %d %d\r\n", FP_SEG(sprite), a, b, draws);
+    return scriptOn(sprite, elements, a, b);
+}
+
+static void hookPushes(void)
+{
+    newStateOn = (NEWSTATE)hookPrologue(496, (void __far *)changing);
+    storedOn = (PUSHTWO)hookPrologue(75, (void __far *)storing);
+    neutralOn = (PUSHTWO)hookPrologue(78, (void __far *)neutral);
+    scriptOn = (PUSHELEMENTS)hookPrologue(81, (void __far *)scripting);
 }
 
 long FAR PASCAL WindowProc(HWND window, UINT message, WPARAM w, LPARAM l)
@@ -268,7 +306,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     }
 
     hookRand();
-    hookNewState();
+    hookPushes();
 
     for (n = 0; n < frames; n++) {
         /* A frame moves the dog on only once the clock reaches the time its
@@ -297,8 +335,21 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         ((WITHPARAMS)ordinal(119))(params);
         sprite = *(unsigned char __far *__far *)(module + 0x58);
 
-        say("frame %d %d %d %lu %d\r\n", n, *(int __far *)(module + 0xc0),
-            *(int __far *)(module + 0xd4), *(unsigned long __far *)MK_FP(dgroup, 0x2d28), draws);
+        say("frame %d %d %d %lu %d %u", n, *(int __far *)(module + 0xc0),
+            *(int __far *)(module + 0xd4), *(unsigned long __far *)MK_FP(dgroup, 0x2d28), draws,
+            FP_SEG(sprite));
+
+        /* And the stage the dog is kept to (ds:0x3bc2 to 0x3bc8) and the
+         * dog's rectangle (its sprite's `+0x58` to `+0x5e`). */
+        for (answer = 0; answer < 4; answer++) {
+            say(" %d", *(int __far *)MK_FP(dgroup, 0x3bc2 + 2 * answer));
+        }
+
+        for (answer = 0; answer < 4; answer++) {
+            say(" %d", sprite ? *(int __far *)(sprite + 0x58 + 2 * answer) : 0);
+        }
+
+        say("\r\n");
 
         /* Each draw kept: `drawn k seed selector offset`, where it returns to. */
         for (answer = 0; answer < draws && answer < KEPT; answer++) {

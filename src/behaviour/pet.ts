@@ -459,6 +459,11 @@ export function idleEnd(excitement: number, rand: Rand): number {
   return (rand() % 30) + 30 > excitement ? STATE.sleeping : STATE.locomote;
 }
 
+/** How many times a trick's script plays (`PushTrick`, seg21:7844): `rand() % extra` more than its repeats, its extra at least 1. */
+export function trickRepeats(trick: { repeats: number; extra: number }, rand: Rand): number {
+  return (rand() % Math.max(1, trick.extra)) + trick.repeats;
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -1693,7 +1698,7 @@ export class Pet {
     }
 
     this.push({ trick: state });
-    repeat((this.rand() % trick.extra) + trick.repeats, () => this.pushStored(trick.script));
+    repeat(trickRepeats(trick, this.rand), () => this.pushStored(trick.script));
 
     if (trick.cueAround) {
       this.push({ cue: 6 });
