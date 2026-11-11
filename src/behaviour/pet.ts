@@ -412,6 +412,53 @@ type Item =
 /** An angle in 256ths of a turn, from -128 to 127. */
 const wrap = (angle: number) => ((((angle + 128) % 256) + 256) % 256) - 128;
 
+/**
+ * An idle dog's plan (`PetModule::SetupIdle`, seg16:0104): `rand() % (13 -
+ * e/10) + 6 - e/20` items, e its excitement, after a draw it does not use.
+ * Each, if `rand() % 100` is over e, one to four runs of one to three pants
+ * (0), each run maybe a pant looking about (1) and -- `(rand() == 0) % 3`,
+ * one time in 32,768 -- a longer pant (2); else a trick (3).
+ */
+export function idlePlan(excitement: number, rand: Rand): number[] {
+  const plan: number[] = [];
+
+  rand();
+  const length = (rand() % (13 - Math.trunc(excitement / 10))) + (6 - Math.trunc(excitement / 20));
+
+  for (let n = 0; n < length; n++) {
+    if (rand() % 100 > excitement) {
+      for (let pants = (rand() % 4) + 1; pants; pants--) {
+        for (let still = (rand() % 3) + 1; still; still--) {
+          plan.push(0);
+        }
+
+        if (rand() % 2) {
+          plan.push(1);
+        }
+
+        /* The engine pushes the longer pant only when rand() is 0. */
+        if ((rand() === 0 ? 1 : 0) % 3) {
+          plan.push(2);
+        }
+      }
+    } else {
+      plan.push(3);
+    }
+  }
+
+  return plan;
+}
+
+/**
+ * Where an idle dog goes with its plan done (`DoIdle`, seg16:05eb): asleep
+ * (5) where `rand() % 30 + 30` -- the module's `+0x1220`, 30 as it is made
+ * -- is over its excitement, else walking (7). (In the screen saver, `PetParams`
+ * `+0x5e` 3, an excited dog, over 70, goes to state 11 first: not here.)
+ */
+export function idleEnd(excitement: number, rand: Rand): number {
+  return (rand() % 30) + 30 > excitement ? STATE.sleeping : STATE.locomote;
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -1364,35 +1411,8 @@ export class Pet {
 
   /** `PetModule::SetupIdle`: a plan of pants and tricks, shorter the more excited the dog. */
   private setupIdle() {
-    const excitement = this.factor(0);
-
-    this.rand();
-    const length =
-      (this.rand() % (13 - Math.trunc(excitement / 10))) + (6 - Math.trunc(excitement / 20));
-
-    this.plan = [];
+    this.plan = idlePlan(this.factor(0), this.rand);
     this.planAt = 0;
-
-    for (let n = 0; n < length; n++) {
-      if (this.rand() % 100 > excitement) {
-        for (let pants = (this.rand() % 4) + 1; pants; pants--) {
-          for (let still = (this.rand() % 3) + 1; still; still--) {
-            this.plan.push(0);
-          }
-
-          if (this.rand() % 2) {
-            this.plan.push(1);
-          }
-
-          /* The engine pushes the longer pant only when rand() is 0. */
-          if ((this.rand() === 0 ? 1 : 0) % 3) {
-            this.plan.push(2);
-          }
-        }
-      } else {
-        this.plan.push(3);
-      }
-    }
   }
 
   /** Whether the dog has left `eIdle` since it was last made idle (`0xda`, seg16:02fe). */
@@ -1444,7 +1464,7 @@ export class Pet {
       }
 
       if (this.planAt >= this.plan.length) {
-        this.newState((this.rand() % 30) + 30 > excitement ? STATE.sleeping : STATE.locomote);
+        this.newState(idleEnd(excitement, this.rand));
         return step;
       }
 
