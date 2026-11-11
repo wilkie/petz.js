@@ -350,6 +350,29 @@ export class Stage implements PetWorld {
     });
   }
 
+  /** The rectangle a frame takes, from the dog's origin, so turned and angled (`Ballz::GetFrame`). */
+  private boxOf(
+    frame: Frame,
+    rotation: number,
+    head = this.head,
+    angles = this.angles,
+    blend = this.blend
+  ) {
+    return ballsBox(
+      project(
+        this.breed,
+        this.header,
+        frame,
+        scalesForAge(this.breed, this.age),
+        rotation,
+        100 - this.age,
+        head,
+        angles,
+        this.blendOf(blend)
+      )
+    );
+  }
+
   /** The blend as `project` takes it, its reference a frame. */
   private blendOf(blend = this.blend) {
     return blend && { scale: blend.scale, reference: this.frames[blend.reference] };
@@ -398,26 +421,47 @@ export class Stage implements PetWorld {
     this.blend = blend;
 
     if (step.glue !== undefined) {
-      const before = this.ballOf(
-        this.frame,
-        step.glue,
-        this.rotation,
-        was.head,
-        was.angles,
-        was.blend
-      );
+      /* `MoveFrameRectBall` (seg10:2ad8): the ball where the frame before
+       * had it taken at the new angles, its head and blend as they were,
+       * from the top left of the rectangle the dog had; the new frame put
+       * with its ball there. */
+      const before = this.ballOf(this.frame, step.glue, rotation, was.head, angles, was.blend);
+      const had = this.boxOf(this.frame, this.rotation, was.head, was.angles, was.blend);
+      const turned = this.boxOf(this.frame, rotation, was.head, angles, was.blend);
       const after = this.ballOf(next, step.glue, rotation);
-      this.x += before.x - after.x;
-      this.y += before.y - after.y;
+      this.x += before.x + had.left - turned.left - after.x;
+      this.y += before.y + had.top - turned.top - after.y;
     } else if (reference !== undefined) {
       const from = this.frameCentre(this.frames[reference], rotation);
       const to = this.frameCentre(next, rotation);
       this.x += from.x - to.x;
       this.y += from.y - to.y;
+    } else {
+      /* `MoveFrameRect` (seg10:2788): the rectangle moved by how the frame's
+       * changed from the frame before taken at the new angles, its head and
+       * blend as they were; so a turn alone keeps its top left in place. */
+      const before = this.boxOf(this.frame, this.rotation, was.head, was.angles, was.blend);
+      const turned = this.boxOf(this.frame, rotation, was.head, angles, was.blend);
+      this.x += before.left - turned.left;
+      this.y += before.top - turned.top;
     }
 
     this.frame = next;
     this.rotation = rotation;
+
+    /* Kept touching the stage (seg7:7058 to 7139): its rectangle's right no
+     * further left than the stage's left, and so on each way -- unless it
+     * steers to a point off the stage. */
+    const steering = (step as { steering?: { x: number; y: number } }).steering;
+    const offStage =
+      steering &&
+      (steering.x < 0 || steering.x >= this.width || steering.y < 0 || steering.y >= this.height);
+
+    if (!offStage) {
+      const rect = this.rect();
+      this.x += Math.max(0, -rect.right) - Math.max(0, rect.left - this.width);
+      this.y += Math.max(0, -rect.bottom) - Math.max(0, rect.top - this.height);
+    }
 
     /* Put by its middle (`XSprite::MoveSpritePt`): the kennel. */
     if (centredAt) {

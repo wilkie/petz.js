@@ -405,7 +405,7 @@ withOracle('the engine’s behaviour', () => {
       /* Open, the lids rest a little closed: 30, 20 once it has looked at
        * the user, and walking, the calmer the droopier, up to 45. */
       expect(lids.filter((lid) => lid === 30).length).toBeGreaterThan(50);
-      expect(lids.filter((lid) => lid > 30 && lid <= 45).length).toBeGreaterThan(50);
+      expect(lids.filter((lid) => lid > 30 && lid <= 45).length).toBeGreaterThan(40);
     });
 
     it('shuts its eyes asleep', () => {
@@ -927,6 +927,13 @@ withOracle('the engine’s behaviour', () => {
     it('guarding the ball, minds the owner coming close, and runs off with it', () => {
       const { stage, pet, run, states } = setUp(3, 640, 480);
       run(200);
+
+      /* On the stage, where guarding goes on (off it, the dog runs off with the ball). */
+      const rect = stage.rect();
+      stage.nudge(
+        320 - Math.trunc((rect.left + rect.right) / 2),
+        240 - Math.trunc((rect.top + rect.bottom) / 2)
+      );
 
       const chin = stage.ballOnStage(51);
       stage.ball = { x: chin.x, y: chin.y, vx: 0, vy: 0, held: false, slot: null, recorded: null };

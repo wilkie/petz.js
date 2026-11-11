@@ -35,8 +35,9 @@
  *   script pushed to a sprite, `target` and `targeted` for each point the
  *   dog is to walk to, `gait` and `gaited` for each way it goes, `spot`
  *   and `spotted` for each spot it wants petting on, `grabbable` for
- *   each time it is asked whether it can grab the ball, and `ballstop` as
- *   the ball is stopped.
+ *   each time it is asked whether it can grab the ball, `ballstop` as the
+ *   ball is stopped, `moved` for each way the dog's rectangle is moved,
+ *   and `grab` and `release` for what it takes up and lets go of.
  */
 #include <dos.h>
 #include <string.h>
@@ -272,8 +273,71 @@ static void __cdecl __far __loadds stopping(void __far *ball)
     stopOn(ball);
 }
 
+/* And how the dog's rectangle is moved each frame (`Ballz`, 198 to 201):
+ * `moved how word draws` -- 0 plainly (`MoveFrameRect`), 1 glued
+ * (`MoveFrameRectBall`, the word its ball), 2 by a reference frame
+ * (`GetCenterOffset`), 3 about its middle (`MoveFrameRectCenter`). Each
+ * passed on as it came, whatever it takes (cdecl: its caller clears). */
+typedef int(__cdecl __far *PLACING)(void __far *ballz, void __far *a, void __far *b,
+                                     void __far *c, int d, int e, int f);
+static PLACING placingOn[4];
+
+static int placed(int how, void __far *ballz, void __far *a, void __far *b, void __far *c, int d,
+                  int e, int f)
+{
+    say("moved %d %d %d\r\n", how, how == 1 ? d : -1, draws);
+    return placingOn[how](ballz, a, b, c, d, e, f);
+}
+
+static int __cdecl __far __loadds plainly(void __far *z, void __far *a, void __far *b,
+                                          void __far *c, int d, int e, int f)
+{
+    return placed(0, z, a, b, c, d, e, f);
+}
+
+static int __cdecl __far __loadds glued(void __far *z, void __far *a, void __far *b,
+                                        void __far *c, int d, int e, int f)
+{
+    return placed(1, z, a, b, c, d, e, f);
+}
+
+static int __cdecl __far __loadds referred(void __far *z, void __far *a, void __far *b,
+                                           void __far *c, int d, int e, int f)
+{
+    return placed(2, z, a, b, c, d, e, f);
+}
+
+static int __cdecl __far __loadds centred(void __far *z, void __far *a, void __far *b,
+                                          void __far *c, int d, int e, int f)
+{
+    return placed(3, z, a, b, c, d, e, f);
+}
+
+/* And what the dog takes up and lets go of (`PetModule::GrabObject`,
+ * `ReleaseObject`, 340, 341): `grab slot draws`, `release slot draws`. */
+typedef void(__cdecl __far *HOLDING)(void __far *module, int slot);
+static HOLDING grabOn, releaseOn;
+
+static void __cdecl __far __loadds grabbed(void __far *module, int slot)
+{
+    say("grab %d %d\r\n", slot, draws);
+    grabOn(module, slot);
+}
+
+static void __cdecl __far __loadds released(void __far *module, int slot)
+{
+    say("release %d %d\r\n", slot, draws);
+    releaseOn(module, slot);
+}
+
 static void hookPushes(void)
 {
+    grabOn = (HOLDING)hookPrologue(340, (void __far *)grabbed);
+    releaseOn = (HOLDING)hookPrologue(341, (void __far *)released);
+    placingOn[0] = (PLACING)hookPrologue(199, (void __far *)plainly);
+    placingOn[1] = (PLACING)hookPrologue(200, (void __far *)glued);
+    placingOn[2] = (PLACING)hookPrologue(198, (void __far *)referred);
+    placingOn[3] = (PLACING)hookPrologue(201, (void __far *)centred);
     stopOn = (STOPBALL)hookPrologue(453, (void __far *)stopping);
     grabbableOn = (GRABBABLE)hookPrologue(406, (void __far *)grabbing);
     spotOn = (PICKSPOT)hookPrologue(390, (void __far *)spotting);
@@ -584,7 +648,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 say(" %d", *(int __far *)(at + words[answer]));
             }
 
-            say("\r\n");
+            /* And whether it steers to a target, and where (`+0x2108`, `+0x2110`);
+             * and whether its state has something of its own to draw -- what
+             * it holds, in its mouth or under a paw (`+0x40c`, `+0x414`);
+             * and whether it slides (`8af4`, `-0x71f2`). */
+            say(" %d %d %d %d %d %d\r\n", *(int __far *)(sprite + 0x2108),
+                *(int __far *)(sprite + 0x2110), *(int __far *)(sprite + 0x2112),
+                *(void __far *__far *)(at + 0x40c) != 0, *(void __far *__far *)(at + 0x414) != 0,
+                *(int __far *)(sprite + (unsigned)-0x71f2));
         }
 
         /* Each draw kept: `drawn k seed selector offset`, where it returns to. */

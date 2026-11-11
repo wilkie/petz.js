@@ -358,6 +358,9 @@ export interface Tick extends Step {
   state: number;
   placedBy?: number;
 
+  /** Where the dog steers, if anywhere (`+0x2108`, `+0x2110`): a point off the stage lets it go off too. */
+  steering?: { x: number; y: number };
+
   /** A ball of the dog held to a point, the dog drawn about it: hanging from the shoe. */
   pinned?: { ball: number; x: number; y: number };
 
@@ -1054,6 +1057,7 @@ export class Pet {
       rotation: this.rotation,
       state: this.state,
       placedBy: this.placedBy,
+      steering: this.steer?.point,
       pinned: this.pinned ?? undefined,
       centredAt,
       head,
