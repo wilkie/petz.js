@@ -4753,7 +4753,8 @@ export class Pet {
    * `Ballz::HeadTrackPrep` (seg5:05ba), each frame drawn: tracking, the
    * head's turn and nod, a roll, a drift of the neck it turns about and
    * an offset, each a wobble (`Lube::Next`, seg5:0468) — waiting a while,
-   * then easing to somewhere in its range — some in proportion to the turn,
+   * then easing to somewhere in its range — some in proportion to the turn
+   * (the roll, and across) and some to the nod (up and down, and back),
    * scaled by `headWobble`; not tracking, the wobbles are put back.
    */
   private headTrackPrep(): Head | undefined {
@@ -4769,17 +4770,19 @@ export class Pet {
     const now = Math.trunc(this.time * 17);
     const next = (n: number) => this.nextLube(this.lubes[n], now) * scale;
     const yaw = this.headYaw;
+    const pitch = this.headPitch;
 
-    /* In the engine's order, each pair a share of the turn and a wobble. */
+    /* In the engine's order, each pair a share of the turn -- or, up and
+     * down and back, of the nod (seg5:092f, 0985, 0a18, 0a52) -- and a wobble. */
     const roll = Math.max(-42, Math.min(42, Math.trunc(next(1) * yaw + next(0))));
     const drift = {
       x: next(11) * yaw + next(8),
-      y: next(12) * yaw + next(9),
-      z: next(13) * yaw + next(10),
+      y: next(12) * pitch + next(9),
+      z: next(13) * pitch + next(10),
     };
     const offsetX = Math.trunc(next(5) * yaw + next(2));
-    const offsetY = Math.trunc(next(6) * yaw + next(3));
-    const offsetZ = Math.trunc(next(7) * yaw + next(4)) - Math.trunc(Math.abs(offsetY) / 2);
+    const offsetY = Math.trunc(next(6) * pitch + next(3));
+    const offsetZ = Math.trunc(next(7) * pitch + next(4)) - Math.trunc(Math.abs(offsetY) / 2);
 
     return {
       yaw,
