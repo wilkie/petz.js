@@ -12,8 +12,8 @@
  * 119), as many as `FRAMES.TXT` says (300 without it), each when the
  * clock lets the dog move on; and, as `FRAMES.TXT`'s second number asks,
  * the dog's idle plans cut short (1), its excitement put low (2), its
- * sleep cut short (4), the dog petted (8), or a treat held out to it and
- * put down (16).
+ * sleep cut short (4), the dog petted (8), a treat held out to it and
+ * put down (16), or a bowl of food put down (32).
  *
  * * `made`: the library and the module;
  * * `segments`: each code segment's selector, by an export of it;
@@ -452,16 +452,20 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * 1090 sends it) taken out at the 100th frame -- command 0 (`+0x2`)
          * with the slot (`+0x16`), dragged (`+0x18` 1) and the main button
          * down (`+0xe`) -- held at (146, 80) in the pen to frame 380, moved
-         * to (146, 200) and let go at the 400th; else no slot (-1) and not
-         * dragged, as DOGZ.WAD leaves them after each frame. */
-        if (forcing & 16) {
-            *(int *)(params + 0x16) = n == 100 ? 9 : -1;
-            *(int *)(params + 0x18) = n == 100;
-            *(int *)(params + 0xe) = n >= 100 && n < 400 ? 0x8000 : 0;
+         * to (146, 200) and let go at the 400th; or 32, the food bowl (slot
+         * 6) taken out the same way and put down at (146, 200) at the
+         * 110th; else no slot (-1) and not dragged, as DOGZ.WAD leaves them
+         * after each frame. */
+        if (forcing & 48) {
+            int slot = forcing & 16 ? 9 : 6, until = forcing & 16 ? 400 : 110;
 
-            if (n >= 100 && n <= 400) {
+            *(int *)(params + 0x16) = n == 100 ? slot : -1;
+            *(int *)(params + 0x18) = n == 100;
+            *(int *)(params + 0xe) = n >= 100 && n < until ? 0x8000 : 0;
+
+            if (n >= 100 && n <= until) {
                 *(int *)(params + 0x12) = 146;
-                *(int *)(params + 0x14) = n < 380 ? 80 : 200;
+                *(int *)(params + 0x14) = n < until - 20 ? 80 : 200;
             }
         }
 

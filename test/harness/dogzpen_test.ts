@@ -24,6 +24,8 @@ import { join } from 'node:path';
 
 import {
   begWaitLoops,
+  bowlPlan,
+  fillBowl,
   idleEnd,
   idlePlan,
   keepsWalking,
@@ -140,10 +142,18 @@ const PET = process.env.DOGZ_PET === '1';
 /** `DOGZ_TREAT=1`: the blue treat taken out of the toy box at frame 100, held over the pen to frame 400, and let go lower down. */
 const TREAT = process.env.DOGZ_TREAT === '1';
 
+/** `DOGZ_FOOD=1`: the bowl of food taken out of the toy box at frame 100 and put down at once. */
+const FOOD = process.env.DOGZ_FOOD === '1';
+
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
-  (PLAN_DONE ? 1 : 0) | (CALM ? 2 : 0) | (WAKE ? 4 : 0) | (PET ? 8 : 0) | (TREAT ? 16 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}-${FRAMES}`;
+  (PLAN_DONE ? 1 : 0) |
+  (CALM ? 2 : 0) |
+  (WAKE ? 4 : 0) |
+  (PET ? 8 : 0) |
+  (TREAT ? 16 : 0) |
+  (FOOD ? 32 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -734,13 +744,70 @@ function followBegWaits(lines: string[]) {
       result.waits++;
       const { rand, state } = randFrom(seed);
       let used = 0;
-      begWaitLoops(Math.min(100, Math.max(1, tick[4])), undefined, false, () => (used++, rand()));
+      [
+        ...begWaitLoops(
+          Math.min(100, Math.max(1, tick[4])),
+          undefined,
+          false,
+          () => (used++, rand())
+        ),
+      ];
       const seedThen = end < drawn.length ? drawn[end].seed : frame[3];
 
       if (used === end - k && state.seed === seedThen) {
         result.held++;
       } else {
         result.wrong.push(`frame ${tick[0]}: ${used} draws, not ${end - k}`);
+      }
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Each bowl of food filled as it is taken out (`FoodSprite::Update`, the
+ * draw returning to seg20:0e3a) against `fillBowl`, and the dog's
+ * mouthfuls from it (`DoEating`, its draws from the one returning to
+ * seg18:18bf, one after another) against `bowlPlan`, for the servings the
+ * last bowl filled was given: as many draws, to the same seed.
+ */
+function followBowls(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { filled: 0, eaten: 0, held: 0, wrong: [] as string[] };
+  const inPlan = (draw: { segment: number | undefined; offset: number } | undefined) =>
+    draw?.segment === 18 && draw.offset >= 0x18ba && draw.offset < 0x19d0;
+  let servings: number | undefined;
+
+  for (const { tick, drawn, frame } of frames) {
+    drawn.forEach(({ seed, segment, offset }, k) => {
+      if (segment === 20 && offset === 0xe3a) {
+        result.filled++;
+        result.held++;
+        servings = fillBowl(randFrom(seed).rand);
+        return;
+      }
+
+      if (segment !== 18 || offset !== 0x18bf || servings === undefined) {
+        return;
+      }
+
+      let end = k;
+
+      while (inPlan(drawn[end])) {
+        end++;
+      }
+
+      result.eaten++;
+      const { rand, state } = randFrom(seed);
+      let used = 0;
+      [...bowlPlan(servings, () => (used++, rand()))];
+      const seedThen = end < drawn.length ? drawn[end].seed : frame[3];
+
+      if (used === end - k && state.seed === seedThen) {
+        result.held++;
+      } else {
+        result.wrong.push(`frame ${tick[0]}: ${servings} servings, ${used} draws, not ${end - k}`);
       }
     });
   }
@@ -893,6 +960,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     const waits = followBegWaits(lines);
     console.log(`begging waits: ${waits.waits} made, ${waits.held} held`);
     expect(waits.wrong).toEqual([]);
+
+    const bowls = followBowls(lines);
+    console.log(`bowls: ${bowls.filled} filled, ${bowls.eaten} eaten from, ${bowls.held} held`);
+    expect(bowls.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

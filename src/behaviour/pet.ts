@@ -675,37 +675,41 @@ export function pettingEyes(rand: Rand): Omit<Step, 'frame'>[] {
 
 /**
  * A dog's pants waiting for the treat after a trick, or for the ball
- * (`PetModule::PushBegWaitLoops`, seg18:25e0): `(100 - e) / 20 + 1`, e its
- * excitement -- at play `(130 - keen) / 20 + 1`, keen its excitement and 30
- * more for a ball held, none when that is under 1 -- and as many again at
- * random; sitting if `rand() % 85` is over e, or sitting already; then that
- * many and as many again at random, each maybe sitting from then on (`rand()
- * % 85` over e and `rand() % 10` 0), every other one or two a look -- at the
- * user (0), the cursor (1) or what is held (2), by `rand() % 3`, never the
- * last again -- and one time in ten a longer pant after.
+ * (`PetModule::PushBegWaitLoops`, seg18:25e0), step by step, so that what
+ * is pushed between its draws is pushed between them as the engine pushes
+ * it: `(100 - e) / 20 + 1`, e its excitement -- at play `(130 - keen) / 20
+ * + 1`, keen its excitement and 30 more for a ball held, nothing when that
+ * is under 1 -- and as many again at random; it settles, sitting if `rand()
+ * % 85` is over e or it sits already; then that many pants and as many
+ * again at random, each maybe sitting from then on (`rand() % 85` over e
+ * and `rand() % 10` 0), every other one or two a look -- at the user (0),
+ * the cursor (1) or what is held (2), `rand() % 3`, never the last again --
+ * and, after it, one time in ten a longer pant.
  */
-export function begWaitLoops(
+export function* begWaitLoops(
   excitement: number,
   keen: number | undefined,
   sitting: boolean,
   rand: Rand
-): { sitting: boolean; pants: { sitting: boolean; look?: number; longer: boolean }[] } | undefined {
+): Generator<
+  { begin: true } | { settle: boolean } | { pant: boolean; look?: number } | { longer: boolean }
+> {
   let loops: number;
 
   if (keen !== undefined) {
     loops = Math.trunc((130 - keen) / 20) + 1;
 
     if (loops < 1) {
-      return undefined;
+      return;
     }
   } else {
     loops = Math.trunc((100 - excitement) / 20) + 1;
   }
 
   loops += rand() % loops;
+  yield { begin: true };
   let sits = excitement < rand() % 85 || sitting;
-  const first = sits;
-  const pants: { sitting: boolean; look?: number; longer: boolean }[] = [];
+  yield { settle: sits };
   let looks = 0;
   let lastLook = 1;
 
@@ -726,10 +730,47 @@ export function begWaitLoops(
       lastLook = look;
     }
 
-    pants.push({ sitting: sits, look, longer: rand() % 10 === 0 });
-  }
+    yield { pant: sits, look };
 
-  return { sitting: first, pants };
+    if (rand() % 10 === 0) {
+      yield { longer: sits };
+    }
+  }
+}
+
+/** A bowl taken out of the toy box filled (`FoodSprite::Update`, seg20:0e35): `rand() % 11 + 25` servings. */
+export function fillBowl(rand: Rand): number {
+  return (rand() % 11) + 25;
+}
+
+/**
+ * A dog's mouthfuls from a bowl of food (`DoEating`, seg18:18ba), step by
+ * step, so that what is pushed between its draws is pushed between them as
+ * the engine pushes it: for each serving left a mouthful, one time in six a
+ * second after (`rand() % 6` 0), a pause once the count -- `rand() % 10 +
+ * 5`, then `+ 6` drawn after each pause -- has run below 0, and the
+ * serving's cue.
+ */
+export function* bowlPlan(
+  servings: number,
+  rand: Rand
+): Generator<'mouthful' | 'more' | 'pause' | 'served'> {
+  let untilPause = (rand() % 10) + 5;
+
+  for (let n = 0; n < servings; n++) {
+    yield 'mouthful';
+
+    if (rand() % 6 === 0) {
+      yield 'more';
+    }
+
+    if (untilPause-- < 0) {
+      yield 'pause';
+      untilPause = (rand() % 10) + 6;
+    }
+
+    yield 'served';
+  }
 }
 
 export class Pet {
@@ -3046,7 +3087,7 @@ export class Pet {
    */
   foodTakenOut(food: Food) {
     if (!isTreat(food)) {
-      food.full = food.servings = (this.rand() % 11) + 25;
+      food.full = food.servings = fillBowl(this.rand);
     }
 
     food.touched = this.time;
@@ -3338,34 +3379,40 @@ export class Pet {
   private pushBegWaitLoops() {
     const excitement = this.factor(0);
     const fetch = this.reducedGlobal() === GLOBAL.fetch;
-    const plan = begWaitLoops(
+    let waited = false;
+
+    for (const step of begWaitLoops(
       excitement,
       /* At play, a held ball makes the dog keener: fewer pants, maybe none. */
       fetch ? excitement + (this.world.ball?.held ? 30 : 0) : undefined,
       this.position === SITTING,
       this.rand
-    );
+    )) {
+      if ('begin' in step) {
+        waited = true;
 
-    if (!plan) {
-      return;
-    }
+        if (fetch) {
+          this.pushBallReleaseAction();
+        }
 
-    if (fetch) {
-      this.pushBallReleaseAction();
-    }
-
-    this.push({ glue: CHEST });
-    this.pushTransition(this.data.scripts[plan.sitting ? SCRIPT.sitPant : SCRIPT.pant].from, BELLY);
-    this.push({ cue: 0 });
-
-    /* (Its looks, at the user, the cursor or what is held -- `0x8afb`,
-     * `0x8afe 6`, `0x8afe 7` -- are not yet played.) */
-    for (const pant of plan.pants) {
-      this.pushStored(pant.sitting ? SCRIPT.sitPant : SCRIPT.pant);
-
-      if (pant.longer) {
-        this.pushStored(pant.sitting ? SCRIPT.sitPantLonger : SCRIPT.pantLonger);
+        this.push({ glue: CHEST });
+      } else if ('settle' in step) {
+        this.pushTransition(
+          this.data.scripts[step.settle ? SCRIPT.sitPant : SCRIPT.pant].from,
+          BELLY
+        );
+        this.push({ cue: 0 });
+      } else if ('pant' in step) {
+        /* (Its looks, at the user, the cursor or what is held -- `0x8afb`,
+         * `0x8afe 6`, `0x8afe 7` -- are not yet played.) */
+        this.pushStored(step.pant ? SCRIPT.sitPant : SCRIPT.pant);
+      } else {
+        this.pushStored(step.longer ? SCRIPT.sitPantLonger : SCRIPT.pantLonger);
       }
+    }
+
+    if (!waited) {
+      return;
     }
 
     this.push({ glue: CHEST });
@@ -3508,21 +3555,16 @@ export class Pet {
     this.push({ cue: 14 });
 
     if (food.kind === 0) {
-      let untilPause = (this.rand() % 10) + 5;
-
-      for (let n = 0; n < food.servings; n++) {
-        this.pushStored(SCRIPT.eatFromBowl);
-
-        if (this.rand() % 6 === 0) {
+      for (const step of bowlPlan(food.servings, this.rand)) {
+        if (step === 'mouthful') {
+          this.pushStored(SCRIPT.eatFromBowl);
+        } else if (step === 'more') {
           this.pushStored(SCRIPT.eatFromBowlMore);
-        }
-
-        if (untilPause-- < 0) {
+        } else if (step === 'pause') {
           this.pushStored(SCRIPT.eatFromBowlPause);
-          untilPause = (this.rand() % 10) + 6;
+        } else {
+          this.push({ cue: 12 });
         }
-
-        this.push({ cue: 12 });
       }
 
       if (food.servings !== 0) {
