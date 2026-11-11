@@ -430,9 +430,10 @@ export class Stage implements PetWorld {
        * had it taken at the new angles, its head and blend as they were,
        * from the top left of the rectangle the dog had; the new frame put
        * with its ball there. */
-      const before = this.ballOf(this.frame, step.glue, rotation, was.head, angles, was.blend);
+      const copy = (step as { headCopy?: Head }).headCopy ?? was.head;
+      const before = this.ballOf(this.frame, step.glue, rotation, copy, angles, was.blend);
       const had = this.boxOf(this.frame, this.rotation, was.head, was.angles, was.blend);
-      const turned = this.boxOf(this.frame, rotation, was.head, angles, was.blend);
+      const turned = this.boxOf(this.frame, rotation, copy, angles, was.blend);
       const after = this.ballOf(next, step.glue, rotation);
       this.x += before.x + had.left - turned.left - after.x;
       this.y += before.y + had.top - turned.top - after.y;
@@ -446,7 +447,9 @@ export class Stage implements PetWorld {
        * changed from the frame before taken at the new angles, its head and
        * blend as they were; so a turn alone keeps its top left in place. */
       const before = this.boxOf(this.frame, this.rotation, was.head, was.angles, was.blend);
-      const turned = this.boxOf(this.frame, rotation, was.head, angles, was.blend);
+      /* (Its head placed afresh for it, where the pet gives it so.) */
+      const copy = (step as { headCopy?: Head }).headCopy ?? was.head;
+      const turned = this.boxOf(this.frame, rotation, copy, angles, was.blend);
       this.x += before.left - turned.left;
       this.y += before.top - turned.top;
     }

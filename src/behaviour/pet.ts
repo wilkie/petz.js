@@ -358,6 +358,9 @@ export interface Tick extends Step {
   state: number;
   placedBy?: number;
 
+  /** The head placed afresh for the frame before, taken at the new angles, as the plain move does turning (`MoveFrameRect`). */
+  headCopy?: Head;
+
   /** Where the dog steers, if anywhere (`+0x2108`, `+0x2110`): a point off the stage lets it go off too. */
   steering?: { x: number; y: number };
 
@@ -1051,6 +1054,38 @@ export class Pet {
     const centredAt = this.centreAt ?? undefined;
     this.centreAt = null;
     const head = this.headTrackPrep();
+    const angles = {
+      tilt: this.fudged(AXIS.tilt),
+      spin: this.fudged(AXIS.spin),
+      roll: this.fudged(AXIS.roll),
+    };
+
+    /* Moved plainly and turned, the head tracking, the engine takes the
+     * frame before at the new angles and places its head afresh -- its turn
+     * and nod as they were, the wobbles moved on again (`MoveFrameRect`'s
+     * second `GetFrame`, seg10:29ee): so here, after the head of the frame. */
+    const was = this.lastPose;
+    const turned =
+      was &&
+      (was.rotation !== this.rotation ||
+        was.tilt !== angles.tilt ||
+        was.spin !== angles.spin ||
+        was.roll !== angles.roll);
+    let headCopy: Head | undefined;
+
+    if (head && was && turned && shown.glue === undefined) {
+      const [yaw, pitch] = [this.headYaw, this.headPitch];
+      [this.headYaw, this.headPitch] = [was.yaw, was.pitch];
+      headCopy = this.headTrackPrep();
+      [this.headYaw, this.headPitch] = [yaw, pitch];
+    }
+
+    this.lastPose = {
+      rotation: this.rotation,
+      ...angles,
+      yaw: this.headYaw,
+      pitch: this.headPitch,
+    };
 
     return {
       ...shown,
@@ -1061,6 +1096,7 @@ export class Pet {
       pinned: this.pinned ?? undefined,
       centredAt,
       head,
+      headCopy,
       eyes: { mode: this.eyeMode, ...this.eyeTarget },
       lids: this.lids,
       eyesWide: this.eyesWide,
@@ -1069,11 +1105,7 @@ export class Pet {
         this.motionScale === 100
           ? undefined
           : { scale: this.motionScale, reference: this.reference },
-      angles: {
-        tilt: this.fudged(AXIS.tilt),
-        spin: this.fudged(AXIS.spin),
-        roll: this.fudged(AXIS.roll),
-      },
+      angles,
       eyelids: {
         left: {
           height: this.fudged(AXIS.leftEyelidHeight),
@@ -1788,6 +1820,11 @@ export class Pet {
   private handFrame = 0;
   private handStep = -1;
   private handCountdown = 0;
+
+  /** The dog's rotation, angles and head turn and nod as the last tick left them (`BallState` `+0xec`). */
+  private lastPose:
+    | { rotation: number; tilt: number; spin: number; roll: number; yaw: number; pitch: number }
+    | undefined;
 
   /** Whether the dog has left `eIdle` since it was last made idle (`0xda`, seg16:02fe). */
   private leftIdle = false;

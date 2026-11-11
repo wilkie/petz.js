@@ -1256,6 +1256,17 @@ function followPlacing(lines: string[]) {
     };
     const was = pose(before!, n - 1);
     const now = pose(state!, n);
+    /* The head placed afresh for the frame before at the new angles, where the engine did (`head 0`). */
+    const copyBlock = frames[n].headCopy;
+    const headCopy = copyBlock
+      ? headOf(
+          copyBlock,
+          extended[was.frame],
+          was.blend && { scale: was.blend.scale, reference: extended[was.blend.reference] },
+          scalesForAge(breed, tick[14]).pet,
+          breed
+        )
+      : undefined;
     /* The model's dog put where the engine's was, then moved on, kept
      * touching the stage unless steering off it (`+0x2108`, `+0x2110`). */
     const stage = new Stage(292, 273, breed, header, shapes, tick[14]);
@@ -1279,7 +1290,7 @@ function followPlacing(lines: string[]) {
     const steering =
       state!.length >= 28 && state![25] ? { x: state![26], y: state![27] } : undefined;
     stage.show(
-      { frame: now.frame, glue, steering } as Step,
+      { frame: now.frame, glue, steering, headCopy } as Step,
       now.rotation,
       undefined,
       undefined,
@@ -1335,6 +1346,37 @@ function followPlacing(lines: string[]) {
       result.wrong.push(
         `frame ${tick[0]}: ${was.frame} to ${now.frame}${glue === undefined ? '' : ` glued by ${glue}`}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
       );
+    }
+  });
+
+  return result;
+}
+
+/**
+ * When the engine places the head afresh for the frame before (`head 0`),
+ * against the model's rule for it (`Pet`'s `headCopy`): moved plainly, the
+ * head tracking, just where the dog turned -- its rotation or its angles
+ * changed from the frame before.
+ */
+function followHeadCopies(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { plain: 0, copies: 0, held: 0, wrong: [] as string[] };
+
+  frames.forEach(({ tick, state, moved, headCopy }, n) => {
+    const before = frames[n - 1]?.state;
+
+    if (!state || !before || state.length < 25 || !state[16] || moved.length !== 1 || moved[0][0]) {
+      return;
+    }
+
+    result.plain++;
+    const turned = [9, 10, 11, 12].some((k) => state[k] !== before[k]);
+    result.copies += headCopy ? 1 : 0;
+
+    if (turned === !!headCopy) {
+      result.held++;
+    } else {
+      result.wrong.push(`frame ${tick[0]}: turned ${turned}, placed afresh ${!!headCopy}`);
     }
   });
 
@@ -1524,6 +1566,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
         `placing, glued out of a blend (${placing.outOfBlend}), not yet explained:\n  ${placing.unexplained.join('\n  ')}`
       );
     }
+
+    const copies = followHeadCopies(lines);
+    console.log(
+      `head placed afresh: ${copies.plain} plain moves with the head tracking, ${copies.copies} with a copy, ${copies.held} held`
+    );
+    expect(copies.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);
