@@ -123,6 +123,15 @@ static unsigned char params[0x722];
  * the recorder's; and the actions pushed through it, in turn. */
 static unsigned char table[0x600];
 static PUSH push;
+
+/* A class's table copied, as much of it as there is: no more than its
+ * segment holds past it (`GetSelectorLimit`), the rest left as it was. */
+static void copyTable(void __far *to, const void __far *from, unsigned size)
+{
+    unsigned long room = GetSelectorLimit(FP_SEG(from)) + 1 - FP_OFF(from);
+
+    _fmemcpy(to, from, room < size ? (unsigned)room : size);
+}
 static int pushed[8], pushes;
 
 /* And a copy of the global machine's table, its slot `0x1c` (`NewState`)
@@ -1974,7 +1983,7 @@ static void __cdecl __far __loadds dogPushing(void __far *dog, int action, int v
 static void installDog(unsigned char __far *dog)
 {
     tracedDog = dog;
-    _fmemcpy(dogTable, *(void __far *__far *)dog, sizeof dogTable);
+    copyTable(dogTable, *(void __far *__far *)dog, sizeof dogTable);
     dogPush = *(PUSH *)(dogTable + 0xb8);
     *(PUSH *)(dogTable + 0xb8) = dogPushing;
     *(void __far *__far *)dog = dogTable;
@@ -1986,15 +1995,15 @@ static void installMouse(unsigned char __far *mouse)
     unsigned char __far *global = *(unsigned char __far *__far *)(mouse + 0x257a);
 
     tracedMouse = mouse;
-    _fmemcpy(mouseTable, *(void __far *__far *)mouse, sizeof mouseTable);
+    copyTable(mouseTable, *(void __far *__far *)mouse, sizeof mouseTable);
     collide = *(COLLIDE *)(mouseTable + 0x158);
     *(COLLIDE *)(mouseTable + 0x158) = colliding;
     *(void __far *__far *)mouse = mouseTable;
-    _fmemcpy(mouseLocalTable, *(void __far *__far *)machine, sizeof mouseLocalTable);
+    copyTable(mouseLocalTable, *(void __far *__far *)machine, sizeof mouseLocalTable);
     mouseHandle = *(DISPATCH *)(mouseLocalTable + 4);
     *(DISPATCH *)(mouseLocalTable + 4) = mouseTracing;
     *(void __far *__far *)machine = mouseLocalTable;
-    _fmemcpy(mouseGlobalTable, *(void __far *__far *)global, sizeof mouseGlobalTable);
+    copyTable(mouseGlobalTable, *(void __far *__far *)global, sizeof mouseGlobalTable);
     mouseGlobalHandle = *(DISPATCH *)(mouseGlobalTable + 4);
     *(DISPATCH *)(mouseGlobalTable + 4) = mouseGlobalTracing;
     *(void __far *__far *)global = mouseGlobalTable;
@@ -2005,7 +2014,7 @@ static void install(unsigned char __far *cat)
     unsigned char __far *global = *(unsigned char __far *__far *)(cat + 0x2fba);
     unsigned char __far *machine = cat + 0x2518;
 
-    _fmemcpy(table, *(void __far *__far *)cat, sizeof table);
+    copyTable(table, *(void __far *__far *)cat, sizeof table);
     push = *(PUSH *)(table + 0xb8);
     track = *(LOOK *)(table + 0xe0);
     lookAtUser = *(LOOK *)(table + 0x2e0);
@@ -2046,12 +2055,12 @@ static void install(unsigned char __far *cat)
     *(REFLEX *)(table + 0x13c) = layering;
     *(void __far *__far *)cat = table;
 
-    _fmemcpy(globalTable, *(void __far *__far *)global, sizeof globalTable);
+    copyTable(globalTable, *(void __far *__far *)global, sizeof globalTable);
     passGlobal = *(GLOBALSTATE *)(globalTable + 0x1c);
     *(GLOBALSTATE *)(globalTable + 0x1c) = keep;
     *(void __far *__far *)global = globalTable;
 
-    _fmemcpy(localTable, *(void __far *__far *)machine, sizeof localTable);
+    copyTable(localTable, *(void __far *__far *)machine, sizeof localTable);
     passLocal = *(GLOBALSTATE *)(localTable + 0x14);
     *(GLOBALSTATE *)(localTable + 0x14) = keepLocal;
     handle = *(DISPATCH *)(localTable + 4);
@@ -2620,7 +2629,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                     own[2], own[3]);
             }
             original = *(void __far *__far *)cat;
-            _fmemcpy(table, original, sizeof table);
+            copyTable(table, original, sizeof table);
             push = *(PUSH *)(table + 0xb8);
             *(PUSH *)(table + 0xb8) = record;
             track = *(LOOK *)(table + 0xe0);
@@ -2634,12 +2643,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             *(void __far *__far *)cat = table;
             pushes = 0;
             globalOriginal = *(void __far *__far *)global;
-            _fmemcpy(globalTable, globalOriginal, sizeof globalTable);
+            copyTable(globalTable, globalOriginal, sizeof globalTable);
             *(GLOBALSTATE *)(globalTable + 0x1c) = keep;
             *(void __far *__far *)global = globalTable;
             globalled = 0;
             localOriginal = *(void __far *__far *)machine;
-            _fmemcpy(localTable, localOriginal, sizeof localTable);
+            copyTable(localTable, localOriginal, sizeof localTable);
             *(GLOBALSTATE *)(localTable + 0x14) = keepLocal;
             *(void __far *__far *)machine = localTable;
             localled = 0;
@@ -3145,7 +3154,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 /* Its own copy of its table, whose slot `0x24`
                  * (`IsThisBeingHeld`) answers as the user holds it. */
                 if (*(void __far *__far *)treat != treatTable) {
-                    _fmemcpy(treatTable, *(void __far *__far *)treat, sizeof treatTable);
+                    copyTable(treatTable, *(void __far *__far *)treat, sizeof treatTable);
                     *(int(__cdecl __far **)(void __far *))(treatTable + 0x24) = treatHolding;
                     *(void __far *__far *)treat = treatTable;
                 }
