@@ -820,6 +820,94 @@ export function pickPlayTrick(
   return 0;
 }
 
+/** A wobble of the head (`Lube`, DS:0x1ba on, 0x48 bytes each): its range and glide, where it is, and when it next moves. */
+export interface Lube {
+  min: number;
+  max: number;
+  shortest: number;
+  longest: number;
+  current: number;
+  from: number;
+  to: number;
+  frames: number;
+  count: number;
+  next: number;
+}
+
+/** The fourteen wobbles at rest, as they are set up (seg5:0d1b). */
+export function restingLubes(): Lube[] {
+  return LUBES.map((range) => ({
+    ...range,
+    current: 0,
+    from: 0,
+    to: 0,
+    frames: 0,
+    count: -1,
+    next: 1,
+  }));
+}
+
+/** The wobbles put back to rest, not tracking (`HeadTrackPrep`, seg5:0ae0). */
+export function restLubes(lubes: Lube[]) {
+  for (const lube of lubes) {
+    Object.assign(lube, { current: 0, count: -1, next: 1 });
+  }
+}
+
+/**
+ * A wobble moved on (`Lube::Next`, seg5:0468): waiting, once its time comes
+ * a glide from where it is to a point at random in its range over 3 to 20
+ * frames; gliding, a frame on, and at its end a wait of up to 5 seconds.
+ */
+export function nextLube(lube: Lube, now: number, rand: Rand) {
+  if (lube.count === -1) {
+    if (lube.next <= now) {
+      lube.from = lube.current;
+      lube.to = lube.min + ((lube.max - lube.min) * (rand() % 1000)) / 1000;
+      lube.frames = (rand() % (lube.longest - lube.shortest + 1)) + lube.shortest;
+      lube.count = 0;
+    }
+  } else {
+    lube.count++;
+    lube.current = lube.from + (lube.count * (lube.to - lube.from)) / lube.frames;
+
+    if (lube.count >= lube.frames) {
+      lube.count = -1;
+      lube.next = now + (rand() % 5000);
+    }
+  }
+
+  return lube.current;
+}
+
+/**
+ * The head's wobbles for a placing (`Ballz::HeadTrackPrep`, seg5:05ba), the
+ * head turned and nodded so, at a time in ms, scaled: each pair a share of
+ * the turn -- or, up and down and back, of the nod (seg5:092f, 0985, 0a18,
+ * 0a52) -- and a wobble, in the engine's order; the roll held within 42.
+ */
+export function wobbleHead(
+  lubes: Lube[],
+  yaw: number,
+  pitch: number,
+  now: number,
+  scale: number,
+  rand: Rand
+): Head {
+  const next = (n: number) => nextLube(lubes[n], now, rand) * scale;
+  const roll = Math.max(-42, Math.min(42, Math.trunc(next(1) * yaw + next(0))));
+  const drift = {
+    x: next(11) * yaw + next(8),
+    y: next(12) * pitch + next(9),
+    z: next(13) * pitch + next(10),
+  };
+  const offsetX = Math.trunc(next(5) * yaw + next(2));
+  const offsetY = Math.trunc(next(6) * pitch + next(3));
+  const offsetZ = Math.trunc(next(7) * pitch + next(4)) - Math.trunc(Math.abs(offsetY) / 2);
+
+  return { yaw, pitch, roll, offset: { x: offsetX, y: offsetY, z: offsetZ }, drift };
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -4662,15 +4750,7 @@ export class Pet {
   headWobble = 0;
 
   /** The head's wobbles (`Lube`s, DS:0x1ba on). */
-  private lubes = LUBES.map((range) => ({
-    ...range,
-    current: 0,
-    from: 0,
-    to: 0,
-    frames: 0,
-    count: -1,
-    next: 1,
-  }));
+  private lubes = restingLubes();
 
   /** `ScriptSprite::SetHeadTarget` (seg5:0000): a point to look toward, kept from the dog's middle now. */
   setHeadTarget(point: { x: number; y: number } | null) {
@@ -4813,59 +4893,19 @@ export class Pet {
    */
   private headTrackPrep(): Head | undefined {
     if (!this.headTracking) {
-      for (const lube of this.lubes) {
-        Object.assign(lube, { current: 0, count: -1, next: 1 });
-      }
-
+      restLubes(this.lubes);
       return undefined;
     }
 
     const scale = this.headWobble === 0 ? 1 : this.headWobble / 100;
-    const now = Math.trunc(this.time * 17);
-    const next = (n: number) => this.nextLube(this.lubes[n], now) * scale;
-    const yaw = this.headYaw;
-    const pitch = this.headPitch;
-
-    /* In the engine's order, each pair a share of the turn -- or, up and
-     * down and back, of the nod (seg5:092f, 0985, 0a18, 0a52) -- and a wobble. */
-    const roll = Math.max(-42, Math.min(42, Math.trunc(next(1) * yaw + next(0))));
-    const drift = {
-      x: next(11) * yaw + next(8),
-      y: next(12) * pitch + next(9),
-      z: next(13) * pitch + next(10),
-    };
-    const offsetX = Math.trunc(next(5) * yaw + next(2));
-    const offsetY = Math.trunc(next(6) * pitch + next(3));
-    const offsetZ = Math.trunc(next(7) * pitch + next(4)) - Math.trunc(Math.abs(offsetY) / 2);
-
-    return {
-      yaw,
-      pitch: this.headPitch,
-      roll,
-      offset: { x: offsetX, y: offsetY, z: offsetZ },
-      drift,
-    };
-  }
-
-  private nextLube(lube: (typeof this.lubes)[number], now: number) {
-    if (lube.count === -1) {
-      if (lube.next <= now) {
-        lube.from = lube.current;
-        lube.to = lube.min + ((lube.max - lube.min) * (this.rand() % 1000)) / 1000;
-        lube.frames = (this.rand() % (lube.longest - lube.shortest + 1)) + lube.shortest;
-        lube.count = 0;
-      }
-    } else {
-      lube.count++;
-      lube.current = lube.from + (lube.count * (lube.to - lube.from)) / lube.frames;
-
-      if (lube.count >= lube.frames) {
-        lube.count = -1;
-        lube.next = now + (this.rand() % 5000);
-      }
-    }
-
-    return lube.current;
+    return wobbleHead(
+      this.lubes,
+      this.headYaw,
+      this.headPitch,
+      Math.trunc(this.time * 17),
+      scale,
+      this.rand
+    );
   }
 
   // The eyelids.

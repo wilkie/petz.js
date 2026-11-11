@@ -334,7 +334,8 @@ static void __cdecl __far __loadds released(void __far *module, int slot)
 
 /* And the head's place for drawing (`Ballz::HeadTrackPrep`, 45): after it,
  * where the state it is given has its head tracking (`+0x1e`), `head dog
- * turn nod roll offset-x offset-y offset-z pivot-x pivot-y pivot-z draws` --
+ * turn nod roll offset-x offset-y offset-z pivot-x pivot-y pivot-z draws
+ * clock scale frame blend reference` --
  * the block it fills (`HeadTrackRenderBlock`, six words and three longs),
  * and whether the state is the dog's own (its sprite's `+0x51a`). */
 typedef void(__cdecl __far *HEADPREP)(void __far *ballz, int __far *block, unsigned char __far *state);
@@ -349,9 +350,15 @@ static void __cdecl __far __loadds heading(void __far *ballz, int __far *block,
     if (*(int __far *)(state + 0x1e)) {
         long __far *pivot = (long __far *)(block + 6);
 
-        say("head %d %d %d %d %d %d %d %ld %ld %ld %d\r\n", dogSprite && state == dogSprite + 0x51a,
+        say("head %d %d %d %d %d %d %d %ld %ld %ld %d", dogSprite && state == dogSprite + 0x51a,
             block[0], block[1], block[2], block[3], block[4], block[5], pivot[0], pivot[1],
             pivot[2], draws);
+
+        /* And the wobbles' clock (`Lube::curtime`, 49, the tick count it
+         * read) and their scale's hundredths (`+0x36`), and the state's frame
+         * and blend (`+0x18`, `+0x32`, `+0x34`), its neck's. */
+        say(" %ld %d %d %d %d\r\n", *(long __far *)ordinal(49), *(int __far *)(state + 0x36),
+            *(int __far *)(state + 0x18), *(int __far *)(state + 0x32), *(int __far *)(state + 0x34));
     }
 }
 
