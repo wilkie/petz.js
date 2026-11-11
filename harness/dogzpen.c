@@ -362,8 +362,28 @@ static void __cdecl __far __loadds heading(void __far *ballz, int __far *block,
     }
 }
 
+/* And `PetModule::IsCursorOverPetSpot` (389), which works out where the pet
+ * spot's ball is: `spotcheck` as it is asked, `spotchecked answer` after.
+ * Passed on as it came, whatever it takes. */
+typedef int(__cdecl __far *SPOTCHECK)(void __far *m, void __far *a, void __far *b, void __far *c,
+                                      void __far *d, void __far *e, void __far *f, void __far *g);
+static SPOTCHECK spotCheckOn;
+
+static int __cdecl __far __loadds spotChecking(void __far *m, void __far *a, void __far *b,
+                                               void __far *c, void __far *d, void __far *e,
+                                               void __far *f, void __far *g)
+{
+    int answer;
+
+    say("spotcheck %d\r\n", draws);
+    answer = spotCheckOn(m, a, b, c, d, e, f, g);
+    say("spotchecked %d\r\n", answer);
+    return answer;
+}
+
 static void hookPushes(void)
 {
+    spotCheckOn = (SPOTCHECK)hookPrologue(389, (void __far *)spotChecking);
     headOn = (HEADPREP)hookPrologue(45, (void __far *)heading);
     grabOn = (HOLDING)hookPrologue(340, (void __far *)grabbed);
     releaseOn = (HOLDING)hookPrologue(341, (void __far *)released);

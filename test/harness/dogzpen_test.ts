@@ -1106,6 +1106,7 @@ function followFrameBoxes(lines: string[]) {
   );
   const result = {
     frames: 0,
+    still: 0,
     turned: 0,
     tracked: 0,
     blended: 0,
@@ -1118,8 +1119,15 @@ function followFrameBoxes(lines: string[]) {
 
   let lastHead: number[] | undefined;
 
-  for (const [index, { tick, state, holding, heldSlot }] of frames.entries()) {
+  for (const [index, { tick, state, holding, heldSlot, moved }] of frames.entries()) {
     if (!state || state.length < 25) {
+      continue;
+    }
+
+    /* (Not moved in the frame, its state's rectangle is the one it had --
+     * the blend eased since, say: not boxed again.) */
+    if (!moved.length && index > 0) {
+      result.still++;
       continue;
     }
 
