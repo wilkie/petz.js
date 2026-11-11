@@ -14,7 +14,8 @@
  * the dog's idle plans cut short (1), its excitement put low (2), its
  * sleep cut short (4), the dog petted (8), a treat held out to it and
  * put down (16), a bowl of food put down (32), the ball thrown (64), the
- * shoe waved (128), or the spray held over the dog (256).
+ * shoe waved (128), the spray held over the dog (256), or the dog painted
+ * (512).
  *
  * * `made`: the library and the module;
  * * `segments`: each code segment's selector, by an export of it;
@@ -343,9 +344,16 @@ typedef void(__cdecl __far *HEADPREP)(void __far *ballz, int __far *block, unsig
 static HEADPREP headOn;
 static unsigned char __far *dogSprite;
 
+static unsigned char __far *dogBallz;
+
 static void __cdecl __far __loadds heading(void __far *ballz, int __far *block,
                                            unsigned char __far *state)
 {
+    /* (The dog's balls, kept: their colours are written as it is painted.) */
+    if (dogSprite && state == dogSprite + 0x51a) {
+        dogBallz = (unsigned char __far *)ballz;
+    }
+
     /* Not tracking, with the wobbles not yet put back (`Lube::curtime`
      * `+0xc`), they are put back now: `headrest draws`. */
     if (!*(int __far *)(state + 0x1e) && *(int __far *)((char __far *)ordinal(49) + 0xc)) {
@@ -609,6 +617,42 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * 6) taken out the same way and put down at (146, 200) at the
          * 110th; else no slot (-1) and not dragged, as DOGZ.WAD leaves them
          * after each frame. */
+        /* 512, the brush (slot 4) taken out the same way at the 100th frame,
+         * held, the button down, over the middle of the dog and let go at
+         * the 150th, which paints; and again from the 250th, over the left
+         * quarter of the dog, let go at the 300th. As each is let go, and
+         * the frame after, `colours`, whether the dog is painted (`Ballz`
+         * `+0xbe7`) and its 67 balls' colours (the words `+0xdc9` points to,
+         * as `SetBallColor` writes them), where the dog's balls are known. */
+        if (forcing & 512) {
+            int stroke = n >= 100 && n < 150 ? 1 : n >= 250 && n < 300 ? 2 : 0;
+
+            *(int *)(params + 0x16) = n == 100 || n == 250 ? 4 : -1;
+            *(int *)(params + 0x18) = n == 100 || n == 250;
+            *(int *)(params + 0xe) = stroke ? 0x8000 : 0;
+
+            if (stroke && sprite) {
+                int left = *(int __far *)(sprite + 0x58), right = *(int __far *)(sprite + 0x5c);
+
+                *(int *)(params + 0x12) = stroke == 1 ? (left + right) / 2 : left + (right - left) / 4;
+                *(int *)(params + 0x14) =
+                    (*(int __far *)(sprite + 0x5a) + *(int __far *)(sprite + 0x5e)) / 2;
+            }
+
+            if (dogBallz && (n == 149 || n == 151 || n == 299 || n == 301)) {
+                int __far *colours = *(int __far *__far *)(dogBallz + 0xdc9);
+                int b;
+
+                say("colours %d %d", n, *(int __far *)(dogBallz + 0xbe7));
+
+                for (b = 0; b < 67; b++) {
+                    say(" %d", colours[b]);
+                }
+
+                say("\r\n");
+            }
+        }
+
         /* 256, the spray (slot 3) taken out the same way at the 100th frame
          * and held, the button down, over the middle of the dog, to the
          * 160th, then let go. */

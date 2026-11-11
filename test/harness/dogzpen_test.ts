@@ -47,7 +47,7 @@ import {
   waitLook,
 } from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
-import { ballRect, frameBox, rollBall, Stage } from '../../src/behaviour/stage.ts';
+import { ballRect, brushTip, frameBox, rollBall, Stage } from '../../src/behaviour/stage.ts';
 import type { Step } from '../../src/behaviour/timeline.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { parseLnz } from '../../src/formats/lnz.ts';
@@ -167,6 +167,9 @@ const SHOE = process.env.DOGZ_SHOE === '1';
 /** `DOGZ_SPRAY=1`: the spray taken out of the toy box at frame 100 and held over the dog, the button down, to frame 160. */
 const SPRAY = process.env.DOGZ_SPRAY === '1';
 
+/** `DOGZ_BRUSH=1`: the brush taken out of the toy box and let go over the dog twice, at frames 150 and 300. */
+const BRUSH = process.env.DOGZ_BRUSH === '1';
+
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
   (PLAN_DONE ? 1 : 0) |
@@ -177,8 +180,9 @@ const FORCING =
   (FOOD ? 32 : 0) |
   (BALL ? 64 : 0) |
   (SHOE ? 128 : 0) |
-  (SPRAY ? 256 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}-${FRAMES}`;
+  (SPRAY ? 256 : 0) |
+  (BRUSH ? 512 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -1659,6 +1663,108 @@ function followShoe(lines: string[]) {
   return result;
 }
 
+/**
+ * The dog painted (`PaintSprite::Update`, `Ballz::SetBallColor`): for each
+ * stroke the trace keeps its colours before and after (`colours`, as the
+ * brush is let go and the frame after), the model's dog posed as the
+ * engine's was as the brush was let go, the brush's tip where the cursor
+ * held it (as the frame before drew the dog's rectangle),
+ * painted with the brush's colour (22, the second ramp's first): the
+ * first stroke's colours before as the breed's, and each stroke's after
+ * as the engine's. The first stroke holds the cursor at the middle of the
+ * dog's rectangle; the second a quarter of the way in from its left.
+ */
+function followPainting(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const read = (path: string) => new Uint8Array(readFileSync(join(DRIVE, 'DOGZ.DOG', path)));
+  const header = parseBhd(read('DATA/ALL_PTZ.BHD'));
+  const breed = parseLnz(new TextDecoder('latin1').decode(read('DATA/BIGDOG.LNZ')));
+  const shapes = header.animations.flatMap((_, n) =>
+    parseAnimation(header, n, read(`DATA/${n}.BDT`))
+  );
+  const extended = extendFrames(shapes, breed);
+  const result = { strokes: 0, painted: 0, held: 0, wrong: [] as string[] };
+  const colours = new Map<number, number[]>();
+  let lastHead: number[] | undefined;
+  const heads: (number[] | undefined)[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('colours ')) {
+      const values = line.split(' ').slice(1).map(Number);
+      colours.set(values[0], values.slice(2));
+    }
+  }
+
+  for (const frame of frames) {
+    lastHead = frame.head ?? lastHead;
+    heads.push(lastHead);
+  }
+
+  for (const [at, before] of colours) {
+    const after = colours.get(at + 2);
+    const n = frames.findIndex((frame) => frame.tick[0] === at);
+    const pose = frames[n]?.state;
+    const drawn = frames[n - 1]?.state;
+
+    if (!after || !pose || !drawn || pose.length < 25) {
+      continue;
+    }
+
+    result.strokes++;
+    const blend = pose[17] === 100 ? undefined : { scale: pose[17], reference: pose[18] };
+    const head =
+      pose[16] && heads[n]
+        ? headOf(
+            heads[n]!,
+            extended[pose[13]],
+            blend && { scale: blend.scale, reference: extended[blend.reference] },
+            scalesForAge(breed, frames[n].tick[14]).pet,
+            breed
+          )
+        : undefined;
+    const stage = new Stage(292, 273, breed, header, shapes, frames[n].tick[14]);
+    stage.show(
+      { frame: pose[13] } as Step,
+      pose[9],
+      undefined,
+      undefined,
+      undefined,
+      head,
+      { tilt: pose[10], spin: pose[11], roll: pose[12] },
+      blend
+    );
+    const rect = stage.rect();
+    stage.nudge(pose[0] - rect.left, pose[1] - rect.top);
+    const cursor = {
+      x:
+        at < 250
+          ? Math.trunc((drawn[0] + drawn[2]) / 2)
+          : drawn[0] + Math.trunc((drawn[2] - drawn[0]) / 4),
+      y: Math.trunc((drawn[1] + drawn[3]) / 2),
+    };
+    const was = stage.breed.ballColor256;
+    const count = was.length;
+
+    if (result.strokes === 1 && was.join(' ') !== before.slice(0, count).join(' ')) {
+      result.wrong.push(`frame ${at}: before, ${was.join(' ')}, not ${before.join(' ')}`);
+      continue;
+    }
+
+    was.splice(0, count, ...before.slice(0, count));
+    const painted = stage.paint(brushTip(cursor), 22, 256);
+    result.painted += painted ? 1 : 0;
+    const ours = stage.breed.ballColor256;
+
+    if (ours.join(' ') === after.slice(0, count).join(' ')) {
+      result.held++;
+    } else {
+      result.wrong.push(`frame ${at}: after, ${ours.join(' ')}, not ${after.join(' ')}`);
+    }
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -1876,6 +1982,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `the shoe: ${shoe.choices} chases or charges chosen, ${shoe.chances} chances of a lunge (${shoe.lunges} lunged), ${shoe.held} held`
     );
     expect(shoe.wrong).toEqual([]);
+
+    const painting = followPainting(lines);
+    console.log(
+      `painting: ${painting.strokes} strokes, ${painting.painted} painted, ${painting.held} held`
+    );
+    expect(painting.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);
