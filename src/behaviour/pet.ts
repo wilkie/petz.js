@@ -630,6 +630,19 @@ export function pickPetSpot(
   return { spot, strokes: (rand() % spots[spot].extra) + spots[spot].strokes };
 }
 
+/**
+ * Where a dog waiting to be petted looks before each pant (`DoWaitPetting`,
+ * seg17:07ec): one time in two about (`8afb`); else, one time in two, at
+ * the cursor (`8af9`); else nowhere new.
+ */
+export function waitLook(rand: Rand): 'about' | 'cursor' | undefined {
+  if (rand() % 2) {
+    return 'about';
+  }
+
+  return rand() % 2 ? 'cursor' : undefined;
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -2644,9 +2657,9 @@ export class Pet {
         return step;
       }
 
-      /* Before each pant, now and then the engine has the dog look at the
-       * cursor or about (`0x8af9`, `0x8afb`); not yet played. */
-      this.rand();
+      /* Before each pant the dog may look about or at the cursor
+       * (`0x8afb`, `0x8af9`); the looks are not yet played. */
+      waitLook(this.rand);
       this.pushStored(SCRIPT.pant);
     }
 

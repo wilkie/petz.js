@@ -33,6 +33,7 @@ import {
   sleepPlan,
   stepHand,
   trickRepeats,
+  waitLook,
 } from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
 import { readEngineScripts, readTrickScripts } from '../../src/formats/engine.ts';
@@ -578,6 +579,38 @@ function followPetSpots(lines: string[]) {
   return result;
 }
 
+/**
+ * Each look before a pant, waiting to be petted (`DoWaitPetting`, the draw
+ * returning to seg17:07f1), against `waitLook`: the next draw is its second
+ * (returning to seg17:0825) just where it draws again.
+ */
+function followWaitLooks(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { looks: 0, held: 0, wrong: [] as string[] };
+
+  for (const { tick, drawn } of frames) {
+    drawn.forEach(({ seed, segment, offset }, k) => {
+      if (segment !== 17 || offset !== 0x7f1) {
+        return;
+      }
+
+      result.looks++;
+      const { rand } = randFrom(seed);
+      let used = 0;
+      waitLook(() => (used++, rand()));
+      const again = drawn[k + 1]?.segment === 17 && drawn[k + 1].offset === 0x825;
+
+      if (again === (used === 2)) {
+        result.held++;
+      } else {
+        result.wrong.push(`frame ${tick[0]}: ${used} draws, the engine ${again ? 2 : 1}`);
+      }
+    });
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -705,6 +738,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     const spotted = followPetSpots(lines);
     console.log(`petting spots: ${spotted.spots} picked, ${spotted.held} held`);
     expect(spotted.wrong).toEqual([]);
+
+    const looks = followWaitLooks(lines);
+    console.log(`waiting looks: ${looks.looks} drawn, ${looks.held} held`);
+    expect(looks.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);
