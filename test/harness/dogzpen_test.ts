@@ -28,6 +28,7 @@ import {
   keepsWalking,
   Pet,
   pickGait,
+  pettingEyes,
   pickPetSpot,
   rollsOver,
   pickTarget,
@@ -654,6 +655,52 @@ function followStrokes(lines: string[]) {
   return result;
 }
 
+/**
+ * Where a petted dog's eyes went (`PushPettingEyePos`, its draws from the
+ * one returning to seg17:1306) against `pettingEyes`: the draws where its
+ * branch makes them -- 1318 for the blink alone; 134a for a look, and 13a1
+ * and 13b3 for the random look's blink -- and the seed after.
+ */
+function followPettingEyes(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { eyes: 0, held: 0, wrong: [] as string[] };
+
+  for (const { tick, drawn, frame } of frames) {
+    drawn.forEach(({ seed, segment, offset }, k) => {
+      if (segment !== 17 || offset !== 0x1306) {
+        return;
+      }
+
+      result.eyes++;
+      const { rand, state } = randFrom(seed);
+      const ours = pettingEyes(rand);
+      const sites =
+        ours[0].blink !== undefined
+          ? [0x1306, 0x1318]
+          : ours[0].look === 'user'
+            ? [0x1306, 0x134a]
+            : ours.length === 2
+              ? [0x1306, 0x134a, 0x13a1, 0x13b3]
+              : [0x1306, 0x134a, 0x13a1];
+      const theirs = drawn.slice(k, k + sites.length);
+      const seedThen = k + sites.length < drawn.length ? drawn[k + sites.length].seed : frame[3];
+
+      if (
+        theirs.every((draw, n) => draw.segment === 17 && draw.offset === sites[n]) &&
+        state.seed === seedThen
+      ) {
+        result.held++;
+      } else {
+        result.wrong.push(
+          `frame ${tick[0]}: ${JSON.stringify(ours)}, the engine ${theirs.map((draw) => draw.offset.toString(16)).join(' ')}`
+        );
+      }
+    });
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -791,6 +838,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `strokes: ${strokes.strokes} drawn, ${strokes.rolled} rolled over, ${strokes.held} held`
     );
     expect(strokes.wrong).toEqual([]);
+
+    const eyes = followPettingEyes(lines);
+    console.log(`petting eyes: ${eyes.eyes} put, ${eyes.held} held`);
+    expect(eyes.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

@@ -653,6 +653,26 @@ export function rollsOver(level: number, rand: Rand): boolean {
   return (rand() % 16) + 7 < level;
 }
 
+/**
+ * Where a petted dog's eyes go (`PetModule::PushPettingEyePos`, seg17:12f7):
+ * one time in two shut, a blink of `rand() % 15 + 30` frames; else one time
+ * in two a look at the user; else a look at a random point, and four times
+ * in five that blink after it.
+ */
+export function pettingEyes(rand: Rand): Omit<Step, 'frame'>[] {
+  const blink = () => ({ blink: (rand() % 15) + 30 });
+
+  if (rand() % 2) {
+    return [blink()];
+  }
+
+  if (rand() % 2) {
+    return [{ look: 'user' }];
+  }
+
+  return rand() % 5 ? [{ look: 'random' }, blink()] : [{ look: 'random' }];
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -2776,6 +2796,7 @@ export class Pet {
 
         this.queue = [];
         this.push({ glue: BELLY });
+        this.pushPettingEyes();
 
         if (area === AREA.hindquarters) {
           const level = this.pettingLevel;
@@ -2818,12 +2839,20 @@ export class Pet {
     return step;
   }
 
+  /** Its eyes as it is petted (`PushPettingEyePos`), each as a script's tail. */
+  private pushPettingEyes() {
+    for (const after of pettingEyes(this.rand)) {
+      this.push({ after });
+    }
+  }
+
   /** Petted lying down: onto its back, one of three wriggles, and maybe to sleep (seg17:0f48). */
   private pettedOnBack(): undefined {
     const rolls = this.data.engineScripts.pettedOnBack;
 
     this.resetSoft();
     this.pushTransition(SCRIPT.rollover, BELLY);
+    this.pushPettingEyes();
     this.pushStored(rolls[this.rand() % 3]);
     this.pettingLevel++;
 
