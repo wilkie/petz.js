@@ -779,6 +779,41 @@ export function* bowlPlan(
   }
 }
 
+/**
+ * A trick done for the ball (`PickTrickState`, seg21:69b0 to 6aa4): one of
+ * the 59 at random (`rand() % 59`), kept if its play weight is at least
+ * `rand() %` the play weights' sum as the dog was made; never one with the
+ * ball while the ball is held or in the box, nor while it cannot be
+ * grabbed (`IsBallGrabbable`, asked only of a trick with the ball).
+ */
+export function pickPlayTrick(
+  tricks: { playWeight: number; withBall: number }[],
+  sum: number,
+  ball: { held: boolean; out: boolean },
+  grabbable: () => boolean,
+  rand: Rand
+): number {
+  for (let tries = 0; tries < 100000; tries++) {
+    const n = rand() % tricks.length;
+    const trick = tricks[n];
+    let reject = trick.playWeight < rand() % sum;
+
+    if (trick.withBall && (ball.held || !ball.out)) {
+      reject = true;
+    }
+
+    if (trick.withBall && !grabbable()) {
+      reject = true;
+    }
+
+    if (!reject) {
+      return n;
+    }
+  }
+
+  return 0;
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -869,6 +904,9 @@ export class Pet {
   }
 
   private readonly idleWeights: number;
+
+  /** The sum of the tricks' play weights, as they were when the dog was made (`ds:0x3d90`, seg21:0df6: not summed again as they drift). */
+  private readonly playWeights: number;
   private readonly data: PetData;
   private readonly world: PetWorld;
   private readonly rand: Rand;
@@ -886,6 +924,7 @@ export class Pet {
     this.factors = new Array(11).fill(0);
     this.centres = factors.map((factor) => factor.centre);
     this.idleWeights = data.tricks.reduce((sum, trick) => sum + trick.idleWeight, 0);
+    this.playWeights = data.tricks.reduce((sum, trick) => sum + trick.playWeight, 0);
     this.loadFactors(factors, age);
   }
 
@@ -5450,27 +5489,16 @@ export class Pet {
       }
     }
 
-    const total = this.data.tricks.reduce((sum, trick) => sum + trick.playWeight, 0);
-
-    for (let tries = 0; tries < 100000; tries++) {
-      const n = this.rand() % this.data.tricks.length;
-      const trick = this.data.tricks[n];
-      let reject = trick.playWeight < this.rand() % total;
-
-      if (trick.withBall && (ball?.held || !ball)) {
-        reject = true;
-      }
-
-      if (!this.isBallGrabbable() && trick.withBall) {
-        reject = true;
-      }
-
-      if (!reject) {
-        return FIRST_TRICK + n;
-      }
-    }
-
-    return STATE.begging;
+    return (
+      FIRST_TRICK +
+      pickPlayTrick(
+        this.data.tricks,
+        this.playWeights,
+        { held: !!ball?.held, out: !!ball },
+        () => this.isBallGrabbable(),
+        this.rand
+      )
+    );
   }
 
   /**

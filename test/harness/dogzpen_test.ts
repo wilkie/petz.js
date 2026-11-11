@@ -33,6 +33,7 @@ import {
   pickGait,
   pettingEyes,
   pickPetSpot,
+  pickPlayTrick,
   rollsOver,
   pickTarget,
   sleepPlan,
@@ -202,6 +203,8 @@ interface Frame {
   frame: number[];
   /** The ball as the frame began (`ball`): held, in the box, its rectangle. */
   ball?: number[];
+  /** What `IsBallGrabbable` answered in the frame, and the draws before each. */
+  grabbable: { answer: number; draws: number }[];
 }
 
 /** A trace's lines read: its trick table, its frames, and each draw's segment by its selector. */
@@ -236,6 +239,7 @@ function readTrace(lines: string[]) {
         changes: [],
         stored: [],
         spots: [],
+        grabbable: [],
         gaits: [],
         targets: [],
         drawn: [],
@@ -264,6 +268,8 @@ function readTrace(lines: string[]) {
       asked.after = values[2];
     } else if (kind === 'stored' && open) {
       open.stored.push({ sprite: values[0], script: values[1], draws: values[3] });
+    } else if (kind === 'grabbable' && open) {
+      open.grabbable.push({ answer: values[0], draws: values[1] });
     } else if (kind === 'ball' && open) {
       open.ball = values;
     } else if (kind === 'frame' && open) {
@@ -850,6 +856,73 @@ function followBowls(lines: string[]) {
   return result;
 }
 
+/**
+ * Each trick done for the ball (`PickTrickState`, its pairs of draws
+ * returning to seg21:69b5 and 6a11) against `pickPlayTrick`, with the
+ * engine's tricks and their play weights' sum as the day began, the ball
+ * held or in the box as the frame began, and what `IsBallGrabbable`
+ * answered: as many draws, to the same seed, and the same trick -- the
+ * state the dog is put in next, or the trick whose script is pushed.
+ */
+function followPlayTricks(lines: string[]) {
+  const { tricks, frames, dll } = readTrace(lines);
+  const scripts = readTrickScripts(dll);
+  const sum = tricks.reduce((total, trick) => total + trick.playWeight, 0);
+  const result = { tricks: 0, held: 0, seen: 0, wrong: [] as string[] };
+  const at = (draw: { segment: number | undefined; offset: number } | undefined, offset: number) =>
+    draw?.segment === 21 && draw.offset === offset;
+
+  for (const { tick, changes, stored, drawn, frame, ball, grabbable } of frames) {
+    drawn.forEach(({ seed }, k) => {
+      if (!at(drawn[k], 0x69b5) || at(drawn[k - 1], 0x6a11)) {
+        return;
+      }
+
+      let end = k;
+
+      while (at(drawn[end], 0x69b5) && at(drawn[end + 1], 0x6a11)) {
+        end += 2;
+      }
+
+      result.tricks++;
+      const { rand, state } = randFrom(seed);
+      let used = 0;
+      const answer = grabbable.find((each) => each.draws > k)?.answer ?? 0;
+      const ours =
+        FIRST_TRICK +
+        pickPlayTrick(
+          tricks,
+          sum,
+          { held: !!ball?.[0], out: !ball?.[1] },
+          () => answer !== 0,
+          () => (used++, rand())
+        );
+      const seedThen = end < drawn.length ? drawn[end].seed : frame[3];
+      const pushed = stored.find((push) => push.sprite === frame[5] && push.draws >= end)?.script;
+      /* (Not always shown within the frame: then only the draws are held.) */
+      const byScript = scripts.findIndex((each) => each.script === pushed);
+      const theirs =
+        changes.find((change) => change.draws >= end && change.to >= FIRST_TRICK)?.to ??
+        (byScript < 0 ? undefined : FIRST_TRICK + byScript);
+
+      if (
+        used === end - k &&
+        state.seed === seedThen &&
+        (theirs === undefined || ours === theirs)
+      ) {
+        result.held++;
+        result.seen += theirs === undefined ? 0 : 1;
+      } else {
+        result.wrong.push(
+          `frame ${tick[0]}: trick ${ours} in ${used} draws, not ${theirs} in ${end - k}`
+        );
+      }
+    });
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -999,6 +1072,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     const bowls = followBowls(lines);
     console.log(`bowls: ${bowls.filled} filled, ${bowls.eaten} eaten from, ${bowls.held} held`);
     expect(bowls.wrong).toEqual([]);
+
+    const play = followPlayTricks(lines);
+    console.log(
+      `play tricks: ${play.tricks} chosen, ${play.held} held (${play.seen} of them seen done)`
+    );
+    expect(play.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

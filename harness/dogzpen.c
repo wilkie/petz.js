@@ -33,8 +33,9 @@
  *   seed selector offset` for each draw, the seed before it and where it
  *   returned to; and within it, `stored`, `neutral` and `script` for each
  *   script pushed to a sprite, `target` and `targeted` for each point the
- *   dog is to walk to, `gait` and `gaited` for each way it goes, and
- *   `spot` and `spotted` for each spot it wants petting on.
+ *   dog is to walk to, `gait` and `gaited` for each way it goes, `spot`
+ *   and `spotted` for each spot it wants petting on, and `grabbable` for
+ *   each time it is asked whether it can grab the ball.
  */
 #include <dos.h>
 #include <string.h>
@@ -247,8 +248,21 @@ static void __cdecl __far __loadds spotting(unsigned char __far *module)
         draws);
 }
 
+/* And `PetModule::IsBallGrabbable` (406): `grabbable answer draws`. */
+typedef int(__cdecl __far *GRABBABLE)(void __far *module);
+static GRABBABLE grabbableOn;
+
+static int __cdecl __far __loadds grabbing(void __far *module)
+{
+    int answer = grabbableOn(module);
+
+    say("grabbable %d %d\r\n", answer, draws);
+    return answer;
+}
+
 static void hookPushes(void)
 {
+    grabbableOn = (GRABBABLE)hookPrologue(406, (void __far *)grabbing);
     spotOn = (PICKSPOT)hookPrologue(390, (void __far *)spotting);
     gaitOn = (PICKGAIT)hookPrologue(512, (void __far *)gaiting);
     targetOn = (NEWTARGET)hookPrologue(368, (void __far *)targeting);
