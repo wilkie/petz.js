@@ -47,7 +47,8 @@ import type { Step } from '../../src/behaviour/timeline.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { parseLnz } from '../../src/formats/lnz.ts';
 import { extendFrames } from '../../src/render/extend.ts';
-import { project, scalesForAge } from '../../src/render/project.ts';
+import { type Head, project, scalesForAge } from '../../src/render/project.ts';
+import { skeletonOf } from '../../src/render/skeleton.ts';
 import { readEngineScripts, readTrickScripts } from '../../src/formats/engine.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
@@ -211,6 +212,10 @@ interface Frame {
   state?: number[];
   /** How its rectangle was moved in the frame (`moved`: how, the glue ball). */
   moved: number[][];
+  /** The head's block for the dog's own state, placed in the frame (`head 1`), the last. */
+  head?: number[];
+  /** And for the copy the plain move takes of the frame before at the new angles (`head 0`), the last. */
+  headCopy?: number[];
   /** Whether the dog held anything at any time in the frame (`grab` to `release`). */
   holding?: boolean;
   /** What it held all through the frame, by its slot (0 the mouth, 1 a paw), if it held one thing throughout. */
@@ -299,6 +304,10 @@ function readTrace(lines: string[]) {
       holds = Math.max(0, holds - 1);
       open.holding = true;
       open.heldSlot = undefined;
+    } else if (kind === 'head' && open && values[0] === 1) {
+      open.head = values.slice(1, 10);
+    } else if (kind === 'head' && open) {
+      open.headCopy = values.slice(1, 10);
     } else if (kind === 'moved' && open) {
       open.moved.push(values);
     } else if (kind === 'state' && open) {
@@ -1021,6 +1030,38 @@ function followRoll(lines: string[]) {
 }
 
 /**
+ * The model's `Head` from the engine's block for it (`HeadTrackRenderBlock`,
+ * as the trace's `head` writes it: turn, nod, roll, the offset, and the
+ * pivot -- the neck scaled, `>>8`, and the drift added): the drift the pivot
+ * less the neck, blended as the frame is, scaled as the model scales it.
+ */
+function headOf(
+  block: number[],
+  frame: { balls: { x: number; y: number; z: number }[] },
+  blending:
+    { scale: number; reference: { balls: { x: number; y: number; z: number }[] } } | undefined,
+  pet: number,
+  breed: Parameters<typeof skeletonOf>[0]
+): Head {
+  const [yaw, pitch, roll, ox, oy, oz, px, py, pz] = block;
+  const neckBall = skeletonOf(breed).neck;
+  const neck = frame.balls[neckBall];
+  const from = blending?.reference.balls[neckBall];
+  const toward = (axis: 'x' | 'y' | 'z') =>
+    blending && from
+      ? Math.trunc(((neck[axis] - from[axis]) * blending.scale) / 100) + from[axis]
+      : neck[axis];
+  const scaled = (axis: 'x' | 'y' | 'z') => Math.floor((toward(axis) * pet) / 256);
+  return {
+    yaw,
+    pitch,
+    roll,
+    offset: { x: ox, y: oy, z: oz },
+    drift: { x: px - scaled('x'), y: py - scaled('y'), z: pz - scaled('z') },
+  };
+}
+
+/**
  * The rectangle each frame's balls take (`BallState` `+0x38` to `+0x3e`,
  * `Ballz::GetFrame`) against the model's: the frame, the breed's own
  * (`DATA\BIGDOG.LNZ`, its extensions), its age (its factor 10), and the
@@ -1040,6 +1081,7 @@ function followFrameBoxes(lines: string[]) {
   const result = {
     frames: 0,
     turned: 0,
+    tracked: 0,
     blended: 0,
     mouthed: 0,
     holding: 0,
@@ -1048,7 +1090,9 @@ function followFrameBoxes(lines: string[]) {
     wrong: [] as string[],
   };
 
-  for (const { tick, state, holding, heldSlot } of frames) {
+  let lastHead: number[] | undefined;
+
+  for (const [index, { tick, state, holding, heldSlot }] of frames.entries()) {
     if (!state || state.length < 25) {
       continue;
     }
@@ -1056,8 +1100,14 @@ function followFrameBoxes(lines: string[]) {
     const [rotation, tilt, spin, roll, frame, , , tracking, blend, reference] = state.slice(9, 19);
     const theirs = state.slice(19, 23);
 
-    /* The head placed only while it tracks (`+0x1e`): its block not yet followed. */
-    if (tracking) {
+    /* The head placed only while it tracks (`+0x1e`), by the block placed
+     * last for the dog's state -- this frame's, or, the engine's placing
+     * kept from before, the last: its turn, nod and roll, its offset, and
+     * its pivot, the neck scaled and the drift, so the drift is the pivot
+     * less the neck scaled as the model scales it. */
+    lastHead = frames[index].head ?? lastHead;
+
+    if (tracking && !lastHead) {
       result.turned++;
       continue;
     }
@@ -1074,16 +1124,25 @@ function followFrameBoxes(lines: string[]) {
 
     result.frames++;
     const age = tick[14];
+    const scales = scalesForAge(breed, age);
+    const blending = blend === 100 ? undefined : { scale: blend, reference: shapes[reference] };
+    let head: Head | undefined;
+
+    if (tracking && lastHead) {
+      result.tracked++;
+      head = headOf(lastHead, shapes[frame], blending, scales.pet, breed);
+    }
+
     const placed = project(
       breed,
       header,
       shapes[frame],
-      scalesForAge(breed, age),
+      scales,
       rotation,
       100 - age,
-      undefined,
+      head,
       { tilt, spin, roll },
-      blend === 100 ? undefined : { scale: blend, reference: shapes[reference] }
+      blending
     );
     const box = ballsBox(
       placed,
@@ -1125,6 +1184,8 @@ function followPlacing(lines: string[]) {
     parseAnimation(header, n, read(`DATA/${n}.BDT`))
   );
   const result = {
+    rewobbled: 0,
+    rewobbledOff: [] as string[],
     outOfBlend: 0,
     unexplained: [] as string[],
     plain: 0,
@@ -1135,8 +1196,20 @@ function followPlacing(lines: string[]) {
     sliding: 0,
     wrong: [] as string[],
   };
-  /* (Its head placed only while it tracks, `+0x1e`: not yet followed.) */
-  const unturned = (state?: number[]) => state && state.length >= 25 && !state[16];
+  /* (The breed's reshaped frames, as `Stage` makes them, for the head's neck.) */
+  const extended = extendFrames(shapes, breed);
+
+  /* Its head, while it tracks (`+0x1e`), by the block placed last for the dog's state. */
+  const heads: (number[] | undefined)[] = [];
+  let lastHead: number[] | undefined;
+
+  for (const frame of frames) {
+    lastHead = frame.head ?? lastHead;
+    heads.push(lastHead);
+  }
+
+  const unturned = (state?: number[], n?: number) =>
+    state && state.length >= 25 && (!state[16] || (n !== undefined && heads[n] !== undefined));
 
   frames.forEach(({ tick, state, moved, holding, heldSlot }, n) => {
     const before = frames[n - 1]?.state;
@@ -1146,7 +1219,7 @@ function followPlacing(lines: string[]) {
       (holding && heldSlot === undefined) ||
       (frames[n - 1]?.holding && frames[n - 1]?.heldSlot !== heldSlot);
 
-    if (!unturned(state) || !unturned(before) || moved.length !== 1 || moved[0][0] > 1) {
+    if (!unturned(state, n) || !unturned(before, n - 1) || moved.length !== 1 || moved[0][0] > 1) {
       return;
     }
 
@@ -1162,14 +1235,27 @@ function followPlacing(lines: string[]) {
     }
 
     const glue = moved[0][0] === 1 ? moved[0][1] : undefined;
-    const pose = (of: number[]) => ({
-      rotation: of[9],
-      angles: { tilt: of[10], spin: of[11], roll: of[12] },
-      frame: of[13],
-      blend: of[17] === 100 ? undefined : { scale: of[17], reference: of[18] },
-    });
-    const was = pose(before!);
-    const now = pose(state!);
+    const pose = (of: number[], at: number) => {
+      const blend = of[17] === 100 ? undefined : { scale: of[17], reference: of[18] };
+      return {
+        rotation: of[9],
+        angles: { tilt: of[10], spin: of[11], roll: of[12] },
+        frame: of[13],
+        blend,
+        head:
+          of[16] && heads[at]
+            ? headOf(
+                heads[at]!,
+                extended[of[13]],
+                blend && { scale: blend.scale, reference: extended[blend.reference] },
+                scalesForAge(breed, tick[14]).pet,
+                breed
+              )
+            : undefined,
+      };
+    };
+    const was = pose(before!, n - 1);
+    const now = pose(state!, n);
     /* The model's dog put where the engine's was, then moved on, kept
      * touching the stage unless steering off it (`+0x2108`, `+0x2110`). */
     const stage = new Stage(292, 273, breed, header, shapes, tick[14]);
@@ -1184,7 +1270,7 @@ function followPlacing(lines: string[]) {
       undefined,
       undefined,
       undefined,
-      undefined,
+      was.head,
       was.angles,
       was.blend
     );
@@ -1198,7 +1284,7 @@ function followPlacing(lines: string[]) {
       undefined,
       undefined,
       undefined,
-      undefined,
+      now.head,
       now.angles,
       now.blend
     );
@@ -1216,6 +1302,16 @@ function followPlacing(lines: string[]) {
       Math.abs(Math.round(ours[0]) - theirs[0]),
       Math.abs(Math.round(ours[1]) - theirs[1]),
     ];
+    /* Its head placed again for the frame before at the new angles, the
+     * wobbles moved on since (`HeadTrackPrep` again, the copy's block not the
+     * frame before's): the model, taking the frame before's head, cannot
+     * follow; listed apart. */
+    const rewobbled =
+      !!frames[n].headCopy &&
+      !!heads[n - 1] &&
+      frames[n].headCopy!.slice(2, 9).join(' ') !== heads[n - 1]!.slice(2, 9).join(' ');
+    result.rewobbled += rewobbled ? 1 : 0;
+
     /* Glued out of a blend: all but one of the harness's days are as the
      * model has it, the old blend; that one, frame 615 of the plain day of
      * 3,000, not yet explained, is listed apart. */
@@ -1224,6 +1320,10 @@ function followPlacing(lines: string[]) {
 
     if (off[0] === 0 && off[1] === 0) {
       result.held++;
+    } else if (rewobbled) {
+      result.rewobbledOff.push(
+        `frame ${tick[0]}: ${was.frame} to ${now.frame}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
+      );
     } else if (outOfBlend) {
       result.unexplained.push(
         `frame ${tick[0]}: ${was.frame} to ${now.frame} glued by ${glue} out of a blend: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
@@ -1403,7 +1503,7 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
 
     const boxes = followFrameBoxes(lines);
     console.log(
-      `frame boxes: ${boxes.frames} frames (${boxes.blended} blended), ${boxes.held} held, ${boxes.nearly} a pixel out on one edge (${boxes.turned} with the head turned, ${boxes.mouthed} taking up or letting go, not followed; ${boxes.holding} with the ball held)`
+      `frame boxes: ${boxes.frames} frames (${boxes.blended} blended, ${boxes.tracked} with the head turned), ${boxes.held} held, ${boxes.nearly} a pixel out on one edge (${boxes.turned} with the head turned, ${boxes.mouthed} taking up or letting go, not followed; ${boxes.holding} with the ball held)`
     );
     expect(boxes.wrong).toEqual([]);
 
@@ -1412,6 +1512,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `placing: ${placing.plain} moved plainly, ${placing.glued} glued, ${placing.held} held, ${placing.nearly} a pixel out (${placing.holding} taking up or letting go, ${placing.sliding} sliding, not followed)`
     );
     expect(placing.wrong).toEqual([]);
+
+    if (placing.rewobbledOff.length) {
+      console.log(
+        `placing, the head's wobbles moved on for the frame before (${placing.rewobbled}), apart:\n  ${placing.rewobbledOff.join('\n  ')}`
+      );
+    }
 
     if (placing.unexplained.length) {
       console.log(
