@@ -22,9 +22,16 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { idleEnd, idlePlan, Pet, trickRepeats } from '../../src/behaviour/pet.ts';
+import {
+  idleEnd,
+  idlePlan,
+  Pet,
+  pickTarget,
+  sleepPlan,
+  trickRepeats,
+} from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
-import { readTrickScripts } from '../../src/formats/engine.ts';
+import { readEngineScripts, readTrickScripts } from '../../src/formats/engine.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
 
@@ -110,6 +117,16 @@ const describeHarness = ready ? describe : describe.skip;
 /** How many frames of the dog's day are followed: 300, or as `DOGZ_FRAMES` says. */
 const FRAMES = Number(process.env.DOGZ_FRAMES ?? 300);
 
+/** `DOGZ_PLAN_DONE=1`: while the dog is idle, its plan taken to its end, so each end of its queue decides between sleep and walking. */
+const PLAN_DONE = process.env.DOGZ_PLAN_DONE === '1';
+
+/** `DOGZ_CALM=1`: the dog's excitement put at 20 as its day begins (`SetExcitement`). */
+const CALM = process.env.DOGZ_CALM === '1';
+
+/** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
+const FORCING = (PLAN_DONE ? 1 : 0) | (CALM ? 2 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}-${FRAMES}`;
+
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
 const IDLE = 4;
@@ -139,6 +156,14 @@ interface Frame {
   tick: number[];
   changes: { from: number; to: number; draws: number }[];
   stored: { sprite: number; script: number; draws: number }[];
+  targets: {
+    distance: number;
+    x: number;
+    y: number;
+    draws: number;
+    to?: { x: number; y: number };
+    after?: number;
+  }[];
   drawn: { seed: number; segment: number | undefined; offset: number }[];
   frame: number[];
 }
@@ -170,10 +195,17 @@ function readTrace(lines: string[]) {
     if (kind === 'trick') {
       tricks[values[0]] = trickOf(values.slice(1));
     } else if (kind === 'tick') {
-      open = { tick: values, changes: [], stored: [], drawn: [], frame: [] };
+      open = { tick: values, changes: [], stored: [], targets: [], drawn: [], frame: [] };
       frames.push(open);
     } else if (kind === 'newstate' && open) {
       open.changes.push({ from: values[0], to: values[1], draws: values[2] });
+    } else if (kind === 'target' && open) {
+      const [distance, x, y, draws] = values;
+      open.targets.push({ distance, x, y, draws });
+    } else if (kind === 'targeted' && open) {
+      const asked = open.targets[open.targets.length - 1];
+      asked.to = { x: values[0], y: values[1] };
+      asked.after = values[2];
     } else if (kind === 'stored' && open) {
       open.stored.push({ sprite: values[0], script: values[1], draws: values[3] });
     } else if (kind === 'frame' && open) {
@@ -295,6 +327,83 @@ function followTrickRepeats(lines: string[]) {
   return result;
 }
 
+/**
+ * Each point the dog was sent to walk to (`GetNewTarget`) against
+ * `pickTarget`, from the first draw it made, with the stage (its left and
+ * top 0, as the playpen's are) and where the dog was: the same point, and
+ * as many draws.
+ */
+function followTargets(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { targets: 0, held: 0, wrong: [] as string[] };
+
+  for (const { tick, targets, drawn, frame } of frames) {
+    for (const { distance, x, y, draws, to, after } of targets) {
+      if (!to || after === undefined || after > drawn.length) {
+        continue;
+      }
+
+      result.targets++;
+      const stage = { width: frame[8] - frame[6], height: frame[9] - frame[7] };
+      const { rand } = randFrom(drawn[draws]?.seed ?? frame[3]);
+      let used = 0;
+      const ours = pickTarget(stage, { x, y }, distance, () => (used++, rand()));
+
+      if (ours.x === to.x && ours.y === to.y && used === after - draws) {
+        result.held++;
+      } else {
+        result.wrong.push(
+          `frame ${tick[0]}: (${ours.x}, ${ours.y}) in ${used} draws, not (${to.x}, ${to.y}) in ${after - draws}`
+        );
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Each sleeping dog's plan (`PushSleepScripts`, seg16:1f61 to 20b6: its
+ * draws, one after another) against `sleepPlan`, with the engine's own
+ * kinds of sleep and breaks: as many draws, to the same seed.
+ */
+function followSleepPlans(lines: string[]) {
+  const { frames, dll } = readTrace(lines);
+  const { sleep, sleepBreaks } = readEngineScripts(dll);
+  const result = { plans: 0, held: 0, wrong: [] as string[] };
+
+  for (const { tick, drawn, frame } of frames) {
+    const inPlan = (k: number) =>
+      drawn[k]?.segment === 16 && drawn[k].offset >= 0x1f61 && drawn[k].offset < 0x20b6;
+
+    for (let k = 0; k < drawn.length; k++) {
+      if (!inPlan(k) || inPlan(k - 1)) {
+        continue;
+      }
+
+      let end = k;
+
+      while (inPlan(end)) {
+        end++;
+      }
+
+      result.plans++;
+      const { rand, state } = randFrom(drawn[k].seed);
+      let used = 0;
+      sleepPlan(sleep, sleepBreaks, () => (used++, rand()));
+      const seedThen = end < drawn.length ? drawn[end].seed : frame[3];
+
+      if (state.seed === seedThen && used === end - k) {
+        result.held++;
+      } else {
+        result.wrong.push(`frame ${tick[0]}: sleep plan of ${used} draws, not ${end - k}`);
+      }
+    }
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -362,13 +471,13 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
   }, 1800000);
 
   it('runs a dog in its playpen: it moves on from walking, its states and draws its own', () => {
-    const kept = join(HARNESS, `DOGZPEN-${FRAMES}.OUT`);
+    const kept = join(HARNESS, `${NAME}.OUT`);
 
     /* `HARNESS_REUSE=1`: the run kept last, without the engine. */
     if (!(process.env.HARNESS_REUSE === '1' && existsSync(kept))) {
       const { drive, at } = stage('dogzpen', 'DOGZPEN', 'DOGZPEN.EXE');
       cpSync(PARAMS, join(at, 'PARAMS.BIN'));
-      writeFileSync(join(at, 'FRAMES.TXT'), `${FRAMES}\r\n`);
+      writeFileSync(join(at, 'FRAMES.TXT'), `${FRAMES} ${FORCING}\r\n`);
       run(drive, 'DOGZPEN', 'DOGZPEN.EXE', 900 * Math.ceil(FRAMES / 300));
       cpSync(join(drive, 'DOGZPEN.OUT'), kept);
     }
@@ -400,6 +509,14 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     const repeats = followTrickRepeats(lines);
     console.log(`trick repeats: ${repeats.tricks} drawn, ${repeats.held} held`);
     expect(repeats.wrong).toEqual([]);
+
+    const targets = followTargets(lines);
+    console.log(`targets: ${targets.targets} picked, ${targets.held} held`);
+    expect(targets.wrong).toEqual([]);
+
+    const sleeps = followSleepPlans(lines);
+    console.log(`sleep plans: ${sleeps.plans} made, ${sleeps.held} held`);
+    expect(sleeps.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

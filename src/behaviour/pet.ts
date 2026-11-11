@@ -464,6 +464,67 @@ export function trickRepeats(trick: { repeats: number; extra: number }, rand: Ra
   return (rand() % Math.max(1, trick.extra)) + trick.repeats;
 }
 
+/**
+ * Where the dog walks to next (`PetModule::GetNewTarget`, seg16:177b): a
+ * point at random 60 within the stage's edges, drawn again until it is at
+ * least so far from the dog -- or, the stage too small for that, as far as
+ * half the inner stage's diagonal, less 50.
+ */
+export function pickTarget(
+  stage: { width: number; height: number },
+  at: { x: number; y: number },
+  distance: number,
+  rand: Rand
+) {
+  const { width, height } = stage;
+  const most = Math.trunc(Math.hypot(width - 120, height - 120) / 2) - 50;
+  const least = Math.min(distance, most);
+
+  for (let tries = 0; tries < 1000; tries++) {
+    const target = {
+      x: (rand() % Math.max(1, width - 120)) + 60,
+      y: (rand() % Math.max(1, height - 120)) + 60,
+    };
+
+    if (Math.hypot(at.x - target.x, at.y - target.y) >= least) {
+      return target;
+    }
+  }
+
+  return { x: width / 2, y: height / 2 };
+}
+
+/**
+ * A sleeping dog's plan (`PetModule::PushSleepScripts`, seg16:1f61): 10 to
+ * 24 stretches, each of one of five kinds of sleep (`rand() % 5`) played
+ * `rand() % times + times` over; after the first 10 to 19 a break (one of
+ * two scripts, `rand() % 2`), and another 6 to 11 after each.
+ */
+export function sleepPlan(
+  sleep: { script: number; times: number }[],
+  breaks: number[],
+  rand: Rand
+): number[] {
+  const plan: number[] = [];
+  let untilBreak = (rand() % 10) + 10;
+  const length = (rand() % 15) + 10;
+
+  for (let n = 0; n < length; n++) {
+    const kind = sleep[rand() % 5];
+
+    for (let times = (rand() % kind.times) + kind.times; times; times--) {
+      plan.push(kind.script);
+    }
+
+    if (untilBreak-- < 0) {
+      plan.push(breaks[rand() % 2]);
+      untilBreak = (rand() % 6) + 6;
+    }
+  }
+
+  return plan;
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -1708,24 +1769,8 @@ export class Pet {
   /** `PetModule::PushSleepScripts`: a plan of 10 to 24 stretches of sleep, broken now and then. */
   private pushSleepScripts() {
     const { sleep, sleepBreaks } = this.data.engineScripts;
-    let untilBreak = (this.rand() % 10) + 10;
-    const length = (this.rand() % 15) + 10;
-
-    this.plan = [];
+    this.plan = sleepPlan(sleep, sleepBreaks, this.rand);
     this.planAt = 0;
-
-    for (let n = 0; n < length; n++) {
-      const kind = sleep[this.rand() % 5];
-
-      for (let times = (this.rand() % kind.times) + kind.times; times; times--) {
-        this.plan.push(kind.script);
-      }
-
-      if (untilBreak-- < 0) {
-        this.plan.push(sleepBreaks[this.rand() % 2]);
-        untilBreak = (this.rand() % 6) + 6;
-      }
-    }
   }
 
   /** `PetModule::DoSleeping`, seg16:198e, undisturbed. */
@@ -1831,23 +1876,7 @@ export class Pet {
 
   /** `PetModule::GetNewTarget`: a point on the stage at least so far from the dog. */
   private newTarget(distance = 400) {
-    const { width, height } = this.world;
-    const most = Math.trunc(Math.hypot(width - 120, height - 120) / 2) - 50;
-    const least = Math.min(distance, most);
-    const at = this.world.where();
-
-    for (let tries = 0; tries < 1000; tries++) {
-      const target = {
-        x: (this.rand() % Math.max(1, width - 120)) + 60,
-        y: (this.rand() % Math.max(1, height - 120)) + 60,
-      };
-
-      if (Math.hypot(at.x - target.x, at.y - target.y) >= least) {
-        return target;
-      }
-    }
-
-    return { x: width / 2, y: height / 2 };
+    return pickTarget(this.world, this.world.where(), distance, this.rand);
   }
 
   /** Walks a stretch towards the target, steered by `SetTargetLocation`. */

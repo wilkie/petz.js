@@ -10,7 +10,8 @@
  * index) and set up (`InitPetModule`, 484), and a frame drawn at a time
  * (`OpenScreenDrawPort`, 118; `DoDrawFrame`, 485; `CloseScreenDrawPort`,
  * 119), as many as `FRAMES.TXT` says (300 without it), each when the
- * clock lets the dog move on.
+ * clock lets the dog move on; and, as `FRAMES.TXT`'s second number asks,
+ * the dog's idle plans cut short (1) or its excitement put low (2).
  *
  * * `made`: the library and the module;
  * * `segments`: each code segment's selector, by an export of it;
@@ -25,7 +26,8 @@
  *   segment, the stage it is kept to and its rectangle -- and `drawn k
  *   seed selector offset` for each draw, the seed before it and where it
  *   returned to; and within it, `stored`, `neutral` and `script` for each
- *   script pushed to a sprite.
+ *   script pushed to a sprite, and `target` and `targeted` for each point
+ *   the dog is to walk to.
  */
 #include <dos.h>
 #include <string.h>
@@ -40,6 +42,7 @@ typedef int(__cdecl __far *WITHPARAMS)(void __far *params);
 typedef void __far *(__cdecl __far *MAKE)(void __far *object);
 typedef int(__cdecl __far *INITMODULE)(void __far *module, void __far *params);
 typedef int(__cdecl __far *DRAWFRAME)(void __far *module, void __far *params);
+typedef void(__cdecl __far *SETEXCITEMENT)(void __far *module, int excitement);
 
 static HINSTANCE dogz;
 static HFILE output;
@@ -188,8 +191,27 @@ static int __cdecl __far __loadds scripting(void __far *sprite, void __far *elem
     return scriptOn(sprite, elements, a, b);
 }
 
+/* And `PetModule::GetNewTarget` (368, seg16:177b), where the dog walks to
+ * next: `target distance x y draws` as it is asked -- how far it should be
+ * at least, and where the dog is (its sprite's `+0x86`, `+0x88`) -- and
+ * `targeted x y draws` with what it answered. */
+typedef void(__cdecl __far *NEWTARGET)(unsigned char __far *module, int __far *point, int distance);
+static NEWTARGET targetOn;
+
+static void __cdecl __far __loadds targeting(unsigned char __far *module, int __far *point,
+                                             int distance)
+{
+    unsigned char __far *sprite = *(unsigned char __far *__far *)(module + 0x58);
+
+    say("target %d %d %d %d\r\n", distance, *(int __far *)(sprite + 0x86),
+        *(int __far *)(sprite + 0x88), draws);
+    targetOn(module, point, distance);
+    say("targeted %d %d %d\r\n", point[0], point[1], draws);
+}
+
 static void hookPushes(void)
 {
+    targetOn = (NEWTARGET)hookPrologue(368, (void __far *)targeting);
     newStateOn = (NEWSTATE)hookPrologue(496, (void __far *)changing);
     storedOn = (PUSHTWO)hookPrologue(75, (void __far *)storing);
     neutralOn = (PUSHTWO)hookPrologue(78, (void __far *)neutral);
@@ -208,6 +230,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     HFILE file;
     unsigned char __far *module;
     int answer, n, frames = FRAMES;
+    long forcing = 0;
 
     (void)previous, (void)command, (void)show;
 
@@ -231,6 +254,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
     if (file != HFILE_ERROR) {
         frames = (int)number(file);
+        forcing = number(file);
+        forcing = forcing < 0 ? 0 : forcing;
         _lclose(file);
     }
 
@@ -315,6 +340,19 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         unsigned char __far *sprite = *(unsigned char __far *__far *)(module + 0x58);
 
         while (sprite && GetTickCount() < *(unsigned long __far *)(sprite + 0xb2)) {
+        }
+
+        /* Where `FRAMES.TXT` asks (its second number): 1, while the dog is
+         * idle (4), its plan (`+0x11c4`, the next item, of `+0x11c6`) taken
+         * to its end, so the next end of its queue decides where it goes;
+         * 2, at the first frame, its excitement put at 20 (`SetExcitement`,
+         * 352), its cycle there. */
+        if (forcing & 1 && *(int __far *)(module + 0xc0) == 4) {
+            *(int __far *)(module + 0x11c4) = *(int __far *)(module + 0x11c6);
+        }
+
+        if (forcing & 2 && n == 0) {
+            ((SETEXCITEMENT)ordinal(352))(module, 20);
         }
 
         /* `tick n state global seed`, its 11 factors (`+0x11de` on) and the
