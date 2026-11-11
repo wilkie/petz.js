@@ -42,6 +42,7 @@ import {
   waitLook,
 } from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
+import { rollBall } from '../../src/behaviour/stage.ts';
 import { readEngineScripts, readTrickScripts } from '../../src/formats/engine.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
@@ -203,6 +204,8 @@ interface Frame {
   frame: number[];
   /** The ball as the frame began (`ball`): held, in the box, its rectangle. */
   ball?: number[];
+  /** Whether the ball was stopped in the frame (`BallSprite::Stop`). */
+  stopped?: boolean;
   /** What `IsBallGrabbable` answered in the frame, and the draws before each. */
   grabbable: { answer: number; draws: number }[];
 }
@@ -268,6 +271,8 @@ function readTrace(lines: string[]) {
       asked.after = values[2];
     } else if (kind === 'stored' && open) {
       open.stored.push({ sprite: values[0], script: values[1], draws: values[3] });
+    } else if (kind === 'ballstop' && open) {
+      open.stopped = true;
     } else if (kind === 'grabbable' && open) {
       open.grabbable.push({ answer: values[0], draws: values[1] });
     } else if (kind === 'ball' && open) {
@@ -923,6 +928,66 @@ function followPlayTricks(lines: string[]) {
   return result;
 }
 
+/** A float's bits, as the trace writes them, as a number. */
+function floatOf(bits: number) {
+  const view = new DataView(new ArrayBuffer(4));
+  view.setUint32(0, bits >>> 0, true);
+  return view.getFloat32(0, true);
+}
+
+/**
+ * The ball rolling (`BallSprite::UpdateLocation`, seg20:2634) against
+ * `rollBall`: each frame it begins out, not held and moving, its place
+ * (its rectangle's top left, 15 and 14 in) and speed rolled a frame on the
+ * stage, to what they are as the next frame begins -- the speed to the bit
+ * -- unless it was stopped in the frame (`BallSprite::Stop`), caught.
+ */
+function followRoll(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { frames: 0, bounced: 0, held: 0, wrong: [] as string[] };
+
+  frames.forEach(({ tick, ball, frame, stopped }, n) => {
+    const next = frames[n + 1]?.ball;
+
+    /* (Not where it was stopped in the frame: caught.) */
+    if (!ball || !next || ball.length < 8 || ball[0] || ball[1] || next[0] || stopped) {
+      return;
+    }
+
+    const ours = {
+      x: ball[2] + 15,
+      y: ball[3] + 14,
+      vx: floatOf(ball[6]),
+      vy: floatOf(ball[7]),
+      held: false,
+      slot: null,
+      recorded: null,
+    };
+
+    if (ours.vx === 0 && ours.vy === 0) {
+      return;
+    }
+
+    result.frames++;
+    result.bounced += rollBall(ours, frame[8] - frame[6], frame[9] - frame[7]) ? 1 : 0;
+
+    if (
+      ours.x - 15 === next[2] &&
+      ours.y - 14 === next[3] &&
+      ours.vx === floatOf(next[6]) &&
+      ours.vy === floatOf(next[7])
+    ) {
+      result.held++;
+    } else if (result.wrong.length < 10) {
+      result.wrong.push(
+        `frame ${tick[0]}: (${ours.x - 15}, ${ours.y - 14}) at ${ours.vx}, ${ours.vy}; not (${next[2]}, ${next[3]}) at ${floatOf(next[6])}, ${floatOf(next[7])}`
+      );
+    }
+  });
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -1078,6 +1143,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `play tricks: ${play.tricks} chosen, ${play.held} held (${play.seen} of them seen done)`
     );
     expect(play.wrong).toEqual([]);
+
+    const roll = followRoll(lines);
+    console.log(`ball rolling: ${roll.frames} frames, ${roll.bounced} bounces, ${roll.held} held`);
+    expect(roll.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

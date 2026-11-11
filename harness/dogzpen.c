@@ -34,8 +34,9 @@
  *   returned to; and within it, `stored`, `neutral` and `script` for each
  *   script pushed to a sprite, `target` and `targeted` for each point the
  *   dog is to walk to, `gait` and `gaited` for each way it goes, `spot`
- *   and `spotted` for each spot it wants petting on, and `grabbable` for
- *   each time it is asked whether it can grab the ball.
+ *   and `spotted` for each spot it wants petting on, `grabbable` for
+ *   each time it is asked whether it can grab the ball, and `ballstop` as
+ *   the ball is stopped.
  */
 #include <dos.h>
 #include <string.h>
@@ -260,8 +261,20 @@ static int __cdecl __far __loadds grabbing(void __far *module)
     return answer;
 }
 
+/* And `BallSprite::Stop` (453), the ball stopped (by the dog's grabbing it,
+ * say): `ballstop draws`. */
+typedef void(__cdecl __far *STOPBALL)(void __far *ball);
+static STOPBALL stopOn;
+
+static void __cdecl __far __loadds stopping(void __far *ball)
+{
+    say("ballstop %d\r\n", draws);
+    stopOn(ball);
+}
+
 static void hookPushes(void)
 {
+    stopOn = (STOPBALL)hookPrologue(453, (void __far *)stopping);
     grabbableOn = (GRABBABLE)hookPrologue(406, (void __far *)grabbing);
     spotOn = (PICKSPOT)hookPrologue(390, (void __far *)spotting);
     gaitOn = (PICKGAIT)hookPrologue(512, (void __far *)gaiting);
@@ -509,15 +522,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         say(" %ld", *(long __far *)MK_FP(dgroup, 0x3d94));
         hand(module);
 
-        /* With the ball (64): `ball held in-box left top right bottom` --
-         * the ball's sprite (`PetModule` `+0x78`), as the frame begins. */
+        /* With the ball (64): `ball held in-box left top right bottom vx vy`
+         * -- the ball's sprite (`PetModule` `+0x78`), as the frame begins,
+         * its speed (`+0x174`, `+0x178`) each a float's bits. */
         if (forcing & 64) {
             unsigned char __far *ball = *(unsigned char __far *__far *)(module + 0x78);
 
-            say("ball %d %d %d %d %d %d\r\n", *(int __far *)(ball + 0x16a),
+            say("ball %d %d %d %d %d %d %lu %lu\r\n", *(int __far *)(ball + 0x16a),
                 *(int __far *)(ball + 0x16c), *(int __far *)(ball + 0x58),
                 *(int __far *)(ball + 0x5a), *(int __far *)(ball + 0x5c),
-                *(int __far *)(ball + 0x5e));
+                *(int __far *)(ball + 0x5e), *(unsigned long __far *)(ball + 0x174),
+                *(unsigned long __far *)(ball + 0x178));
         }
 
         draws = 0;

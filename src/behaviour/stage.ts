@@ -180,15 +180,17 @@ const HOLDERS = [51, 45];
 /**
  * `BallSprite::UpdateLocation` (seg20:2634): a frame of rolling. The speed
  * loses a fortieth of itself, stops within a pixel a frame, and turns back
- * when its rectangle is past the stage's edges. Returns whether it bounced.
+ * when its rectangle is past the stage's edges; its rectangle moved by it,
+ * each cut to a whole pixel. Returns whether it bounced.
  */
 export function rollBall(ball: Ball, width: number, height: number) {
   if (ball.vx === 0 && ball.vy === 0) {
     return false;
   }
 
-  ball.vx -= ball.vx / 40;
-  ball.vy -= ball.vy / 40;
+  /* Each kept as a float (`+0x174`, `+0x178`), as the engine stores it. */
+  ball.vx = Math.fround(ball.vx - ball.vx / 40);
+  ball.vy = Math.fround(ball.vy - ball.vy / 40);
 
   if (ball.vx < 1 && ball.vx > -1) {
     ball.vx = 0;
