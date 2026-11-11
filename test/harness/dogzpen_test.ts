@@ -30,6 +30,7 @@ import {
   pickGait,
   pickTarget,
   sleepPlan,
+  stepHand,
   trickRepeats,
 } from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
@@ -128,9 +129,12 @@ const CALM = process.env.DOGZ_CALM === '1';
 /** `DOGZ_WAKE=1`: while the dog sleeps, its plan of sleep taken to its end, so it wakes as its script ends. */
 const WAKE = process.env.DOGZ_WAKE === '1';
 
+/** `DOGZ_PET=1`: from the 100th frame to the 700th, the button held and the cursor moved back and forth over the middle of the dog. */
+const PET = process.env.DOGZ_PET === '1';
+
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
-const FORCING = (PLAN_DONE ? 1 : 0) | (CALM ? 2 : 0) | (WAKE ? 4 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}-${FRAMES}`;
+const FORCING = (PLAN_DONE ? 1 : 0) | (CALM ? 2 : 0) | (WAKE ? 4 : 0) | (PET ? 8 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -487,6 +491,51 @@ function followWalking(lines: string[]) {
   return result;
 }
 
+/**
+ * The petting hand (`DoPettingHandler`) against `stepHand`: each frame the
+ * dog is petted from start to end, its state unchanged, the hand's frame,
+ * count and step as the frame began stepped on -- from the draw returning
+ * to seg17:025b, where it drew -- to what they are as it ends.
+ */
+function followHand(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { frames: 0, steps: 0, held: 0, wrong: [] as string[] };
+
+  for (const { tick, changes, drawn, frame } of frames) {
+    const before = tick.slice(16, 20);
+    const after = frame.slice(14, 18);
+
+    if (before[0] !== 1 || after[0] !== 1 || changes.length || before.length < 4) {
+      continue;
+    }
+
+    result.frames++;
+    const k = drawn.findIndex(({ segment, offset }) => segment === 17 && offset === 0x25b);
+    let used = 0;
+    const { rand } = randFrom(k < 0 ? 0 : drawn[k].seed);
+    const ours = stepHand(
+      { frame: before[1], countdown: before[2], step: before[3] },
+      () => (used++, rand())
+    );
+    result.steps += used;
+
+    if (
+      ours.frame === after[1] &&
+      ours.countdown === after[2] &&
+      ours.step === after[3] &&
+      used === (k < 0 ? 0 : 1)
+    ) {
+      result.held++;
+    } else {
+      result.wrong.push(
+        `frame ${tick[0]}: ${ours.frame} ${ours.countdown} ${ours.step} not ${after.slice(1).join(' ')}`
+      );
+    }
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -606,6 +655,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `walking: ${walking.gaits} gaits, ${walking.arrivals} arrivals, ${walking.held} held`
     );
     expect(walking.wrong).toEqual([]);
+
+    const hand = followHand(lines);
+    console.log(`petting hand: ${hand.frames} frames, ${hand.steps} steps, ${hand.held} held`);
+    expect(hand.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

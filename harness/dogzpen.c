@@ -11,20 +11,22 @@
  * (`OpenScreenDrawPort`, 118; `DoDrawFrame`, 485; `CloseScreenDrawPort`,
  * 119), as many as `FRAMES.TXT` says (300 without it), each when the
  * clock lets the dog move on; and, as `FRAMES.TXT`'s second number asks,
- * the dog's idle plans cut short (1), its excitement put low (2), or its
- * sleep cut short (4).
+ * the dog's idle plans cut short (1), its excitement put low (2), its
+ * sleep cut short (4), or the dog petted (8).
  *
  * * `made`: the library and the module;
  * * `segments`: each code segment's selector, by an export of it;
  * * `trick n` and its 12 words, for each of the library's 59, and
  *   `weights`, the sum of their idle weights;
- * * for each frame, `tick n state global seed`, the dog's 11 factors and
- *   the weights' sum as it begins; `newstate from to draws` for each
+ * * for each frame, `tick n state global seed`, the dog's 11 factors, the
+ *   weights' sum and its petting (`hand`, below) as it begins; `newstate from to draws` for each
  *   change of state within it; and after it `frame n state global seed
  *   draws` -- the dog's state (`PetModule` `+0xc0`, newest of the ten
  *   `NewState` keeps), its global state (`+0xd4`), C's `rand` seed
  *   (DOGZDLL ds:0x2d28), how many times it was drawn, its sprite's
- *   segment, the stage it is kept to and its rectangle -- and `drawn k
+ *   segment, the stage it is kept to, its rectangle and its petting --
+ *   whether it is petted and its petting hand's frame, count and step --
+ *   and `drawn k
  *   seed selector offset` for each draw, the seed before it and where it
  *   returned to; and within it, `stored`, `neutral` and `script` for each
  *   script pushed to a sprite, `target` and `targeted` for each point the
@@ -236,6 +238,15 @@ static void hookPushes(void)
     scriptOn = (PUSHELEMENTS)hookPrologue(81, (void __far *)scripting);
 }
 
+/* The end of a frame's line: whether the dog is being petted (`+0x123a`)
+ * and its petting hand -- its frame, its count to the next and its step
+ * (`+0x1232`, `+0x1234`, `+0x1236`). */
+static void hand(unsigned char __far *module)
+{
+    say(" %d %d %d %d\r\n", *(int __far *)(module + 0x123a), *(int __far *)(module + 0x1232),
+        *(int __far *)(module + 0x1234), *(int __far *)(module + 0x1236));
+}
+
 long FAR PASCAL WindowProc(HWND window, UINT message, WPARAM w, LPARAM l)
 {
     return DefWindowProc(window, message, w, l);
@@ -379,6 +390,23 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             ((SETEXCITEMENT)ordinal(352))(module, 20);
         }
 
+        /* 8, from the 100th frame to the 700th, the dog petted: the main
+         * button held (`PetParams` `+0xe`, as `GetAsyncKeyState` has it) and
+         * the cursor (`+0x12`, `+0x14`) moved 6 either side of the middle of
+         * the dog's rectangle, a frame each; else let go. */
+        if (forcing & 8) {
+            int petting = n >= 100 && n < 700 && sprite;
+
+            *(int *)(params + 0xe) = petting ? 0x8000 : 0;
+
+            if (petting) {
+                *(int *)(params + 0x12) = (*(int __far *)(sprite + 0x58) +
+                                           *(int __far *)(sprite + 0x5c)) / 2 + (n & 1 ? 6 : -6);
+                *(int *)(params + 0x14) =
+                    (*(int __far *)(sprite + 0x5a) + *(int __far *)(sprite + 0x5e)) / 2;
+            }
+        }
+
         /* `tick n state global seed`, its 11 factors (`+0x11de` on) and the
          * idle weights' sum, as the frame begins. */
         say("tick %d %d %d %lu", n, *(int __far *)(module + 0xc0), *(int __far *)(module + 0xd4),
@@ -388,7 +416,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             say(" %d", *(int __far *)(module + 0x11de + 2 * answer));
         }
 
-        say(" %ld\r\n", *(long __far *)MK_FP(dgroup, 0x3d94));
+        say(" %ld", *(long __far *)MK_FP(dgroup, 0x3d94));
+        hand(module);
         draws = 0;
 
         /* (What opening the port answers the program does not ask.) */
@@ -411,7 +440,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             say(" %d", sprite ? *(int __far *)(sprite + 0x58 + 2 * answer) : 0);
         }
 
-        say("\r\n");
+        hand(module);
 
         /* Each draw kept: `drawn k seed selector offset`, where it returns to. */
         for (answer = 0; answer < draws && answer < KEPT; answer++) {

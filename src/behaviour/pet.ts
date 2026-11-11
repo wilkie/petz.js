@@ -575,6 +575,36 @@ export function keepsWalking(excitement: number, rand: Rand): boolean {
   return rand() % 150 < excitement;
 }
 
+/**
+ * The petting hand's next frame (`DoPettingHandler`, seg17:01e7): its count
+ * run down, a step on, turned back at 4 and 7, and the count put at two or
+ * three (`rand() % 2 + 2`).
+ */
+export function stepHand(
+  hand: { frame: number; step: number; countdown: number },
+  rand: Rand
+): { frame: number; step: number; countdown: number } {
+  let { frame, step, countdown } = hand;
+
+  if (countdown-- < 0) {
+    frame += step;
+
+    if (frame > 7) {
+      frame = 6;
+      step = -step;
+    }
+
+    if (frame < 4) {
+      frame = 5;
+      step = -step;
+    }
+
+    countdown = (rand() % 2) + 2;
+  }
+
+  return { frame, step, countdown };
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -1531,6 +1561,17 @@ export class Pet {
     this.planAt = 0;
   }
 
+  /**
+   * The cursor's frame the dog asks for, petted (`PushCursorRequest`): the
+   * hand's 4 to 7; none, the cursor as the user has it.
+   */
+  hand: number | undefined;
+
+  /** The petting hand's frame, its step and its count to the next (`+0x1232`, `+0x1236`, `+0x1234`; the step -1 as the module is made). */
+  private handFrame = 0;
+  private handStep = -1;
+  private handCountdown = 0;
+
   /** Whether the dog has left `eIdle` since it was last made idle (`0xda`, seg16:02fe). */
   private leftIdle = false;
 
@@ -2425,12 +2466,28 @@ export class Pet {
       this.petting = false;
     }
 
-    if (this.state === STATE.grabbingTreat) {
+    /* Nor grabbing a treat, nor leaping for the ball (seg17:0170). */
+    if (this.state === STATE.grabbingTreat || this.state === STATE.jumpingGrabbingBall) {
       this.petting = false;
     }
 
     if (!was && this.petting && this.global !== GLOBAL.petting) {
       this.newGlobalState(GLOBAL.petting);
+    }
+
+    /* The hand petting, its frames 4 to 7 back and forth, a step each two
+     * or three frames (seg17:01da to 0292); not petting, put away. */
+    if (this.petting) {
+      const hand = stepHand(
+        { frame: this.handFrame, step: this.handStep, countdown: this.handCountdown },
+        this.rand
+      );
+      this.handFrame = hand.frame;
+      this.handStep = hand.step;
+      this.handCountdown = hand.countdown;
+      this.hand = this.handFrame;
+    } else if (this.global === GLOBAL.petting) {
+      this.hand = undefined;
     }
 
     const clicked = cursor.button && !this.samples[1]?.button;
@@ -2451,6 +2508,7 @@ export class Pet {
 
   /** `PetModule::EnterPetting` (seg17:0352): to good petting, or first to turn side on. */
   private enterPetting(state: number) {
+    this.handStep = 1;
     this.pettingLevel = 0;
     this.pickNewPetSpot();
     this.offSpot = 0;
@@ -2652,6 +2710,7 @@ export class Pet {
    */
   private doPettingGood(mode: Mode): Step | undefined {
     if (mode === 'exit') {
+      this.hand = undefined;
       return undefined;
     }
 
@@ -2661,6 +2720,11 @@ export class Pet {
       }
 
       this.resetSoft();
+
+      /* The hand shown petting, from its fourth frame (seg17:0e92). */
+      this.hand = 4;
+      this.handFrame = 4;
+      this.handCountdown = 2;
       this.pettingLevel = Math.min(this.pettingLevel, 16);
 
       let area = -1;
