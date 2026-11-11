@@ -29,6 +29,7 @@ import {
   Pet,
   pickGait,
   pickPetSpot,
+  rollsOver,
   pickTarget,
   sleepPlan,
   stepHand,
@@ -611,6 +612,48 @@ function followWaitLooks(lines: string[]) {
   return result;
 }
 
+/**
+ * Each stroke on the head, body or hindquarters (`DoPettingGood`, the draw
+ * returning to seg17:105b or 1124) against `rollsOver`, with how much the
+ * dog had enjoyed the petting as the frame began: the wriggle on its back
+ * drawn after it in the frame (returning to seg17:0fa9) just where it rolls
+ * over.
+ */
+function followStrokes(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { strokes: 0, rolled: 0, held: 0, wrong: [] as string[] };
+
+  for (const { tick, drawn } of frames) {
+    const level = tick[20];
+
+    if (level === undefined) {
+      continue;
+    }
+
+    drawn.forEach(({ seed, segment, offset }, k) => {
+      if (segment !== 17 || (offset !== 0x105b && offset !== 0x1124)) {
+        return;
+      }
+
+      result.strokes++;
+      const ours = rollsOver(level, randFrom(seed).rand);
+      /* (Its eyes put first, `PushPettingEyePos`, which may draw.) */
+      const theirs = drawn
+        .slice(k + 1)
+        .some((draw) => draw.segment === 17 && draw.offset === 0xfa9);
+      result.rolled += theirs ? 1 : 0;
+
+      if (ours === theirs) {
+        result.held++;
+      } else {
+        result.wrong.push(`frame ${tick[0]}: rolls over ${ours}, not ${theirs}, at ${level}`);
+      }
+    });
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -742,6 +785,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     const looks = followWaitLooks(lines);
     console.log(`waiting looks: ${looks.looks} drawn, ${looks.held} held`);
     expect(looks.wrong).toEqual([]);
+
+    const strokes = followStrokes(lines);
+    console.log(
+      `strokes: ${strokes.strokes} drawn, ${strokes.rolled} rolled over, ${strokes.held} held`
+    );
+    expect(strokes.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);

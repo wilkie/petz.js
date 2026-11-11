@@ -255,13 +255,15 @@ static void hookPushes(void)
     scriptOn = (PUSHELEMENTS)hookPrologue(81, (void __far *)scripting);
 }
 
-/* The end of a frame's line: whether the dog is being petted (`+0x123a`)
- * and its petting hand -- its frame, its count to the next and its step
- * (`+0x1232`, `+0x1234`, `+0x1236`). */
+/* The end of a frame's line: whether the dog is being petted (`+0x123a`),
+ * its petting hand -- its frame, its count to the next and its step
+ * (`+0x1232`, `+0x1234`, `+0x1236`) -- and how much it has enjoyed the
+ * petting (`+0x122a`). */
 static void hand(unsigned char __far *module)
 {
-    say(" %d %d %d %d\r\n", *(int __far *)(module + 0x123a), *(int __far *)(module + 0x1232),
-        *(int __far *)(module + 0x1234), *(int __far *)(module + 0x1236));
+    say(" %d %d %d %d %d\r\n", *(int __far *)(module + 0x123a), *(int __far *)(module + 0x1232),
+        *(int __far *)(module + 0x1234), *(int __far *)(module + 0x1236),
+        *(int __far *)(module + 0x122a));
 }
 
 long FAR PASCAL WindowProc(HWND window, UINT message, WPARAM w, LPARAM l)

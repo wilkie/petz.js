@@ -643,6 +643,16 @@ export function waitLook(rand: Rand): 'about' | 'cursor' | undefined {
   return rand() % 2 ? 'cursor' : undefined;
 }
 
+/**
+ * Whether a dog petted on its head, body or hindquarters rolls onto its
+ * back instead (`DoPettingGood`, seg17:1056, 111f): `rand() % 16 + 7` under
+ * how much it has enjoyed the petting -- never before its eighth stroke, and
+ * at most nine times in sixteen, its enjoyment held to 16.
+ */
+export function rollsOver(level: number, rand: Rand): boolean {
+  return (rand() % 16) + 7 < level;
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -2760,7 +2770,7 @@ export class Pet {
       }
 
       if (area === AREA.head || area === AREA.body || area === AREA.hindquarters) {
-        if (this.rand() % 16 < this.pettingLevel) {
+        if (rollsOver(this.pettingLevel, this.rand)) {
           return this.pettedOnBack();
         }
 
