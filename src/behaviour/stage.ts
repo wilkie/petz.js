@@ -14,7 +14,15 @@ import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
 import { ballAt } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
-import { type Angles, type Head, type Placed, project, scalesForAge } from '../render/project.ts';
+import {
+  type Angles,
+  type Blend,
+  type Head,
+  type Placed,
+  project,
+  type Scales,
+  scalesForAge,
+} from '../render/project.ts';
 import { skeletonOf } from '../render/skeleton.ts';
 import { type PetWorld } from './pet.ts';
 import { DEFAULT_GLUE, type Step } from './timeline.ts';
@@ -239,6 +247,43 @@ export function ballsBox(
   };
 }
 
+/**
+ * A frame's rectangle as the engine boxes it (`Ballz::GetFrame`): its balls
+ * each at its own size and at the size the frame's extras give it -- so a
+ * ball the frame shrinks keeps the rectangle it had -- with what the dog
+ * holds, and 2 more each way (`ballsBox`).
+ */
+export function frameBox(
+  breed: Breed,
+  header: AnimationHeader,
+  frame: Frame,
+  scales: Scales,
+  rotation: number,
+  puppiness: number,
+  head?: Head,
+  angles?: Partial<Angles>,
+  blend?: Blend,
+  held?: (
+    placed: Placed[]
+  ) => { left: number; top: number; right: number; bottom: number } | undefined
+) {
+  const placed = project(breed, header, frame, scales, rotation, puppiness, head, angles, blend);
+  const unsized = frame.extras.length
+    ? project(
+        breed,
+        header,
+        { ...frame, extras: [] },
+        scales,
+        rotation,
+        puppiness,
+        head,
+        angles,
+        blend
+      )
+    : [];
+  return ballsBox([...placed, ...unsized], held?.(placed));
+}
+
 export class Stage implements PetWorld {
   /** The dog's origin on the stage, from its top left. */
   x: number;
@@ -364,7 +409,7 @@ export class Stage implements PetWorld {
     angles = this.angles,
     blend = this.blend
   ) {
-    const placed = project(
+    return frameBox(
       this.breed,
       this.header,
       frame,
@@ -373,9 +418,9 @@ export class Stage implements PetWorld {
       100 - this.age,
       head,
       angles,
-      this.blendOf(blend)
+      this.blendOf(blend),
+      (placed) => this.heldRect(placed)
     );
-    return ballsBox(placed, this.heldRect(placed));
   }
 
   /** The blend as `project` takes it, its reference a frame. */
@@ -513,8 +558,13 @@ export class Stage implements PetWorld {
 
   /** The rectangle the dog is drawn in. */
   rect() {
-    const placed = this.placed();
-    return ballsBox(placed, this.heldRect(placed));
+    const box = this.boxOf(this.frame, this.rotation);
+    return {
+      left: box.left + this.x,
+      top: box.top + this.y,
+      right: box.right + this.x,
+      bottom: box.bottom + this.y,
+    };
   }
 
   /** What the dog holds, by the ball of its that holds it: the ball's own rectangle there. */

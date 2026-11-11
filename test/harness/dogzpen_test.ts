@@ -42,7 +42,7 @@ import {
   waitLook,
 } from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
-import { ballRect, ballsBox, rollBall, Stage } from '../../src/behaviour/stage.ts';
+import { ballRect, frameBox, rollBall, Stage } from '../../src/behaviour/stage.ts';
 import type { Step } from '../../src/behaviour/timeline.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { parseLnz } from '../../src/formats/lnz.ts';
@@ -1085,7 +1085,7 @@ function headOf(
  * `Ballz::GetFrame`) against the model's: the frame, the breed's own
  * (`DATA\BIGDOG.LNZ`, its extensions), its age (its factor 10), and the
  * dog's rotation and angles as the frame left them, projected and boxed
- * (`ballsBox`) -- where the head is not turned nor the frame blended, whose
+ * (`frameBox`) -- where the head is not turned nor the frame blended, whose
  * wobbles the trace does not keep.
  */
 function followFrameBoxes(lines: string[]) {
@@ -1152,7 +1152,7 @@ function followFrameBoxes(lines: string[]) {
       head = headOf(lastHead, shapes[frame], blending, scales.pet, breed);
     }
 
-    const placed = project(
+    const box = frameBox(
       breed,
       header,
       shapes[frame],
@@ -1161,11 +1161,8 @@ function followFrameBoxes(lines: string[]) {
       100 - age,
       head,
       { tilt, spin, roll },
-      blending
-    );
-    const box = ballsBox(
-      placed,
-      heldSlot === undefined ? undefined : ballRect(placed[[51, 45][heldSlot]])
+      blending,
+      (placed) => (heldSlot === undefined ? undefined : ballRect(placed[[51, 45][heldSlot]]))
     );
     result.holding += heldSlot === undefined ? 0 : 1;
     const ours = [box.left, box.top, box.right, box.bottom];
@@ -1203,6 +1200,7 @@ function followPlacing(lines: string[]) {
     parseAnimation(header, n, read(`DATA/${n}.BDT`))
   );
   const result = {
+    nearlyAt: [] as string[],
     slid: 0,
     rewobbled: 0,
     rewobbledOff: [] as string[],
@@ -1376,8 +1374,11 @@ function followPlacing(lines: string[]) {
         `frame ${tick[0]}: ${was.frame} to ${now.frame} glued by ${glue} out of a blend: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
       );
     } else if (off[0] + off[1] === 1) {
-      /* (A pixel out: where a far ball's projection is, as the boxes.) */
+      /* (A pixel out.) */
       result.nearly++;
+      result.nearlyAt.push(
+        `frame ${tick[0]}: ${was.frame} to ${now.frame}${glue === undefined ? '' : ` glued by ${glue}`}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
+      );
     } else if (result.wrong.length < 10) {
       result.wrong.push(
         `frame ${tick[0]}: ${was.frame} to ${now.frame}${glue === undefined ? '' : ` glued by ${glue}`}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
@@ -1590,6 +1591,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `placing: ${placing.plain} moved plainly, ${placing.glued} glued (${placing.slid} sliding), ${placing.held} held, ${placing.nearly} a pixel out (${placing.holding} taking up or letting go, ${placing.sliding} sliding, not followed)`
     );
     expect(placing.wrong).toEqual([]);
+
+    if (placing.nearlyAt.length) {
+      console.log(`placing, a pixel out:\n  ${placing.nearlyAt.join('\n  ')}`);
+    }
 
     if (placing.rewobbledOff.length) {
       console.log(
