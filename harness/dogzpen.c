@@ -559,6 +559,34 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         hand(module);
 
+        /* `state` and the dog's placing as the frame left it: its sprite's
+         * rectangle (`+0x60` to `+0x66`) and its middle (`+0x86`, `+0x88`);
+         * then its state (`BallState`, `+0x51a`): its three scales (longs),
+         * rotation, tilt, spin and roll (`+0xc` to `+0x12`), frame (`+0x18`),
+         * head turn and nod and `+0x1e`, blend scale and reference frame
+         * (`+0x32`, `+0x34`), the frame's rectangle in its own terms (`+0x38`
+         * to `+0x3e`) and `+0x42`, `+0x44`. */
+        if (sprite) {
+            unsigned char __far *at = sprite + 0x51a;
+            static const int words[] = {0xc, 0xe, 0x10, 0x12, 0x18, 0x1a, 0x1c, 0x1e,
+                                        0x32, 0x34, 0x38, 0x3a, 0x3c, 0x3e, 0x42, 0x44};
+
+            say("state");
+
+            for (answer = 0; answer < 4; answer++) {
+                say(" %d", *(int __far *)(sprite + 0x60 + 2 * answer));
+            }
+
+            say(" %d %d %ld %ld %ld", *(int __far *)(sprite + 0x86), *(int __far *)(sprite + 0x88),
+                *(long __far *)at, *(long __far *)(at + 4), *(long __far *)(at + 8));
+
+            for (answer = 0; answer < 16; answer++) {
+                say(" %d", *(int __far *)(at + words[answer]));
+            }
+
+            say("\r\n");
+        }
+
         /* Each draw kept: `drawn k seed selector offset`, where it returns to. */
         for (answer = 0; answer < draws && answer < KEPT; answer++) {
             say("drawn %d %lu %u %u\r\n", answer, drawnSeed[answer], drawnSeg[answer],

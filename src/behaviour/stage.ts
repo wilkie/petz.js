@@ -219,6 +219,20 @@ export function rollBall(ball: Ball, width: number, height: number) {
   return bounced;
 }
 
+/**
+ * The rectangle a frame's balls take, as the engine keeps it for the dog's
+ * sprite (`BallState` `+0x38` to `+0x3e`, the sprite's `+0x60`): every ball
+ * to its radius, and 2 more each way.
+ */
+export function ballsBox(placed: { x: number; y: number; diameter: number }[]) {
+  return {
+    left: Math.min(...placed.map((ball) => ball.x - ball.diameter / 2)) - 2,
+    top: Math.min(...placed.map((ball) => ball.y - ball.diameter / 2)) - 2,
+    right: Math.max(...placed.map((ball) => ball.x + ball.diameter / 2)) + 2,
+    bottom: Math.max(...placed.map((ball) => ball.y + ball.diameter / 2)) + 2,
+  };
+}
+
 export class Stage implements PetWorld {
   /** The dog's origin on the stage, from its top left. */
   x: number;
@@ -447,13 +461,7 @@ export class Stage implements PetWorld {
 
   /** The rectangle the dog is drawn in. */
   rect() {
-    const placed = this.placed();
-    return {
-      left: Math.min(...placed.map((ball) => ball.x - ball.diameter / 2)),
-      top: Math.min(...placed.map((ball) => ball.y - ball.diameter / 2)),
-      right: Math.max(...placed.map((ball) => ball.x + ball.diameter / 2)),
-      bottom: Math.max(...placed.map((ball) => ball.y + ball.diameter / 2)),
-    };
+    return ballsBox(this.placed());
   }
 
   /**

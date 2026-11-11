@@ -42,7 +42,11 @@ import {
   waitLook,
 } from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
-import { rollBall } from '../../src/behaviour/stage.ts';
+import { ballsBox, rollBall } from '../../src/behaviour/stage.ts';
+import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
+import { parseLnz } from '../../src/formats/lnz.ts';
+import { extendFrames } from '../../src/render/extend.ts';
+import { project, scalesForAge } from '../../src/render/project.ts';
 import { readEngineScripts, readTrickScripts } from '../../src/formats/engine.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
@@ -202,6 +206,8 @@ interface Frame {
   }[];
   drawn: { seed: number; segment: number | undefined; offset: number }[];
   frame: number[];
+  /** The dog's sprite and state as the frame left it (`state`). */
+  state?: number[];
   /** The ball as the frame began (`ball`): held, in the box, its rectangle. */
   ball?: number[];
   /** Whether the ball was stopped in the frame (`BallSprite::Stop`). */
@@ -271,6 +277,8 @@ function readTrace(lines: string[]) {
       asked.after = values[2];
     } else if (kind === 'stored' && open) {
       open.stored.push({ sprite: values[0], script: values[1], draws: values[3] });
+    } else if (kind === 'state' && open) {
+      open.state = values;
     } else if (kind === 'ballstop' && open) {
       open.stopped = true;
     } else if (kind === 'grabbable' && open) {
@@ -988,6 +996,70 @@ function followRoll(lines: string[]) {
   return result;
 }
 
+/**
+ * The rectangle each frame's balls take (`BallState` `+0x38` to `+0x3e`,
+ * `Ballz::GetFrame`) against the model's: the frame, the breed's own
+ * (`DATA\BIGDOG.LNZ`, its extensions), its age (its factor 10), and the
+ * dog's rotation and angles as the frame left them, projected and boxed
+ * (`ballsBox`) -- where the head is not turned nor the frame blended, whose
+ * wobbles the trace does not keep.
+ */
+function followFrameBoxes(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const read = (path: string) => new Uint8Array(readFileSync(join(DRIVE, 'DOGZ.DOG', path)));
+  const header = parseBhd(read('DATA/ALL_PTZ.BHD'));
+  const breed = parseLnz(new TextDecoder('latin1').decode(read('DATA/BIGDOG.LNZ')));
+  const shapes = extendFrames(
+    header.animations.flatMap((_, n) => parseAnimation(header, n, read(`DATA/${n}.BDT`))),
+    breed
+  );
+  const result = { frames: 0, turned: 0, held: 0, wrong: [] as string[] };
+
+  for (const { tick, state } of frames) {
+    if (!state || state.length < 25) {
+      continue;
+    }
+
+    const [rotation, tilt, spin, roll, frame, turn, nod, , blend] = state.slice(9, 18);
+    const theirs = state.slice(19, 23);
+
+    if (turn || nod || blend !== 100) {
+      result.turned++;
+      continue;
+    }
+
+    result.frames++;
+    const age = tick[14];
+    const box = ballsBox(
+      project(
+        breed,
+        header,
+        shapes[frame],
+        scalesForAge(breed, age),
+        rotation,
+        100 - age,
+        undefined,
+        {
+          tilt,
+          spin,
+          roll,
+        }
+      )
+    );
+    const ours = [box.left, box.top, box.right, box.bottom];
+
+    if (ours.every((edge, n) => edge === theirs[n])) {
+      result.held++;
+    } else if (result.wrong.length < 10) {
+      result.wrong.push(
+        `frame ${tick[0]} (${frame}, turned ${rotation}): ${ours.join(' ')}, not ${theirs.join(' ')}`
+      );
+    }
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -1147,6 +1219,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     const roll = followRoll(lines);
     console.log(`ball rolling: ${roll.frames} frames, ${roll.bounced} bounces, ${roll.held} held`);
     expect(roll.wrong).toEqual([]);
+
+    const boxes = followFrameBoxes(lines);
+    console.log(
+      `frame boxes: ${boxes.frames} frames, ${boxes.held} held (${boxes.turned} with the head turned, not followed)`
+    );
+    expect(boxes.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);
