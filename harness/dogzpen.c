@@ -30,7 +30,8 @@
  *   seed selector offset` for each draw, the seed before it and where it
  *   returned to; and within it, `stored`, `neutral` and `script` for each
  *   script pushed to a sprite, `target` and `targeted` for each point the
- *   dog is to walk to, and `gait` and `gaited` for each way it goes.
+ *   dog is to walk to, `gait` and `gaited` for each way it goes, and
+ *   `spot` and `spotted` for each spot it wants petting on.
  */
 #include <dos.h>
 #include <string.h>
@@ -228,8 +229,24 @@ static int __cdecl __far __loadds gaiting(void __far *module, int pace, int over
     return answer;
 }
 
+/* And `PetModule::PickNewPetSpot` (390, seg17:192b), where the dog wants
+ * petting next: `spot was draws` with the spot it had (`+0x1224`), and
+ * `spotted spot strokes draws` with the one it picked and its strokes
+ * (`+0x1226`). */
+typedef void(__cdecl __far *PICKSPOT)(unsigned char __far *module);
+static PICKSPOT spotOn;
+
+static void __cdecl __far __loadds spotting(unsigned char __far *module)
+{
+    say("spot %d %d\r\n", *(int __far *)(module + 0x1224), draws);
+    spotOn(module);
+    say("spotted %d %d %d\r\n", *(int __far *)(module + 0x1224), *(int __far *)(module + 0x1226),
+        draws);
+}
+
 static void hookPushes(void)
 {
+    spotOn = (PICKSPOT)hookPrologue(390, (void __far *)spotting);
     gaitOn = (PICKGAIT)hookPrologue(512, (void __far *)gaiting);
     targetOn = (NEWTARGET)hookPrologue(368, (void __far *)targeting);
     newStateOn = (NEWSTATE)hookPrologue(496, (void __far *)changing);

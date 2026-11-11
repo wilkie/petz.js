@@ -605,6 +605,31 @@ export function stepHand(
   return { frame, step, countdown };
 }
 
+/**
+ * The spot the dog wants petting on next (`PetModule::PickNewPetSpot`,
+ * seg17:192b): another of the three than it had, at random, kept by its
+ * chance in 100; and for how many strokes, `rand() % extra + strokes`.
+ */
+export function pickPetSpot(
+  was: number,
+  spots: { chance: number; strokes: number; extra: number }[],
+  rand: Rand
+): { spot: number; strokes: number } {
+  let spot = was;
+
+  for (let tries = 0; tries < 1000; tries++) {
+    do {
+      spot = rand() % 3;
+    } while (spot === was);
+
+    if (spots[spot].chance >= rand() % 100) {
+      break;
+    }
+  }
+
+  return { spot, strokes: (rand() % spots[spot].extra) + spots[spot].strokes };
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -2520,21 +2545,9 @@ export class Pet {
 
   /** `PetModule::PickNewPetSpot` (seg17:192b): another spot, by the spots' chances. */
   private pickNewPetSpot() {
-    const was = this.petSpot;
-    const spots = this.data.engineScripts.petSpots;
-
-    for (let tries = 0; tries < 1000; tries++) {
-      do {
-        this.petSpot = this.rand() % 3;
-      } while (this.petSpot === was);
-
-      if (spots[this.petSpot].chance >= this.rand() % 100) {
-        break;
-      }
-    }
-
-    const spot = spots[this.petSpot];
-    this.spotStrokes = (this.rand() % spot.extra) + spot.strokes;
+    const picked = pickPetSpot(this.petSpot, this.data.engineScripts.petSpots, this.rand);
+    this.petSpot = picked.spot;
+    this.spotStrokes = picked.strokes;
   }
 
   /**

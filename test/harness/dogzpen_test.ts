@@ -28,6 +28,7 @@ import {
   keepsWalking,
   Pet,
   pickGait,
+  pickPetSpot,
   pickTarget,
   sleepPlan,
   stepHand,
@@ -165,6 +166,7 @@ interface Frame {
   tick: number[];
   changes: { from: number; to: number; draws: number }[];
   stored: { sprite: number; script: number; draws: number }[];
+  spots: { was: number; draws: number; spot?: number; strokes?: number; after?: number }[];
   gaits: { pace: number; overrides: number; draws: number; answer?: number; after?: number }[];
   targets: {
     distance: number;
@@ -209,6 +211,7 @@ function readTrace(lines: string[]) {
         tick: values,
         changes: [],
         stored: [],
+        spots: [],
         gaits: [],
         targets: [],
         drawn: [],
@@ -217,6 +220,11 @@ function readTrace(lines: string[]) {
       frames.push(open);
     } else if (kind === 'newstate' && open) {
       open.changes.push({ from: values[0], to: values[1], draws: values[2] });
+    } else if (kind === 'spot' && open) {
+      open.spots.push({ was: values[0], draws: values[1] });
+    } else if (kind === 'spotted' && open) {
+      const asked = open.spots[open.spots.length - 1];
+      [asked.spot, asked.strokes, asked.after] = values;
     } else if (kind === 'gait' && open) {
       open.gaits.push({ pace: values[0], overrides: values[1], draws: values[2] });
     } else if (kind === 'gaited' && open) {
@@ -536,6 +544,40 @@ function followHand(lines: string[]) {
   return result;
 }
 
+/**
+ * Each spot the dog wanted petting on (`PickNewPetSpot`) against
+ * `pickPetSpot`, with the engine's table of spots (`ds:0x20d0`): the same
+ * spot and strokes in as many draws.
+ */
+function followPetSpots(lines: string[]) {
+  const { frames, dll } = readTrace(lines);
+  const { petSpots } = readEngineScripts(dll);
+  const result = { spots: 0, held: 0, wrong: [] as string[] };
+
+  for (const { tick, spots, drawn, frame } of frames) {
+    for (const { was, draws, spot, strokes, after } of spots) {
+      if (spot === undefined || after === undefined || after > drawn.length) {
+        continue;
+      }
+
+      result.spots++;
+      const { rand } = randFrom(drawn[draws]?.seed ?? frame[3]);
+      let used = 0;
+      const ours = pickPetSpot(was, petSpots, () => (used++, rand()));
+
+      if (ours.spot === spot && ours.strokes === strokes && used === after - draws) {
+        result.held++;
+      } else {
+        result.wrong.push(
+          `frame ${tick[0]}: spot ${ours.spot} for ${ours.strokes} in ${used}, not ${spot} for ${strokes} in ${after - draws}`
+        );
+      }
+    }
+  }
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -659,6 +701,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     const hand = followHand(lines);
     console.log(`petting hand: ${hand.frames} frames, ${hand.steps} steps, ${hand.held} held`);
     expect(hand.wrong).toEqual([]);
+
+    const spotted = followPetSpots(lines);
+    console.log(`petting spots: ${spotted.spots} picked, ${spotted.held} held`);
+    expect(spotted.wrong).toEqual([]);
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);
