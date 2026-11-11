@@ -212,6 +212,8 @@ interface Frame {
   state?: number[];
   /** How its rectangle was moved in the frame (`moved`: how, the glue ball). */
   moved: number[][];
+  /** The slide as the frame left it (`slide`): limit, count, place and speed each way (floats' bits). */
+  slide?: number[];
   /** The head's block for the dog's own state, placed in the frame (`head 1`), the last. */
   head?: number[];
   /** And for the copy the plain move takes of the frame before at the new angles (`head 0`), the last. */
@@ -304,6 +306,8 @@ function readTrace(lines: string[]) {
       holds = Math.max(0, holds - 1);
       open.holding = true;
       open.heldSlot = undefined;
+    } else if (kind === 'slide' && open) {
+      open.slide = values;
     } else if (kind === 'head' && open && values[0] === 1) {
       open.head = values.slice(1, 10);
     } else if (kind === 'head' && open) {
@@ -324,6 +328,21 @@ function readTrace(lines: string[]) {
       open.drawn.push({ seed: values[1], segment: segments.get(values[2]), offset: values[3] });
     }
   }
+
+  /* The ball held throughout a frame -- in the mouth (`+0x18c`, slot 0) or
+   * under a paw (`+0x18e`, slot 1) as it begins and as the next begins --
+   * where the trace keeps it: which, rather than asked (`grab` may take
+   * nothing), it is held by. */
+  frames.forEach((frame, n) => {
+    const [now, next] = [frame.ball, frames[n + 1]?.ball];
+
+    if (now && next && now.length >= 10 && next.length >= 10) {
+      const held = (ball: number[]) => (ball[8] ? 0 : ball[9] ? 1 : undefined);
+      const [was, is] = [held(now), held(next)];
+      frame.holding = was !== undefined || is !== undefined;
+      frame.heldSlot = was !== undefined && was === is ? was : undefined;
+    }
+  });
 
   return { tricks, frames, dll };
 }
@@ -1184,6 +1203,7 @@ function followPlacing(lines: string[]) {
     parseAnimation(header, n, read(`DATA/${n}.BDT`))
   );
   const result = {
+    slid: 0,
     rewobbled: 0,
     rewobbledOff: [] as string[],
     outOfBlend: 0,
@@ -1228,11 +1248,27 @@ function followPlacing(lines: string[]) {
       return;
     }
 
-    /* (Nor sliding, `8af4`: the slide is not yet followed.) */
-    if (state!.length >= 31 && state![30]) {
+    /* Sliding (`8af4`), as the frame before left it: the rectangle moved
+     * on by the whole part of the slide's place, as it changed (seg7:6f6b
+     * on); where the trace keeps the slide. */
+    const sliding = before!.length >= 31 && before![30];
+    const slidAt = (slide?: number[]) => [
+      Math.trunc(floatOf(slide![2])),
+      Math.trunc(floatOf(slide![3])),
+    ];
+
+    if (sliding && (!frames[n].slide || !frames[n - 1].slide)) {
       result.sliding++;
       return;
     }
+
+    const slid = sliding
+      ? [
+          slidAt(frames[n].slide)[0] - slidAt(frames[n - 1].slide)[0],
+          slidAt(frames[n].slide)[1] - slidAt(frames[n - 1].slide)[1],
+        ]
+      : [0, 0];
+    result.slid += sliding ? 1 : 0;
 
     const glue = moved[0][0] === 1 ? moved[0][1] : undefined;
     const pose = (of: number[], at: number) => {
@@ -1300,7 +1336,7 @@ function followPlacing(lines: string[]) {
       now.blend
     );
     const to = stage.rect();
-    const ours = [to.left - before![0], to.top - before![1]];
+    const ours = [to.left - before![0] + slid[0], to.top - before![1] + slid[1]];
     const theirs = [state![0] - before![0], state![1] - before![1]];
 
     if (glue === undefined) {
@@ -1551,7 +1587,7 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
 
     const placing = followPlacing(lines);
     console.log(
-      `placing: ${placing.plain} moved plainly, ${placing.glued} glued, ${placing.held} held, ${placing.nearly} a pixel out (${placing.holding} taking up or letting go, ${placing.sliding} sliding, not followed)`
+      `placing: ${placing.plain} moved plainly, ${placing.glued} glued (${placing.slid} sliding), ${placing.held} held, ${placing.nearly} a pixel out (${placing.holding} taking up or letting go, ${placing.sliding} sliding, not followed)`
     );
     expect(placing.wrong).toEqual([]);
 

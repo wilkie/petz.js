@@ -1329,8 +1329,9 @@ export class Pet {
       this.placedBy = placedBy;
 
       if (this.slide && this.slide.left-- > 0) {
-        this.slide.x += this.slide.dx;
-        this.slide.y += this.slide.dy;
+        /* Each kept as a float (`-0x71ec`, `-0x71e8`), as the engine stores it. */
+        this.slide.x = Math.fround(this.slide.x + this.slide.dx);
+        this.slide.y = Math.fround(this.slide.y + this.slide.dy);
         const [x, y] = [Math.trunc(this.slide.x), Math.trunc(this.slide.y)];
         this.world.nudge?.(x - this.slide.movedX, y - this.slide.movedY);
         this.slide.movedX = x;
@@ -6050,9 +6051,10 @@ export class Pet {
     }
 
     const there = this.world.lookAhead(frames, ball);
+    /* Its speed each way a float (`-0x71e4`, `-0x71e0`, seg7:730e on). */
     this.slide = {
-      dx: (point.x - there.x) / frames.length,
-      dy: (point.y - there.y) / frames.length,
+      dx: Math.fround((point.x - there.x) / frames.length),
+      dy: Math.fround((point.y - there.y) / frames.length),
       x: 0,
       y: 0,
       movedX: 0,

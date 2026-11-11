@@ -37,7 +37,8 @@
  *   and `spotted` for each spot it wants petting on, `grabbable` for
  *   each time it is asked whether it can grab the ball, `ballstop` as the
  *   ball is stopped, `moved` for each way the dog's rectangle is moved,
- *   `grab` and `release` for what it takes up and lets go of, and `head`
+ *   `grab` and `release` as it is asked to take up and let go of things,
+ *   and `head`
  *   for each placing of a head turned.
  */
 #include <dos.h>
@@ -615,15 +616,18 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         /* With the ball (64): `ball held in-box left top right bottom vx vy`
          * -- the ball's sprite (`PetModule` `+0x78`), as the frame begins,
-         * its speed (`+0x174`, `+0x178`) each a float's bits. */
+         * its speed (`+0x174`, `+0x178`) each a float's bits, and whether the
+         * dog holds it in its mouth or under a paw (`+0x18c`, `+0x18e`, as
+         * `GrabObject` marks them). */
         if (forcing & 64) {
             unsigned char __far *ball = *(unsigned char __far *__far *)(module + 0x78);
 
-            say("ball %d %d %d %d %d %d %lu %lu\r\n", *(int __far *)(ball + 0x16a),
+            say("ball %d %d %d %d %d %d %lu %lu %d %d\r\n", *(int __far *)(ball + 0x16a),
                 *(int __far *)(ball + 0x16c), *(int __far *)(ball + 0x58),
                 *(int __far *)(ball + 0x5a), *(int __far *)(ball + 0x5c),
                 *(int __far *)(ball + 0x5e), *(unsigned long __far *)(ball + 0x174),
-                *(unsigned long __far *)(ball + 0x178));
+                *(unsigned long __far *)(ball + 0x178), *(int __far *)(ball + 0x18c),
+                *(int __far *)(ball + 0x18e));
         }
 
         draws = 0;
@@ -683,6 +687,15 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(sprite + 0x2110), *(int __far *)(sprite + 0x2112),
                 *(void __far *__far *)(at + 0x40c) != 0, *(void __far *__far *)(at + 0x414) != 0,
                 *(int __far *)(sprite + (unsigned)-0x71f2));
+
+            /* And the slide: its limit and count (`-0x71f0`, `-0x71ee`), and its
+             * place and speed each way (`-0x71ec` on), floats' bits. */
+            say("slide %d %d %lu %lu %lu %lu\r\n", *(int __far *)(sprite + (unsigned)-0x71f0),
+                *(int __far *)(sprite + (unsigned)-0x71ee),
+                *(unsigned long __far *)(sprite + (unsigned)-0x71ec),
+                *(unsigned long __far *)(sprite + (unsigned)-0x71e8),
+                *(unsigned long __far *)(sprite + (unsigned)-0x71e4),
+                *(unsigned long __far *)(sprite + (unsigned)-0x71e0));
         }
 
         /* Each draw kept: `drawn k seed selector offset`, where it returns to. */
