@@ -1053,6 +1053,14 @@ export class Pet {
     this.data.brain?.pulse();
     const centredAt = this.centreAt ?? undefined;
     this.centreAt = null;
+    /* (Placed again for the steering's ask, before the frame's own, the turn and nod as they were.) */
+    if (this.steeredTracking && this.lastPose) {
+      const [yaw, pitch] = [this.headYaw, this.headPitch];
+      [this.headYaw, this.headPitch] = [this.lastPose.yaw, this.lastPose.pitch];
+      this.headTrackPrep();
+      [this.headYaw, this.headPitch] = [yaw, pitch];
+    }
+
     const head = this.headTrackPrep();
     const angles = {
       tilt: this.fudged(AXIS.tilt),
@@ -1316,6 +1324,11 @@ export class Pet {
     if (!this.queue.some((item) => 'step' in item && !item.step.reference)) {
       flags |= 1;
     }
+
+    /* Steering, the engine asks where the nose of the frame before is
+     * (`GetBallOffset`), its state changed since it was kept: while the head
+     * tracks, its head placed again (seg7:6b38 on; the tick does it). */
+    this.steeredTracking = !!this.steer && this.headTracking;
 
     if (this.steer) {
       flags |= this.steerFrame();
@@ -1821,6 +1834,9 @@ export class Pet {
   private handFrame = 0;
   private handStep = -1;
   private handCountdown = 0;
+
+  /** Whether this tick's pop steered with the head tracking: the head placed once more. */
+  private steeredTracking = false;
 
   /** The dog's rotation, angles and head turn and nod as the last tick left them (`BallState` `+0xec`). */
   private lastPose:

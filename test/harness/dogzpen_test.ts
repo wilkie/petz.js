@@ -216,6 +216,8 @@ interface Frame {
   slide?: number[];
   /** The head's block for the dog's own state, placed in the frame (`head 1`), the last. */
   head?: number[];
+  /** How many times the head was placed for the dog's own state in the frame. */
+  headPlacings?: number;
   /** And for the copy the plain move takes of the frame before at the new angles (`head 0`), the last. */
   headCopy?: number[];
   /** Whether the dog held anything at any time in the frame (`grab` to `release`). */
@@ -310,6 +312,7 @@ function readTrace(lines: string[]) {
       open.slide = values;
     } else if (kind === 'head' && open && values[0] === 1) {
       open.head = values.slice(1, 10);
+      open.headPlacings = (open.headPlacings ?? 0) + 1;
     } else if (kind === 'head' && open) {
       open.headCopy = values.slice(1, 10);
     } else if (kind === 'moved' && open) {
@@ -1420,6 +1423,47 @@ function followHeadCopies(lines: string[]) {
   return result;
 }
 
+/**
+ * How often the head is placed for the dog's own state in a frame, its head
+ * tracking, moved plainly: once, and once more before while it steers -- the
+ * steering asking where the nose of the frame before is (`GetBallOffset`,
+ * `PopScript` seg7:6b38 on), the state changed since it was kept -- as the
+ * model's rule has it; steering as the frame begins, as the frame before left it.
+ */
+function followSteeredHeads(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { frames: 0, steered: 0, held: 0, wrong: [] as string[] };
+
+  frames.forEach(({ tick, state, moved, headPlacings }, n) => {
+    const before = frames[n - 1]?.state;
+
+    if (
+      !state ||
+      !before ||
+      state.length < 28 ||
+      !state[16] ||
+      !before[16] ||
+      moved.length !== 1 ||
+      moved[0][0]
+    ) {
+      return;
+    }
+
+    result.frames++;
+    const steering = !!before[25];
+    result.steered += steering ? 1 : 0;
+    const ours = 1 + (steering ? 1 : 0);
+
+    if ((headPlacings ?? 0) === ours) {
+      result.held++;
+    } else if (result.wrong.length < 10) {
+      result.wrong.push(`frame ${tick[0]}: steering ${steering}, placed ${headPlacings ?? 0}`);
+    }
+  });
+
+  return result;
+}
+
 function followIdleTricks(lines: string[]) {
   const { tricks, frames } = readTrace(lines);
   const result = { chosen: 0, held: 0, wrong: [] as string[] };
@@ -1613,6 +1657,11 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `head placed afresh: ${copies.plain} plain moves with the head tracking, ${copies.copies} with a copy, ${copies.held} held`
     );
     expect(copies.wrong).toEqual([]);
+
+    const steered = followSteeredHeads(lines);
+    console.log(
+      `head placed while steering: ${steered.frames} frames, ${steered.steered} steering, ${steered.held} held`
+    );
 
     const plans = followIdlePlans(lines);
     console.log(`idle plans: ${plans.plans} made, ${plans.ends} done, ${plans.held} held`);
