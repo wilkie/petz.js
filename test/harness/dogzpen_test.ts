@@ -1879,7 +1879,27 @@ function followPokes(lines: string[]) {
     parseAnimation(header, n, read(`DATA/${n}.BDT`))
   );
   const extended = extendFrames(shapes, breed);
-  const result = { clicks: 0, poked: 0, held: 0, notPoked: [] as string[], wrong: [] as string[] };
+  const result = {
+    clicks: 0,
+    poked: 0,
+    held: 0,
+    notPoking: 0,
+    notStanding: 0,
+    reacting: 0,
+    moved: 0,
+    wrong: [] as string[],
+  };
+  const bodyAreas = readBodyAreas(dll, header.ballCount);
+  /* Each click's neutral position type (`poking`). */
+  const poking = new Map<number, number>();
+
+  for (const line of lines) {
+    if (line.startsWith('poking ')) {
+      const values = line.split(' ').slice(1).map(Number);
+      poking.set(values[0], values[2]);
+    }
+  }
+
   const pokes = [AREA.face, AREA.tongue, AREA.rightLeg, AREA.leftLeg, AREA.tail] as number[];
   const cursors = new Map<number, number[]>();
   let lastHead: number[] | undefined;
@@ -1907,42 +1927,66 @@ function followPokes(lines: string[]) {
     }
 
     result.clicks++;
-    const blend = pose[17] === 100 ? undefined : { scale: pose[17], reference: pose[18] };
-    const head =
-      pose[16] && heads[n - 1]
-        ? headOf(
-            heads[n - 1]!,
-            extended[pose[13]],
-            blend && { scale: blend.scale, reference: extended[blend.reference] },
-            scalesForAge(breed, tick[14]).pet,
-            breed
-          )
-        : undefined;
-    const stage = new Stage(292, 273, breed, header, shapes, tick[14]);
-    stage.show(
-      { frame: pose[13] } as Step,
-      pose[9],
-      undefined,
-      undefined,
-      undefined,
-      head,
-      { tilt: pose[10], spin: pose[11], roll: pose[12] },
-      blend
-    );
-    stage.bodyAreas = readBodyAreas(dll, header.ballCount);
-    const rect = stage.rect();
-    stage.nudge(pose[0] - rect.left, pose[1] - rect.top);
-    const standard = stage.standardSize();
-    const area = stage.areaAt(
-      { x: cursor[0], y: cursor[1] },
-      { x: Math.trunc(standard.width / 7), y: Math.trunc(standard.height / 3) }
-    );
+    /* The area under the cursor with the dog as frame k left it. */
+    const areaAt = (k: number) => {
+      const pose = frames[k]?.state;
+
+      if (!pose || pose.length < 25) {
+        return -1;
+      }
+
+      const blend = pose[17] === 100 ? undefined : { scale: pose[17], reference: pose[18] };
+      const head =
+        pose[16] && heads[k]
+          ? headOf(
+              heads[k]!,
+              extended[pose[13]],
+              blend && { scale: blend.scale, reference: extended[blend.reference] },
+              scalesForAge(breed, tick[14]).pet,
+              breed
+            )
+          : undefined;
+      const stage = new Stage(292, 273, breed, header, shapes, tick[14]);
+      stage.show(
+        { frame: pose[13] } as Step,
+        pose[9],
+        undefined,
+        undefined,
+        undefined,
+        head,
+        { tilt: pose[10], spin: pose[11], roll: pose[12] },
+        blend
+      );
+      stage.bodyAreas = bodyAreas;
+      const rect = stage.rect();
+      stage.nudge(pose[0] - rect.left, pose[1] - rect.top);
+      const standard = stage.standardSize();
+      return stage.areaAt(
+        { x: cursor[0], y: cursor[1] },
+        { x: Math.trunc(standard.width / 7), y: Math.trunc(standard.height / 3) }
+      );
+    };
+    const area = areaAt(n - 1);
+    /* The area the frame before found (`+0x1230`), the cursor already here. */
+    const areaBefore = areaAt(n - 2);
+    const type = poking.get(at);
     const change = changes.find((each) => each.to === 0x16);
 
     if (!change) {
-      /* (Not while it reacts to the last, `+0xdc` 0x16, seg17:02fb.) */
-      if (pokes.includes(area) && tick[1] !== 0x16) {
-        result.notPoked.push(`frame ${at}: area ${area}, state ${tick[1]}`);
+      /* What the engine asks (seg17:02b8 to 032d): the area the one it was
+       * the frame before, the dog standing (its neutral position's type with
+       * 0x10), not reacting to the last (0x16), and a poking area. Each
+       * click so unanswered is wrong; the rest, by which it failed. */
+      if (!pokes.includes(area)) {
+        result.notPoking++;
+      } else if (type === undefined || !(type & 0x10)) {
+        result.notStanding++;
+      } else if (tick[1] === 0x16) {
+        result.reacting++;
+      } else if (areaBefore !== area) {
+        result.moved++;
+      } else {
+        result.wrong.push(`frame ${at}: area ${area}, standing, not poked`);
       }
 
       return;
@@ -1963,8 +2007,16 @@ function followPokes(lines: string[]) {
     const areaRight = face
       ? area === AREA.face || area === AREA.tongue
       : pokes.includes(area) && area !== AREA.face && area !== AREA.tongue;
+    /* (And as the engine asks: standing, the area as the frame before found it.) */
+    const asked = type !== undefined && !!(type & 0x10) && areaBefore === area;
 
-    if (scripts.join(' ') === theirs.join(' ') && state.seed === seedThen && inSeg17 && areaRight) {
+    if (
+      scripts.join(' ') === theirs.join(' ') &&
+      state.seed === seedThen &&
+      inSeg17 &&
+      areaRight &&
+      asked
+    ) {
       result.held++;
     } else {
       result.wrong.push(
@@ -2397,9 +2449,18 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     /* (Only on a poke day: the scruff day writes its cursor too.) */
     const pokes = POKE
       ? followPokes(lines)
-      : { clicks: 0, poked: 0, held: 0, notPoked: [] as string[], wrong: [] as string[] };
+      : {
+          clicks: 0,
+          poked: 0,
+          held: 0,
+          notPoking: 0,
+          notStanding: 0,
+          reacting: 0,
+          moved: 0,
+          wrong: [] as string[],
+        };
     console.log(
-      `pokes: ${pokes.clicks} clicks, ${pokes.poked} poked, ${pokes.held} held; ${pokes.notPoked.length} the model would take for a poke, not followed${pokes.notPoked.length ? `:\n  ${pokes.notPoked.join('\n  ')}` : ''}`
+      `pokes: ${pokes.clicks} clicks, ${pokes.poked} poked, ${pokes.held} held; not poked: ${pokes.notPoking} off a poking area, ${pokes.notStanding} not standing, ${pokes.reacting} still reacting, ${pokes.moved} the area changed`
     );
     expect(pokes.wrong).toEqual([]);
 

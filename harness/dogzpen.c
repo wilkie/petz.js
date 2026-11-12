@@ -56,6 +56,7 @@ typedef int(__cdecl __far *WITHPARAMS)(void __far *params);
 typedef void __far *(__cdecl __far *MAKE)(void __far *object);
 typedef int(__cdecl __far *INITMODULE)(void __far *module, void __far *params);
 typedef int(__cdecl __far *INITDDE)(int a, int b, int c, int d, int e);
+typedef int(__cdecl __far *NEUTRALTYPE)(int position);
 typedef int(__cdecl __far *DRAWFRAME)(void __far *module, void __far *params);
 typedef void(__cdecl __far *SETEXCITEMENT)(void __far *module, int excitement);
 
@@ -787,6 +788,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             if (n >= 98 && n < 700 && at <= 3) {
                 say("cursor %d %d %d %d %d\r\n", n, *(int *)(params + 0x12), *(int *)(params + 0x14),
                     *(int __far *)(module + 0x86), *(int __far *)(module + 0x88));
+            }
+
+            /* At the click, the dog's neutral position (the sprite's `+0x94a`)
+             * and its type (`GetNeutralType`, 67): standing with 0x10. */
+            if (n >= 98 && n < 700 && at == 2 && sprite) {
+                int position = *(int __far *)(sprite + 0x94a);
+
+                say("poking %d %d %d\r\n", n, position, ((NEUTRALTYPE)ordinal(67))(position));
             }
         }
 
