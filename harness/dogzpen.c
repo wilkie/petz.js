@@ -697,8 +697,8 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             }
         }
 
-        if (forcing & 48) {
-            int slot = forcing & 16 ? 9 : 6, until = forcing & 16 ? 400 : 110;
+        if (forcing & 1072) {
+            int slot = forcing & 16 ? 9 : forcing & 1024 ? 7 : 6, until = forcing & 16 ? 400 : 110;
 
             *(int *)(params + 0x16) = n == 100 ? slot : -1;
             *(int *)(params + 0x18) = n == 100;

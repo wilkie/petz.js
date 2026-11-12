@@ -28,6 +28,7 @@ import {
   lungeChance,
   bowlPlan,
   fillBowl,
+  lapsOf,
   idleEnd,
   idlePlan,
   keepsWalking,
@@ -169,6 +170,8 @@ const SPRAY = process.env.DOGZ_SPRAY === '1';
 
 /** `DOGZ_BRUSH=1`: the brush taken out of the toy box and let go over the dog twice, at frames 150 and 300. */
 const BRUSH = process.env.DOGZ_BRUSH === '1';
+/** `DOGZ_WATER=1`: the bowl of water taken out of the toy box and put down at frame 110, as the food. */
+const WATER = process.env.DOGZ_WATER === '1';
 
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
@@ -181,8 +184,9 @@ const FORCING =
   (BALL ? 64 : 0) |
   (SHOE ? 128 : 0) |
   (SPRAY ? 256 : 0) |
-  (BRUSH ? 512 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}-${FRAMES}`;
+  (BRUSH ? 512 : 0) |
+  (WATER ? 1024 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}${WATER ? '-WATER' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -904,21 +908,39 @@ function followBegWaits(lines: string[]) {
  * draw returning to seg20:0e3a) against `fillBowl`, and the dog's
  * mouthfuls from it (`DoEating`, its draws from the one returning to
  * seg18:18bf, one after another) against `bowlPlan`, for the servings the
- * last bowl filled was given: as many draws, to the same seed.
+ * last bowl filled was given: as many draws, to the same seed. From water,
+ * the laps (the draw returning to seg18:1a19) against `lapsOf`, as many
+ * laps (script 262) stored after it in the frame.
  */
 function followBowls(lines: string[]) {
   const { frames } = readTrace(lines);
-  const result = { filled: 0, eaten: 0, held: 0, wrong: [] as string[] };
+  const result = { filled: 0, eaten: 0, lapped: 0, held: 0, wrong: [] as string[] };
   const inPlan = (draw: { segment: number | undefined; offset: number } | undefined) =>
     draw?.segment === 18 && draw.offset >= 0x18ba && draw.offset < 0x19d0;
   let servings: number | undefined;
 
-  for (const { tick, drawn, frame } of frames) {
+  for (const { tick, drawn, frame, stored } of frames) {
     drawn.forEach(({ seed, segment, offset }, k) => {
       if (segment === 20 && offset === 0xe3a) {
         result.filled++;
         result.held++;
         servings = fillBowl(randFrom(seed).rand);
+        return;
+      }
+
+      if (segment === 18 && offset === 0x1a19 && servings !== undefined) {
+        result.lapped++;
+        const ours = lapsOf(servings, randFrom(seed).rand);
+        const theirs = stored.filter(
+          (push) => push.sprite === frame[5] && push.script === 262 && push.draws > k
+        ).length;
+
+        if (ours === theirs) {
+          result.held++;
+        } else {
+          result.wrong.push(`frame ${tick[0]}: ${servings} filled, ${ours} laps, not ${theirs}`);
+        }
+
         return;
       }
 
@@ -1912,7 +1934,9 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     expect(waits.wrong).toEqual([]);
 
     const bowls = followBowls(lines);
-    console.log(`bowls: ${bowls.filled} filled, ${bowls.eaten} eaten from, ${bowls.held} held`);
+    console.log(
+      `bowls: ${bowls.filled} filled, ${bowls.eaten} eaten from, ${bowls.lapped} lapped from, ${bowls.held} held`
+    );
     expect(bowls.wrong).toEqual([]);
 
     const play = followPlayTricks(lines);

@@ -756,6 +756,14 @@ export function fillBowl(rand: Rand): number {
 }
 
 /**
+ * A dog's laps from a bowl of water (`DoEating`, seg18:1a14): `rand() % 4 +
+ * 3`, no more than the servings the bowl was filled with, whatever is left.
+ */
+export function lapsOf(full: number, rand: Rand): number {
+  return Math.min((rand() % 4) + 3, full);
+}
+
+/**
  * A dog's mouthfuls from a bowl of food (`DoEating`, seg18:18ba), step by
  * step, so that what is pushed between its draws is pushed between them as
  * the engine pushes it: for each serving left a mouthful, one time in six a
@@ -3773,7 +3781,7 @@ export class Pet {
       }
     } else {
       /* Laps by how full it was filled, not by what is left. */
-      const laps = Math.min((this.rand() % 4) + 3, food.full);
+      const laps = lapsOf(food.full, this.rand);
 
       for (let n = 0; n < laps; n++) {
         this.pushStored(SCRIPT.lap);
