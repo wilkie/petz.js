@@ -470,6 +470,12 @@ export class Stage implements PetWorld {
     this.angles = angles;
     this.blend = blend;
 
+    /* Moved by the script first (`8aeb`, `8aec`), then by the frame. */
+    if (step.shift) {
+      this.x += step.shift.x;
+      this.y += step.shift.y;
+    }
+
     if (step.glue !== undefined) {
       /* `MoveFrameRectBall` (seg10:2ad8): the ball where the frame before
        * had it taken at the new angles, its head and blend as they were,

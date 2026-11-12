@@ -56,6 +56,7 @@ import { extendFrames } from '../../src/render/extend.ts';
 import { type Head, project, scalesForAge } from '../../src/render/project.ts';
 import { skeletonOf } from '../../src/render/skeleton.ts';
 import { readEngineScripts, readTrickScripts } from '../../src/formats/engine.ts';
+import { parseScripts, readOpcodes } from '../../src/formats/script.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
 
@@ -1246,6 +1247,43 @@ function followFrameBoxes(lines: string[]) {
 }
 
 /**
+ * The scripts' own moves between two frames (`0x8aeb n` across, `0x8aec n`
+ * down), by the frames either side: `from>to`. Script 5, put down from the
+ * scruff, is the one that has them.
+ */
+function scriptShifts(dll: ReturnType<typeof parseNe>) {
+  const data = new Uint8Array(readFileSync(join(DRIVE, 'DOGZ.DOG', 'DATA', 'ALL_PTZ.SCP')));
+  const shifts = new Map<string, { x: number; y: number }>();
+
+  for (const script of parseScripts(data, readOpcodes(dll))) {
+    for (const variant of script.variants) {
+      let last: number | undefined;
+      let shift = { x: 0, y: 0 };
+      let shifted = false;
+
+      for (const element of variant) {
+        if ('frame' in element) {
+          if (shifted && last !== undefined) {
+            shifts.set(`${last}>${element.frame}`, shift);
+          }
+
+          last = element.frame;
+          shift = { x: 0, y: 0 };
+          shifted = false;
+        } else if (element.op === 0x8aeb || element.op === 0x8aec) {
+          const by = Number(element.operands[0]);
+          shift =
+            element.op === 0x8aeb ? { ...shift, x: shift.x + by } : { ...shift, y: shift.y + by };
+          shifted = true;
+        }
+      }
+    }
+  }
+
+  return shifts;
+}
+
+/**
  * The dog placed from frame to frame (`PopScript`'s `MoveFrameRect` and
  * `MoveFrameRectBall`) against the model's `Stage.show`: each pair of
  * frames neither turned in the head nor blended, moved plainly or glued
@@ -1253,7 +1291,8 @@ function followFrameBoxes(lines: string[]) {
  * with its glue -- the model's rectangle moved as the engine's was.
  */
 function followPlacing(lines: string[]) {
-  const { frames } = readTrace(lines);
+  const { frames, dll } = readTrace(lines);
+  const shifts = scriptShifts(dll);
   const read = (path: string) => new Uint8Array(readFileSync(join(DRIVE, 'DOGZ.DOG', path)));
   const header = parseBhd(read('DATA/ALL_PTZ.BHD'));
   const breed = parseLnz(new TextDecoder('latin1').decode(read('DATA/BIGDOG.LNZ')));
@@ -1274,7 +1313,6 @@ function followPlacing(lines: string[]) {
     holding: 0,
     sliding: 0,
     pinned: 0,
-    putDown: [] as string[],
     wrong: [] as string[],
   };
   /* (The breed's reshaped frames, as `Stage` makes them, for the head's neck.) */
@@ -1302,15 +1340,8 @@ function followPlacing(lines: string[]) {
   const unturned = (state?: number[], n?: number) =>
     state && state.length >= 25 && (!state[16] || (n !== undefined && heads[n] !== undefined));
 
-  /* The last frame the dog was scruffed (state 10). */
-  let lastScruffed: number | undefined;
-
   frames.forEach(({ tick, state, moved, holding, heldSlot }, n) => {
     const before = frames[n - 1]?.state;
-
-    if (frames[n - 1]?.tick[1] === 10) {
-      lastScruffed = frames[n - 1].tick[0];
-    }
 
     /* (Not where it takes up or lets go: held throughout, the ball in its slot.) */
     const changing =
@@ -1405,7 +1436,13 @@ function followPlacing(lines: string[]) {
     const steering =
       state!.length >= 28 && state![25] ? { x: state![26], y: state![27] } : undefined;
     stage.show(
-      { frame: now.frame, glue, steering, headCopy } as Step,
+      {
+        frame: now.frame,
+        glue,
+        steering,
+        headCopy,
+        shift: shifts.get(`${was.frame}>${now.frame}`),
+      } as Step,
       now.rotation,
       undefined,
       undefined,
@@ -1463,13 +1500,6 @@ function followPlacing(lines: string[]) {
     } else if (rewobbled) {
       result.rewobbledOff.push(
         `frame ${tick[0]}: ${was.frame} to ${now.frame}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
-      );
-    } else if (lastScruffed !== undefined && tick[0] - lastScruffed <= 8 && off[0] === 0) {
-      /* Put down from the scruff: as far across as the model has it, but
-       * lower, by an amount that falls away over a few frames (21, 15, 9,
-       * 6, 3 on the scruff day); not yet explained, listed apart. */
-      result.putDown.push(
-        `frame ${tick[0]}: ${was.frame} to ${now.frame}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
       );
     } else if (outOfBlend) {
       result.unexplained.push(
@@ -2021,10 +2051,8 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       );
     }
 
-    if (placing.pinned || placing.putDown.length) {
-      console.log(
-        `placing, scruffed: ${placing.pinned} pinned by the neck to the cursor; put down, lower than the model, not yet explained:\n  ${placing.putDown.join('\n  ')}`
-      );
+    if (placing.pinned) {
+      console.log(`placing, scruffed: ${placing.pinned} pinned by the neck to the cursor`);
     }
 
     const copies = followHeadCopies(lines);

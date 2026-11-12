@@ -85,6 +85,14 @@ export interface Step {
    * longer (`8b00`, null): the frames' motion from it scaled by the heart rate.
    */
   breathe?: number | null;
+
+  /**
+   * The dog moved so many pixels across and down before this frame is
+   * placed (`8aeb n`, `8aec n`: `PopScript`, seg7:5b71 to 5bc7): the
+   * rectangle offset, then moved on by the frame. Script 5, put down from
+   * the scruff, lowers it so onto the floor.
+   */
+  shift?: { x: number; y: number };
 }
 
 /** The ball a script glues by when it says none: the belly (`GetDefaultGlueBall`). */
@@ -96,6 +104,8 @@ const SOUND_LAST = 0x8ade;
 const GLUE_CHEST = 0x8ad7;
 const GLUE = 0x8ad8;
 const TURN = 0x8ae5;
+const SHIFT_X = 0x8aeb;
+const SHIFT_Y = 0x8aec;
 const REFERENCE = 0x8ad3;
 const GRAB = 0x8b03;
 const RELEASE = 0x8b04;
@@ -287,6 +297,15 @@ export function timeline(
               fudge({ kind: 'drift', axis: value(a), to: value(b) });
             }
             break;
+          case SHIFT_X:
+          case SHIFT_Y: {
+            const shift = pending.shift ?? { x: 0, y: 0 };
+            pending.shift =
+              element.op === SHIFT_X
+                ? { ...shift, x: shift.x + value(a) }
+                : { ...shift, y: shift.y + value(a) };
+            break;
+          }
           case TURN:
             // `1 turn x`: only the first operand of 1 turns the dog.
             if (value(a) === 1) {
