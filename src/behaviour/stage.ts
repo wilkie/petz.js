@@ -584,13 +584,18 @@ export class Stage implements PetWorld {
    * holds it, as `Ballz::HitTest` (seg10:46d8) tries them nearest first, and
    * that ball's area (`HitTestBodyArea`).
    */
-  areaAt(point: { x: number; y: number }) {
-    const ball = this.ballUnder(point);
+  areaAt(point: { x: number; y: number }, slop = { x: 0, y: 0 }) {
+    const ball = this.ballUnder(point, slop);
     return ball < 0 ? -1 : (this.bodyAreas[ball] ?? -1);
   }
 
-  /** The ball under a point, nearest first, or -1 (`Ballz::HitTest`, seg10:46d8). */
-  ballUnder(point: { x: number; y: number }) {
+  /**
+   * The ball under a point, nearest first, or -1 (`Ballz::HitTest`,
+   * seg10:46d8): each ball's half-size widened by half the slop across and
+   * down (seg10:47b6 to 47c9). The petting handler gives a seventh of the
+   * dog's standard width and a third of its height; the brush none.
+   */
+  ballUnder(point: { x: number; y: number }, slop = { x: 0, y: 0 }) {
     const placed = this.placed();
     const nearestFirst = placed
       .map((_, ball) => ball)
@@ -598,9 +603,15 @@ export class Stage implements PetWorld {
 
     for (const ball of nearestFirst) {
       const { x, y, diameter } = placed[ball];
-      const half = diameter / 2;
+      const across = diameter / 2 + Math.trunc(slop.x / 2);
+      const down = diameter / 2 + Math.trunc(slop.y / 2);
 
-      if (point.x > x - half && point.x < x + half && point.y > y - half && point.y < y + half) {
+      if (
+        point.x > x - across &&
+        point.x < x + across &&
+        point.y > y - down &&
+        point.y < y + down
+      ) {
         return ball;
       }
     }

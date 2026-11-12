@@ -700,6 +700,42 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         /* Scruffed: the secondary button down from frame 100 to 200, a third
          * of the way down the dog's rectangle as it was at 100, the cursor
          * drifting 1 a frame right to 150, then back. */
+        /* Poked: from frame 100, every 30 frames, the cursor put two frames
+         * ahead at one of five points about the dog's rectangle in turn --
+         * its top corners, a quarter of the way down; a quarter in from each
+         * side and the middle, 5 above its bottom -- and the button down for
+         * the one frame. */
+        if (forcing & 4096) {
+            static int pokeX, pokeY;
+            int k = (n - 98) / 30, at = (n - 98) % 30;
+
+            if (n >= 98 && n < 700 && at == 0 && sprite) {
+                int left = *(int __far *)(sprite + 0x58), top = *(int __far *)(sprite + 0x5a);
+                int right = *(int __far *)(sprite + 0x5c), bottom = *(int __far *)(sprite + 0x5e);
+                int w = right - left, h = bottom - top;
+
+                switch (k % 5) {
+                case 0: pokeX = left + w / 10; pokeY = top + h / 4; break;
+                case 1: pokeX = right - w / 10; pokeY = top + h / 4; break;
+                case 2: pokeX = left + w / 4; pokeY = bottom - 5; break;
+                case 3: pokeX = right - w / 4; pokeY = bottom - 5; break;
+                default: pokeX = (left + right) / 2; pokeY = bottom - 5; break;
+                }
+            }
+
+            if (n >= 98 && n < 700 && at <= 3) {
+                *(int *)(params + 0x12) = pokeX;
+                *(int *)(params + 0x14) = pokeY;
+            }
+
+            *(int *)(params + 0xe) = n >= 98 && n < 700 && at == 2 ? 0x8000 : 0;
+
+            if (n >= 98 && n < 700 && at <= 3) {
+                say("cursor %d %d %d %d %d\r\n", n, *(int *)(params + 0x12), *(int *)(params + 0x14),
+                    *(int __far *)(module + 0x86), *(int __far *)(module + 0x88));
+            }
+        }
+
         if (forcing & 2048) {
             static int scruffX, scruffY;
 

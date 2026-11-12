@@ -284,7 +284,7 @@ export interface PetWorld {
   holding?(): boolean;
 
   /** The part of the dog's body under a point (`AREA`), or -1. */
-  areaAt?(point: { x: number; y: number }): number;
+  areaAt?(point: { x: number; y: number }, slop?: { x: number; y: number }): number;
 
   /** A ball of the dog on the stage, and how wide it is drawn. */
   ballOnStage?(ball: number): { x: number; y: number; diameter: number };
@@ -747,6 +747,23 @@ export function* begWaitLoops(
     if (rand() % 10 === 0) {
       yield { longer: sits };
     }
+  }
+}
+
+/**
+ * A poked dog's reaction (`DoPettingBad`, seg17:1416), its scripts in turn:
+ * in the face (or tongue), one of the three of DS:0x20ca (`rand() % 3`);
+ * elsewhere a growl (43) or, as often, a flinch (122; `rand() % 2`). After
+ * the face or a growl, three times in four (`rand() % 4` not 0) it shakes
+ * it off, one way or the other (120, 121; `rand() % 2`). Each is yielded
+ * as it is drawn, so the engine's pushes fall between the draws as they do.
+ */
+export function* pokeReaction(face: boolean, pokedInFace: number[], rand: Rand): Generator<number> {
+  const first = face ? pokedInFace[rand() % 3] : rand() % 2 === 0 ? SCRIPT.growl : SCRIPT.flinch;
+  yield first;
+
+  if (first !== SCRIPT.flinch && rand() % 4 !== 0) {
+    yield rand() % 2 === 0 ? SCRIPT.shake : SCRIPT.shakeOther;
   }
 }
 
@@ -2819,7 +2836,12 @@ export class Pet {
     const lastArea = this.area;
     let moves = 0;
 
-    this.area = this.world.areaAt(cursor);
+    /* `HitTestBodyArea` with a seventh of the standard width and a third of its height to spare (seg17:002c to 0078). */
+    const standard = this.world.standardSize?.() ?? { width: 0, height: 0 };
+    this.area = this.world.areaAt(cursor, {
+      x: Math.trunc(standard.width / 7),
+      y: Math.trunc(standard.height / 3),
+    });
     this.petting = this.samples.length >= 5;
 
     for (let n = 0; n < 4 && this.petting; n++) {
@@ -3190,26 +3212,20 @@ export class Pet {
     if (mode === 'enter') {
       this.factors[6] = Math.min(100, this.factors[6] + 5);
 
-      const shake = () => {
-        if (this.rand() % 4 !== 0) {
-          this.push({ glue: CHEST });
-          this.pushStored(this.rand() % 2 === 0 ? SCRIPT.shake : SCRIPT.shakeOther);
-          this.push({ glue: CHEST });
-        }
-      };
+      const face = this.area === AREA.tongue || this.area === AREA.face;
 
-      if (this.area === AREA.tongue || this.area === AREA.face) {
-        this.queue = [{ glue: BELLY }];
-        this.pushStored(this.data.engineScripts.pokedInFace[this.rand() % 3]);
-        this.pettingLevel--;
-        shake();
-      } else if (this.rand() % 2 === 0) {
-        this.queue = [{ glue: BELLY }];
-        this.pushStored(SCRIPT.growl);
-        this.pettingLevel--;
-        shake();
-      } else {
-        this.pushStored(SCRIPT.flinch);
+      for (const script of pokeReaction(face, this.data.engineScripts.pokedInFace, this.rand)) {
+        if (script === SCRIPT.flinch) {
+          this.pushStored(script);
+        } else if (script === SCRIPT.shake || script === SCRIPT.shakeOther) {
+          this.push({ glue: CHEST });
+          this.pushStored(script);
+          this.push({ glue: CHEST });
+        } else {
+          this.queue = [{ glue: BELLY }];
+          this.pushStored(script);
+          this.pettingLevel--;
+        }
       }
 
       return undefined;

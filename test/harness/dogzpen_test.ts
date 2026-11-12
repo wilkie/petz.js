@@ -29,6 +29,7 @@ import {
   bowlPlan,
   fillBowl,
   lapsOf,
+  pokeReaction,
   idleEnd,
   idlePlan,
   keepsWalking,
@@ -55,7 +56,12 @@ import { parseLnz } from '../../src/formats/lnz.ts';
 import { extendFrames } from '../../src/render/extend.ts';
 import { type Head, project, scalesForAge } from '../../src/render/project.ts';
 import { skeletonOf } from '../../src/render/skeleton.ts';
-import { readEngineScripts, readTrickScripts } from '../../src/formats/engine.ts';
+import {
+  AREA,
+  readBodyAreas,
+  readEngineScripts,
+  readTrickScripts,
+} from '../../src/formats/engine.ts';
 import { parseScripts, readOpcodes } from '../../src/formats/script.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
@@ -175,6 +181,8 @@ const BRUSH = process.env.DOGZ_BRUSH === '1';
 const WATER = process.env.DOGZ_WATER === '1';
 /** `DOGZ_SCRUFF=1`: the dog picked up by the scruff, the secondary button held from frame 100 to 200. */
 const SCRUFF = process.env.DOGZ_SCRUFF === '1';
+/** `DOGZ_POKE=1`: the dog clicked on, about its rectangle, every 30 frames from 100 to 700. */
+const POKE = process.env.DOGZ_POKE === '1';
 
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
@@ -189,8 +197,9 @@ const FORCING =
   (SPRAY ? 256 : 0) |
   (BRUSH ? 512 : 0) |
   (WATER ? 1024 : 0) |
-  (SCRUFF ? 2048 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}${WATER ? '-WATER' : ''}${SCRUFF ? '-SCRUFF' : ''}-${FRAMES}`;
+  (SCRUFF ? 2048 : 0) |
+  (POKE ? 4096 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}${WATER ? '-WATER' : ''}${SCRUFF ? '-SCRUFF' : ''}${POKE ? '-POKE' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -1760,6 +1769,128 @@ function followShoe(lines: string[]) {
 }
 
 /**
+ * Each click on the dog (`DOGZ_POKE=1`: the button down for frame 100 and
+ * every 30th after, the cursor where the trace's `cursor` line puts it)
+ * against the model's dog, posed as the engine's was drawn the frame
+ * before: the body area under the cursor (`Stage.areaAt`, `HitTestBodyArea`,
+ * with the petting handler's slop)
+ * one that pokes -- face, tongue, legs or tail -- wherever the engine poked
+ * it (into `ePettingBad`, 0x16), and its face or tongue where the engine
+ * reacted to the face. Each poke's reaction (`DoPettingBad`, its draws from
+ * seg17 after the change) against `pokeReaction`: the same scripts stored,
+ * in as many draws, to the same seed. Clicks the model would take for a
+ * poke but the engine did not are listed (the dog not standing -- its
+ * neutral position's type without 0x10, seg17:02e2 -- or the area under the
+ * cursor changed since the frame before: not followed).
+ */
+function followPokes(lines: string[]) {
+  const { frames, dll } = readTrace(lines);
+  const { pokedInFace } = readEngineScripts(dll);
+  const read = (path: string) => new Uint8Array(readFileSync(join(DRIVE, 'DOGZ.DOG', path)));
+  const header = parseBhd(read('DATA/ALL_PTZ.BHD'));
+  const breed = parseLnz(new TextDecoder('latin1').decode(read('DATA/BIGDOG.LNZ')));
+  const shapes = header.animations.flatMap((_, n) =>
+    parseAnimation(header, n, read(`DATA/${n}.BDT`))
+  );
+  const extended = extendFrames(shapes, breed);
+  const result = { clicks: 0, poked: 0, held: 0, notPoked: [] as string[], wrong: [] as string[] };
+  const pokes = [AREA.face, AREA.tongue, AREA.rightLeg, AREA.leftLeg, AREA.tail] as number[];
+  const cursors = new Map<number, number[]>();
+  let lastHead: number[] | undefined;
+  const heads: (number[] | undefined)[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('cursor ')) {
+      const values = line.split(' ').slice(1).map(Number);
+      cursors.set(values[0], values.slice(1, 3));
+    }
+  }
+
+  for (const frame of frames) {
+    lastHead = frame.head ?? lastHead;
+    heads.push(lastHead);
+  }
+
+  frames.forEach(({ tick, changes, drawn, stored, frame }, n) => {
+    const at = tick[0];
+    const cursor = cursors.get(at);
+    const pose = frames[n - 1]?.state;
+
+    if (at < 100 || at >= 700 || (at - 100) % 30 !== 0 || !cursor || !pose || pose.length < 25) {
+      return;
+    }
+
+    result.clicks++;
+    const blend = pose[17] === 100 ? undefined : { scale: pose[17], reference: pose[18] };
+    const head =
+      pose[16] && heads[n - 1]
+        ? headOf(
+            heads[n - 1]!,
+            extended[pose[13]],
+            blend && { scale: blend.scale, reference: extended[blend.reference] },
+            scalesForAge(breed, tick[14]).pet,
+            breed
+          )
+        : undefined;
+    const stage = new Stage(292, 273, breed, header, shapes, tick[14]);
+    stage.show(
+      { frame: pose[13] } as Step,
+      pose[9],
+      undefined,
+      undefined,
+      undefined,
+      head,
+      { tilt: pose[10], spin: pose[11], roll: pose[12] },
+      blend
+    );
+    stage.bodyAreas = readBodyAreas(dll, header.ballCount);
+    const rect = stage.rect();
+    stage.nudge(pose[0] - rect.left, pose[1] - rect.top);
+    const standard = stage.standardSize();
+    const area = stage.areaAt(
+      { x: cursor[0], y: cursor[1] },
+      { x: Math.trunc(standard.width / 7), y: Math.trunc(standard.height / 3) }
+    );
+    const change = changes.find((each) => each.to === 0x16);
+
+    if (!change) {
+      /* (Not while it reacts to the last, `+0xdc` 0x16, seg17:02fb.) */
+      if (pokes.includes(area) && tick[1] !== 0x16) {
+        result.notPoked.push(`frame ${at}: area ${area}, state ${tick[1]}`);
+      }
+
+      return;
+    }
+
+    result.poked++;
+    const ours = stored.filter((push) => push.sprite === frame[5] && push.draws >= change.draws);
+    const theirs = ours
+      .map((push) => push.script)
+      .filter((script) => [43, 120, 121, 122, ...pokedInFace].includes(script));
+    const face = pokedInFace.includes(theirs[0]);
+    const { rand, state } = randFrom(drawn[change.draws]?.seed ?? frame[3]);
+    let used = 0;
+    const scripts = [...pokeReaction(face, pokedInFace, () => (used++, rand()))];
+    const end = change.draws + used;
+    const seedThen = end < drawn.length ? drawn[end].seed : frame[3];
+    const inSeg17 = drawn.slice(change.draws, end).every((draw) => draw.segment === 17);
+    const areaRight = face
+      ? area === AREA.face || area === AREA.tongue
+      : pokes.includes(area) && area !== AREA.face && area !== AREA.tongue;
+
+    if (scripts.join(' ') === theirs.join(' ') && state.seed === seedThen && inSeg17 && areaRight) {
+      result.held++;
+    } else {
+      result.wrong.push(
+        `frame ${at}: area ${area}, ${scripts.join(' ')} in ${used} draws, not ${theirs.join(' ')}${inSeg17 ? '' : ' (draws elsewhere)'}`
+      );
+    }
+  });
+
+  return result;
+}
+
+/**
  * The dog painted (`PaintSprite::Update`, `Ballz::SetBallColor`): for each
  * stroke the trace keeps its colours before and after (`colours`, as the
  * brush is let go and the frame after), the model's dog posed as the
@@ -2084,6 +2215,15 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `the shoe: ${shoe.choices} chases or charges chosen, ${shoe.chances} chances of a lunge (${shoe.lunges} lunged), ${shoe.held} held`
     );
     expect(shoe.wrong).toEqual([]);
+
+    /* (Only on a poke day: the scruff day writes its cursor too.) */
+    const pokes = POKE
+      ? followPokes(lines)
+      : { clicks: 0, poked: 0, held: 0, notPoked: [] as string[], wrong: [] as string[] };
+    console.log(
+      `pokes: ${pokes.clicks} clicks, ${pokes.poked} poked, ${pokes.held} held; ${pokes.notPoked.length} the model would take for a poke, not followed${pokes.notPoked.length ? `:\n  ${pokes.notPoked.join('\n  ')}` : ''}`
+    );
+    expect(pokes.wrong).toEqual([]);
 
     const painting = followPainting(lines);
     console.log(
