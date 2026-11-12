@@ -172,6 +172,8 @@ const SPRAY = process.env.DOGZ_SPRAY === '1';
 const BRUSH = process.env.DOGZ_BRUSH === '1';
 /** `DOGZ_WATER=1`: the bowl of water taken out of the toy box and put down at frame 110, as the food. */
 const WATER = process.env.DOGZ_WATER === '1';
+/** `DOGZ_SCRUFF=1`: the dog picked up by the scruff, the secondary button held from frame 100 to 200. */
+const SCRUFF = process.env.DOGZ_SCRUFF === '1';
 
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
@@ -185,8 +187,9 @@ const FORCING =
   (SHOE ? 128 : 0) |
   (SPRAY ? 256 : 0) |
   (BRUSH ? 512 : 0) |
-  (WATER ? 1024 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}${WATER ? '-WATER' : ''}-${FRAMES}`;
+  (WATER ? 1024 : 0) |
+  (SCRUFF ? 2048 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}${WATER ? '-WATER' : ''}${SCRUFF ? '-SCRUFF' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -1270,10 +1273,22 @@ function followPlacing(lines: string[]) {
     nearly: 0,
     holding: 0,
     sliding: 0,
+    pinned: 0,
+    putDown: [] as string[],
     wrong: [] as string[],
   };
   /* (The breed's reshaped frames, as `Stage` makes them, for the head's neck.) */
   const extended = extendFrames(shapes, breed);
+
+  /* The cursor the driver held while scruffing, by frame (`cursor`). */
+  const cursors = new Map<number, number[]>();
+
+  for (const line of lines) {
+    if (line.startsWith('cursor ')) {
+      const values = line.split(' ').slice(1).map(Number);
+      cursors.set(values[0], values.slice(1, 3));
+    }
+  }
 
   /* Its head, while it tracks (`+0x1e`), by the block placed last for the dog's state. */
   const heads: (number[] | undefined)[] = [];
@@ -1287,8 +1302,15 @@ function followPlacing(lines: string[]) {
   const unturned = (state?: number[], n?: number) =>
     state && state.length >= 25 && (!state[16] || (n !== undefined && heads[n] !== undefined));
 
+  /* The last frame the dog was scruffed (state 10). */
+  let lastScruffed: number | undefined;
+
   frames.forEach(({ tick, state, moved, holding, heldSlot }, n) => {
     const before = frames[n - 1]?.state;
+
+    if (frames[n - 1]?.tick[1] === 10) {
+      lastScruffed = frames[n - 1].tick[0];
+    }
 
     /* (Not where it takes up or lets go: held throughout, the ball in its slot.) */
     const changing =
@@ -1379,6 +1401,7 @@ function followPlacing(lines: string[]) {
     );
     const from = stage.rect();
     stage.nudge(before![0] - from.left, before![1] - from.top);
+
     const steering =
       state!.length >= 28 && state![25] ? { x: state![26], y: state![27] } : undefined;
     stage.show(
@@ -1391,6 +1414,20 @@ function followPlacing(lines: string[]) {
       now.angles,
       now.blend
     );
+    /* Scruffed, the button held (`DoScruff`, seg21:6672 to 6783): once
+     * the frame has moved on, the dog as it now is put with its neck's centre
+     * at the cursor, lowered by half the neck's drawn size. */
+    const pin = tick[1] === 10 ? cursors.get(tick[0]) : undefined;
+
+    if (pin) {
+      const neck = stage.placed()[54];
+      result.pinned++;
+      stage.nudge(
+        pin[0] - Math.round(neck.x),
+        pin[1] + Math.trunc(neck.diameter / 2) - Math.round(neck.y)
+      );
+    }
+
     const to = stage.rect();
     const ours = [to.left - before![0] + slid[0], to.top - before![1] + slid[1]];
     const theirs = [state![0] - before![0], state![1] - before![1]];
@@ -1426,6 +1463,13 @@ function followPlacing(lines: string[]) {
     } else if (rewobbled) {
       result.rewobbledOff.push(
         `frame ${tick[0]}: ${was.frame} to ${now.frame}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
+      );
+    } else if (lastScruffed !== undefined && tick[0] - lastScruffed <= 8 && off[0] === 0) {
+      /* Put down from the scruff: as far across as the model has it, but
+       * lower, by an amount that falls away over a few frames (21, 15, 9,
+       * 6, 3 on the scruff day); not yet explained, listed apart. */
+      result.putDown.push(
+        `frame ${tick[0]}: ${was.frame} to ${now.frame}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
       );
     } else if (outOfBlend) {
       result.unexplained.push(
@@ -1974,6 +2018,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     if (placing.unexplained.length) {
       console.log(
         `placing, glued out of a blend (${placing.outOfBlend}), not yet explained:\n  ${placing.unexplained.join('\n  ')}`
+      );
+    }
+
+    if (placing.pinned || placing.putDown.length) {
+      console.log(
+        `placing, scruffed: ${placing.pinned} pinned by the neck to the cursor; put down, lower than the model, not yet explained:\n  ${placing.putDown.join('\n  ')}`
       );
     }
 

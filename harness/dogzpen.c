@@ -697,6 +697,27 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             }
         }
 
+        /* Scruffed: the secondary button down from frame 100 to 200, a third
+         * of the way down the dog's rectangle as it was at 100, the cursor
+         * drifting 1 a frame right to 150, then back. */
+        if (forcing & 2048) {
+            static int scruffX, scruffY;
+
+            if (n == 100 && sprite) {
+                scruffX = (*(int __far *)(sprite + 0x58) + *(int __far *)(sprite + 0x5c)) / 2;
+                scruffY = *(int __far *)(sprite + 0x5a) + (*(int __far *)(sprite + 0x5e) - *(int __far *)(sprite + 0x5a)) / 3;
+            }
+
+            *(int *)(params + 0xc) = n >= 100 && n < 200 ? 0x8000 : 0;
+
+            if (n >= 100 && n <= 200) {
+                *(int *)(params + 0x12) = scruffX + (n < 150 ? n - 100 : 200 - n);
+                *(int *)(params + 0x14) = scruffY;
+                say("cursor %d %d %d %d %d\r\n", n, *(int *)(params + 0x12), *(int *)(params + 0x14),
+                    *(int __far *)(module + 0x86), *(int __far *)(module + 0x88));
+            }
+        }
+
         if (forcing & 1072) {
             int slot = forcing & 16 ? 9 : forcing & 1024 ? 7 : 6, until = forcing & 16 ? 400 : 110;
 
