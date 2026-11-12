@@ -196,6 +196,8 @@ const POKE = process.env.DOGZ_POKE === '1';
 /** `DOGZ_GREEN=1`, `DOGZ_RED=1`: as `DOGZ_TREAT`, the green treat (slot 10) or the red (11). */
 const GREEN = process.env.DOGZ_GREEN === '1';
 const RED = process.env.DOGZ_RED === '1';
+/** `DOGZ_AGAIN=1`: the treat's taking out, holding up and letting go again every 400 frames. */
+const AGAIN = process.env.DOGZ_AGAIN === '1';
 
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
@@ -213,8 +215,9 @@ const FORCING =
   (SCRUFF ? 2048 : 0) |
   (POKE ? 4096 : 0) |
   (GREEN ? 8192 : 0) |
-  (RED ? 16384 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}${WATER ? '-WATER' : ''}${SCRUFF ? '-SCRUFF' : ''}${POKE ? '-POKE' : ''}${GREEN ? '-GREEN' : ''}${RED ? '-RED' : ''}-${FRAMES}`;
+  (RED ? 16384 : 0) |
+  (AGAIN ? 32768 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}${WATER ? '-WATER' : ''}${SCRUFF ? '-SCRUFF' : ''}${POKE ? '-POKE' : ''}${GREEN ? '-GREEN' : ''}${RED ? '-RED' : ''}${AGAIN ? '-AGAIN' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;

@@ -812,14 +812,17 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             int treat = (forcing & (16 | 8192 | 16384)) != 0;
             int slot = forcing & 16384 ? 11 : forcing & 8192 ? 10 : forcing & 16 ? 9 : forcing & 1024 ? 7 : 6;
             int until = treat ? 400 : 110;
+            /* With 32768 (`DOGZ_AGAIN`), a treat so every 400 frames: frame
+             * 100 + 400k is taken as 100. */
+            int m = forcing & 32768 && treat && n >= 100 ? 100 + (n - 100) % 400 : n;
 
-            *(int *)(params + 0x16) = n == 100 ? slot : -1;
-            *(int *)(params + 0x18) = n == 100;
-            *(int *)(params + 0xe) = n >= 100 && n < until ? 0x8000 : 0;
+            *(int *)(params + 0x16) = m == 100 ? slot : -1;
+            *(int *)(params + 0x18) = m == 100;
+            *(int *)(params + 0xe) = m >= 100 && m < until ? 0x8000 : 0;
 
-            if (n >= 100 && n <= until) {
+            if (m >= 100 && m <= until) {
                 *(int *)(params + 0x12) = 146;
-                *(int *)(params + 0x14) = n < until - 20 ? 80 : 200;
+                *(int *)(params + 0x14) = m < until - 20 ? 80 : 200;
             }
         }
 
