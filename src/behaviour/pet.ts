@@ -30,6 +30,7 @@ import {
   selects,
   setTarget,
 } from './fudger.ts';
+import { Swing } from './swing.ts';
 import { type Brain } from './brain.ts';
 import { type Ball, type Food, type Shoe, foodSize, ballRect, isTreat } from './stage.ts';
 import { type Rand } from './random.ts';
@@ -1191,6 +1192,22 @@ export class Pet {
       roll: this.fudged(AXIS.roll),
     };
 
+    /* Swinging, after the fudgers, the swing sets the spin and tilt
+     * itself (`Fizziks`, `RotatoPet`; seg7:6dbe), stepped by the cursor's
+     * move since the tick before. */
+    if (this.swingAsked || this.swing) {
+      if (this.swingAsked || !this.swing) {
+        this.swing = new Swing(this.rotation);
+        this.swingAsked = false;
+      }
+
+      const [now, before] = [this.samples[0], this.samples[1] ?? this.samples[0]];
+      this.swing.step(now ? now.x - before.x : 0, now ? now.y - before.y : 0);
+      const { spin, tilt } = this.swing.angles(this.rotation);
+      angles.spin = spin;
+      angles.tilt = tilt ?? angles.tilt;
+    }
+
     /* Moved plainly and turned, the head tracking, the engine takes the
      * frame before at the new angles and places its head afresh -- its turn
      * and nod as they were, the wobbles moved on again (`MoveFrameRect`'s
@@ -1553,7 +1570,8 @@ export class Pet {
 
   /**
    * A cue raised (`0x8ae3`): the states see it, and `ProcessCue` (seg7:7c1d)
-   * acts on some itself: cue 2 ends a slide (`0x8af4`), cue 3 resets the
+   * acts on some itself: cue 2 ends a slide (`0x8af4`), cue 11 sets the
+   * dog swinging from the cursor (`Fizziks`), cue 3 resets the
    * dog's easing and drift (`ResetParams`, seg7:33ae, through every
    * `Fudger`, the eyelids' tilts eased level) and what it looks at, cue 7 stops it looking at anything and
    * cue 6 lets it again.
@@ -1571,8 +1589,15 @@ export class Pet {
       this.targetsOn = false;
     } else if (cue === 3) {
       this.resetParams();
+    } else if (cue === 11) {
+      /* The pick-up's: the dog swings from the cursor (seg7:7cc1, `+0x210e` 2). */
+      this.swingAsked = true;
     }
   }
+
+  /** Swinging from the cursor, dangling (`Fizziks`), and asked to start afresh. */
+  private swing: Swing | null = null;
+  private swingAsked = false;
 
   /**
    * `ScriptSprite::ResetParams` (seg7:33ae), from cue 3, `ResetScript` and
@@ -1583,6 +1608,9 @@ export class Pet {
   private resetParams() {
     this.ease = null;
     this.drift = 0;
+    /* (And the swing stopped, `+0x210e` 0, seg7:3498.) */
+    this.swing = null;
+    this.swingAsked = false;
 
     /* Every fudger stopped, and the eyelids' tilts back level at 10 a frame. */
     for (const fudger of this.fudgers) {
@@ -5225,8 +5253,9 @@ export class Pet {
    * `PetModule::DoScruff` (seg21:637c): picked up (script 4), swaying, and
    * dangling (3, again and again) by its neck from the cursor while the
    * button is held; let go of, back to its food or the ball, or to idle.
-   * Its tilt, the cursor's shape, and its being put down by playing the
-   * pick-up backwards are not yet played.
+   * It swings as it hangs (`Swing`, from the pick-up's cue 11), and is put
+   * down by script 5, the way back to its feet. The cursor's shape is not
+   * played.
    */
   private doScruff(mode: Mode): Step | undefined {
     if (mode === 'exit') {

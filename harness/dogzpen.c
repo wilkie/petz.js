@@ -211,6 +211,27 @@ static int __cdecl __far __loadds realising(unsigned char __far *brain)
     return realOn(brain);
 }
 
+/* Each tick of the swing (`ScriptSprite::Fizziks`, 99, seg7:4f08), as it is
+ * called -- more than once a frame at times: `fizz on rotation cx cy cx' cy'
+ * vx vy vz x y z draws`, the sprite's `+0x210e` and rotation (`+0x526`)
+ * and the cursor sprite's middle now and before (`ds:0x3bd8`) as it
+ * begins, its velocity and place (`ds:0x1318`, `0x1324`) after. */
+typedef int(__cdecl __far *FIZZIKS)(unsigned char __far *sprite, unsigned long point);
+static FIZZIKS fizzOn;
+
+static int __cdecl __far __loadds fizzing(unsigned char __far *sprite, unsigned long point)
+{
+    int on = *(int __far *)(sprite + 0x210e), rotation = *(int __far *)(sprite + 0x526), answer;
+    unsigned char __far *pointer = *(unsigned char __far *__far *)MK_FP(dgroup, 0x3bd8);
+    int __far *swing = (int __far *)MK_FP(dgroup, 0x1318);
+
+    say("fizz %d %d %d %d %d %d", on, rotation, *(int __far *)(pointer + 0x86), *(int __far *)(pointer + 0x88),
+        *(int __far *)(pointer + 0x8a), *(int __far *)(pointer + 0x8c));
+    answer = fizzOn(sprite, point);
+    say(" %d %d %d %d %d %d %d\r\n", swing[0], swing[1], swing[2], swing[6], swing[7], swing[8], draws);
+    return answer;
+}
+
 /* `PetModule::NewState` (496, seg21:5bb8): each change (`newstate from to
  * draws`, the draws of the frame before it). */
 typedef int(__cdecl __far *NEWSTATE)(void __far *module, int state);
@@ -464,6 +485,7 @@ static void hookPushes(void)
     zeroOn = (BRAINCALL)hookPrologue(304, (void __far *)zeroing);
     realOn = (BRAINCALL)hookPrologue(291, (void __far *)realising);
     pulseOn = (PULSE)hookPrologue(498, (void __far *)pulsing);
+    fizzOn = (FIZZIKS)hookPrologue(99, (void __far *)fizzing);
 }
 
 /* The end of a frame's line: whether the dog is being petted (`+0x123a`),

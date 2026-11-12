@@ -72,6 +72,7 @@ import {
 } from '../../src/formats/engine.ts';
 import { parseBrain } from '../../src/formats/brain.ts';
 import { Brain } from '../../src/behaviour/brain.ts';
+import { Swing } from '../../src/behaviour/swing.ts';
 import { parseScripts, readOpcodes } from '../../src/formats/script.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
@@ -2117,6 +2118,75 @@ function followBrain(lines: string[]) {
 }
 
 /**
+ * The dangling dog's swing (`Fizziks`, `RotatoPet`) against the model's
+ * `Swing`, call by call (`fizz`; more than one a frame at times): started
+ * where the engine starts it (the sprite's `+0x210e` 2), at the dog's
+ * rotation, and stepped by the cursor sprite's move, its velocity and place
+ * after each as the engine's; and the spin and tilt the frame's last gives
+ * the dog as the frame left them.
+ */
+function followSwing(lines: string[]) {
+  const { frames } = readTrace(lines);
+  const result = { calls: 0, held: 0, frames: 0, angles: 0, wrong: [] as string[] };
+  let swing: Swing | undefined;
+  let rotation = 0;
+  let frame = -1;
+  const swungIn = new Set<number>();
+  /* (Not the frame it is let go in: leaving, the scruff eases the spin on, seg21:63d5.) */
+  const leaving = new Set(
+    frames
+      .filter((each) => each.changes.some((change) => change.from === 10))
+      .map((each) => each.tick[0])
+  );
+
+  for (const line of lines) {
+    const [kind, ...rest] = line.split(' ');
+
+    if (kind === 'tick') {
+      frame = Number(rest[0]);
+    } else if (kind === 'fizz') {
+      const [on, turned, cx, cy, bx, by, ...after] = rest.map(Number);
+
+      if (on === 2 || !swing) {
+        swing = new Swing(turned);
+      }
+
+      rotation = turned;
+      swing.step(cx - bx, cy - by);
+      result.calls++;
+      swungIn.add(frame);
+      const ours = [...swing.v, ...swing.p].join(' ');
+      const theirs = after.slice(0, 6).join(' ');
+
+      if (ours === theirs) {
+        result.held++;
+      } else if (result.wrong.length < 10) {
+        result.wrong.push(`frame ${frame}: swung to ${ours}, not ${theirs}`);
+      }
+
+      /* (Kept in step with the engine's, so that one miss is not many.) */
+      swing.v = after.slice(0, 3);
+      swing.p = after.slice(3, 6);
+    } else if (kind === 'state' && swing && swungIn.has(frame) && !leaving.has(frame)) {
+      /* The angles the last swing of the frame gave the dog, as the frame left them. */
+      const state = rest.map(Number);
+      const { spin, tilt } = swing.angles(rotation);
+      result.frames++;
+
+      if (spin === state[11] && (tilt === undefined || tilt === state[10])) {
+        result.angles++;
+      } else if (result.wrong.length < 10) {
+        result.wrong.push(
+          `frame ${frame}: spin ${spin} tilt ${tilt}, not ${state[11]} ${state[10]}`
+        );
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * The dog painted (`PaintSprite::Update`, `Ballz::SetBallColor`): for each
  * stroke the trace keeps its colours before and after (`colours`, as the
  * brush is let go and the frame after), the model's dog posed as the
@@ -2463,6 +2533,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `pokes: ${pokes.clicks} clicks, ${pokes.poked} poked, ${pokes.held} held; not poked: ${pokes.notPoking} off a poking area, ${pokes.notStanding} not standing, ${pokes.reacting} still reacting, ${pokes.moved} the area changed`
     );
     expect(pokes.wrong).toEqual([]);
+
+    const swinging = followSwing(lines);
+    console.log(
+      `swing: ${swinging.calls} ticks, ${swinging.held} held; ${swinging.frames} frames' angles, ${swinging.angles} held`
+    );
+    expect(swinging.wrong).toEqual([]);
 
     const thinking = followBrain(lines);
     console.log(
