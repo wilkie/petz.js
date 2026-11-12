@@ -1585,9 +1585,11 @@ function followPlacing(lines: string[]) {
       frames[n].headCopy!.slice(2, 9).join(' ') !== heads[n - 1]!.slice(2, 9).join(' ');
     result.rewobbled += rewobbled ? 1 : 0;
 
-    /* Glued out of a blend: all but one of the harness's days are as the
-     * model has it, the old blend; that one, frame 615 of the plain day of
-     * 3,000, not yet explained, is listed apart. */
+    /* Glued out of a blend: as the model has it, the old blend, but for
+     * three of the harness's days' (frame 615 of the plain day, 1359 of the
+     * food day, 1558 of the water day), each out of breathing on frame 35
+     * into an unbreathing frame, a transition pushed in the frame; no blend
+     * of the old ball places two of them, so not the blend. Listed apart. */
     const outOfBlend = glue !== undefined && was.blend !== undefined;
     result.outOfBlend += outOfBlend ? 1 : 0;
 
