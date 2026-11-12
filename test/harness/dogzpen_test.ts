@@ -49,7 +49,14 @@ import {
   waitLook,
 } from '../../src/behaviour/pet.ts';
 import type { Rand } from '../../src/behaviour/random.ts';
-import { ballRect, brushTip, frameBox, rollBall, Stage } from '../../src/behaviour/stage.ts';
+import {
+  ballRect,
+  brushTip,
+  frameBox,
+  rollBall,
+  SHOE_SIZE,
+  Stage,
+} from '../../src/behaviour/stage.ts';
 import type { Step } from '../../src/behaviour/timeline.ts';
 import { parseAnimation, parseBhd } from '../../src/formats/animation.ts';
 import { parseLnz } from '../../src/formats/lnz.ts';
@@ -258,6 +265,12 @@ interface Frame {
   holding?: boolean;
   /** What it held all through the frame, by its slot (0 the mouth, 1 a paw), if it held one thing throughout. */
   heldSlot?: number;
+  /** The shoe in the mouth all through the frame (taken while taunted, `GrabObject` 4), drawn with the chin. */
+  heldShoe?: boolean;
+  /** The shoe taken or let go of in the frame. */
+  shoeChanged?: boolean;
+  /** The shoe as the frame began (`shoe`): whether the user holds it, whether the dog may snatch. */
+  shoe?: number[];
   /** The ball as the frame began (`ball`): held, in the box, its rectangle. */
   ball?: number[];
   /** Whether the ball was stopped in the frame (`BallSprite::Stop`). */
@@ -276,6 +289,7 @@ function readTrace(lines: string[]) {
 
   let holds = 0;
   let slot: number | undefined;
+  let shoeIn = false;
 
   for (const line of lines) {
     const [kind, ...rest] = line.split(' ');
@@ -300,6 +314,7 @@ function readTrace(lines: string[]) {
         holding: holds > 0,
         /* (By what it is asked to take; the ball's own marks, below, where kept.) */
         heldSlot: holds === 1 && (slot === 0 || slot === 1) ? slot : undefined,
+        heldShoe: shoeIn,
         tick: values,
         changes: [],
         stored: [],
@@ -334,6 +349,22 @@ function readTrace(lines: string[]) {
       asked.after = values[2];
     } else if (kind === 'stored' && open) {
       open.stored.push({ sprite: values[0], script: values[1], draws: values[3] });
+    } else if (kind === 'grab' && open && values[0] === 4) {
+      /* The shoe, taken only while the dog is taunted (global 0x3f5,
+       * seg14:07f0), and not from the user's hand unless the dog may snatch
+       * (`ActualGrabObject`, seg14:084c): the trace's `shoe` line, as the
+       * frame began, where kept. */
+      const fromHand = open.shoe && open.shoe[0] !== 0 && open.shoe[1] === 0;
+
+      if (open.tick[2] === 0x3f5 && !shoeIn && open.shoe && !fromHand) {
+        shoeIn = true;
+        open.shoeChanged = true;
+      }
+    } else if (kind === 'release' && open && values[0] === 4) {
+      if (shoeIn) {
+        shoeIn = false;
+        open.shoeChanged = true;
+      }
     } else if (kind === 'grab' && open) {
       /* (One thing held at a time: asked again, it holds the one.) */
       holds = 1;
@@ -344,6 +375,8 @@ function readTrace(lines: string[]) {
       holds = 0;
       open.holding = true;
       open.heldSlot = undefined;
+    } else if (kind === 'shoe' && open) {
+      open.shoe = values;
     } else if (kind === 'slide' && open) {
       open.slide = values;
     } else if (kind === 'head' && open && values[0] === 1) {
@@ -372,6 +405,10 @@ function readTrace(lines: string[]) {
    * under a paw (`+0x18e`, slot 1) as it begins and as the next begins --
    * where the trace keeps it: which, rather than asked (`grab` may take
    * nothing), it is held by. */
+  for (const frame of frames) {
+    frame.heldShoe = !!frame.heldShoe && !frame.shoeChanged;
+  }
+
   frames.forEach((frame, n) => {
     /* (Without the ball's marks, what it holds is not known to be the ball: not boxed.) */
     if (!frame.ball) {
@@ -1168,6 +1205,7 @@ function followFrameBoxes(lines: string[]) {
     blended: 0,
     mouthed: 0,
     holding: 0,
+    shoe: 0,
     held: 0,
     nearly: 0,
     wrong: [] as string[],
@@ -1175,7 +1213,10 @@ function followFrameBoxes(lines: string[]) {
 
   let lastHead: number[] | undefined;
 
-  for (const [index, { tick, state, holding, heldSlot, moved }] of frames.entries()) {
+  for (const [
+    index,
+    { tick, state, holding, heldSlot, heldShoe, shoeChanged, moved },
+  ] of frames.entries()) {
     if (!state || state.length < 25) {
       continue;
     }
@@ -1205,9 +1246,9 @@ function followFrameBoxes(lines: string[]) {
     result.blended += blend === 100 ? 0 : 1;
 
     /* Held all through the frame, the ball is boxed with it, by the ball of
-     * the dog that holds it (chin 51, toe 45); taken up or let go in it, not
-     * followed. Only the ball is so held in the harness's days. */
-    if (holding && heldSlot === undefined) {
+     * the dog that holds it (chin 51, toe 45), and so the shoe in the mouth,
+     * by its own picture's size; taken up or let go in it, not followed. */
+    if ((holding && heldSlot === undefined && !heldShoe) || shoeChanged) {
       result.mouthed++;
       continue;
     }
@@ -1233,9 +1274,15 @@ function followFrameBoxes(lines: string[]) {
       head,
       { tilt, spin, roll },
       blending,
-      (placed) => (heldSlot === undefined ? undefined : ballRect(placed[[51, 45][heldSlot]]))
+      (placed) =>
+        heldShoe
+          ? ballRect(placed[51], SHOE_SIZE)
+          : heldSlot === undefined
+            ? undefined
+            : ballRect(placed[[51, 45][heldSlot]])
     );
     result.holding += heldSlot === undefined ? 0 : 1;
+    result.shoe += heldShoe ? 1 : 0;
     const ours = [box.left, box.top, box.right, box.bottom];
 
     const off = ours.map((edge, n) => Math.abs(edge - theirs[n]));
@@ -1320,8 +1367,10 @@ function followPlacing(lines: string[]) {
     held: 0,
     nearly: 0,
     holding: 0,
+    shoe: 0,
     sliding: 0,
     pinned: 0,
+    lunging: 0,
     wrong: [] as string[],
   };
   /* (The breed's reshaped frames, as `Stage` makes them, for the head's neck.) */
@@ -1349,13 +1398,17 @@ function followPlacing(lines: string[]) {
   const unturned = (state?: number[], n?: number) =>
     state && state.length >= 25 && (!state[16] || (n !== undefined && heads[n] !== undefined));
 
-  frames.forEach(({ tick, state, moved, holding, heldSlot }, n) => {
+  frames.forEach(({ tick, state, moved, holding, heldSlot, heldShoe, shoeChanged }, n) => {
     const before = frames[n - 1]?.state;
 
     /* (Not where it takes up or lets go: held throughout, the ball in its slot.) */
-    const changing =
-      (holding && heldSlot === undefined) ||
-      (frames[n - 1]?.holding && frames[n - 1]?.heldSlot !== heldSlot);
+    const shoeThrough = heldShoe && frames[n - 1]?.heldShoe;
+    const changing = shoeThrough
+      ? false
+      : (holding && heldSlot === undefined) ||
+        (frames[n - 1]?.holding && frames[n - 1]?.heldSlot !== heldSlot) ||
+        !!shoeChanged ||
+        !!frames[n - 1]?.shoeChanged;
 
     if (!unturned(state, n) || !unturned(before, n - 1) || moved.length !== 1 || moved[0][0] > 1) {
       return;
@@ -1429,6 +1482,11 @@ function followPlacing(lines: string[]) {
       stage.ball = { x: 0, y: 0, vx: 0, vy: 0, held: false, slot: heldSlot, recorded: null };
     }
 
+    if (shoeThrough) {
+      stage.shoe = { x: 0, y: 0, held: false, inMouth: true };
+      result.shoe++;
+    }
+
     stage.show(
       { frame: was.frame } as Step,
       was.rotation,
@@ -1474,8 +1532,25 @@ function followPlacing(lines: string[]) {
       );
     }
 
+    /* Lunging with hold of the shoe (`DoLungingCursor`, seg3:1a92 to 1b4b),
+     * the grip held as the frame began (the module's `+0x222`): so, the
+     * chin's centre (ball 51) put at the shoe's middle, where the shoe has
+     * moved to in the frame (as the next frame begins), the slide's move
+     * overridden. */
+    const [grip, shoeAt] = [frames[n].shoe, frames[n + 1]?.shoe];
+
+    const lunging = tick[1] === 0x12 && !!grip && grip.length >= 5 && !!grip[4] && !!shoeAt;
+
+    if (lunging) {
+      const chin = stage.placed()[51];
+      result.lunging++;
+      stage.nudge(shoeAt![2] - Math.round(chin.x), shoeAt![3] - Math.round(chin.y));
+    }
+
     const to = stage.rect();
-    const ours = [to.left - before![0] + slid[0], to.top - before![1] + slid[1]];
+    /* (Pinned, the dog is put where the pin says, the slide's move and all.) */
+    const slidBy = pin || lunging ? [0, 0] : slid;
+    const ours = [to.left - before![0] + slidBy[0], to.top - before![1] + slidBy[1]];
     const theirs = [state![0] - before![0], state![1] - before![1]];
 
     if (glue === undefined) {
@@ -2156,13 +2231,13 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
 
     const boxes = followFrameBoxes(lines);
     console.log(
-      `frame boxes: ${boxes.frames} frames (${boxes.blended} blended, ${boxes.tracked} with the head turned), ${boxes.held} held, ${boxes.nearly} a pixel out on one edge (${boxes.turned} with the head turned, ${boxes.mouthed} taking up or letting go, not followed; ${boxes.holding} with the ball held)`
+      `frame boxes: ${boxes.frames} frames (${boxes.blended} blended, ${boxes.tracked} with the head turned), ${boxes.held} held, ${boxes.nearly} a pixel out on one edge (${boxes.turned} with the head turned, ${boxes.mouthed} taking up or letting go, not followed; ${boxes.holding} with the ball held, ${boxes.shoe} with the shoe)`
     );
     expect(boxes.wrong).toEqual([]);
 
     const placing = followPlacing(lines);
     console.log(
-      `placing: ${placing.plain} moved plainly, ${placing.glued} glued (${placing.slid} sliding), ${placing.held} held, ${placing.nearly} a pixel out (${placing.holding} taking up or letting go, ${placing.sliding} sliding, not followed)`
+      `placing: ${placing.plain} moved plainly, ${placing.glued} glued (${placing.slid} sliding), ${placing.held} held (${placing.shoe} with the shoe), ${placing.nearly} a pixel out (${placing.holding} taking up or letting go, ${placing.sliding} sliding, not followed)`
     );
     expect(placing.wrong).toEqual([]);
 
@@ -2184,6 +2259,10 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
 
     if (placing.pinned) {
       console.log(`placing, scruffed: ${placing.pinned} pinned by the neck to the cursor`);
+    }
+
+    if (placing.lunging) {
+      console.log(`placing, lunging: ${placing.lunging} pinned by the chin to the shoe`);
     }
 
     const copies = followHeadCopies(lines);

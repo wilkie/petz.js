@@ -573,10 +573,25 @@ export class Stage implements PetWorld {
     };
   }
 
-  /** What the dog holds, by the ball of its that holds it: the ball's own rectangle there. */
+  /**
+   * What the dog holds, by the ball of its that holds it: the thing's own
+   * rectangle there. The ball by its slot; a shoe or a treat in the mouth,
+   * drawn with the chin (`ActualGrabObject`, seg14:0842, ball 51), by its
+   * picture's size.
+   */
   private heldRect(placed: { x: number; y: number }[]) {
     const slot = this.ball?.slot;
-    return slot === null || slot === undefined ? undefined : ballRect(placed[HOLDERS[slot]]);
+
+    if (slot !== null && slot !== undefined) {
+      return ballRect(placed[HOLDERS[slot]]);
+    }
+
+    if (this.shoe?.inMouth) {
+      return ballRect(placed[HOLDERS[0]], SHOE_SIZE);
+    }
+
+    const food = this.foods.find((each) => each.inMouth);
+    return food ? ballRect(placed[HOLDERS[0]], foodSize(food)) : undefined;
   }
 
   /**

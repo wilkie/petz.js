@@ -795,6 +795,18 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(ball + 0x18e));
         }
 
+        /* With the shoe out, whether the user holds it (`+0x16a`) and whether
+         * the dog may take a thing from the hand (the module's `+0x96`):
+         * `GrabObject` takes it only if not, or if so (`ActualGrabObject`,
+         * seg14:084c); its middle (`+0x86`, `+0x88`), and whether the dog
+         * has hold of it, lunging (the module's `+0x222`, seg3:1a92). */
+        if (forcing & 128) {
+            unsigned char __far *shoe = *(unsigned char __far *__far *)(module + 0x74);
+
+            say("shoe %d %d %d %d %d\r\n", *(int __far *)(shoe + 0x16a), *(int __far *)(module + 0x96),
+                *(int __far *)(shoe + 0x86), *(int __far *)(shoe + 0x88), *(int __far *)(module + 0x222));
+        }
+
         draws = 0;
 
         /* (What opening the port answers the program does not ask.) */
