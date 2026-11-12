@@ -66,9 +66,12 @@ import { skeletonOf } from '../../src/render/skeleton.ts';
 import {
   AREA,
   readBodyAreas,
+  readBrainMap,
   readEngineScripts,
   readTrickScripts,
 } from '../../src/formats/engine.ts';
+import { parseBrain } from '../../src/formats/brain.ts';
+import { Brain } from '../../src/behaviour/brain.ts';
 import { parseScripts, readOpcodes } from '../../src/formats/script.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
@@ -190,6 +193,9 @@ const WATER = process.env.DOGZ_WATER === '1';
 const SCRUFF = process.env.DOGZ_SCRUFF === '1';
 /** `DOGZ_POKE=1`: the dog clicked on, about its rectangle, every 30 frames from 100 to 700. */
 const POKE = process.env.DOGZ_POKE === '1';
+/** `DOGZ_GREEN=1`, `DOGZ_RED=1`: as `DOGZ_TREAT`, the green treat (slot 10) or the red (11). */
+const GREEN = process.env.DOGZ_GREEN === '1';
+const RED = process.env.DOGZ_RED === '1';
 
 /** The switches asked, as `FRAMES.TXT`'s second number, and the trace's name. */
 const FORCING =
@@ -205,8 +211,10 @@ const FORCING =
   (BRUSH ? 512 : 0) |
   (WATER ? 1024 : 0) |
   (SCRUFF ? 2048 : 0) |
-  (POKE ? 4096 : 0);
-const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}${WATER ? '-WATER' : ''}${SCRUFF ? '-SCRUFF' : ''}${POKE ? '-POKE' : ''}-${FRAMES}`;
+  (POKE ? 4096 : 0) |
+  (GREEN ? 8192 : 0) |
+  (RED ? 16384 : 0);
+const NAME = `DOGZPEN${PLAN_DONE ? '-PLAN' : ''}${CALM ? '-CALM' : ''}${WAKE ? '-WAKE' : ''}${PET ? '-PET' : ''}${TREAT ? '-TREAT' : ''}${FOOD ? '-FOOD' : ''}${BALL ? '-BALL' : ''}${SHOE ? '-SHOE' : ''}${SPRAY ? '-SPRAY' : ''}${BRUSH ? '-BRUSH' : ''}${WATER ? '-WATER' : ''}${SCRUFF ? '-SCRUFF' : ''}${POKE ? '-POKE' : ''}${GREEN ? '-GREEN' : ''}${RED ? '-RED' : ''}-${FRAMES}`;
 
 /** The first trick state (`eTrickBegging`, 0x2b), and idle (`eIdle`). */
 const FIRST_TRICK = 0x2b;
@@ -1966,6 +1974,94 @@ function followPokes(lines: string[]) {
 }
 
 /**
+ * The brain (`XBrain`, read from `BRAIN.PBT` as the day began) against the
+ * model's `Brain`, given what the engine gave it in turn: its desires
+ * cleared (`brainzero`), told a verb and object (`brain 5`, `tell`) or
+ * asked to think (`brain 4`, `think`), each from the engine's seed then,
+ * and pulsed as the module pulses it (`pulse`: once a frame, mostly, but
+ * up to 11 in one), so its choices are made real as the model times them. Each answer -- the state its choice maps to (`brained`, DS:0x1e1e)
+ * -- the same, in as many draws, to the same seed; and each choice made
+ * real (`brainreal`) in the same frame.
+ */
+function followBrain(lines: string[]) {
+  const { frames, dll } = readTrace(lines);
+  const file = parseBrain(new Uint8Array(readFileSync(join(DRIVE, 'DOGZ.DOG', 'BRAIN.PBT'))));
+  let draw = { rand: () => 0, used: 0 };
+  const brain = new Brain(file, readBrainMap(dll), () => (draw.used++, draw.rand()));
+  const result = { commands: 0, held: 0, real: 0, realHeld: 0, wrong: [] as string[] };
+  let frame = -1;
+  let asked:
+    { line: string; answer: number; at: number; drawn: Frame['drawn']; next: number } | undefined;
+  const reals = new Map<number, number>();
+  const ours = new Map<number, number>();
+  /* (The model's own makings real, counted as it pulses.) */
+  const counting = brain as unknown as { makeLastThinkReal: () => void };
+  const make = counting.makeLastThinkReal.bind(brain);
+  counting.makeLastThinkReal = () => {
+    ours.set(frame, (ours.get(frame) ?? 0) + 1);
+    make();
+  };
+
+  for (const line of lines) {
+    const [kind, ...rest] = line.split(' ');
+
+    if (kind === 'tick') {
+      frame = Number(rest[0]);
+      asked = undefined;
+    } else if (kind === 'pulse') {
+      brain.pulse();
+    } else if (kind === 'brainzero') {
+      brain.zeroOutDesires();
+    } else if (kind === 'brainreal') {
+      reals.set(frame, (reals.get(frame) ?? 0) + 1);
+    } else if (kind === 'brain') {
+      const [command, verb, object, at] = [Number(rest[0]), rest[1], rest[2], Number(rest[3])];
+      const current = frames.find((each) => each.tick[0] === frame)!;
+      const seed = current.drawn[at]?.seed ?? current.frame[3];
+      const { rand, state } = randFrom(seed);
+      draw = { rand, used: 0 };
+      const answer = command === 5 ? brain.tell(verb, object) : brain.think();
+      asked = { line, answer, at, drawn: current.drawn, next: 0 };
+      (asked as unknown as { state: typeof state }).state = state;
+    } else if (kind === 'brained' && asked) {
+      result.commands++;
+      const [theirs, end] = rest.map(Number);
+      const current = frames.find((each) => each.tick[0] === frame)!;
+      const seedThen = end < current.drawn.length ? current.drawn[end].seed : current.frame[3];
+      const state = (asked as unknown as { state: { seed: number } }).state;
+
+      if (asked.answer === theirs && draw.used === end - asked.at && state.seed === seedThen) {
+        result.held++;
+      } else {
+        result.wrong.push(
+          `frame ${frame}: ${asked.line}: ${asked.answer} in ${draw.used} draws, not ${theirs} in ${end - asked.at}`
+        );
+      }
+
+      asked = undefined;
+    }
+  }
+
+  for (const [at, count] of reals) {
+    result.real += count;
+
+    if (ours.get(at) === count) {
+      result.realHeld += count;
+    } else {
+      result.wrong.push(`frame ${at}: ${ours.get(at) ?? 0} made real, not ${count}`);
+    }
+  }
+
+  for (const [at, count] of ours) {
+    if (!reals.has(at)) {
+      result.wrong.push(`frame ${at}: ${count} made real, not 0`);
+    }
+  }
+
+  return result;
+}
+
+/**
  * The dog painted (`PaintSprite::Update`, `Ballz::SetBallColor`): for each
  * stroke the trace keeps its colours before and after (`colours`, as the
  * brush is let go and the frame after), the model's dog posed as the
@@ -2303,6 +2399,12 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `pokes: ${pokes.clicks} clicks, ${pokes.poked} poked, ${pokes.held} held; ${pokes.notPoked.length} the model would take for a poke, not followed${pokes.notPoked.length ? `:\n  ${pokes.notPoked.join('\n  ')}` : ''}`
     );
     expect(pokes.wrong).toEqual([]);
+
+    const thinking = followBrain(lines);
+    console.log(
+      `brain: ${thinking.commands} told or asked, ${thinking.held} held; ${thinking.real} made real, ${thinking.realHeld} held`
+    );
+    expect(thinking.wrong).toEqual([]);
 
     const painting = followPainting(lines);
     console.log(

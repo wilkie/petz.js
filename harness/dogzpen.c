@@ -55,6 +55,7 @@ typedef int(__cdecl __far *INITINI)(void __far *params, int how);
 typedef int(__cdecl __far *WITHPARAMS)(void __far *params);
 typedef void __far *(__cdecl __far *MAKE)(void __far *object);
 typedef int(__cdecl __far *INITMODULE)(void __far *module, void __far *params);
+typedef int(__cdecl __far *INITDDE)(int a, int b, int c, int d, int e);
 typedef int(__cdecl __far *DRAWFRAME)(void __far *module, void __far *params);
 typedef void(__cdecl __far *SETEXCITEMENT)(void __far *module, int excitement);
 
@@ -164,6 +165,49 @@ static void __far *hookPrologue(int number, void __far *hook)
     jumpTo(code, hook);
     FreeSelector(writable);
     return MK_FP(alias(171, FP_SEG(copy)), FP_OFF(copy));
+}
+
+/* The brain (`XBrain`): each command it is given (`DoCommand_Change`, 293,
+ * seg12:0642; `brain command verb object draws`: 5 told the verb and
+ * object, 4 think), and the state its choice maps to after (`brained
+ * state draws`, DS:0x1e1e, seg15:1483); its desires cleared
+ * (`ZeroOutDesires`, 304; `brainzero draws`); and a choice made real
+ * (`MakeLastThinkReal`, 291; `brainreal draws`). */
+typedef int(__cdecl __far *BRAINCALL)(unsigned char __far *brain);
+static BRAINCALL commandOn, zeroOn, realOn;
+
+static int __cdecl __far __loadds commanding(unsigned char __far *brain)
+{
+    int answer;
+
+    say("brain %d %s %s %d\r\n", *(int __far *)(brain + 0x11c2), (char __far *)(brain + 0x11c6),
+        (char __far *)(brain + 0x11de), draws);
+    answer = commandOn(brain);
+    say("brained %d %d\r\n", *(int __far *)MK_FP(dgroup, 0x1e1e), draws);
+    return answer;
+}
+
+static int __cdecl __far __loadds zeroing(unsigned char __far *brain)
+{
+    say("brainzero %d\r\n", draws);
+    return zeroOn(brain);
+}
+
+/* And each pulse the module gives it (`PetModule::Pulse`, 498, seg21:8ac4;
+ * `pulse draws`): not always one a frame. */
+typedef int(__cdecl __far *PULSE)(void __far *module);
+static PULSE pulseOn;
+
+static int __cdecl __far __loadds pulsing(void __far *module)
+{
+    say("pulse %d\r\n", draws);
+    return pulseOn(module);
+}
+
+static int __cdecl __far __loadds realising(unsigned char __far *brain)
+{
+    say("brainreal %d\r\n", draws);
+    return realOn(brain);
 }
 
 /* `PetModule::NewState` (496, seg21:5bb8): each change (`newstate from to
@@ -415,6 +459,10 @@ static void hookPushes(void)
     storedOn = (PUSHTWO)hookPrologue(75, (void __far *)storing);
     neutralOn = (PUSHTWO)hookPrologue(78, (void __far *)neutral);
     scriptOn = (PUSHELEMENTS)hookPrologue(81, (void __far *)scripting);
+    commandOn = (BRAINCALL)hookPrologue(293, (void __far *)commanding);
+    zeroOn = (BRAINCALL)hookPrologue(304, (void __far *)zeroing);
+    realOn = (BRAINCALL)hookPrologue(291, (void __far *)realising);
+    pulseOn = (PULSE)hookPrologue(498, (void __far *)pulsing);
 }
 
 /* The end of a frame's line: whether the dog is being petted (`+0x123a`),
@@ -502,6 +550,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     *(void __far **)(params + 0x550) = module;
     answer = ((INITMODULE)ordinal(484))(module, params);
     say("made module %d %u %u\r\n", answer, FP_SEG(module), FP_OFF(module));
+
+    /* The brain, as DOGZ.WAD makes it just after (`InitPetzDDE`, 363,
+     * seg15:0084; seg4:10de of DOGZ.WAD): an `XBrain` read from the INI's
+     * brain file (`Main2`), its DDE mode 1, its five words unused. */
+    answer = ((INITDDE)ordinal(363))(0, 0, 0, 0, 0);
+    say("made brain %d %lu\r\n", answer, *(unsigned long __far *)MK_FP(dgroup, 0x1dfa));
 
     /* Each code segment's selector, by an export in it (`segments`, the
      * ordinal and its selector, each selector once). */
@@ -754,8 +808,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             }
         }
 
-        if (forcing & 1072) {
-            int slot = forcing & 16 ? 9 : forcing & 1024 ? 7 : 6, until = forcing & 16 ? 400 : 110;
+        if (forcing & (1072 | 8192 | 16384)) {
+            int treat = (forcing & (16 | 8192 | 16384)) != 0;
+            int slot = forcing & 16384 ? 11 : forcing & 8192 ? 10 : forcing & 16 ? 9 : forcing & 1024 ? 7 : 6;
+            int until = treat ? 400 : 110;
 
             *(int *)(params + 0x16) = n == 100 ? slot : -1;
             *(int *)(params + 0x18) = n == 100;
