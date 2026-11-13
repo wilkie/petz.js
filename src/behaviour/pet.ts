@@ -332,6 +332,8 @@ export interface PetWorld {
     ball: number
   ): { x: number; y: number };
   nudge?(dx: number, dy: number): void;
+  /** The dog's frame placed from a point: its origin there (`FindStartingLocation`). */
+  placeAt?(x: number, y: number): void;
 }
 
 /** A cursor sample, one a frame: `ReallyDoDrawFrame` keeps thirty. */
@@ -1161,6 +1163,48 @@ export class Pet {
     this.global = GLOBAL.idle;
     this.enterIdle(STATE.leaveKennel);
   }
+
+  /**
+   * The dog made in the playpen as `InitPetModule` makes it, after
+   * `LoadFactors` (the constructor), with no kennel to come out of:
+   * the script sprite's own draws -- its last script one of two (seg7:1372,
+   * the sprite's `-0x7222`), and the game's table of 50 numbers and its
+   * place in it (seg7:1568 to 1591) -- the moon's phase (`MoonSprite`,
+   * seg20:39e5), its middle somewhere on the stage at least 100 in
+   * (`FindStartingLocation`, seg21:5805: across within the stage's width
+   * less 200, down within its height less 200, at least 10 each), whether it
+   * has the hiccups (`rand() % 100` under the INI's `Hiccup Proclivity`, 10,
+   * seg21:1d6f), facing 64 and level (seg21:1db3), and idle (seg21:1e7f),
+   * which sets it walking.
+   */
+  startInPen(time = 0, hiccupProclivity = 10) {
+    this.time = time;
+    this.nextDrift = time;
+    this.lastScript = this.rand() % 2 ? 0x4a : 2;
+    this.randomTable = Array.from({ length: 50 }, () => this.rand());
+    this.randomAt = this.rand() % 49;
+    this.rand();
+    const across = Math.max(10, this.world.width - 200);
+    const down = Math.max(10, this.world.height - 200);
+    const x = (this.rand() % across) + 100;
+    const y = (this.rand() % down) + 100;
+    /* (Put there at once -- the point the frame is placed from, its
+     * rectangle then the sprite's, seg21:5876 to 58cb -- so that where it
+     * walks to is worked out from there.) */
+    this.world.placeAt?.(x, y);
+
+    this.hiccups = this.rand() % 100 < hiccupProclivity;
+    this.rotation = 64;
+    this.global = GLOBAL.idle;
+    this.enterIdle(0);
+  }
+
+  /** The game's table of numbers the scripts take in turn (`theirSavedThings` `+0xa`), and its place (`+0x6e`). */
+  private randomTable: number[] = [];
+  private randomAt = 0;
+
+  /** Whether the dog has the hiccups (`+0x1cde`): not yet played. */
+  hiccups = false;
 
   /**
    * One tick of the engine, `time` in its ticks, in the order of
@@ -2397,8 +2441,9 @@ export class Pet {
   }
 
   /** `PetModule::GetNewTarget`: a point on the stage at least so far from the dog. */
+  /** `GetNewTarget` (seg16:177b): far enough from the dog's middle (`+0x86`, `+0x88`, seg16:1867). */
   private newTarget(distance = 400) {
-    return pickTarget(this.world, this.world.where(), distance, this.rand);
+    return pickTarget(this.world, this.world.centre?.() ?? this.world.where(), distance, this.rand);
   }
 
   /** Walks a stretch towards the target, steered by `SetTargetLocation`. */

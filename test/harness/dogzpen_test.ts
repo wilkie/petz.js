@@ -2273,7 +2273,7 @@ function followLockstep(lines: string[]) {
   );
   const ours = (pet as unknown as { factors: number[] }).factors;
   result.factors = `${ours.join(' ')} / ${frames[0].tick.slice(4, 15).join(' ')}; seed ${seeded.seed}`;
-  pet.start(0);
+  pet.startInPen(0);
   result.factors += `, started ${seeded.seed} / ${frames[0].tick[3]}`;
 
   for (const [n, { frame }] of frames.entries()) {

@@ -619,6 +619,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         }
 
         say("initstate %d %d %d\r\n", *(int __far *)(module + 0xc0), *(int __far *)(module + 0xd4), draws);
+        /* The stage as the module keeps it (`ds:0x3bc2` on: left, top, right, bottom, then two more). */
+        {
+            int __far *stage = (int __far *)MK_FP(dgroup, 0x3bc2);
+
+            say("stage %d %d %d %d %d %d\r\n", stage[0], stage[1], stage[2], stage[3], stage[4], stage[5]);
+        }
     }
 
     /* The brain, as DOGZ.WAD makes it just after (`InitPetzDDE`, 363,

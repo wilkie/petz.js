@@ -794,6 +794,11 @@ export class Stage implements PetWorld {
   }
 
   /** Moves the dog by so much, as `PopScript` slides it towards an aim (seg7:6f6b). */
+  placeAt(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+
   nudge(dx: number, dy: number) {
     this.x += dx;
     this.y += dy;
