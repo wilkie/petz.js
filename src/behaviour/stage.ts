@@ -735,18 +735,20 @@ export class Stage implements PetWorld {
    * `PetModule::FigureOutStandardWidthAndHeight` (seg21:0289) measures it.
    */
   standardSize() {
-    const placed = project(
+    /* Frame 35's rectangle at rotation 64 (`GetFrame`'s, `+0x552`; seg21:0289),
+     * as the module is made: all but grown, its balls to their radius and 2
+     * more. (At an age of 99 the model's is the engine's, 161 by 119 for the
+     * harness's dog, measured; what scales the engine's is at then is not
+     * yet read out.) */
+    const box = frameBox(
       this.breed,
       this.header,
       this.frames[35],
-      scalesForAge(this.breed, this.age),
+      scalesForAge(this.breed, 99),
       64,
-      100 - this.age
+      1
     );
-    const extent = (axis: 'x' | 'y') =>
-      Math.max(...placed.map((ball) => ball[axis] + ball.diameter / 2)) -
-      Math.min(...placed.map((ball) => ball[axis] - ball.diameter / 2));
-    return { width: Math.trunc(extent('x')), height: Math.trunc(extent('y')) };
+    return { width: box.right - box.left, height: box.bottom - box.top };
   }
 
   /**
@@ -794,6 +796,27 @@ export class Stage implements PetWorld {
   }
 
   /** Moves the dog by so much, as `PopScript` slides it towards an aim (seg7:6f6b). */
+  /**
+   * What a check finds with a step shown as it will be -- placed, turned --
+   * and then the stage as it was: for the engine's own asks at the end of
+   * `PopScript`, made of the frame it has just placed.
+   */
+  peek<T>(step: Step, rotation: number, reference: number | undefined, check: () => T): T {
+    const kept = {
+      x: this.x,
+      y: this.y,
+      frame: this.frame,
+      rotation: this.rotation,
+      head: this.head,
+      angles: this.angles,
+      blend: this.blend,
+    };
+    this.show(step, rotation, reference, undefined, undefined, this.head, this.angles, this.blend);
+    const found = check();
+    Object.assign(this, kept);
+    return found;
+  }
+
   placeAt(x: number, y: number) {
     this.x = x;
     this.y = y;

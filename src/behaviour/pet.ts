@@ -334,6 +334,8 @@ export interface PetWorld {
   nudge?(dx: number, dy: number): void;
   /** The dog's frame placed from a point: its origin there (`FindStartingLocation`). */
   placeAt?(x: number, y: number): void;
+  /** A check made with a step shown as it will be, the stage then as it was (`Stage.peek`). */
+  peek?<T>(step: Step, rotation: number, reference: number | undefined, check: () => T): T;
 }
 
 /** A cursor sample, one a frame: `ReallyDoDrawFrame` keeps thirty. */
@@ -1214,9 +1216,7 @@ export class Pet {
     /* One frame played as it is made: the engine's dog is on it when the
      * first frame begins (frame 38, [[measured]]); its pop pulses the
      * sprite, so the blinking a step on (`ScriptSprite::Pulse`, seg7:590e). */
-    const first = this.pop().step;
-    this.blinkPulse();
-    return first;
+    return this.pop().step;
   }
 
   /** The game's table of numbers the scripts take in turn (`theirSavedThings` `+0xa`), and its place (`+0x6e`). */
@@ -1259,7 +1259,6 @@ export class Pet {
     this.world.updateBall?.();
     this.wearFullness();
     this.pulse();
-    this.blinkPulse();
     this.data.brain?.pulse();
     const centredAt = this.centreAt ?? undefined;
     this.centreAt = null;
@@ -1478,7 +1477,9 @@ export class Pet {
     let flags = 0;
     let glue: number | undefined;
     let step: Step | undefined;
-    let placedBy: number | undefined;
+    /* (A frame held to place the next by, taken up by a pop that ran dry, places the next pop's.) */
+    let placedBy: number | undefined = this.heldReference;
+    this.heldReference = undefined;
     /* The old state a glue starts from: as the last pop this tick left it,
      * where there was one (`PopScript` copies the state into the old as it
      * ends, run dry or not, seg7:71eb). */
@@ -1487,6 +1488,9 @@ export class Pet {
 
     this.cues.clear();
     this.easeMotionScale();
+    /* (Each pop pulses the sprite, `ScriptSprite::Pulse` from `PopScript`,
+     * seg7:590e: its blinking goes on once a pop.) */
+    this.blinkPulse();
     this.tails.splice(0).forEach((after) => this.applyTail(after));
     this.grabbedSlot = -1;
 
@@ -1564,12 +1568,17 @@ export class Pet {
       }
     }
 
-    /* What follows the last frame -- a state to go to -- is acted on now. */
-    while (this.queue.length && !('step' in this.queue[0]) && !('glue' in this.queue[0])) {
-      control(this.queue.shift()!);
+    /* Done only once it finds nothing more to show (`PopScript` reaching the
+     * queue's end, seg7:58f9): what follows the last frame -- a state to go
+     * to, a frame held to place the next by -- is taken up then, the tick
+     * after the last frame was shown, as the engine's is. */
+    this.dryPop = !step;
+
+    if (!step && placedBy !== undefined) {
+      this.heldReference = placedBy;
     }
 
-    if (!this.queue.some((item) => 'step' in item && !item.step.reference)) {
+    if (!step) {
       flags |= 1;
     }
 
@@ -1578,8 +1587,10 @@ export class Pet {
      * tracks, its head placed again (seg7:6b38 on; the tick does it). */
     this.steeredTracking = !!this.steer && this.headTracking;
 
+    /* Turned toward where it steers as the last frame left it (the engine
+     * sets the turn as a call ends, and its fudgers take it up the next). */
     if (this.steer) {
-      flags |= this.steerFrame();
+      this.steerFrame();
     }
 
     this.updateHeadTracking();
@@ -1603,6 +1614,15 @@ export class Pet {
     } else {
       step = { frame: this.lastStep.frame };
       this.placedBy = undefined;
+    }
+
+    /* Reached, asked of the frame just placed (seg7:7144 on): the point
+     * within the box ahead of its nose (`MakeFocusRect`), flag 2. */
+    if (this.steer) {
+      const shown = step;
+      flags |= this.world.peek
+        ? this.world.peek(shown, this.rotation, this.placedBy, () => this.steerReached())
+        : this.steerReached();
     }
 
     /* Breathing, the frames move as far as the heart beats fast (seg7:6aea). */
@@ -1769,18 +1789,24 @@ export class Pet {
    * (`MakeFocusRect`, seg7:3565); otherwise the dog's rotation is set
    * turning towards it, `atan2` of where it is from the middle of the dog.
    */
-  private steerFrame() {
-    const { point, rate, width, height, distance } = this.steer!;
-    const centre = this.world.centre?.() ?? this.world.where();
+  /** Whether the point steered to is within the box ahead of the nose: 2, else 0. */
+  private steerReached() {
+    const { point, width, height, distance } = this.steer!;
     const box = this.noseBox(width, height, distance);
-
-    if (
-      box &&
+    const inside =
+      !!box &&
       point.x >= box.left &&
       point.x < box.right &&
       point.y >= box.top &&
-      point.y < box.bottom
-    ) {
+      point.y < box.bottom;
+    return inside ? 2 : 0;
+  }
+
+  private steerFrame() {
+    const { point, rate } = this.steer!;
+    const centre = this.world.centre?.() ?? this.world.where();
+
+    if (this.steerReached()) {
       return 2;
     }
 
@@ -1936,8 +1962,23 @@ export class Pet {
   }
 
   private dispatch(): Step {
-    return this.handle(this.state, 'run') ?? this.pop().step;
+    this.dryPop = false;
+    const step = this.handle(this.state, 'run') ?? this.pop().step;
+
+    /* Run dry and given more by the state, popped again in the tick (the
+     * engine's second `PopScript`: frame 27 of the harness's day of 300). */
+    if (this.dryPop && this.queue.some((item) => 'step' in item && !item.step.reference)) {
+      return this.pop().step;
+    }
+
+    return step;
   }
+
+  /** Whether the last pop found nothing to show. */
+  private dryPop = false;
+
+  /** A frame held to place the next by (`0x8ad3`, `+0x20aa`), taken up by a pop that ran dry. */
+  private heldReference: number | undefined;
 
   /**
    * `PetModule::StateDispatch`: the state's handler, as it enters, as it

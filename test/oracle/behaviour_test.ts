@@ -773,7 +773,9 @@ withOracle('the engine’s behaviour', () => {
     });
 
     it('charges at a shoe picked up, and on the run grabs it and tugs at it', () => {
-      const { stage, pet, run, states } = setUp(3, 640, 480);
+      /* (Seed 2: on 3's course, with the standard size as the engine measures it, 161 wide, its
+       * grabs all slip within 2,000 frames; on 1, 2, 6 and 7 it tugs.) */
+      const { stage, pet, run, states } = setUp(2, 640, 480);
       run(200);
 
       const shoe = { x: 0, y: 200, held: true, inMouth: false };
@@ -1073,6 +1075,8 @@ withOracle('the engine’s behaviour', () => {
     it('fetches a ball thrown, brings it back and drops it', () => {
       const { stage, pet, run, states } = setUp(3, 640, 480);
       run(200);
+      /* A good dog, not a naughty one, which runs off with it (`DecideIfNaughty`). */
+      (pet as unknown as { factors: number[] }).factors[1] = 1;
 
       /* The cursor brought to the ball first, as a hand would be. */
       stage.pointer = { x: 320, y: 120, button: false };

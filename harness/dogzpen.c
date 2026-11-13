@@ -643,11 +643,14 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
                 *(int __far *)(sprite + 0x88), *(int __far *)(sprite + 0x51a + 0x18));
         }
         say("initstate %d %d %d\r\n", *(int __far *)(module + 0xc0), *(int __far *)(module + 0xd4), draws);
-        /* The stage as the module keeps it (`ds:0x3bc2` on: left, top, right, bottom, then two more). */
+        /* The stage as the module keeps it (`ds:0x3bc2` on: left, top, right,
+         * bottom, its height and width), and the dog's standard width and
+         * height (`ds:0x3bd0`, `0x3bd2`). */
         {
             int __far *stage = (int __far *)MK_FP(dgroup, 0x3bc2);
 
-            say("stage %d %d %d %d %d %d\r\n", stage[0], stage[1], stage[2], stage[3], stage[4], stage[5]);
+            say("stage %d %d %d %d %d %d %d %d\r\n", stage[0], stage[1], stage[2], stage[3], stage[4], stage[5],
+                stage[7], stage[8]);
         }
     }
 
@@ -935,6 +938,18 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         /* `tick n state global seed`, its 11 factors (`+0x11de` on) and the
          * idle weights' sum, as the frame begins. */
+        /* The engine's clock as the frame begins (`clock n ms`): `timeGetTime`, as seg9:0668 asks it. */
+        {
+            typedef DWORD(FAR PASCAL * TIMEGET)(void);
+            static TIMEGET timeGet;
+
+            if (!timeGet) {
+                timeGet = (TIMEGET)GetProcAddress(GetModuleHandle("MMSYSTEM"), "TIMEGETTIME");
+            }
+
+            say("clock %d %lu\r\n", n, timeGet ? timeGet() : 0ul);
+        }
+
         say("tick %d %d %d %lu", n, *(int __far *)(module + 0xc0), *(int __far *)(module + 0xd4),
             *(unsigned long __far *)MK_FP(dgroup, 0x2d28));
 
@@ -1026,10 +1041,13 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
              * and whether its state has something of its own to draw -- what
              * it holds, in its mouth or under a paw (`+0x40c`, `+0x414`);
              * and whether it slides (`8af4`, `-0x71f2`). */
-            say(" %d %d %d %d %d %d\r\n", *(int __far *)(sprite + 0x2108),
+            say(" %d %d %d %d %d %d", *(int __far *)(sprite + 0x2108),
                 *(int __far *)(sprite + 0x2110), *(int __far *)(sprite + 0x2112),
                 *(void __far *__far *)(at + 0x40c) != 0, *(void __far *__far *)(at + 0x414) != 0,
                 *(int __far *)(sprite + (unsigned)-0x71f2));
+            /* (Then the steering's box: its width and height, `-0x71f6`, `-0x71f4`, and distance, `+0x2114`.) */
+            say(" %d %d %d\r\n", *(int __far *)(sprite + (unsigned)-0x71f6),
+                *(int __far *)(sprite + (unsigned)-0x71f4), *(int __far *)(sprite + 0x2114));
 
             /* And the slide: its limit and count (`-0x71f0`, `-0x71ee`), and its
              * place and speed each way (`-0x71ec` on), floats' bits. */

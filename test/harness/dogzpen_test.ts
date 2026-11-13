@@ -2247,7 +2247,13 @@ function followLockstep(lines: string[]) {
   const scripts = parseScripts(read('DATA/ALL_PTZ.SCP'), readOpcodes(dll));
   const states = readStateNames(dll);
   const tricks = parseTricks(read('TRICKS.TDT'));
-  const { rand, state: seeded } = randFrom(Number(seedLine.split(' ')[2]));
+  const { rand: drawn0, state: seeded } = randFrom(Number(seedLine.split(' ')[2]));
+  /* (Each draw's caller this frame, to say where the two part.) */
+  let callers: string[] = [];
+  const rand = () => {
+    callers.push(new Error().stack!.split('\n')[2]?.trim().split(' ')[1] ?? '?');
+    return drawn0();
+  };
   const brain = new Brain(parseBrain(read('BRAIN.PBT')), readBrainMap(dll), rand);
   /* Its age in days from its age factor, a tenth of a day each (`ageFactor`). */
   const age = Math.trunc(frames[0].tick[14] / 10);
@@ -2278,7 +2284,21 @@ function followLockstep(lines: string[]) {
     .find((line) => line.startsWith('inited '))
     ?.split(' ')
     .map(Number);
-  const first = pet.startInPen(0, 10, inited ? { x: inited[5], y: inited[6] } : undefined);
+  /* The engine's clock, milliseconds over 17 (`timeGetTime`, seg9:0668), as each frame begins (`clock`). */
+  const clocks = new Map<number, number>();
+
+  for (const line of lines) {
+    if (line.startsWith('clock ')) {
+      const [n, ms] = line.split(' ').slice(1).map(Number);
+      clocks.set(n, Math.trunc(ms / 17));
+    }
+  }
+
+  const first = pet.startInPen(
+    clocks.get(0) ?? 0,
+    10,
+    inited ? { x: inited[5], y: inited[6] } : undefined
+  );
   stage.show(first, pet.rotation);
 
   if (inited) {
@@ -2288,8 +2308,17 @@ function followLockstep(lines: string[]) {
 
   result.factors += `, started ${seeded.seed} / ${frames[0].tick[3]}`;
 
-  for (const [n, { frame, state }] of frames.entries()) {
-    const step = pet.tick((n * 45) / 17);
+  for (const [n, { frame, state, drawn, tick }] of frames.entries()) {
+    callers = [];
+    /* Its factors as the frame begins, against the engine's (`tick`). */
+    const factorsNow = (pet as unknown as { factors: number[] }).factors.join(' ');
+
+    if (factorsNow !== tick.slice(4, 15).join(' ')) {
+      result.parted = `frame ${tick[0]} begins: factors ${factorsNow}, not ${tick.slice(4, 15).join(' ')}`;
+      break;
+    }
+
+    const step = pet.tick(clocks.get(n) ?? (n * 45) / 17);
     stage.show(
       step,
       step.rotation,
@@ -2301,11 +2330,13 @@ function followLockstep(lines: string[]) {
     );
     result.frames++;
     const seed = seeded.seed;
-    const mine = `${pet.state} ${pet.global} frame ${step.frame}`;
-    const theirs = `${frame[1]} ${frame[2]} frame ${state?.[13]}`;
+    const box = stage.rect();
+    const mine = `${pet.state} ${pet.global} frame ${step.frame} at ${[box.left, box.top, box.right, box.bottom].map(Math.round).join(' ')}`;
+    const theirs = `${frame[1]} ${frame[2]} frame ${state?.[13]} at ${state?.slice(0, 4).join(' ')}`;
 
     if (mine !== theirs || seed !== frame[3]) {
-      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]})`;
+      const engine = drawn.map((each) => `${each.segment}:${each.offset.toString(16)}`).join(' ');
+      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'})`;
       break;
     }
 
