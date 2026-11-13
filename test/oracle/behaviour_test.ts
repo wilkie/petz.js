@@ -472,7 +472,8 @@ withOracle('the engine’s behaviour', () => {
       expect(pet.state).toBe(STATE.idle);
 
       const from = looks.length;
-      run(120, (n) => {
+      /* (Long enough to be idle again, should it take up an idle trick first.) */
+      run(400, (n) => {
         const centre = stage.centre();
         stage.pointer = { x: centre.x + 80 * Math.cos(n / 8), y: centre.y - 60, button: false };
       });

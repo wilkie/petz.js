@@ -25,6 +25,9 @@ export interface Step {
   /** Sounds to play, by their number in the breed's sound list. */
   sounds?: number[];
 
+  /** Sounds yet to be chosen, each from its choices, as the frame is played (`deferSounds`). */
+  soundChoices?: number[][];
+
   /**
    * A ball to keep where it was: the dog is moved so that this ball of this
    * frame is where it was in the frame before.
@@ -143,6 +146,15 @@ export interface TimelineOptions {
   /** A random number below `n`. */
   random: (n: number) => number;
 
+  /**
+   * A number below `n` from the game's table, as `PushScript` takes an
+   * operand's (`0x8b05`, seg7:4b99) and `0x8b09`'s variants; without, `random`.
+   */
+  table?: (n: number) => number;
+
+  /** Sounds left to be chosen as each frame is played (`soundChoices`), not as pushed. */
+  deferSounds?: boolean;
+
   /** How many frames at most: a repeat of 999 is for ever. */
   limit?: number;
 
@@ -155,7 +167,7 @@ export function timeline(
   scripts: Script[],
   index: number,
   variant: number,
-  { flags, random, limit = 2000, tail }: TimelineOptions
+  { flags, random, table = random, deferSounds = false, limit = 2000, tail }: TimelineOptions
 ): Step[] {
   const frames: Step[] = [];
 
@@ -183,7 +195,7 @@ export function timeline(
   const value = (operand: Operand) =>
     typeof operand === 'number'
       ? operand
-      : operand.random[0] + random(Math.max(1, operand.random[1] - operand.random[0] + 1));
+      : operand.random[0] + table(Math.max(1, operand.random[1] - operand.random[0] + 1));
 
   const play = (elements: Element[], depth: number) => {
     let at = 0;
@@ -199,7 +211,13 @@ export function timeline(
 
         if (element.op >= SOUND_FIRST && element.op <= SOUND_LAST) {
           const choices = element.operands.map(value);
-          pending.sounds = [...(pending.sounds ?? []), choices[random(choices.length)]];
+
+          /* (Kept to be chosen as the frame is played, where asked: `PopScript` draws then, seg7:620a.) */
+          if (deferSounds) {
+            pending.soundChoices = [...(pending.soundChoices ?? []), choices];
+          } else {
+            pending.sounds = [...(pending.sounds ?? []), choices[random(choices.length)]];
+          }
           continue;
         }
 
@@ -328,7 +346,7 @@ export function timeline(
                * says otherwise (GlueScriptsIfNotGlued). Inferred: not yet
                * read how. */
               pending.glue ??= DEFAULT_GLUE;
-              play(script.variants[random(script.variants.length)], depth + 1);
+              play(script.variants[table(script.variants.length)], depth + 1);
             }
 
             void c;

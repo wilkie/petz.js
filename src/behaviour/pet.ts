@@ -1177,9 +1177,14 @@ export class Pet {
    * seg21:1d6f), facing 64 and level (seg21:1db3), and idle (seg21:1e7f),
    * which sets it walking.
    */
-  startInPen(time = 0, hiccupProclivity = 10) {
+  startInPen(time = 0, hiccupProclivity = 10, middle?: { x: number; y: number }) {
     this.time = time;
     this.nextDrift = time;
+    /* Its neutral position as the module leaves it: standing panting, 14 --
+     * [[measured]], the engine's dog then playing script 28, 14 to 9, back
+     * from frame 38. (The script sprite is made at 6, sitting, seg7:1366;
+     * what puts it at 14 is not yet read out.) */
+    this.position = 14;
     this.lastScript = this.rand() % 2 ? 0x4a : 2;
     this.randomTable = Array.from({ length: 50 }, () => this.rand());
     this.randomAt = this.rand() % 49;
@@ -1193,15 +1198,44 @@ export class Pet {
      * walks to is worked out from there.) */
     this.world.placeAt?.(x, y);
 
+    /* (Or with its middle where the engine's ends up: the frames it is
+     * placed by, and moved by, as the module is made are not yet followed.) */
+    const now = this.world.centre?.();
+
+    if (middle && now) {
+      this.world.nudge?.(middle.x - now.x, middle.y - now.y);
+    }
+
     this.hiccups = this.rand() % 100 < hiccupProclivity;
     this.rotation = 64;
     this.global = GLOBAL.idle;
     this.enterIdle(0);
+
+    /* One frame played as it is made: the engine's dog is on it when the
+     * first frame begins (frame 38, [[measured]]); its pop pulses the
+     * sprite, so the blinking a step on (`ScriptSprite::Pulse`, seg7:590e). */
+    const first = this.pop().step;
+    this.blinkPulse();
+    return first;
   }
 
   /** The game's table of numbers the scripts take in turn (`theirSavedThings` `+0xa`), and its place (`+0x6e`). */
   private randomTable: number[] = [];
   private randomAt = 0;
+
+  /**
+   * The table's next number: its place moved on, back to the first at 50
+   * (seg7:44df to 4500). Without a table made (`start`, not `startInPen`), a
+   * fresh `rand()`, as the model had it.
+   */
+  private tableNext() {
+    if (!this.randomTable.length) {
+      return this.rand();
+    }
+
+    this.randomAt = this.randomAt + 1 >= 50 ? 0 : this.randomAt + 1;
+    return this.randomTable[this.randomAt];
+  }
 
   /** Whether the dog has the hiccups (`+0x1cde`): not yet played. */
   hiccups = false;
@@ -1342,11 +1376,14 @@ export class Pet {
 
   private pushScript(index: number) {
     const script = this.data.scripts[index];
-    const variant = this.rand() % script.variants.length;
+    /* Its variant, and its numbers, from the game's table (`PushStoredScript`, seg7:44df; `PushScript`, seg7:4b99). */
+    const variant = this.tableNext() % script.variants.length;
     let after: Omit<Step, 'frame'> | undefined;
     const steps = timeline(this.data.scripts, index, variant, {
       flags: this.data.flags,
       random: (n) => this.rand() % n,
+      table: (n) => this.tableNext() % n,
+      deferSounds: true,
       limit: 600,
       tail: (rest) => (after = rest),
     });
@@ -1510,6 +1547,13 @@ export class Pet {
           step.glueBlend = earlier;
         }
 
+        /* Its sounds chosen now, as `PopScript` plays them (seg7:620a). */
+        if (step.soundChoices) {
+          const chosen = step.soundChoices.map((choices) => choices[this.rand() % choices.length]);
+          step.sounds = [...(step.sounds ?? []), ...chosen];
+          delete step.soundChoices;
+        }
+
         if (this.sounds.length) {
           step.sounds = [...(step.sounds ?? []), ...this.sounds];
           this.sounds = [];
@@ -1631,6 +1675,9 @@ export class Pet {
     }
 
     this.sounds.push(...(after.sounds ?? []));
+    this.sounds.push(
+      ...(after.soundChoices ?? []).map((choices) => choices[this.rand() % choices.length])
+    );
     this.applyEffects(after);
   }
 
@@ -5061,7 +5108,8 @@ export class Pet {
   private blinkShut = 0;
 
   /** Frames to the next blink (`-0x7218`). */
-  private blinkWait = 0;
+  /* (20 as the script sprite is made, seg7:12b0, `-0x7218`.) */
+  private blinkWait = 20;
 
   /** How far the eyelids are closed this frame, in hundredths (`0x54a`). */
   private lids = 0;

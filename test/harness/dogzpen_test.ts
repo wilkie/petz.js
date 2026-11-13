@@ -2273,10 +2273,22 @@ function followLockstep(lines: string[]) {
   );
   const ours = (pet as unknown as { factors: number[] }).factors;
   result.factors = `${ours.join(' ')} / ${frames[0].tick.slice(4, 15).join(' ')}; seed ${seeded.seed}`;
-  pet.startInPen(0);
+  /* Its middle as `InitPetModule` left it (`inited`), where the trace keeps it. */
+  const inited = lines
+    .find((line) => line.startsWith('inited '))
+    ?.split(' ')
+    .map(Number);
+  const first = pet.startInPen(0, 10, inited ? { x: inited[5], y: inited[6] } : undefined);
+  stage.show(first, pet.rotation);
+
+  if (inited) {
+    const middle = stage.centre();
+    stage.nudge(inited[5] - middle.x, inited[6] - middle.y);
+  }
+
   result.factors += `, started ${seeded.seed} / ${frames[0].tick[3]}`;
 
-  for (const [n, { frame }] of frames.entries()) {
+  for (const [n, { frame, state }] of frames.entries()) {
     const step = pet.tick((n * 45) / 17);
     stage.show(
       step,
@@ -2289,8 +2301,8 @@ function followLockstep(lines: string[]) {
     );
     result.frames++;
     const seed = seeded.seed;
-    const mine = `${pet.state} ${pet.global}`;
-    const theirs = `${frame[1]} ${frame[2]}`;
+    const mine = `${pet.state} ${pet.global} frame ${step.frame}`;
+    const theirs = `${frame[1]} ${frame[2]} frame ${state?.[13]}`;
 
     if (mine !== theirs || seed !== frame[3]) {
       result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]})`;

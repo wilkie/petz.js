@@ -251,6 +251,22 @@ static int __cdecl __far __loadds loadingFactors(void __far *module, int a, int 
     return answer;
 }
 
+/* `PetModule::FindStartingLocation`, as the module is made: the dog's
+ * sprite after (`started` its rectangle and middle). */
+typedef int(__cdecl __far *FINDSTART)(unsigned char __far *module);
+static FINDSTART findOn;
+
+static int __cdecl __far __loadds finding(unsigned char __far *module)
+{
+    int answer = findOn(module);
+    unsigned char __far *sprite = *(unsigned char __far *__far *)(module + 0x58);
+
+    say("started %d %d %d %d %d %d %d\r\n", *(int __far *)(sprite + 0x60), *(int __far *)(sprite + 0x62),
+        *(int __far *)(sprite + 0x64), *(int __far *)(sprite + 0x66), *(int __far *)(sprite + 0x86),
+        *(int __far *)(sprite + 0x88), *(int __far *)(sprite + 0x51a + 0x18));
+    return answer;
+}
+
 /* `PetModule::NewState` (496, seg21:5bb8): each change (`newstate from to
  * draws`, the draws of the frame before it). */
 typedef int(__cdecl __far *NEWSTATE)(void __far *module, int state);
@@ -606,6 +622,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     *(int *)(params + 0x54e) = 0;
     *(void __far **)(params + 0x550) = module;
     factorsOn = (LOADFACTORS)hookPrologue(499, (void __far *)loadingFactors);
+    findOn = (FINDSTART)hookPrologue(505, (void __far *)finding);
 
     /* The seed as the module is made (`seed`): the model's dog starts from it. */
     say("seed %lu\r\n", *(unsigned long __far *)MK_FP(dgroup, 0x2d28));
@@ -618,6 +635,13 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             say("initdraw %d %lu %u %u\r\n", k, drawnSeed[k], drawnSeg[k], drawnOff[k]);
         }
 
+        {
+            unsigned char __far *sprite = *(unsigned char __far *__far *)(module + 0x58);
+
+            say("inited %d %d %d %d %d %d %d\r\n", *(int __far *)(sprite + 0x60), *(int __far *)(sprite + 0x62),
+                *(int __far *)(sprite + 0x64), *(int __far *)(sprite + 0x66), *(int __far *)(sprite + 0x86),
+                *(int __far *)(sprite + 0x88), *(int __far *)(sprite + 0x51a + 0x18));
+        }
         say("initstate %d %d %d\r\n", *(int __far *)(module + 0xc0), *(int __far *)(module + 0xd4), draws);
         /* The stage as the module keeps it (`ds:0x3bc2` on: left, top, right, bottom, then two more). */
         {
