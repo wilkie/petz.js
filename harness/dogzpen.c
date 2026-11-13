@@ -244,6 +244,10 @@ static int __cdecl __far __loadds loadingFactors(void __far *module, int a, int 
     say("factors in %lu %d %d %d\r\n", *(unsigned long __far *)MK_FP(dgroup, 0x2d28), draws, a, b);
     answer = factorsOn(module, a, b);
     say("factors out %lu %d\r\n", *(unsigned long __far *)MK_FP(dgroup, 0x2d28), draws);
+    /* (The draws from here to the first frame kept, `initdraw`: the game's
+     * `rand` hooked only now, the 66,307 before too many to keep.) */
+    draws = 0;
+    hookRand();
     return answer;
 }
 
@@ -607,6 +611,15 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     say("seed %lu\r\n", *(unsigned long __far *)MK_FP(dgroup, 0x2d28));
     answer = ((INITMODULE)ordinal(484))(module, params);
     say("made module %d %u %u\r\n", answer, FP_SEG(module), FP_OFF(module));
+    {
+        int k;
+
+        for (k = 0; k < draws && k < KEPT; k++) {
+            say("initdraw %d %lu %u %u\r\n", k, drawnSeed[k], drawnSeg[k], drawnOff[k]);
+        }
+
+        say("initstate %d %d %d\r\n", *(int __far *)(module + 0xc0), *(int __far *)(module + 0xd4), draws);
+    }
 
     /* The brain, as DOGZ.WAD makes it just after (`InitPetzDDE`, 363,
      * seg15:0084; seg4:10de of DOGZ.WAD): an `XBrain` read from the INI's
@@ -651,7 +664,6 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         say("weights %ld\r\n", *(long __far *)MK_FP(dgroup, 0x3d94));
     }
 
-    hookRand();
     hookPushes();
 
     for (n = 0; n < frames; n++) {
