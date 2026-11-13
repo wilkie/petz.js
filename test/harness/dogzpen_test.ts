@@ -1638,8 +1638,8 @@ function followPlacing(lines: string[]) {
 /**
  * When the engine places the head afresh for the frame before (`head 0`),
  * against the model's rule for it (`Pet`'s `headCopy`): moved plainly, the
- * head tracking, just where the dog turned -- its rotation or its angles
- * changed from the frame before.
+ * head tracking in both frames, just where the dog turned -- its rotation
+ * or its angles changed from the frame before.
  */
 function followHeadCopies(lines: string[]) {
   const { frames } = readTrace(lines);
@@ -1648,7 +1648,16 @@ function followHeadCopies(lines: string[]) {
   frames.forEach(({ tick, state, moved, headCopy }, n) => {
     const before = frames[n - 1]?.state;
 
-    if (!state || !before || state.length < 25 || !state[16] || moved.length !== 1 || moved[0][0]) {
+    /* (Both tracking, the frame before as well: an untracking one has no head to place.) */
+    if (
+      !state ||
+      !before ||
+      state.length < 25 ||
+      !state[16] ||
+      !before[16] ||
+      moved.length !== 1 ||
+      moved[0][0]
+    ) {
       return;
     }
 

@@ -1222,7 +1222,9 @@ export class Pet {
         was.roll !== angles.roll);
     let headCopy: Head | undefined;
 
-    if (head && was && turned && shown.glue === undefined) {
+    /* (The frame before's head is placed afresh only if it tracked: its
+     * state's `+0x1e` set, as the engine's `GetFrame` asks.) */
+    if (head && was?.tracking && turned && shown.glue === undefined) {
       const [yaw, pitch] = [this.headYaw, this.headPitch];
       [this.headYaw, this.headPitch] = [was.yaw, was.pitch];
       headCopy = this.headTrackPrep();
@@ -1234,6 +1236,7 @@ export class Pet {
       ...angles,
       yaw: this.headYaw,
       pitch: this.headPitch,
+      tracking: !!head,
     };
 
     return {
@@ -2003,7 +2006,16 @@ export class Pet {
 
   /** The dog's rotation, angles and head turn and nod as the last tick left them (`BallState` `+0xec`). */
   private lastPose:
-    | { rotation: number; tilt: number; spin: number; roll: number; yaw: number; pitch: number }
+    | {
+        rotation: number;
+        tilt: number;
+        spin: number;
+        roll: number;
+        yaw: number;
+        pitch: number;
+        /** Whether its head tracked (`+0x1e`): only then is it placed afresh. */
+        tracking: boolean;
+      }
     | undefined;
 
   /** Whether the dog has left `eIdle` since it was last made idle (`0xda`, seg16:02fe). */
