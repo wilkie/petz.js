@@ -281,6 +281,8 @@ interface Frame {
   heldShoe?: boolean;
   /** The shoe taken or let go of in the frame. */
   shoeChanged?: boolean;
+  /** The glue's states as it was made (`glue`): top left, the old frame, blend, angles; the new. */
+  glueLine?: number[];
   /** The shoe as the frame began (`shoe`): whether the user holds it, whether the dog may snatch. */
   shoe?: number[];
   /** The ball as the frame began (`ball`): held, in the box, its rectangle. */
@@ -387,6 +389,8 @@ function readTrace(lines: string[]) {
       holds = 0;
       open.holding = true;
       open.heldSlot = undefined;
+    } else if (kind === 'glue' && open) {
+      open.glueLine = values;
     } else if (kind === 'shoe' && open) {
       open.shoe = values;
     } else if (kind === 'slide' && open) {
@@ -1410,211 +1414,223 @@ function followPlacing(lines: string[]) {
   const unturned = (state?: number[], n?: number) =>
     state && state.length >= 25 && (!state[16] || (n !== undefined && heads[n] !== undefined));
 
-  frames.forEach(({ tick, state, moved, holding, heldSlot, heldShoe, shoeChanged }, n) => {
-    const before = frames[n - 1]?.state;
+  frames.forEach(
+    ({ tick, state, moved, holding, heldSlot, heldShoe, shoeChanged, glueLine }, n) => {
+      const before = frames[n - 1]?.state;
 
-    /* (Not where it takes up or lets go: held throughout, the ball in its slot.) */
-    const shoeThrough = heldShoe && frames[n - 1]?.heldShoe;
-    const changing = shoeThrough
-      ? false
-      : (holding && heldSlot === undefined) ||
-        (frames[n - 1]?.holding && frames[n - 1]?.heldSlot !== heldSlot) ||
-        !!shoeChanged ||
-        !!frames[n - 1]?.shoeChanged;
+      /* (Not where it takes up or lets go: held throughout, the ball in its slot.) */
+      const shoeThrough = heldShoe && frames[n - 1]?.heldShoe;
+      const changing = shoeThrough
+        ? false
+        : (holding && heldSlot === undefined) ||
+          (frames[n - 1]?.holding && frames[n - 1]?.heldSlot !== heldSlot) ||
+          !!shoeChanged ||
+          !!frames[n - 1]?.shoeChanged;
 
-    if (!unturned(state, n) || !unturned(before, n - 1) || moved.length !== 1 || moved[0][0] > 1) {
-      return;
-    }
+      if (
+        !unturned(state, n) ||
+        !unturned(before, n - 1) ||
+        moved.length !== 1 ||
+        moved[0][0] > 1
+      ) {
+        return;
+      }
 
-    if (changing) {
-      result.holding++;
-      return;
-    }
+      if (changing) {
+        result.holding++;
+        return;
+      }
 
-    /* Sliding (`8af4`), as the frame before left it: the rectangle moved
-     * on by the whole part of the slide's place, as it changed (seg7:6f6b
-     * on); where the trace keeps the slide. */
-    const sliding = before!.length >= 31 && before![30];
-    const slidAt = (slide?: number[]) => [
-      Math.trunc(floatOf(slide![2])),
-      Math.trunc(floatOf(slide![3])),
-    ];
+      /* Sliding (`8af4`), as the frame before left it: the rectangle moved
+       * on by the whole part of the slide's place, as it changed (seg7:6f6b
+       * on); where the trace keeps the slide. */
+      const sliding = before!.length >= 31 && before![30];
+      const slidAt = (slide?: number[]) => [
+        Math.trunc(floatOf(slide![2])),
+        Math.trunc(floatOf(slide![3])),
+      ];
 
-    if (sliding && (!frames[n].slide || !frames[n - 1].slide)) {
-      result.sliding++;
-      return;
-    }
+      if (sliding && (!frames[n].slide || !frames[n - 1].slide)) {
+        result.sliding++;
+        return;
+      }
 
-    const slid = sliding
-      ? [
-          slidAt(frames[n].slide)[0] - slidAt(frames[n - 1].slide)[0],
-          slidAt(frames[n].slide)[1] - slidAt(frames[n - 1].slide)[1],
-        ]
-      : [0, 0];
-    result.slid += sliding ? 1 : 0;
+      const slid = sliding
+        ? [
+            slidAt(frames[n].slide)[0] - slidAt(frames[n - 1].slide)[0],
+            slidAt(frames[n].slide)[1] - slidAt(frames[n - 1].slide)[1],
+          ]
+        : [0, 0];
+      result.slid += sliding ? 1 : 0;
 
-    const glue = moved[0][0] === 1 ? moved[0][1] : undefined;
-    const pose = (of: number[], at: number) => {
-      const blend = of[17] === 100 ? undefined : { scale: of[17], reference: of[18] };
-      return {
-        rotation: of[9],
-        angles: { tilt: of[10], spin: of[11], roll: of[12] },
-        frame: of[13],
-        blend,
-        head:
-          of[16] && heads[at]
-            ? headOf(
-                heads[at]!,
-                extended[of[13]],
-                blend && { scale: blend.scale, reference: extended[blend.reference] },
-                scalesForAge(breed, tick[14]).pet,
-                breed
-              )
-            : undefined,
+      const glue = moved[0][0] === 1 ? moved[0][1] : undefined;
+      const pose = (of: number[], at: number) => {
+        const blend = of[17] === 100 ? undefined : { scale: of[17], reference: of[18] };
+        return {
+          rotation: of[9],
+          angles: { tilt: of[10], spin: of[11], roll: of[12] },
+          frame: of[13],
+          blend,
+          head:
+            of[16] && heads[at]
+              ? headOf(
+                  heads[at]!,
+                  extended[of[13]],
+                  blend && { scale: blend.scale, reference: extended[blend.reference] },
+                  scalesForAge(breed, tick[14]).pet,
+                  breed
+                )
+              : undefined,
+        };
       };
-    };
-    const was = pose(before!, n - 1);
-    const now = pose(state!, n);
-    /* The head placed afresh for the frame before at the new angles, where the engine did (`head 0`). */
-    const copyBlock = frames[n].headCopy;
-    const headCopy = copyBlock
-      ? headOf(
-          copyBlock,
-          extended[was.frame],
-          was.blend && { scale: was.blend.scale, reference: extended[was.blend.reference] },
-          scalesForAge(breed, tick[14]).pet,
-          breed
-        )
-      : undefined;
-    /* The model's dog put where the engine's was, then moved on, kept
-     * touching the stage unless steering off it (`+0x2108`, `+0x2110`). */
-    const stage = new Stage(292, 273, breed, header, shapes, tick[14]);
+      const was = pose(before!, n - 1);
+      const now = pose(state!, n);
+      /* The head placed afresh for the frame before at the new angles, where the engine did (`head 0`). */
+      const copyBlock = frames[n].headCopy;
+      const headCopy = copyBlock
+        ? headOf(
+            copyBlock,
+            extended[was.frame],
+            was.blend && { scale: was.blend.scale, reference: extended[was.blend.reference] },
+            scalesForAge(breed, tick[14]).pet,
+            breed
+          )
+        : undefined;
+      /* The model's dog put where the engine's was, then moved on, kept
+       * touching the stage unless steering off it (`+0x2108`, `+0x2110`). */
+      const stage = new Stage(292, 273, breed, header, shapes, tick[14]);
 
-    if (heldSlot !== undefined) {
-      stage.ball = { x: 0, y: 0, vx: 0, vy: 0, held: false, slot: heldSlot, recorded: null };
-    }
+      if (heldSlot !== undefined) {
+        stage.ball = { x: 0, y: 0, vx: 0, vy: 0, held: false, slot: heldSlot, recorded: null };
+      }
 
-    if (shoeThrough) {
-      stage.shoe = { x: 0, y: 0, held: false, inMouth: true };
-      result.shoe++;
-    }
+      if (shoeThrough) {
+        stage.shoe = { x: 0, y: 0, held: false, inMouth: true };
+        result.shoe++;
+      }
 
-    stage.show(
-      { frame: was.frame } as Step,
-      was.rotation,
-      undefined,
-      undefined,
-      undefined,
-      was.head,
-      was.angles,
-      was.blend
-    );
-    const from = stage.rect();
-    stage.nudge(before![0] - from.left, before![1] - from.top);
-
-    const steering =
-      state!.length >= 28 && state![25] ? { x: state![26], y: state![27] } : undefined;
-    stage.show(
-      {
-        frame: now.frame,
-        glue,
-        steering,
-        headCopy,
-        shift: shifts.get(`${was.frame}>${now.frame}`),
-      } as Step,
-      now.rotation,
-      undefined,
-      undefined,
-      undefined,
-      now.head,
-      now.angles,
-      now.blend
-    );
-    /* Scruffed, the button held (`DoScruff`, seg21:6672 to 6783): once
-     * the frame has moved on, the dog as it now is put with its neck's centre
-     * at the cursor, lowered by half the neck's drawn size. */
-    const pin = tick[1] === 10 ? cursors.get(tick[0]) : undefined;
-
-    if (pin) {
-      const neck = stage.placed()[54];
-      result.pinned++;
-      stage.nudge(
-        pin[0] - Math.round(neck.x),
-        pin[1] + Math.trunc(neck.diameter / 2) - Math.round(neck.y)
+      stage.show(
+        { frame: was.frame } as Step,
+        was.rotation,
+        undefined,
+        undefined,
+        undefined,
+        was.head,
+        was.angles,
+        was.blend
       );
-    }
+      const from = stage.rect();
+      stage.nudge(before![0] - from.left, before![1] - from.top);
 
-    /* Lunging with hold of the shoe (`DoLungingCursor`, seg3:1a92 to 1b4b),
-     * the grip held as the frame began (the module's `+0x222`): so, the
-     * chin's centre (ball 51) put at the shoe's middle, where the shoe has
-     * moved to in the frame (as the next frame begins), the slide's move
-     * overridden. */
-    const [grip, shoeAt] = [frames[n].shoe, frames[n + 1]?.shoe];
-
-    const lunging = tick[1] === 0x12 && !!grip && grip.length >= 5 && !!grip[4] && !!shoeAt;
-
-    if (lunging) {
-      const chin = stage.placed()[51];
-      result.lunging++;
-      stage.nudge(shoeAt![2] - Math.round(chin.x), shoeAt![3] - Math.round(chin.y));
-    }
-
-    const to = stage.rect();
-    /* (Pinned, the dog is put where the pin says, the slide's move and all.) */
-    const slidBy = pin || lunging ? [0, 0] : slid;
-    const ours = [to.left - before![0] + slidBy[0], to.top - before![1] + slidBy[1]];
-    const theirs = [state![0] - before![0], state![1] - before![1]];
-
-    if (glue === undefined) {
-      result.plain++;
-    } else {
-      result.glued++;
-    }
-
-    const off = [
-      Math.abs(Math.round(ours[0]) - theirs[0]),
-      Math.abs(Math.round(ours[1]) - theirs[1]),
-    ];
-    /* Its head placed again for the frame before at the new angles, the
-     * wobbles moved on since (`HeadTrackPrep` again, the copy's block not the
-     * frame before's): the model, taking the frame before's head, cannot
-     * follow; listed apart. */
-    const rewobbled =
-      !!frames[n].headCopy &&
-      !!heads[n - 1] &&
-      frames[n].headCopy!.slice(2, 9).join(' ') !== heads[n - 1]!.slice(2, 9).join(' ');
-    result.rewobbled += rewobbled ? 1 : 0;
-
-    /* Glued out of a blend: as the model has it, the old blend, but for
-     * three of the harness's days' (frame 615 of the plain day, 1359 of the
-     * food day, 1558 of the water day), each out of breathing on frame 35
-     * into an unbreathing frame, a transition pushed in the frame; no blend
-     * of the old ball places two of them, so not the blend. Listed apart. */
-    const outOfBlend = glue !== undefined && was.blend !== undefined;
-    result.outOfBlend += outOfBlend ? 1 : 0;
-
-    if (off[0] === 0 && off[1] === 0) {
-      result.held++;
-    } else if (rewobbled) {
-      result.rewobbledOff.push(
-        `frame ${tick[0]}: ${was.frame} to ${now.frame}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
+      const steering =
+        state!.length >= 28 && state![25] ? { x: state![26], y: state![27] } : undefined;
+      stage.show(
+        {
+          frame: now.frame,
+          glue,
+          steering,
+          headCopy,
+          shift: shifts.get(`${was.frame}>${now.frame}`),
+          /* The old state's blend as the glue found it, where the trace keeps it. */
+          glueBlend: glueLine
+            ? glueLine[3] === 100
+              ? null
+              : { scale: glueLine[3], reference: glueLine[4] }
+            : undefined,
+        } as Step,
+        now.rotation,
+        undefined,
+        undefined,
+        undefined,
+        now.head,
+        now.angles,
+        now.blend
       );
-    } else if (outOfBlend) {
-      result.unexplained.push(
-        `frame ${tick[0]}: ${was.frame} to ${now.frame} glued by ${glue} out of a blend: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
-      );
-    } else if (off[0] + off[1] === 1) {
-      /* (A pixel out.) */
-      result.nearly++;
-      result.nearlyAt.push(
-        `frame ${tick[0]}: ${was.frame} to ${now.frame}${glue === undefined ? '' : ` glued by ${glue}`}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
-      );
-    } else if (result.wrong.length < 10) {
-      result.wrong.push(
-        `frame ${tick[0]}: ${was.frame} to ${now.frame}${glue === undefined ? '' : ` glued by ${glue}`}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
-      );
+      /* Scruffed, the button held (`DoScruff`, seg21:6672 to 6783): once
+       * the frame has moved on, the dog as it now is put with its neck's centre
+       * at the cursor, lowered by half the neck's drawn size. */
+      const pin = tick[1] === 10 ? cursors.get(tick[0]) : undefined;
+
+      if (pin) {
+        const neck = stage.placed()[54];
+        result.pinned++;
+        stage.nudge(
+          pin[0] - Math.round(neck.x),
+          pin[1] + Math.trunc(neck.diameter / 2) - Math.round(neck.y)
+        );
+      }
+
+      /* Lunging with hold of the shoe (`DoLungingCursor`, seg3:1a92 to 1b4b),
+       * the grip held as the frame began (the module's `+0x222`): so, the
+       * chin's centre (ball 51) put at the shoe's middle, where the shoe has
+       * moved to in the frame (as the next frame begins), the slide's move
+       * overridden. */
+      const [grip, shoeAt] = [frames[n].shoe, frames[n + 1]?.shoe];
+
+      const lunging = tick[1] === 0x12 && !!grip && grip.length >= 5 && !!grip[4] && !!shoeAt;
+
+      if (lunging) {
+        const chin = stage.placed()[51];
+        result.lunging++;
+        stage.nudge(shoeAt![2] - Math.round(chin.x), shoeAt![3] - Math.round(chin.y));
+      }
+
+      const to = stage.rect();
+      /* (Pinned, the dog is put where the pin says, the slide's move and all.) */
+      const slidBy = pin || lunging ? [0, 0] : slid;
+      const ours = [to.left - before![0] + slidBy[0], to.top - before![1] + slidBy[1]];
+      const theirs = [state![0] - before![0], state![1] - before![1]];
+
+      if (glue === undefined) {
+        result.plain++;
+      } else {
+        result.glued++;
+      }
+
+      const off = [
+        Math.abs(Math.round(ours[0]) - theirs[0]),
+        Math.abs(Math.round(ours[1]) - theirs[1]),
+      ];
+      /* Its head placed again for the frame before at the new angles, the
+       * wobbles moved on since (`HeadTrackPrep` again, the copy's block not the
+       * frame before's): the model, taking the frame before's head, cannot
+       * follow; listed apart. */
+      const rewobbled =
+        !!frames[n].headCopy &&
+        !!heads[n - 1] &&
+        frames[n].headCopy!.slice(2, 9).join(' ') !== heads[n - 1]!.slice(2, 9).join(' ');
+      result.rewobbled += rewobbled ? 1 : 0;
+
+      /* Glued out of a blend: the old state as the glue found it -- its blend
+       * moved on a breath, or out of breathing, where the engine ran more
+       * than once in the tick (the trace's `glue`); before the trace kept
+       * that, three were a pixel or two apart. Any still apart listed so. */
+      const outOfBlend = glue !== undefined && was.blend !== undefined;
+      result.outOfBlend += outOfBlend ? 1 : 0;
+
+      if (off[0] === 0 && off[1] === 0) {
+        result.held++;
+      } else if (rewobbled) {
+        result.rewobbledOff.push(
+          `frame ${tick[0]}: ${was.frame} to ${now.frame}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
+        );
+      } else if (outOfBlend) {
+        result.unexplained.push(
+          `frame ${tick[0]}: ${was.frame} to ${now.frame} glued by ${glue} out of a blend: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
+        );
+      } else if (off[0] + off[1] === 1) {
+        /* (A pixel out.) */
+        result.nearly++;
+        result.nearlyAt.push(
+          `frame ${tick[0]}: ${was.frame} to ${now.frame}${glue === undefined ? '' : ` glued by ${glue}`}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
+        );
+      } else if (result.wrong.length < 10) {
+        result.wrong.push(
+          `frame ${tick[0]}: ${was.frame} to ${now.frame}${glue === undefined ? '' : ` glued by ${glue}`}, turned ${was.rotation} to ${now.rotation}: moved ${ours.join(', ')}, not ${theirs.join(', ')}`
+        );
+      }
     }
-  });
+  );
 
   return result;
 }

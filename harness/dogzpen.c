@@ -368,7 +368,22 @@ static int __cdecl __far __loadds plainly(void __far *z, void __far *a, void __f
 static int __cdecl __far __loadds glued(void __far *z, void __far *a, void __far *b,
                                         void __far *c, int d, int e, int f)
 {
-    return placed(1, z, a, b, c, d, e, f);
+    /* And each glue's states (`glue` the rectangle's top left before, then
+     * the old state's frame, blend scale and frame, rotation, tilt, spin and
+     * roll, and the new's; `glued` its top left after). */
+    int __far *rect = (int __far *)a;
+    unsigned char __far *now = (unsigned char __far *)b, __far *was = (unsigned char __far *)c;
+    int answer;
+
+    say("glue %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\r\n", rect[0], rect[1],
+        *(int __far *)(was + 0x18), *(int __far *)(was + 0x32), *(int __far *)(was + 0x34),
+        *(int __far *)(was + 0xc), *(int __far *)(was + 0xe), *(int __far *)(was + 0x10),
+        *(int __far *)(was + 0x12), *(int __far *)(now + 0x18), *(int __far *)(now + 0x32),
+        *(int __far *)(now + 0x34), *(int __far *)(now + 0xc), *(int __far *)(now + 0xe),
+        *(int __far *)(now + 0x10), *(int __far *)(now + 0x12));
+    answer = placed(1, z, a, b, c, d, e, f);
+    say("glued %d %d\r\n", rect[0], rect[1]);
+    return answer;
 }
 
 static int __cdecl __far __loadds referred(void __far *z, void __far *a, void __far *b,
