@@ -267,6 +267,16 @@ static int __cdecl __far __loadds finding(unsigned char __far *module)
     return answer;
 }
 
+/* `PetModule::SetExcitement` (352): each call (`excite value draws`), from the module's making on. */
+typedef int(__cdecl __far *SETEXCITE)(void __far *module, int value);
+static SETEXCITE exciteOn;
+
+static int __cdecl __far __loadds exciting(void __far *module, int value)
+{
+    say("excite %d %d\r\n", value, draws);
+    return exciteOn(module, value);
+}
+
 /* `PetModule::NewState` (496, seg21:5bb8): each change (`newstate from to
  * draws`, the draws of the frame before it). */
 typedef int(__cdecl __far *NEWSTATE)(void __far *module, int state);
@@ -622,6 +632,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     *(int *)(params + 0x54e) = 0;
     *(void __far **)(params + 0x550) = module;
     factorsOn = (LOADFACTORS)hookPrologue(499, (void __far *)loadingFactors);
+    exciteOn = (SETEXCITE)hookPrologue(352, (void __far *)exciting);
     findOn = (FINDSTART)hookPrologue(505, (void __far *)finding);
 
     /* The seed as the module is made (`seed`): the model's dog starts from it. */

@@ -1062,7 +1062,8 @@ export class Pet {
     /* Each factor first the INI's slider for it (`Control Val0` on, `PetParams`
      * `+0x1ee`, `LoadSliderVals`), at least 1 (seg21:0c07 on); `LoadFactors`
      * then draws all but factor 1 afresh. */
-    this.factors = Array.from({ length: 11 }, (_, n) => Math.max(1, sliders[n] ?? 0));
+    this.sliders = Array.from({ length: 11 }, (_, n) => sliders[n] ?? 0);
+    this.factors = this.sliders.map((slider) => Math.max(1, slider));
     this.centres = factors.map((factor) => factor.centre);
     this.idleWeights = data.tricks.reduce((sum, trick) => sum + trick.idleWeight, 0);
     this.playWeights = data.tricks.reduce((sum, trick) => sum + trick.playWeight, 0);
@@ -1102,9 +1103,18 @@ export class Pet {
     if (n === 0) {
       this.setExcitement(clamped);
     } else {
+      /* The factor and its slider both (seg14:22bf to 22d7). */
       this.factors[n] = clamped;
+      this.sliders[n] = clamped;
     }
   }
+
+  /**
+   * The sliders of the dog's nature (`PetParams` `+0x1ee` on): set with the
+   * factors, copied into them each pulse and back from them after
+   * (`PulseTrickData`, seg14:18b5; seg21:4bf9 to 4c27).
+   */
+  private sliders: number[];
 
   /** The angle of the mood cycle now, without its phase. */
   private moodAngle() {
@@ -1121,6 +1131,8 @@ export class Pet {
 
     this.phase = Math.asin((level - 50) / 50) - this.moodAngle();
     this.factors[0] = level;
+    /* (Its slider the value asked, seg14:2461: the next pulse takes that as the factor.) */
+    this.sliders[0] = value;
   }
 
   /**
@@ -1129,10 +1141,19 @@ export class Pet {
    * defaults and centres.
    */
   private pulse() {
-    const power = (100 - this.centres[0]) / 25;
-    const wave = (1 + Math.sin(this.phase + this.moodAngle())) / 2;
+    /* Its slider moved from its excitement, the excitement set to it, and
+     * no wave this pulse (seg14:17f8 to 181d); else the wave. */
+    if (this.sliders[0] !== this.factor(0)) {
+      this.setExcitement(this.sliders[0]);
+    } else {
+      const power = (100 - this.centres[0]) / 25;
+      const wave = (1 + Math.sin(this.phase + this.moodAngle())) / 2;
+      this.factors[0] = Math.trunc(Math.pow(wave, power) * 100);
+      this.sliders[0] = this.factors[0];
+    }
 
-    this.factors[0] = Math.trunc(Math.pow(wave, power) * 100);
+    /* Every factor its slider's (seg14:18b5 to 191c). */
+    this.sliders.forEach((slider, n) => (this.factors[n] = Math.min(100, Math.max(1, slider))));
 
     if (this.time < this.nextDrift) {
       return;
@@ -1259,6 +1280,8 @@ export class Pet {
     this.world.updateBall?.();
     this.wearFullness();
     this.pulse();
+    /* And the sliders the factors as the pulse left them (seg21:4bf9 to 4c27). */
+    this.sliders = this.factors.map((_, n) => this.factor(n));
     this.data.brain?.pulse();
     const centredAt = this.centreAt ?? undefined;
     this.centreAt = null;
@@ -3402,7 +3425,7 @@ export class Pet {
     }
 
     if (mode === 'enter') {
-      this.factors[6] = Math.min(100, this.factors[6] + 5);
+      this.setFactor(6, Math.min(100, this.factors[6] + 5));
 
       const face = this.area === AREA.tongue || this.area === AREA.face;
 
@@ -3756,7 +3779,7 @@ export class Pet {
 
     /* Only a treat is snatched; a bowl, never (seg21:6927). */
     if (this.reducedGlobal() === GLOBAL.begEat && treat?.held && isTreat(treat)) {
-      this.factors[9] = Math.min(100, this.factors[9] + 4);
+      this.setFactor(9, Math.min(100, this.factors[9] + 4));
 
       if (this.decideIfGrabFromUser()) {
         /* Allowed to take it from the hand (`0x96`, seg21:6b1d). */
@@ -3889,7 +3912,7 @@ export class Pet {
 
     if (this.cues.has(10) && food && isTreat(food)) {
       this.world.putAwayFood?.(food);
-      this.factors[9] = this.centres[9];
+      this.setFactor(9, this.centres[9]);
 
       if (!this.brainActive) {
         this.positiveReinforcement();
@@ -4099,7 +4122,7 @@ export class Pet {
     const { step, flags } = this.pop();
 
     if (this.cues.has(10)) {
-      this.factors[9] = this.centres[9];
+      this.setFactor(9, this.centres[9]);
       if (this.food) {
         this.world.putAwayFood?.(this.food);
       }
@@ -5502,7 +5525,7 @@ export class Pet {
    */
   private negativeReinforcement() {
     if (this.grabDecisions.slice(0, 3).some(Boolean)) {
-      this.factors[2] = Math.max(1, this.factors[2] - 5);
+      this.setFactor(2, Math.max(1, this.factors[2] - 5));
       this.grabDecisions = [];
       return;
     }
@@ -5525,7 +5548,7 @@ export class Pet {
         trick.idleWeight = Math.max(1, trick.idleWeight - 5);
       }
     } else if (global === GLOBAL.fetch) {
-      this.factors[1] = Math.min(100, Math.max(1, this.factors[1] + (this.naughty ? -5 : 5)));
+      this.setFactor(1, Math.min(100, Math.max(1, this.factors[1] + (this.naughty ? -5 : 5))));
       this.naughty = !this.naughty;
     }
   }
@@ -5786,7 +5809,7 @@ export class Pet {
 
     const excitement = this.factor(0);
     this.queue = [{ glue: 36 }];
-    this.factors[9] = this.centres[9];
+    this.setFactor(9, this.centres[9]);
 
     /* Whether it will leap for a ball that bounces once: the clumsier, the less likely (seg20:22b6). */
     this.leapsBounce = 50 + Math.trunc(((this.factor(3) - 1) * 50) / 100) < this.rand() % 105;
@@ -5814,7 +5837,7 @@ export class Pet {
     const ball = this.world.ball;
 
     if (ball?.held) {
-      this.factors[9] = Math.min(100, this.factors[9] + 4);
+      this.setFactor(9, Math.min(100, this.factors[9] + 4));
 
       if (this.rand() % 0xd2 < this.factor(9) && this.rand() % 0xd2 < this.factor(2)) {
         this.grabFromUser = true;

@@ -1076,7 +1076,7 @@ withOracle('the engine’s behaviour', () => {
       const { stage, pet, run, states } = setUp(3, 640, 480);
       run(200);
       /* A good dog, not a naughty one, which runs off with it (`DecideIfNaughty`). */
-      (pet as unknown as { factors: number[] }).factors[1] = 1;
+      pet.setFactor(1, 1);
 
       /* The cursor brought to the ball first, as a hand would be. */
       stage.pointer = { x: 320, y: 120, button: false };
