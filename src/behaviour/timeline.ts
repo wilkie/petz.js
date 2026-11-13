@@ -93,6 +93,13 @@ export interface Step {
    * the scruff, lowers it so onto the floor.
    */
   shift?: { x: number; y: number };
+
+  /**
+   * Glued later in a tick than an earlier pop, the old state's blend as that
+   * pop left it (null, none), not as the frame before was drawn: see
+   * `Stage.show`.
+   */
+  glueBlend?: { scale: number; reference: number } | null;
 }
 
 /** The ball a script glues by when it says none: the belly (`GetDefaultGlueBall`). */

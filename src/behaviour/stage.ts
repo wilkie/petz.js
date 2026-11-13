@@ -485,7 +485,7 @@ export class Stage implements PetWorld {
       /* (The old state as the glue finds it: moved on a breath, or out of
        * breathing, where a transition is pushed in the tick; the rectangle
        * the dog had is as it was drawn.) */
-      const glueBlend = (step as { glueBlend?: typeof was.blend | null }).glueBlend;
+      const glueBlend = step.glueBlend;
       const old = glueBlend === undefined ? was.blend : (glueBlend ?? undefined);
       const before = this.ballOf(this.frame, step.glue, rotation, copy, angles, old);
       const had = this.boxOf(this.frame, this.rotation, was.head, was.angles, was.blend);

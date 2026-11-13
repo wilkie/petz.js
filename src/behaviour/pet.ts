@@ -1162,6 +1162,7 @@ export class Pet {
    */
   tick(time: number): Tick {
     this.time = time;
+    this.popsThisTick = 0;
     this.sample();
     this.doPettingHandler();
     this.doScruffHandler();
@@ -1387,6 +1388,11 @@ export class Pet {
     let glue: number | undefined;
     let step: Step | undefined;
     let placedBy: number | undefined;
+    /* The old state a glue starts from: as the last pop this tick left it,
+     * where there was one (`PopScript` copies the state into the old as it
+     * ends, run dry or not, seg7:71eb). */
+    const earlier = this.popsThisTick > 0 ? this.poppedBlend : undefined;
+    this.popsThisTick++;
 
     this.cues.clear();
     this.easeMotionScale();
@@ -1446,6 +1452,10 @@ export class Pet {
       } else if ('step' in item) {
         step = { ...item.step, glue: item.step.glue ?? glue };
 
+        if (step.glue !== undefined && earlier !== undefined) {
+          step.glueBlend = earlier;
+        }
+
         if (this.sounds.length) {
           step.sounds = [...(step.sounds ?? []), ...this.sounds];
           this.sounds = [];
@@ -1502,6 +1512,8 @@ export class Pet {
       this.motionTarget = Math.trunc(this.heart / 10);
     }
 
+    this.poppedBlend =
+      this.motionScale === 100 ? null : { scale: this.motionScale, reference: this.reference };
     return { step, flags };
   }
 
@@ -5068,6 +5080,10 @@ export class Pet {
 
   /** How far, in hundredths, each frame's balls are from the reference frame (`+0x32`), and where that eases to (`0x2098`). */
   private motionScale = 100;
+
+  /** Pops this tick, and the blend the last ended with: what a glue later in the tick starts from. */
+  private popsThisTick = 0;
+  private poppedBlend: { scale: number; reference: number } | null = null;
   private motionTarget = 100;
 
   /** How many levels the fur bristles (`+0x46`, `8b01`). */
