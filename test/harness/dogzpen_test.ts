@@ -2508,14 +2508,9 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     console.log(
       `head placed afresh: ${copies.plain} plain moves with the head tracking, ${copies.copies} with a copy, ${copies.held} as the rule has it`
     );
-    /* (Reported, not held: the old state is placed afresh, too, by code not
-     * yet found, now and then before the move -- the nod changed in a blend,
-     * the petting day's -- which the rule does not cover.) */
-    if (copies.wrong.length) {
-      console.log(
-        `head placed afresh, not by the rule:\n  ${copies.wrong.slice(0, 5).join('\n  ')}`
-      );
-    }
+    /* (Once only reported, the petting day's trace then breaking the rule
+     * now and then; on every day the harness keeps now, it holds.) */
+    expect(copies.wrong).toEqual([]);
 
     const steered = followSteeredHeads(lines);
     console.log(
