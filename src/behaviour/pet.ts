@@ -768,6 +768,9 @@ export function* pokeReaction(face: boolean, pokedInFace: number[], rand: Rand):
   }
 }
 
+/** The INI's sliders as Dogz installs them (`Control Val0` to `2`): factor 1 keeps its 30. */
+export const SLIDERS = [10, 30, 100];
+
 /** A bowl taken out of the toy box filled (`FoodSprite::Update`, seg20:0e35): `rand() % 11 + 25` servings. */
 export function fillBowl(rand: Rand): number {
   return (rand() % 11) + 25;
@@ -1046,12 +1049,16 @@ export class Pet {
     world: PetWorld,
     rand: Rand,
     factors: { centre: number; spread: number }[],
-    age = 0
+    age = 0,
+    sliders: number[] = SLIDERS
   ) {
     this.data = data;
     this.world = world;
     this.rand = rand;
-    this.factors = new Array(11).fill(0);
+    /* Each factor first the INI's slider for it (`Control Val0` on, `PetParams`
+     * `+0x1ee`, `LoadSliderVals`), at least 1 (seg21:0c07 on); `LoadFactors`
+     * then draws all but factor 1 afresh. */
+    this.factors = Array.from({ length: 11 }, (_, n) => Math.max(1, sliders[n] ?? 0));
     this.centres = factors.map((factor) => factor.centre);
     this.idleWeights = data.tricks.reduce((sum, trick) => sum + trick.idleWeight, 0);
     this.playWeights = data.tricks.reduce((sum, trick) => sum + trick.playWeight, 0);

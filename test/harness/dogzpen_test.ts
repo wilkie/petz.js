@@ -68,12 +68,18 @@ import {
   readBodyAreas,
   readBrainMap,
   readEngineScripts,
+  readHeartRates,
+  readPositionKinds,
   readTrickScripts,
 } from '../../src/formats/engine.ts';
 import { parseBrain } from '../../src/formats/brain.ts';
 import { Brain } from '../../src/behaviour/brain.ts';
 import { Swing } from '../../src/behaviour/swing.ts';
-import { parseScripts, readOpcodes } from '../../src/formats/script.ts';
+import { transitionTable } from '../../src/behaviour/transitions.ts';
+import { readFactors } from '../../src/formats/lnz.ts';
+import { parseTricks } from '../../src/formats/tricks.ts';
+
+import { parseScripts, readOpcodes, readStateNames } from '../../src/formats/script.ts';
 import { parseNe } from '../../src/formats/ne.ts';
 import type { Trick } from '../../src/formats/tricks.ts';
 
@@ -2214,6 +2220,90 @@ function followSwing(lines: string[]) {
 }
 
 /**
+ * The model's dog run beside the engine's (`Pet`, as the viewer makes it):
+ * the same breed and age, its random numbers from the engine's seed as the
+ * module was made (`seed`), started as `InitPetModule` and the first frame
+ * start it, and ticked once a frame, 45 milliseconds on (the engine's clock,
+ * milliseconds over 17). Each frame, its state, global state and seed as
+ * the frame left them against the engine's; the first frame they part, and
+ * how many held before it.
+ */
+function followLockstep(lines: string[]) {
+  const { frames, dll } = readTrace(lines);
+  /* (From `LoadFactors`, the 66,307 draws before it -- the fur's speckles and the rest -- not played.) */
+  const seedLine = lines.find((line) => line.startsWith('factors in '));
+  const result = { frames: 0, held: 0, factors: '', parted: '' };
+
+  if (!seedLine || !frames.length) {
+    return result;
+  }
+
+  const read = (path: string) => new Uint8Array(readFileSync(join(DRIVE, 'DOGZ.DOG', path)));
+  const header = parseBhd(read('DATA/ALL_PTZ.BHD'));
+  const breed = parseLnz(new TextDecoder('latin1').decode(read('DATA/BIGDOG.LNZ')));
+  const shapes = header.animations.flatMap((_, n) =>
+    parseAnimation(header, n, read(`DATA/${n}.BDT`))
+  );
+  const scripts = parseScripts(read('DATA/ALL_PTZ.SCP'), readOpcodes(dll));
+  const states = readStateNames(dll);
+  const tricks = parseTricks(read('TRICKS.TDT'));
+  const { rand, state: seeded } = randFrom(Number(seedLine.split(' ')[2]));
+  const brain = new Brain(parseBrain(read('BRAIN.PBT')), readBrainMap(dll), rand);
+  /* Its age in days from its age factor, a tenth of a day each (`ageFactor`). */
+  const age = Math.trunc(frames[0].tick[14] / 10);
+  const stage = new Stage(292, 273, breed, header, shapes, age * 10);
+  stage.bodyAreas = readBodyAreas(dll, header.ballCount);
+  const pet = new Pet(
+    {
+      scripts,
+      table: transitionTable(scripts),
+      positionKinds: readPositionKinds(dll, states.length),
+      heartRates: readHeartRates(dll, states.length),
+      tricks: tricks.current,
+      trickDefaults: tricks.defaults,
+      trickScripts: readTrickScripts(dll),
+      engineScripts: readEngineScripts(dll),
+      flags: (frame) => shapes[frame]?.tag ?? 3,
+      brain,
+    },
+    stage,
+    rand,
+    readFactors(breed.sections),
+    age
+  );
+  const ours = (pet as unknown as { factors: number[] }).factors;
+  result.factors = `${ours.join(' ')} / ${frames[0].tick.slice(4, 15).join(' ')}; seed ${seeded.seed}`;
+  pet.start(0);
+  result.factors += `, started ${seeded.seed} / ${frames[0].tick[3]}`;
+
+  for (const [n, { frame }] of frames.entries()) {
+    const step = pet.tick((n * 45) / 17);
+    stage.show(
+      step,
+      step.rotation,
+      step.placedBy,
+      step.pinned,
+      step.centredAt,
+      step.head,
+      step.angles
+    );
+    result.frames++;
+    const seed = seeded.seed;
+    const mine = `${pet.state} ${pet.global}`;
+    const theirs = `${frame[1]} ${frame[2]}`;
+
+    if (mine !== theirs || seed !== frame[3]) {
+      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]})`;
+      break;
+    }
+
+    result.held++;
+  }
+
+  return result;
+}
+
+/**
  * The dog painted (`PaintSprite::Update`, `Ballz::SetBallColor`): for each
  * stroke the trace keeps its colours before and after (`colours`, as the
  * brush is let go and the frame after), the model's dog posed as the
@@ -2561,6 +2651,11 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `swing: ${swinging.calls} ticks, ${swinging.held} held; ${swinging.frames} frames' angles, ${swinging.angles} held`
     );
     expect(swinging.wrong).toEqual([]);
+
+    const lockstep = followLockstep(lines);
+    console.log(
+      `lockstep: factors ${lockstep.factors}; ${lockstep.held} of ${lockstep.frames} frames held${lockstep.parted ? `; parted at ${lockstep.parted}` : ''}`
+    );
 
     const thinking = followBrain(lines);
     console.log(

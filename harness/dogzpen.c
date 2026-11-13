@@ -232,6 +232,21 @@ static int __cdecl __far __loadds fizzing(unsigned char __far *sprite, unsigned 
     return answer;
 }
 
+/* `PetModule::LoadFactors` (499, seg21:1ec5), as the module is made: the
+ * seed and the draws so far as it begins and ends (`factors in`, `out`). */
+typedef int(__cdecl __far *LOADFACTORS)(void __far *module, int a, int b);
+static LOADFACTORS factorsOn;
+
+static int __cdecl __far __loadds loadingFactors(void __far *module, int a, int b)
+{
+    int answer;
+
+    say("factors in %lu %d %d %d\r\n", *(unsigned long __far *)MK_FP(dgroup, 0x2d28), draws, a, b);
+    answer = factorsOn(module, a, b);
+    say("factors out %lu %d\r\n", *(unsigned long __far *)MK_FP(dgroup, 0x2d28), draws);
+    return answer;
+}
+
 /* `PetModule::NewState` (496, seg21:5bb8): each change (`newstate from to
  * draws`, the draws of the frame before it). */
 typedef int(__cdecl __far *NEWSTATE)(void __far *module, int state);
@@ -586,6 +601,10 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     module = ((MAKE)ordinal(482))(GlobalLock(GlobalAlloc(GPTR, 0x1280)));
     *(int *)(params + 0x54e) = 0;
     *(void __far **)(params + 0x550) = module;
+    factorsOn = (LOADFACTORS)hookPrologue(499, (void __far *)loadingFactors);
+
+    /* The seed as the module is made (`seed`): the model's dog starts from it. */
+    say("seed %lu\r\n", *(unsigned long __far *)MK_FP(dgroup, 0x2d28));
     answer = ((INITMODULE)ordinal(484))(module, params);
     say("made module %d %u %u\r\n", answer, FP_SEG(module), FP_OFF(module));
 
