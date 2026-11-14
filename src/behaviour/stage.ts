@@ -446,6 +446,17 @@ export class Stage implements PetWorld {
     /* Nothing new shown, nothing placed: the rectangle as it was, its
      * frame and angles too, for the next placing to move on from. */
     if (step.still) {
+      /* (The old state takes the angles the fudgers have moved to, as the
+       * pop that ran dry copies the state, its rectangle as it was.) */
+      if (rotation !== this.rotation || angles !== this.angles) {
+        const was = this.rect();
+        this.rotation = rotation;
+        this.angles = angles;
+        const now = this.rect();
+        this.x += was.left - now.left;
+        this.y += was.top - now.top;
+      }
+
       return;
     }
 

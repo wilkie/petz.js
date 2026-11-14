@@ -1868,7 +1868,8 @@ export class Pet {
         /* `0x8adf n value` (`PetModule::SetFactor`). */
         this.setFactor(...item.factor);
       } else if ('aim' in item) {
-        this.startAim(item.aim.ball, item.aim.at);
+        /* (Played ahead once the frame it comes with is placed, seg7:7144 on.) */
+        this.pendingAim = item.aim;
       } else if ('glue' in item) {
         glue = item.glue;
       } else if ('goto' in item) {
@@ -2019,6 +2020,13 @@ export class Pet {
         this.world.nudge?.(x - this.slide.movedX, y - this.slide.movedY);
         this.slide.movedX = x;
         this.slide.movedY = y;
+      }
+
+      /* An aim met in this pop, played ahead from the frame now placed. */
+      if (this.pendingAim) {
+        const aim = this.pendingAim;
+        this.pendingAim = undefined;
+        this.startAim(aim.ball, aim.at, { step, rotation: this.rotation, placedBy });
       }
 
       this.applyEffects(step);
@@ -6996,9 +7004,18 @@ export class Pet {
    * `0x7ffd` for the point is the ball at play. Played ahead here are the
    * frames, their glue and placing, and the dog's turning, eases and drift.
    */
-  private startAim(ball: number, at: { x: number; y: number } | null) {
+  /** An aim popped, to be played ahead once its frame is placed (`0x8af4`). */
+  private pendingAim: { ball: number; at: { x: number; y: number } | null } | undefined;
+
+  private startAim(
+    ball: number,
+    at: { x: number; y: number } | null,
+    shown?: { step: Step; rotation: number; placedBy?: number }
+  ) {
     const point = at ?? this.world.ball;
-    const frames: { step: Step; rotation: number; placedBy?: number }[] = [];
+    /* (From the frame just placed: the slide over those after it.) */
+    const frames: { step: Step; rotation: number; placedBy?: number }[] = shown ? [shown] : [];
+    const first = frames.length;
     let glue: number | undefined;
     let placedBy: number | undefined;
     const saved = { rotation: this.rotation, ease: this.ease, drift: this.drift };
@@ -7037,21 +7054,22 @@ export class Pet {
     }
 
     Object.assign(this, saved);
+    const count = frames.length - first;
 
-    if (!point || !this.world.lookAhead || frames.length < 1) {
+    if (!point || !this.world.lookAhead || count < 1) {
       return;
     }
 
     const there = this.world.lookAhead(frames, ball);
     /* Its speed each way a float (`-0x71e4`, `-0x71e0`, seg7:730e on). */
     this.slide = {
-      dx: Math.fround((point.x - there.x) / frames.length),
-      dy: Math.fround((point.y - there.y) / frames.length),
+      dx: Math.fround((point.x - there.x) / count),
+      dy: Math.fround((point.y - there.y) / count),
       x: 0,
       y: 0,
       movedX: 0,
       movedY: 0,
-      left: frames.length,
+      left: count,
     };
   }
 }
