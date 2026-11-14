@@ -2039,7 +2039,12 @@ export class Pet {
      * work, a pop among it, in the one call (`NewState`'s dispatch with
      * `+0xe2` set, seg21:5d9c): the frame that pop shows is the tick's. */
     if (ENTER_RUNS_ON.has(state) && this.state === state) {
-      this.enteredStep = this.handle(state, 'run') ?? this.pop().step;
+      const ran = this.handle(state, 'run') ?? this.pop().step;
+
+      /* (Unless it went on into another state, whose frame stands.) */
+      if (this.state === state) {
+        this.enteredStep = ran;
+      }
     }
   }
 
@@ -2208,9 +2213,34 @@ export class Pet {
     this.push({ cue: 3 }, { glue: after && 'glue' in after ? after.glue : CHEST });
   }
 
+  /**
+   * `IsPetTotallyOnscreenMargin` (seg21:59c9): its rectangle within the
+   * stage by a margin, at most half the stage less the standard size --
+   * across and down each -- the across one taken for the left and top, the
+   * down one for the right and bottom, as the engine pairs them.
+   */
   private isOnscreen() {
     const { x, y } = this.world.where();
     return x > 0 && y > 0 && x < this.world.width && y < this.world.height;
+  }
+
+  private isOnscreenMargin(margin: number) {
+    const rect = this.world.rect?.();
+    const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+
+    if (!rect) {
+      const { x, y } = this.world.where();
+      return x > 0 && y > 0 && x < this.world.width && y < this.world.height;
+    }
+
+    const across = Math.min(margin, Math.trunc(this.world.width / 2) - width);
+    const down = Math.min(margin, Math.trunc(this.world.height / 2) - height);
+    return (
+      rect.left > across &&
+      rect.right < this.world.width - down &&
+      rect.top > across &&
+      rect.bottom < this.world.height - down
+    );
   }
 
   /** `PetModule::SetupIdle`: a plan of pants and tricks, shorter the more excited the dog. */
@@ -2704,7 +2734,12 @@ export class Pet {
     const { step, flags } = this.pop();
 
     if (flags & 1) {
-      if (this.isOnscreen()) {
+      const { width } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+
+      if (this.isOnscreenMargin(Math.trunc(width / 2) + 5)) {
+        /* `rand() % 40` against its excitement, though either way it is idle
+         * (the jump to sleep is never taken, seg16:15e1 to 15f7). */
+        this.rand();
         this.newState(STATE.idle);
       } else {
         const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };

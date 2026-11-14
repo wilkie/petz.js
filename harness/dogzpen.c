@@ -544,7 +544,6 @@ static void hookPushes(void)
     commandOn = (BRAINCALL)hookPrologue(293, (void __far *)commanding);
     zeroOn = (BRAINCALL)hookPrologue(304, (void __far *)zeroing);
     realOn = (BRAINCALL)hookPrologue(291, (void __far *)realising);
-    pulseOn = (PULSE)hookPrologue(498, (void __far *)pulsing);
     fizzOn = (FIZZIKS)hookPrologue(99, (void __far *)fizzing);
 }
 
@@ -633,6 +632,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     *(void __far **)(params + 0x550) = module;
     factorsOn = (LOADFACTORS)hookPrologue(499, (void __far *)loadingFactors);
     exciteOn = (SETEXCITE)hookPrologue(352, (void __far *)exciting);
+    pulseOn = (PULSE)hookPrologue(498, (void __far *)pulsing);
     findOn = (FINDSTART)hookPrologue(505, (void __far *)finding);
 
     /* The seed as the module is made (`seed`): the model's dog starts from it. */

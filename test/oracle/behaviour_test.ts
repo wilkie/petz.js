@@ -494,12 +494,14 @@ withOracle('the engine’s behaviour', () => {
       expect(turned.some(({ head }) => head!.pitch > 0)).toBe(true);
     });
 
-    it('takes stroking the chest for petting, enjoys it more and more, and rolls over', () => {
+    it('takes stroking for petting, enjoys it more and more where it wants it, and rolls over', () => {
       const { stage, pet, run, states } = setUp(3);
       run(300);
+      /* Stroked on the chest, then wherever it wants (`pickPetSpot`: the chest, belly or rump). */
       run(400, (n) => {
-        const chest = stage.ballOnStage(50);
-        stage.pointer = { x: chest.x + ((n % 6) - 3) * 3, y: chest.y, button: true };
+        const ball = n < 40 ? 50 : engineScripts.petSpots[pet.petSpot].ball;
+        const at = stage.ballOnStage(ball);
+        stage.pointer = { x: at.x + ((n % 6) - 3) * 3, y: at.y, button: true };
       });
 
       expect(pet.global === GLOBAL.petting || pet.global === GLOBAL.idle).toBe(true);
