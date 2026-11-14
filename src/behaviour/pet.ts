@@ -424,7 +424,8 @@ type Item =
   | { release: number }
   | { repeat: number }
   | { endRepeat: true }
-  | { lookAt: null };
+  | { lookAt: null }
+  | { seek: 'user' | 'cursor' | 'held' };
 
 /**
  * How many words of the engine's queue an item takes (`PushScript` copies
@@ -464,7 +465,7 @@ const itemWords = (item: Item): number => {
     return 3;
   }
 
-  if ('end' in item || 'endRepeat' in item) {
+  if ('end' in item || 'endRepeat' in item || ('seek' in item && item.seek === 'user')) {
     return 1;
   }
 
@@ -1412,7 +1413,7 @@ export class Pet {
     this.time = time;
     this.wobbledAt = wobbledAt;
     this.poppedCentre = undefined;
-    this.statesThisTick = 0;
+    this.askedBall = false;
 
     /* After a tick that showed nothing new, its head tracking, the frame
      * before is placed afresh before the module pulses -- its head, its turn
@@ -1472,13 +1473,13 @@ export class Pet {
      * ball -- the trace's `head 0` in the glue, frame 2869.) */
     let headCopy: Head | undefined = shown.glue !== undefined ? freshened : undefined;
 
-    /* (Only where the frame before is not as Ballz last placed it:
+    /* (Only where the frame before is not what Ballz last placed:
      * `MoveFrameRectBall` reads it again only if the old state differs from
-     * that one, seg10:2b55 to 2ce4. [[inferred]] Its turn and nod alone do
-     * not tell: a new state this tick before the glue does -- frame 2869 of
-     * the day of 3,000, idle to walking, read it again; frame 113 of the
-     * ball's day, begging on, did not.) */
-    const moved = this.statesThisTick > 0;
+     * that one, seg10:2b55 to 2ce4 -- as after the steering has asked where
+     * the nose is, or anything has asked where a ball of it is, placing the
+     * dog as it now is (frame 124 of the ball's day, steering; frame 2869
+     * of the day of 3,000, a target set; not frame 113).) */
+    const moved = this.steeredTracking || this.askedBall;
 
     if (
       !still &&
@@ -1592,7 +1593,7 @@ export class Pet {
   }
 
   /** The queue as items and their words (for the harness). */
-  describeQueue(limit = 80) {
+  describeQueue(limit = 400) {
     return this.unread
       .slice(0, limit)
       .map((item) => {
@@ -1878,6 +1879,14 @@ export class Pet {
         this.applyFudge(item.fudge, this.framesAhead());
       } else if ('lids' in item) {
         this.restLids(item.lids);
+      } else if ('seek' in item) {
+        /* `0x8afb`; `0x8afe 6`, the cursor; `0x8afe 7`, what is held, or else the cursor. */
+        if (item.seek === 'user') {
+          this.lookAtUser();
+        } else {
+          const held = item.seek === 'held' ? this.heldObject() : undefined;
+          this.lookAt(held ?? this.samples[0]);
+        }
       } else if ('lookAt' in item) {
         /* `0x8af9 7ffe 7ffe`: the head and the eyes look at nothing (seg7:62f0 to 6350). */
         this.lookAt(null);
@@ -1980,10 +1989,14 @@ export class Pet {
       this.steerFrame();
     }
 
+    if (step) {
+      this.turn(step);
+    }
+
+    /* The head after the fudgers have moved the dog's angles on (`Fudger::ForAll`, seg7:6d3b, before seg7:6de2). */
     this.updateHeadTracking();
 
     if (step) {
-      this.turn(step);
       this.lastStep = step;
       this.placedBy = placedBy;
 
@@ -2235,7 +2248,7 @@ export class Pet {
    * the nose by its diagonal over a distance, the way the dog faces.
    */
   private noseBox(width: number, height: number, distance = FOCUS_DISTANCE) {
-    const nose = this.world.ballOnStage?.(NOSE);
+    const nose = this.askBall(NOSE);
 
     if (!nose) {
       return null;
@@ -2359,7 +2372,6 @@ export class Pet {
    * chest unless the queue already glues it, and the new state enters.
    */
   newState(state: number) {
-    this.statesThisTick++;
     this.handle(this.state, 'exit');
     this.history = [state, ...this.history].slice(0, 10);
     this.state = state;
@@ -2806,22 +2818,35 @@ export class Pet {
       this.lookAt(this.samples[0]);
     }
 
-    const { step, flags } = this.pop();
-    this.noteWaiting();
+    /* Waiting, for a treat or at play for the ball (seg18:09fc to 0a0c),
+     * the cursor -- what it holds -- still in a box 1.8 times the standard
+     * size about the dog's middle (`MakeFocusRect`, seg18:0990 to 09e6,
+     * `ds:0x20f7`; the module's `+0x86`, and its `+0xfa`, which stays 0):
+     * asked before the pop (seg18:0ad8), a new state's frame the tick's. */
+    if (
+      this.waiting &&
+      (this.reducedGlobal() === GLOBAL.begEat || this.reducedGlobal() === GLOBAL.fetch)
+    ) {
+      const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+      const middle = this.world.centre?.() ?? this.world.where();
+      const box = this.focusRectAt(middle, Math.trunc(width * 1.8), Math.trunc(height * 1.8), 3);
+      const cursor = this.samples[0];
 
-    if (this.waiting && this.reducedGlobal() === GLOBAL.begEat) {
-      if (!this.treatNear()) {
+      if (!cursor || !Pet.within(box, cursor)) {
         this.queue = [];
         this.newState(STATE.beggingChasing);
-        return step;
+        return this.enteredStep ?? this.pop().step;
       }
 
       if (this.waggling) {
         this.resetSoft();
         this.newState(this.pickTrickState());
-        return step;
+        return this.enteredStep ?? this.pop().step;
       }
     }
+
+    const { step, flags } = this.pop();
+    this.noteWaiting();
 
     if (flags & 8) {
       this.newState(this.gotoState);
@@ -3640,7 +3665,7 @@ export class Pet {
    */
   private isCursorOverPetSpot() {
     const cursor = this.samples[0];
-    const ball = this.world.ballOnStage?.(this.data.engineScripts.petSpots[this.petSpot].ball);
+    const ball = this.askBall(this.data.engineScripts.petSpots[this.petSpot].ball);
 
     if (!cursor || !ball) {
       return false;
@@ -3750,7 +3775,7 @@ export class Pet {
     const cursor = this.samples[0] ?? { x: -1, y: -1, button: false };
 
     if (mode === 'enter') {
-      const spot = this.world.ballOnStage?.(this.data.engineScripts.petSpots[this.petSpot].ball);
+      const spot = this.askBall(this.data.engineScripts.petSpots[this.petSpot].ball);
       const rotation = this.rotation;
       const sideOn = (rotation > 20 && rotation < 108) || (rotation < -20 && rotation > -108);
 
@@ -4118,7 +4143,7 @@ export class Pet {
     const cursor = this.samples[0];
 
     if (this.waiting && cursor) {
-      const belly = this.world.ballOnStage?.(BELLY) ?? this.world.where();
+      const belly = this.askBall(BELLY) ?? this.world.where();
       const { width } = this.world.standardSize?.() ?? { width: 60 };
       const wide = this.focusRectAt(belly, width * 2, width * 2);
       const close = this.focusRectAt(belly, width, width);
@@ -4337,7 +4362,8 @@ export class Pet {
           this.pushBallReleaseAction();
         }
 
-        this.push({ glue: CHEST });
+        /* (`8ad7`, a word, seg18:26a8.) */
+        this.push({ glue: CHEST, words: 1 } as Item);
       } else if ('settle' in step) {
         this.pushTransition(
           this.data.scripts[step.settle ? SCRIPT.sitPant : SCRIPT.pant].from,
@@ -4345,8 +4371,12 @@ export class Pet {
         );
         this.push({ cue: 0 });
       } else if ('pant' in step) {
-        /* (Its looks, at the user, the cursor or what is held -- `0x8afb`,
-         * `0x8afe 6`, `0x8afe 7` -- are not yet played.) */
+        /* Its look first, at the user, the cursor or what is held (`0x8afb`,
+         * `0x8afe 6`, `0x8afe 7`, seg18:2804 to 2853). */
+        if (step.look !== undefined) {
+          this.push({ seek: (['user', 'cursor', 'held'] as const)[step.look] });
+        }
+
         this.pushStored(step.pant ? SCRIPT.sitPant : SCRIPT.pant);
       } else {
         this.pushStored(step.longer ? SCRIPT.sitPantLonger : SCRIPT.pantLonger);
@@ -4474,7 +4504,7 @@ export class Pet {
     const across = Math.trunc(-this.rotation / 16);
     this.push({ cue: 3 });
 
-    const nose = this.world.ballOnStage?.(NOSE);
+    const nose = this.askBall(NOSE);
     const turn = nose ? Math.max(-0x40, Math.min(0x40, Math.trunc((nose.x - food.x) / 3))) : 0;
 
     if ((turn > 0 && this.rotation < 0) || (turn < 0 && this.rotation > 0)) {
@@ -4576,7 +4606,7 @@ export class Pet {
 
   /** Cue 14: the dog's tongue on the bowl, within 14 of its sides and up to 20 above it (seg18:2041). */
   private atBowl(food: Food) {
-    const tongue = this.world.ballOnStage?.(63);
+    const tongue = this.askBall(63);
 
     if (!tongue) {
       return true;
@@ -4904,7 +4934,7 @@ export class Pet {
         this.newState(this.decideChasingCharging());
       }
     } else if (this.going && shoe) {
-      const chin = this.world.ballOnStage?.(51);
+      const chin = this.askBall(51);
 
       if (chin && Math.hypot(chin.x - shoe.x, chin.y - shoe.y) > 75) {
         this.resetScript(36);
@@ -5537,7 +5567,7 @@ export class Pet {
 
   /** `LookAtUser` (seg7:2a78): the head toward just past its nose, the eyes at the user. */
   private lookAtUser() {
-    const nose = this.world.ballOnStage?.(NOSE);
+    const nose = this.askBall(NOSE);
 
     if (nose) {
       this.setHeadTarget({ x: Math.trunc(nose.x) + this.rotation, y: Math.trunc(nose.y) + 10 });
@@ -5603,9 +5633,12 @@ export class Pet {
 
     const most = Math.max(Math.abs(yaw - was.yaw), Math.abs(pitch - was.pitch));
 
+    /* (In the engine's order: a share, 13 over the most, then each way's
+     * difference times it and the old added, cut to a whole number; seg5:01f8 to 0279.) */
     if (most > 13) {
-      yaw = Math.trunc(was.yaw + ((yaw - was.yaw) * 13) / most);
-      pitch = Math.trunc(was.pitch + ((pitch - was.pitch) * 13) / most);
+      const share = 13 / most;
+      yaw = Math.trunc((yaw - was.yaw) * share + was.yaw);
+      pitch = Math.trunc((pitch - was.pitch) * share + was.pitch);
     }
 
     /* Within its reach each way (`HeadTrackMaxLeft` and so on, 100 each). */
@@ -5659,8 +5692,18 @@ export class Pet {
     );
   }
 
-  /** How many times the state has changed this tick. */
-  private statesThisTick = 0;
+  /** Whether a ball of the dog has been asked for this tick (`GetBallOffset`), placing it as it is. */
+  private askedBall = false;
+
+  /**
+   * Where a ball of the dog is on the stage (`Ballz::GetBallOffset`), which
+   * places the dog as it now is, so that Ballz's last placed is no longer
+   * the frame before (see `MoveFrameRectBall`).
+   */
+  private askBall(ball: number) {
+    this.askedBall = true;
+    return this.world.ballOnStage?.(ball);
+  }
 
   /** Whether the last tick showed nothing new (`Step.still`). */
   private lastStill = false;
@@ -5891,7 +5934,7 @@ export class Pet {
     const secondary = !!cursor?.secondary;
 
     if (cursor && this.state !== STATE.scruff && !this.world.holding?.()) {
-      const neck = this.world.ballOnStage?.(NECK);
+      const neck = this.askBall(NECK);
 
       if (
         neck &&
@@ -6001,7 +6044,7 @@ export class Pet {
     }
 
     /* Held by the top of its neck: the neck half its width below the cursor (seg21:637c, `Ballz` slot 0x38). */
-    const neck = this.world.ballOnStage?.(NECK);
+    const neck = this.askBall(NECK);
     this.pinned = {
       ball: NECK,
       x: cursor.x,
@@ -6206,7 +6249,7 @@ export class Pet {
 
     /* The shoe put down at the chin, as the ball is (`ActualReleaseObject`). */
     if (slot === 4 && shoe?.inMouth) {
-      const chin = this.world.ballOnStage?.(51);
+      const chin = this.askBall(51);
       shoe.inMouth = false;
       shoe.x = Math.trunc(chin?.x ?? shoe.x);
       shoe.y = Math.trunc(chin?.y ?? shoe.y);
@@ -6385,7 +6428,7 @@ export class Pet {
     }
 
     const ahead = this.world.projectBall?.(14);
-    const chin = this.world.ballOnStage?.(51);
+    const chin = this.askBall(51);
 
     if (!ahead || !chin || ahead.bounces > 1 || (ahead.bounces === 1 && !this.leapsBounce)) {
       return false;

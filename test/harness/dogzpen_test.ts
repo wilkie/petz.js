@@ -2488,8 +2488,16 @@ function followLockstep(lines: string[]) {
       : undefined;
     const theirHead = frames[n].head?.slice(0, 6).join(' ');
 
+    if (process.env.HEADLOG && n >= Number(process.env.HEADLOG)) {
+      const inner = pet as unknown as { waiting: boolean; headTarget: unknown };
+      console.log(
+        `${n} ${ourHead} / ${theirHead} ${inner.waiting} ${JSON.stringify(inner.headTarget)} rot ${(pet as unknown as { rotation: number }).rotation} / ${state?.[9]}`
+      );
+    }
+
     if (theirHead !== undefined && ourHead !== theirHead) {
-      result.parted = `frame ${frame[0]}: head ${ourHead}, not ${theirHead} at ${frames[n].headClock}`;
+      const inner = pet as unknown as { waiting: boolean; headTarget: unknown; samples: unknown[] };
+      result.parted = `frame ${frame[0]}: head ${ourHead}, not ${theirHead} at ${frames[n].headClock} (waiting ${inner.waiting}, target ${JSON.stringify(inner.headTarget)}, samples ${JSON.stringify(inner.samples.slice(0, 2))})`;
       break;
     }
 
