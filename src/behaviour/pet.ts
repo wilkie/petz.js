@@ -5811,8 +5811,12 @@ export class Pet {
    * places the dog as it now is, so that Ballz's last placed is no longer
    * the frame before (see `MoveFrameRectBall`).
    */
-  private askBall(ball: number) {
-    this.askedBall = true;
+  private askBall(ball: number, old = false) {
+    /* (Asked of the old state, as the scruff handler asks, Ballz's last placed is the old state: no cause to place it again.) */
+    if (!old) {
+      this.askedBall = true;
+    }
+
     return this.world.ballOnStage?.(ball);
   }
 
@@ -6045,7 +6049,8 @@ export class Pet {
     const secondary = !!cursor?.secondary;
 
     if (cursor && this.state !== STATE.scruff && !this.world.holding?.()) {
-      const neck = this.askBall(NECK);
+      /* (Of the old state, `+0xec`, seg21:4ee7 to 4f1c.) */
+      const neck = this.askBall(NECK, true);
 
       if (
         neck &&
