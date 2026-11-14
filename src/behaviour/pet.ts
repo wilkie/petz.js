@@ -1438,7 +1438,12 @@ export class Pet {
      * places it is not yet read out). */
     let freshened: Head | undefined;
 
-    if (this.lastStill && this.lastPose?.tracking && this.headTracking) {
+    /* (Not where an ask after the dry pop placed the dog as it is already,
+     * frame 1347 of the ball's day: the old state is what Ballz last placed.) */
+    const placedAlready = this.placedAfterDry;
+    this.placedAfterDry = false;
+
+    if (this.lastStill && !placedAlready && this.lastPose?.tracking && this.headTracking) {
       const [yaw, pitch] = [this.headYaw, this.headPitch];
       [this.headYaw, this.headPitch] = [this.lastPose.yaw, this.lastPose.pitch];
       freshened = this.headTrackPrep();
@@ -1569,6 +1574,7 @@ export class Pet {
      * tick's, as the engine's is the frame's.) */
     this.lastTickPops = this.popsThisTick;
     this.ranDryThisTick = false;
+    this.placedSinceDry = false;
     this.popsThisTick = 0;
     this.placedThisTick = [];
 
@@ -2005,6 +2011,7 @@ export class Pet {
     if (!step) {
       this.heldGlue = glue;
       this.ranDryThisTick = true;
+      this.placedSinceDry = false;
 
       /* (Run dry after a turn, the state copied into the old as the pop
        * ends, seg7:71eb: the turn's frame lost, the dog still turned about
@@ -2710,7 +2717,8 @@ export class Pet {
    * down, its rectangle; all within the stage.
    */
   private isHeadOnscreen() {
-    const [a, b] = [this.askBall(50), this.askBall(55)];
+    /* (Asked before the pop, of the state Ballz last placed: nothing placed again.) */
+    const [a, b] = [this.askBall(50, true), this.askBall(55, true)];
     const rect = this.world.rect?.();
 
     if (!a || !b || !rect) {
@@ -5695,7 +5703,8 @@ export class Pet {
         this.pushStored(SCRIPT.growlOverBall);
       }
 
-      return undefined;
+      /* And popped, its first frame the tick's (seg19:2372). */
+      return this.pop().step;
     }
 
     const ball = this.ballSprite();
@@ -5709,7 +5718,8 @@ export class Pet {
         this.resetScript(36);
         this.pushBallGrabAction();
         this.newState(STATE.returningBallIndirect);
-        return this.pop().step;
+        /* (No pop of its own after: the new state's, running on, is the tick's, seg19:24ae.) */
+        return this.enteredStep ?? { frame: this.lastStep.frame, still: true };
       }
     }
 
@@ -5918,6 +5928,10 @@ export class Pet {
   /** Whether a pop ran dry this tick. */
   private ranDryThisTick = false;
 
+  /** Placed afresh by an ask since the pop that ran dry (`askBall`); and so, for the next tick's start. */
+  private placedSinceDry = false;
+  private placedAfterDry = false;
+
   /** How many pops the last tick made (for the harness, against the engine's). */
   lastTickPops = 0;
 
@@ -5956,6 +5970,19 @@ export class Pet {
     /* (Asked of the old state, as the scruff handler asks, Ballz's last placed is the old state: no cause to place it again.) */
     if (!old) {
       this.askedBall = true;
+
+      /* After a pop ran dry, the state copied into the old as it ended is
+       * not what Ballz last placed: the first ask places the dog as it now
+       * is, its head too where it tracks, the wobbles moved on (frame 1346
+       * of the ball's day, `PushBallGrabAction`'s ask for the chin). */
+      if (this.ranDryThisTick && !this.placedSinceDry) {
+        this.placedSinceDry = true;
+        this.placedAfterDry = true;
+
+        if (this.headTracking) {
+          this.headTrackPrep();
+        }
+      }
     }
 
     return this.world.ballOnStage?.(ball);
@@ -6441,6 +6468,10 @@ export class Pet {
         if (item.step.grab === 0) {
           inMouth = true;
         }
+      } else if ('release' in item && item.release === 0) {
+        inMouth = false;
+      } else if ('grab' in item && item.grab === 0) {
+        inMouth = true;
       }
     }
 
@@ -7192,11 +7223,14 @@ export class Pet {
 
     switch (state) {
       case 0x61:
+        /* Looking at nothing (`8af9 7ffe 7ffe`, seg21:6e58); the ball moved,
+         * taken up and let go of again where it lies (`8b04 0 8ad8 32`, 6ed8). */
         this.pushBallReleaseAction();
+        this.push({ lookAt: null });
 
         if (this.world.ballHasMoved?.()) {
           this.pushBallGrabAction();
-          this.push({ step: { frame: this.lastStep.frame, release: 0 } }, { glue: CHEST });
+          this.push({ release: 0 }, { glue: CHEST });
         }
 
         repeat((this.rand() % 4) + 1, () => this.pushStored(102));

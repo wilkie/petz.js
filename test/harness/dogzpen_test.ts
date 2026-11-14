@@ -410,6 +410,8 @@ function readTrace(lines: string[]) {
       open.headPlacings = (open.headPlacings ?? 0) + 1;
     } else if (kind === 'head' && open) {
       open.headCopy = values.slice(1, 10);
+      /* (The same clock, where only an ask placed the head: a still frame's, 1346 of the ball's day.) */
+      open.headClock ??= values[11];
     } else if (kind === 'moved' && open) {
       open.moved.push(values);
     } else if (kind === 'state' && open) {
