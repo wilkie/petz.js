@@ -342,6 +342,8 @@ export interface PetWorld {
   placeAt?(x: number, y: number): void;
   /** A check made with a step shown as it will be, the stage then as it was (`Stage.peek`). */
   peek?<T>(step: Step, rotation: number, reference: number | undefined, check: () => T): T;
+  /** A ball of the dog as it is, but no longer blended (`8b00` earlier in the pop; `Stage.unblendedBall`). */
+  unblendedBall?(ball: number): { x: number; y: number } | undefined;
 }
 
 /** A cursor sample, one a frame: `ReallyDoDrawFrame` keeps thirty. */
@@ -1911,6 +1913,7 @@ export class Pet {
         /* `0x8afb`; `0x8afe 6`, the cursor; `0x8afe 7`, what is held, or else the cursor. */
         if (item.seek === 'user') {
           this.lookAtUser();
+          this.placeBeforeAfresh();
         } else {
           const held = item.seek === 'held' ? this.heldObject() : undefined;
           this.lookAt(held ?? this.samples[0]);
@@ -2102,6 +2105,7 @@ export class Pet {
       this.lookAtRandomPoint();
     } else if (step.look === 'user') {
       this.lookAtUser();
+      this.placeBeforeAfresh();
     } else if (step.look === 'ahead') {
       this.lookAhead();
     }
@@ -2698,6 +2702,23 @@ export class Pet {
   private isOnscreen() {
     const { x, y } = this.world.where();
     return x > 0 && y > 0 && x < this.world.width && y < this.world.height;
+  }
+
+  /**
+   * `PetModule::IsPetHeadOnscreen` (seg21:5a73): across, from ball 50 to
+   * ball 55 of the dog as it now is (`GetBallOffset`, so placing it); up and
+   * down, its rectangle; all within the stage.
+   */
+  private isHeadOnscreen() {
+    const [a, b] = [this.askBall(50), this.askBall(55)];
+    const rect = this.world.rect?.();
+
+    if (!a || !b || !rect) {
+      return this.isOnscreen();
+    }
+
+    const [left, right] = [Math.min(a.x, b.x), Math.max(a.x, b.x)].map(Math.trunc);
+    return left > 0 && right < this.world.width && rect.top > 0 && rect.bottom < this.world.height;
   }
 
   private isOnscreenMargin(margin: number) {
@@ -3511,7 +3532,7 @@ export class Pet {
     if (flags & 2) {
       if (this.decideIfClumsy() && this.totallyOnscreen()) {
         this.newState(STATE.tumbling);
-      } else if (cursor && Pet.within(this.focusRect(2, FOCUS_DISTANCE), cursor)) {
+      } else if (cursor && Pet.inXRect(this.focusRect(2, FOCUS_DISTANCE), cursor)) {
         this.pushStored(this.locomotion);
       } else {
         this.newState(STATE.releasingBall);
@@ -4919,6 +4940,16 @@ export class Pet {
     );
   }
 
+  /** `XPointInXRect` (seg11:1b40): within, and not on its left or top either. */
+  private static inXRect(
+    rect: { left: number; right: number; top: number; bottom: number },
+    point: { x: number; y: number }
+  ) {
+    return (
+      point.x > rect.left && point.x < rect.right && point.y > rect.top && point.y < rect.bottom
+    );
+  }
+
   /** Within the dog's reach to lunge: 2.1 standard sizes, raised by half its height. */
   private lungeRect() {
     const rect = this.focusRect(2.1, 2);
@@ -5590,9 +5621,10 @@ export class Pet {
       return undefined;
     }
 
-    if (!this.isOnscreen()) {
+    if (!this.isHeadOnscreen()) {
       this.newState(this.isBallGrabbable() ? STATE.returningBallIndirect : STATE.chasingBall);
-      return this.pop().step;
+      /* (No pop of its own after: the new state's, running on, is the tick's, seg19:1fea.) */
+      return this.enteredStep ?? { frame: this.lastStep.frame, still: true };
     }
 
     if (this.cursorMoved()) {
@@ -5624,9 +5656,15 @@ export class Pet {
     return step;
   }
 
+  /** The ball's sprite's middle: where the dog took it up, while it holds it (`Ball.taken`). */
+  private ballSprite() {
+    const ball = this.world.ball;
+    return ball && ball.slot !== null && ball.taken ? ball.taken : ball;
+  }
+
   /** The cursor within 180 of the ball (`0x1246`), or come 40 nearer it over three frames (seg19:2130 on). */
   private ownerTooClose() {
-    const ball = this.world.ball;
+    const ball = this.ballSprite();
     const [now, then] = [this.samples[0], this.samples[3]];
 
     if (!ball || !now) {
@@ -5660,7 +5698,7 @@ export class Pet {
       return undefined;
     }
 
-    const ball = this.world.ball;
+    const ball = this.ballSprite();
     const now = this.samples[0];
 
     /* The engine tests whether it has settled (`0x222`) and does the same either way (seg19:244a). */
@@ -5748,7 +5786,11 @@ export class Pet {
 
   /** `LookAtUser` (seg7:2a78): the head toward just past its nose, the eyes at the user. */
   private lookAtUser() {
-    const nose = this.askBall(NOSE);
+    /* (Asked of the dog's state as it now is: the breathing stopped earlier
+     * in the pop, `8b00`, its blend is none at once, the frame shown or not.) */
+    const asked = this.askBall(NOSE);
+    const nose =
+      this.motionScale === 100 && this.world.unblendedBall ? this.world.unblendedBall(NOSE) : asked;
 
     if (nose) {
       this.setHeadTarget({ x: Math.trunc(nose.x) + this.rotation, y: Math.trunc(nose.y) + 10 });
@@ -5884,6 +5926,26 @@ export class Pet {
 
   /** Whether a ball of the dog has been asked for this tick (`GetBallOffset`), placing it as it is. */
   private askedBall = false;
+
+  /**
+   * Looking at the user in a pop (`8afb`), `LookAtUser` asks where ball 55
+   * is (seg7:2a85), the state changed since it was kept: the frame before
+   * placed afresh then and there, its head tracking -- the turn and nod as
+   * they were, the wobbles moved on -- before the frame's own and before
+   * the handler's work after the pop.
+   */
+  private placeBeforeAfresh() {
+    const was = this.lastPose;
+
+    if (!was?.tracking) {
+      return;
+    }
+
+    const kept = [this.headYaw, this.headPitch, this.headTracking] as const;
+    [this.headYaw, this.headPitch, this.headTracking] = [was.yaw, was.pitch, true];
+    this.headTrackPrep();
+    [this.headYaw, this.headPitch, this.headTracking] = kept;
+  }
 
   /**
    * Where a ball of the dog is on the stage (`Ballz::GetBallOffset`), which
@@ -6843,8 +6905,40 @@ export class Pet {
 
       const rotation = this.rotation;
 
+      /* Facing away (seg19:0463 to 0598): the cursor within the dog's
+       * rectangle grown a quarter of its standard width and half its height
+       * each way, it turns round (219); else it walks round (13), the turn
+       * eased to 0x4c the way it faces -- the other way within twice its
+       * standard width of the stage's side it would turn toward. */
       if (rotation < -0x50 || rotation > 0x50) {
-        this.pushStored(SCRIPT.turnAround);
+        const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+        const rect = this.world.rect?.();
+        const cursor = this.samples[0];
+        const grown = rect && {
+          left: rect.left - Math.trunc(width / 4),
+          right: rect.right + Math.trunc(width / 4),
+          top: rect.top - Math.trunc(height / 2),
+          bottom: rect.bottom + Math.trunc(height / 2),
+        };
+
+        if (grown && cursor && Pet.inXRect(grown, cursor)) {
+          this.pushStored(SCRIPT.turnAround);
+        } else {
+          const { x } = this.middle();
+          let turn = rotation < 0 ? -0x4c : 0x4c;
+
+          if (turn > 0 && x < 2 * width) {
+            turn = -turn;
+          }
+
+          if (turn < 0 && x > this.world.width - 2 * width) {
+            turn = -turn;
+          }
+
+          this.pushTransition(this.data.scripts[SCRIPT.walk].from, BELLY);
+          this.push({ ease: turn });
+          this.pushStored(SCRIPT.walk);
+        }
       }
 
       this.pushBallReleaseAction();
@@ -6860,7 +6954,8 @@ export class Pet {
         /* Keep-away: the user reaches for it, and the dog snatches it back. */
         this.pushBallGrabAction();
         this.newState(STATE.returningBallIndirect);
-        return this.pop().step;
+        /* (No pop of its own after: the new state's, running on, is the tick's, seg19:065c.) */
+        return this.enteredStep ?? { frame: this.lastStep.frame, still: true };
       }
     }
 

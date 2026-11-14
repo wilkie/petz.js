@@ -870,6 +870,7 @@ canvas.addEventListener('mousedown', (event) => {
     /* Picked up, even out of the dog's mouth. */
     ball.held = true;
     ball.slot = null;
+    ball.taken = undefined;
     ball.x = point.x;
     ball.y = point.y;
     pet.ballPickedUp();

@@ -181,6 +181,13 @@ export interface Ball {
 
   /** Where it was put down, and where the dog's chin was then (`RecordPosition`). */
   recorded: { x: number; y: number; chinX: number; chinY: number } | null;
+
+  /**
+   * Where it was taken up, while the dog holds it: its sprite, hidden, keeps
+   * its middle there (`+0x86`, `+0x88`; the trace's `ball` line) until put
+   * down, and what reads the sprite's middle reads that.
+   */
+  taken?: { x: number; y: number };
 }
 
 /** The dog's balls an object is held by: the chin, and a toe (`GrabObject`, seg14:04e4). */
@@ -594,6 +601,25 @@ export class Stage implements PetWorld {
     return this.pointer;
   }
 
+  /**
+   * A ball of the dog as it is but no longer blended (`8b00` earlier in the
+   * pop), as `GetBallOffset` (seg10:3213) finds it: the sprite's rectangle's
+   * corner, and the ball from the corner of the box the unblended frame has.
+   */
+  unblendedBall(ball: number) {
+    const blend = this.blend;
+    const shown = this.rect();
+    this.blend = undefined;
+
+    try {
+      const box = this.rect();
+      const at = this.ballOnStage(ball);
+      return { ...at, x: at.x + shown.left - box.left, y: at.y + shown.top - box.top };
+    } finally {
+      this.blend = blend;
+    }
+  }
+
   /** A ball on the stage, and how wide it is drawn. */
   ballOnStage(ball: number) {
     return this.placed()[ball];
@@ -878,6 +904,7 @@ export class Stage implements PetWorld {
   /** `PetModule::GrabObject`: the ball into the dog's mouth, or under its paw. */
   grabBall(slot: number) {
     if (this.ball) {
+      this.ball.taken ??= { x: this.ball.x, y: this.ball.y };
       this.ball.slot = slot;
       this.ball.held = false;
     }
@@ -897,6 +924,7 @@ export class Stage implements PetWorld {
     /* Put down at the chin, whichever slot held it (`ActualReleaseObject`, seg14:0df1). */
     const holder = this.placed()[HOLDERS[0]];
     ball.slot = null;
+    ball.taken = undefined;
     ball.x = Math.trunc(holder.x);
     ball.y = Math.trunc(holder.y);
     ball.vx = ball.vy = 0;
