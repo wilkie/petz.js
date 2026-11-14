@@ -1007,6 +1007,12 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             say("\r\n");
         }
 
+        /* And what the frame is handed (`params x y buttons slot taken`):
+         * the cursor (`PetParams` `+0x12`, `+0x14`), the buttons (`+0xe`),
+         * the toy box's slot taken out (`+0x16`) and whether just now (`+0x18`). */
+        say("params %d %d %d %d %d\r\n", *(int *)(params + 0x12), *(int *)(params + 0x14),
+            *(int *)(params + 0xe), *(int *)(params + 0x16), *(int *)(params + 0x18));
+
         say("tick %d %d %d %lu", n, *(int __far *)(module + 0xc0), *(int __far *)(module + 0xd4),
             *(unsigned long __far *)MK_FP(dgroup, 0x2d28));
 

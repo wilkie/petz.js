@@ -2302,6 +2302,8 @@ function followLockstep(lines: string[]) {
   /* And its queue's words unread, and them (`queue read write ...: words`). */
   const queues = new Map<number, { unread: number; words: string; repeat: string }>();
   const pulses = new Map<number, number>();
+  /* And what each frame is handed: the cursor, buttons, toy slot and whether just taken (`params`). */
+  const inputs = new Map<number, number[]>();
   let clocked = -1;
 
   for (const line of lines) {
@@ -2309,6 +2311,8 @@ function followLockstep(lines: string[]) {
       const [n, ms] = line.split(' ').slice(1).map(Number);
       clocks.set(n, Math.trunc(ms / 17));
       clocked = n;
+    } else if (line.startsWith('params ') && clocked >= 0) {
+      inputs.set(clocked, line.split(' ').slice(1).map(Number));
     } else if (line.startsWith('pulsed ') && clocked >= 0) {
       /* (The clock as `PulseTrickData` reads it, the drift timed by it.) */
       pulses.set(clocked, Math.trunc(Number(line.split(' ')[1]) / 17));
@@ -2410,6 +2414,28 @@ function followLockstep(lines: string[]) {
       break;
     }
 
+    /* What the user does, as the frame is handed it (`params`), before the
+     * frame: the cursor and its button; the ball (the toy box's slot 8)
+     * taken out held where the cursor is, and let go of, thrown. */
+    const handed = inputs.get(n);
+
+    if (handed) {
+      const [x, y, buttons, slot, taken] = handed;
+      const down = (buttons & 0x8000) !== 0;
+      const wasDown = stage.pointer.button;
+      stage.pointer = { x, y, button: down };
+
+      if (taken && slot === 8) {
+        stage.ball = { x, y, vx: 0, vy: 0, held: true, slot: null, recorded: null };
+        /* (The cursor was there already: no throw in its first move.) */
+        (stage as unknown as { lastPointer: { x: number; y: number } }).lastPointer = { x, y };
+        pet.ballPickedUp();
+      } else if (wasDown && !down && stage.ball?.held) {
+        stage.ball.held = false;
+        pet.ballThrown();
+      }
+    }
+
     const step = pet.tick(clocks.get(n) ?? (n * 45) / 17, pulses.get(n), frames[n].headClock);
     stage.show(
       step,
@@ -2469,7 +2495,7 @@ function followLockstep(lines: string[]) {
 
     if (mine !== theirs || seed !== frame[3]) {
       const engine = drawn.map((each) => `${each.segment}:${each.offset.toString(16)}`).join(' ');
-      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]}; at ${(stage as unknown as { x: number }).x} ${(stage as unknown as { y: number }).y}, placed by ${step.placedBy}, glue ${step.glue}; head ${JSON.stringify(step.head)} / ${frames[n].head?.join(' ')} at ${frames[n].headClock})`;
+      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]}; at ${(stage as unknown as { x: number }).x} ${(stage as unknown as { y: number }).y}, placed by ${step.placedBy}, glue ${step.glue}; head ${JSON.stringify(step.head)} / ${frames[n].head?.join(' ')} at ${frames[n].headClock}; history ${JSON.stringify((pet as unknown as { history: number[] }).history)}; ball ${stage.ball ? `${stage.ball.held ? 1 : 0} ${stage.ball.x} ${stage.ball.y} ${stage.ball.vx} ${stage.ball.vy} ${stage.ball.slot}` : 'none'} / ${frames[n].ball?.join(' ')})`;
       break;
     }
 

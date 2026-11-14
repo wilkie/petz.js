@@ -1412,6 +1412,7 @@ export class Pet {
     this.time = time;
     this.wobbledAt = wobbledAt;
     this.poppedCentre = undefined;
+    this.statesThisTick = 0;
 
     /* After a tick that showed nothing new, its head tracking, the frame
      * before is placed afresh before the module pulses -- its head, its turn
@@ -1471,7 +1472,22 @@ export class Pet {
      * ball -- the trace's `head 0` in the glue, frame 2869.) */
     let headCopy: Head | undefined = shown.glue !== undefined ? freshened : undefined;
 
-    if (!still && !freshened && shown.glue !== undefined && was?.tracking && this.headTracking) {
+    /* (Only where the frame before is not as Ballz last placed it:
+     * `MoveFrameRectBall` reads it again only if the old state differs from
+     * that one, seg10:2b55 to 2ce4. [[inferred]] Its turn and nod alone do
+     * not tell: a new state this tick before the glue does -- frame 2869 of
+     * the day of 3,000, idle to walking, read it again; frame 113 of the
+     * ball's day, begging on, did not.) */
+    const moved = this.statesThisTick > 0;
+
+    if (
+      !still &&
+      !freshened &&
+      shown.glue !== undefined &&
+      was?.tracking &&
+      this.headTracking &&
+      moved
+    ) {
       const [yaw, pitch] = [this.headYaw, this.headPitch];
       [this.headYaw, this.headPitch] = [was.yaw, was.pitch];
       headCopy = this.headTrackPrep();
@@ -2343,6 +2359,7 @@ export class Pet {
    * chest unless the queue already glues it, and the new state enters.
    */
   newState(state: number) {
+    this.statesThisTick++;
     this.handle(this.state, 'exit');
     this.history = [state, ...this.history].slice(0, 10);
     this.state = state;
@@ -4086,6 +4103,8 @@ export class Pet {
 
       this.headWobble = 30;
       this.waiting = false;
+      /* Its tilt eased level (`8ae6 0 0`, seg18:0d07). */
+      this.push({ fudge: { kind: 'ease', axis: 0, to: 0 } });
       this.pushTransition(this.data.scripts[SCRIPT.sitUp].from, BELLY);
       this.push({ cue: 0 });
 
@@ -4126,7 +4145,12 @@ export class Pet {
         this.resetScript(36);
         this.push({ steerAt: { x: cursor.x, y: cursor.y, rate: 5, width: 10, height: 10 } });
         this.pushStored(SCRIPT.begShuffle);
-        this.push({ glue: CHEST }, { steerAt: { x: 0, y: 0, rate: 0, width: 0, height: 0 } });
+        /* (`8ad7 8af2 0 0 0 0 0 8ae6 0 0`: by the chest, a word; no steering; its tilt eased level, seg18:1044 to 1074.) */
+        this.push(
+          { glue: CHEST, words: 1 } as Item,
+          { steerAt: { x: 0, y: 0, rate: 0, width: 0, height: 0 } },
+          { fudge: { kind: 'ease', axis: 0, to: 0 } }
+        );
         this.pushStored(SCRIPT.begShuffleBack);
         this.push({ cue: 0 }, { glue: CHEST });
         this.waiting = false;
@@ -5634,6 +5658,9 @@ export class Pet {
       this.rand
     );
   }
+
+  /** How many times the state has changed this tick. */
+  private statesThisTick = 0;
 
   /** Whether the last tick showed nothing new (`Step.still`). */
   private lastStill = false;
