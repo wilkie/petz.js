@@ -2205,12 +2205,30 @@ export class Pet {
    * it has played, and a glue — the one that followed, or the chest.
    */
   private resetSoft() {
+    /* Kept to the end of the script playing, or all of it where none ends
+     * (seg7:3248 to 32a1); its glue the one `IsScriptGlued` finds ahead --
+     * the last not followed by a frame (seg7:36fb) -- else the chest. */
+    const glued = this.gluedAhead();
     const end = this.queue.findIndex((item) => 'end' in item);
-    const after = end === -1 ? undefined : this.queue[end + 1];
-    this.queue = end === -1 ? [] : this.queue.slice(0, end + 1);
+    this.queue = end === -1 ? this.queue : this.queue.slice(0, end + 1);
     this.target = null;
     this.steer = null;
-    this.push({ cue: 3 }, { glue: after && 'glue' in after ? after.glue : CHEST });
+    this.push({ cue: 3 }, { glue: glued ?? CHEST });
+  }
+
+  /** `IsScriptGlued` (seg7:36fb): the last glue queued that no frame follows, if any. */
+  private gluedAhead(): number | undefined {
+    let glued: number | undefined;
+
+    for (const item of this.queue) {
+      if ('glue' in item) {
+        glued = item.glue;
+      } else if ('step' in item) {
+        glued = undefined;
+      }
+    }
+
+    return glued;
   }
 
   /**
@@ -2719,8 +2737,8 @@ export class Pet {
    * stage, walk back to its middle (`0x8af2`, then script 13).
    */
   private doPostLocomote(mode: Mode): Step | undefined {
+    /* Leaving, nothing (seg16:1554 to 155c): no soft reset, so no cue 3 queued. */
     if (mode === 'exit') {
-      this.resetSoft();
       return undefined;
     }
 

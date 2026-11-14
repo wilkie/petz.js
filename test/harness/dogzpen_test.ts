@@ -2301,9 +2301,10 @@ function followLockstep(lines: string[]) {
   );
   stage.show(first, pet.rotation);
 
+  /* Its rectangle the engine's as the module left it (`inited`), whole as the engine's is. */
   if (inited) {
-    const middle = stage.centre();
-    stage.nudge(inited[5] - middle.x, inited[6] - middle.y);
+    const rect = stage.rect();
+    stage.nudge(inited[1] - rect.left, inited[2] - rect.top);
   }
 
   result.factors += `, started ${seeded.seed} / ${frames[0].tick[3]}`;
