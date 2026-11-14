@@ -2251,7 +2251,7 @@ function followLockstep(lines: string[]) {
   /* (Each draw's caller this frame, to say where the two part.) */
   let callers: string[] = [];
   const rand = () => {
-    callers.push(new Error().stack!.split('\n')[2]?.trim().split(' ')[1] ?? '?');
+    callers.push(new Error().stack!.split("\n").slice(2, 6).map((l) => l.trim().split(" ")[1]).join("<") ?? '?');
     return drawn0();
   };
   const brain = new Brain(parseBrain(read('BRAIN.PBT')), readBrainMap(dll), rand);
@@ -2343,7 +2343,8 @@ function followLockstep(lines: string[]) {
       step.pinned,
       step.centredAt,
       step.head,
-      step.angles
+      step.angles,
+      step.blend
     );
     result.frames++;
     const seed = seeded.seed;
@@ -2353,7 +2354,7 @@ function followLockstep(lines: string[]) {
 
     if (mine !== theirs || seed !== frame[3]) {
       const engine = drawn.map((each) => `${each.segment}:${each.offset.toString(16)}`).join(' ');
-      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'})`;
+      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]})`;
       break;
     }
 
