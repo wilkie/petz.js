@@ -476,14 +476,19 @@ static int __cdecl __far __loadds centred(void __far *z, void __far *a, void __f
 typedef void(__cdecl __far *HOLDING)(void __far *module, int slot);
 static HOLDING grabOn, releaseOn;
 
+/* A frame something is taken up or let go in (for `balls`, below). */
+static int heldChanged;
+
 static void __cdecl __far __loadds grabbed(void __far *module, int slot)
 {
+    heldChanged = 1;
     say("grab %d %d\r\n", slot, draws);
     grabOn(module, slot);
 }
 
 static void __cdecl __far __loadds released(void __far *module, int slot)
 {
+    heldChanged = 1;
     say("release %d %d\r\n", slot, draws);
     releaseOn(module, slot);
 }
@@ -1085,9 +1090,32 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
         /* (What opening the port answers the program does not ask.) */
         ((WITHPARAMS)ordinal(118))(params);
+        heldChanged = 0;
         ((DRAWFRAME)ordinal(485))(module, params);
         ((WITHPARAMS)ordinal(119))(params);
         sprite = *(unsigned char __far *__far *)(module + 0x58);
+
+        /* Something taken up or let go, its head not tracking (else the asking
+         * would wobble it, and draw): each of the dog's balls as `Ballz::
+         * GetBallOffset` (203, seg10:3213) has it after the frame, `balls x y
+         * ...` -- (ballz, &point, state +0x51a, rect +0x60, ball). */
+        if (heldChanged && sprite && !*(int __far *)(sprite + 0x51a + 0x1e)) {
+            typedef void(__cdecl __far * BALLAT)(void __far *ballz, int __far *point,
+                                                 unsigned char __far *state,
+                                                 unsigned char __far *rect, int ball);
+            void __far *ballz = *(void __far *__far *)MK_FP(dgroup, 0x3bbe);
+            int count = *(int __far *)((unsigned char __far *)ballz + 0x58);
+            int ball, point[2];
+
+            say("balls %d", n);
+
+            for (ball = 0; ball < count; ball++) {
+                ((BALLAT)ordinal(203))(ballz, (int __far *)point, sprite + 0x51a, sprite + 0x60, ball);
+                say(" %d %d", point[0], point[1]);
+            }
+
+            say("\r\n");
+        }
 
         say("frame %d %d %d %lu %d %u", n, *(int __far *)(module + 0xc0),
             *(int __far *)(module + 0xd4), *(unsigned long __far *)MK_FP(dgroup, 0x2d28), draws,

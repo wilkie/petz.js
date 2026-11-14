@@ -2233,6 +2233,7 @@ function followSwing(lines: string[]) {
  * how many held before it.
  */
 function followLockstep(lines: string[]) {
+  const lines2 = lines;
   const { frames, dll } = readTrace(lines);
   /* (From `LoadFactors`, the 66,307 draws before it -- the fur's speckles and the rest -- not played.) */
   const seedLine = lines.find((line) => line.startsWith('factors in '));
@@ -2488,6 +2489,21 @@ function followLockstep(lines: string[]) {
       step.blend
     );
     result.frames++;
+    /* (With `BALLSLOG` a frame, each of the model's balls on the stage against the engine's `balls` line.) */
+    if (process.env.BALLSLOG && n === Number(process.env.BALLSLOG)) {
+      const theirs =
+        lines2
+          .find((line) => line.startsWith(`balls ${n} `))
+          ?.split(' ')
+          .slice(2)
+          .map(Number) ?? [];
+      const ours = (stage as unknown as { placed(): { x: number; y: number }[] }).placed();
+      ours.forEach((ball, at) => {
+        const [x, y] = [Math.trunc(ball.x), Math.trunc(ball.y)];
+        const [ex, ey] = [theirs[2 * at], theirs[2 * at + 1]];
+        console.log(`ball ${at}: ${x} ${y} / ${ex} ${ey}${x !== ex || y !== ey ? ' *' : ''}`);
+      });
+    }
 
     /* Its cycle from now the engine's under winbox.js, the bare (1 + sin) / 2
      * (behaviour.md): a power of 1, its centre 75, the phase as frame 0's
