@@ -1898,8 +1898,14 @@ export class Pet {
         });
       } else if ('endRepeat' in item) {
         this.endRepeat();
+      } else if ('end' in item) {
+        /* `0x8b0b`: the script at its end, and so to be cut short (seg7:6688 to 6692). */
+        this.scriptEnded = true;
+        this.interruptible = true;
       } else if ('begin' in item) {
         this.begun = item.begin;
+        this.scriptEnded = false;
+        this.framesShown = 0;
         this.updateHeartRate(item.begin);
       } else if ('after' in item) {
         /* Met after this frame, it is for the next (`PopScript` reaches it then). */
@@ -1919,6 +1925,8 @@ export class Pet {
         placedBy = item.step.frame;
       } else if ('step' in item) {
         step = { ...item.step, glue: item.step.glue ?? glue };
+        /* (One more of the script's frames shown, seg7:713f.) */
+        this.framesShown++;
 
         /* (A glue by no ball of the dog's, -1 say, is none: the frame placed as it is, seg7:6e33 to 6e44.) */
         if (step.glue !== undefined && (step.glue < 0 || step.glue >= 65)) {
@@ -2126,6 +2134,10 @@ export class Pet {
 
     if (cue === 2) {
       this.slide = null;
+    } else if (cue === 8) {
+      this.interruptible = true;
+    } else if (cue === 9) {
+      this.interruptible = false;
     } else if (cue === 6) {
       this.targetsOn = true;
     } else if (cue === 7) {
@@ -2151,8 +2163,9 @@ export class Pet {
    * their own size, and the eyelids and blinks as they start.
    */
   private resetParams() {
-    /* (No repeat under way, seg7:347a.) */
+    /* (No repeat under way, seg7:347a; the script to be cut short, seg7:3502.) */
     this.repeats = [];
+    this.interruptible = true;
     this.ease = null;
     this.drift = 0;
     /* (And the swing stopped, `+0x210e` 0, seg7:3498.) */
@@ -2525,36 +2538,70 @@ export class Pet {
   }
 
   /**
-   * `ScriptSprite::ResetScript` (seg7:2dd0): the queue cleared, glued by
-   * the ball given (the chest, for none), and the dog taken to be in the
-   * position of the script it was playing — where it ends, unless it starts
-   * and ends the same; then `ResetParams`. `ResetScriptHard` is played so too.
+   * `ScriptSprite::ResetScript` (seg7:2dd0): where the script playing may
+   * not be cut short (cue 9 until cue 8, `+0x952`), or is a move under way
+   * -- past its first frame, not yet at its end, from one position to
+   * another -- it plays out (`ResetScriptSoft`). Else the queue is
+   * cleared to the glue given (a ball of the dog's; else the one queued
+   * that no frame follows; else the chest) and an end; `ResetParams`; and
+   * the dog is where the script started, or, past its first frame, where it
+   * ends -- and starting at 21, glued by the belly too.
    */
-  private resetScript(glue = CHEST) {
-    const script = this.data.scripts[this.playing];
-    this.queue = [{ glue }];
+  private resetScript(glue = -1) {
+    const script = this.data.scripts[this.begun];
+
+    if (
+      !this.interruptible ||
+      (!this.scriptEnded && this.framesShown > 1 && script && script.to !== script.from)
+    ) {
+      this.resetSoft(glue);
+      return;
+    }
+
+    const ball =
+      glue >= 0 && glue < (this.data.ballCount ?? 65) ? glue : (this.gluedAhead() ?? CHEST);
+    this.queue = [{ glue: ball }, { end: this.begun }];
+    this.repeats = [];
     this.resetParams();
 
     /* And the slide it was aimed over: inferred, as the queue it counted is gone. */
     this.slide = null;
 
     if (script) {
-      this.position = script.to;
+      this.lastScript = this.begun;
+
+      if (script.from !== script.to) {
+        this.position = this.framesShown > 1 ? script.to : script.from;
+      } else {
+        this.position = script.from;
+
+        if (this.position === 21) {
+          this.push({ glue: BELLY });
+        }
+      }
     }
   }
+
+  /** Whether the script playing may be cut short (`+0x952`): not from cue 9 to cue 8. */
+  private interruptible = true;
+
+  /** Whether the script playing has reached its end (`+0x94c`), and how many of its frames have been shown (`+0x94e`). */
+  private scriptEnded = false;
+  private framesShown = 0;
 
   /**
    * `ResetScriptSoft` (seg7:31f1): the script playing plays to its end, and
    * what was queued after it is dropped; then cue 3, so `ResetParams` once
    * it has played, and a glue — the one that followed, or the chest.
    */
-  private resetSoft() {
+  private resetSoft(glue = -1) {
     /* (No repeat under way, seg7:339e.) */
     this.repeats = [];
     /* Kept to the end of the script playing, or all of it where none ends
-     * (seg7:3248 to 32a1); its glue the one `IsScriptGlued` finds ahead --
-     * the last not followed by a frame (seg7:36fb) -- else the chest. */
-    const glued = this.gluedAhead();
+     * (seg7:3248 to 32a1); its glue the one given, a ball of the dog's, or
+     * else the one `IsScriptGlued` finds ahead -- the last not followed by a
+     * frame (seg7:36fb) -- else the chest (seg7:320b to 3243). */
+    const glued = glue >= 0 && glue < (this.data.ballCount ?? 65) ? glue : this.gluedAhead();
     const end = this.queue.findIndex((item) => 'end' in item);
     this.queue = end === -1 ? this.queue : this.queue.slice(0, end + 1);
 
@@ -6362,7 +6409,9 @@ export class Pet {
     }
 
     const excitement = this.factor(0);
-    this.queue = [{ glue: 36 }];
+    /* Glued by ball 36, then the script reset (`8ad8 24`, `ResetScript(-1)`, seg20:2253 to 2294). */
+    this.push({ glue: 36 });
+    this.resetScript();
     this.setFactor(9, this.centres[9]);
 
     /* Whether it will leap for a ball that bounces once: the clumsier, the less likely (seg20:22b6). */
