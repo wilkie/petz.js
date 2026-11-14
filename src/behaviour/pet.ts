@@ -2202,6 +2202,9 @@ export class Pet {
     this.interruptible = true;
     this.ease = null;
     this.drift = 0;
+    /* (No steering, `+0x2108` 0, seg7:3484, its distance back at 4; and no slide, `-0x71f2` 0.) */
+    this.steer = null;
+    this.slide = null;
     /* (And the swing stopped, `+0x210e` 0, seg7:3498.) */
     this.swing = null;
     this.swingAsked = false;

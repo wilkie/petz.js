@@ -1274,9 +1274,30 @@ function followFrameBoxes(lines: string[]) {
     /* Held all through the frame, the ball is boxed with it, by the ball of
      * the dog that holds it (chin 51, toe 45), and so the shoe in the mouth,
      * by its own picture's size; taken up or let go in it, not followed. */
-    if ((holding && heldSlot === undefined && !heldShoe) || shoeChanged) {
+    if (
+      ((holding && heldSlot === undefined && !heldShoe) || shoeChanged) &&
+      tick[0] !== Number(process.env.BOXAT)
+    ) {
       result.mouthed++;
       continue;
+    }
+
+    if (tick[0] === Number(process.env.BOXAT)) {
+      const age = tick[14];
+      const b = frameBox(
+        breed,
+        header,
+        shapes[frame],
+        scalesForAge(breed, age),
+        rotation,
+        100 - age,
+        undefined,
+        { tilt, spin, roll },
+        blend === 100 ? undefined : { scale: blend, reference: shapes[reference] }
+      );
+      console.log(
+        `boxat ${tick[0]} frame ${frame} rot ${rotation} age ${age} blend ${blend} ref ${reference}: ${b.left} ${b.top} ${b.right} ${b.bottom} / ${theirs.join(' ')}`
+      );
     }
 
     result.frames++;
@@ -2498,6 +2519,10 @@ function followLockstep(lines: string[]) {
           .slice(2)
           .map(Number) ?? [];
       const ours = (stage as unknown as { placed(): { x: number; y: number }[] }).placed();
+      const st = stage as unknown as Record<string, unknown> & { frames: unknown[] };
+      console.log(
+        `stage rot ${st.rotation} frame ${st.frames.indexOf(st.frame)} head ${JSON.stringify(st.head)} angles ${JSON.stringify(st.angles)} blend ${JSON.stringify(st.blend)} age ${st.age} ball ${JSON.stringify(stage.ball)}`
+      );
       ours.forEach((ball, at) => {
         const [x, y] = [Math.trunc(ball.x), Math.trunc(ball.y)];
         const [ex, ey] = [theirs[2 * at], theirs[2 * at + 1]];
