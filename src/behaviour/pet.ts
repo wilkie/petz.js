@@ -72,6 +72,7 @@ export const STATE = {
   releasingBall: 0x21,
   ownerTooCloseToBall: 0x22,
   fakingBall: 0x23,
+  tumbling: 0x24,
   observingBallThrown: 0x25,
   beggingChasing: 0x26,
   beggingChasingHindLegs: 0x27,
@@ -2246,6 +2247,11 @@ export class Pet {
     distance = FOCUS_DISTANCE
   ) {
     this.steer = point ? { point: { ...point }, rate, width, height, distance } : null;
+
+    /* (Without a point, the rotation's fudger stopped too, seg7:29c7 to 29ef.) */
+    if (!point) {
+      this.ease = null;
+    }
   }
 
   /**
@@ -2514,8 +2520,9 @@ export class Pet {
         return this.doLungingWall(mode);
       case STATE.chasingBall:
       case STATE.returningBallDirect:
-      case STATE.returningBallIndirect:
         return this.doTargettedLocomote(mode);
+      case STATE.returningBallIndirect:
+        return this.doReturningBallIndirect(mode);
       case STATE.waitState:
         return this.doWaitState(mode);
       case STATE.anticipatingBall:
@@ -3140,12 +3147,17 @@ export class Pet {
   /** `PetModule::GetNewTarget`: a point on the stage at least so far from the dog. */
   /** `GetNewTarget` (seg16:177b): far enough from the dog's middle (`+0x86`, `+0x88`, seg16:1867). */
   private newTarget(distance = 400) {
-    const at = this.poppedCentre ?? this.world.centre?.() ?? this.world.where();
+    const at = this.middle();
     return pickTarget(this.world, at, distance, this.rand);
   }
 
   /** The dog's middle as this tick's last pop placed it, if it did. */
   private poppedCentre: { x: number; y: number } | undefined;
+
+  /** The dog's middle (`+0x86`, `+0x88` of the sprite): as this tick's last pop placed it, else as it was. */
+  private middle() {
+    return this.poppedCentre ?? this.world.centre?.() ?? this.world.where();
+  }
 
   /** Walks a stretch towards the target, steered by `SetTargetLocation`. */
   private pushLocomotion() {
@@ -3298,10 +3310,6 @@ export class Pet {
         return this.world.projectBall?.(4) ?? this.world.ball;
       }
 
-      if (state === STATE.returningBallIndirect) {
-        return this.naughtyTarget;
-      }
-
       const cursor = this.samples[0] ?? this.wallTarget;
 
       if (state === STATE.returningBallDirect) {
@@ -3327,7 +3335,6 @@ export class Pet {
         STATE.chasingOwner,
         STATE.chasingPetting,
         STATE.returningBallDirect,
-        STATE.returningBallIndirect,
         STATE.beggingChasing,
       ] as number[];
 
@@ -3351,12 +3358,6 @@ export class Pet {
         };
       }
 
-      if (state === STATE.returningBallIndirect) {
-        this.resetSoft();
-        this.pushBallGrabAction();
-        this.naughtyTarget = this.newNaughtyTarget();
-      }
-
       const ballMoving = state === STATE.chasingBall && this.ballMoving();
       const pace =
         state === STATE.chasingPetting ? 1 : state === STATE.chasingWall || ballMoving ? 2 : 0;
@@ -3373,11 +3374,6 @@ export class Pet {
     }
 
     if (state === STATE.chasingBall && this.jumpForBall()) {
-      return this.pop().step;
-    }
-
-    if (state === STATE.returningBallIndirect && this.waggling && !this.decideIfNaughty()) {
-      this.newState(STATE.returningBallDirect);
       return this.pop().step;
     }
 
@@ -3427,7 +3423,6 @@ export class Pet {
           break;
         }
         case STATE.returningBallDirect:
-        case STATE.returningBallIndirect:
           this.newState(STATE.releasingBall);
           return step;
       }
@@ -3443,6 +3438,84 @@ export class Pet {
 
       this.push({ lids: this.eyelidHeight() });
       this.pushStored(this.locomotion);
+    }
+
+    return step;
+  }
+
+  /**
+   * `PetModule::DoReturningBallIndirect` (seg19:1632): bringing the ball
+   * back the long way, to a point away from the user. Leaving, the script
+   * reset, no more (seg19:1643 to 166a). Entering (to 170a): its script let
+   * play out (`ResetScriptSoft(-1)`), the ball grabbed, cue 0, a target
+   * (`GetNewNaughtyTarget(300, 300)`) and a gait picked, not waiting; and
+   * no script of its own pushed, nor its eyelids, before it goes on as each
+   * tick. Each tick: the cursor moved more than 30 over the last two
+   * frames, it heads 256 away from the user from the stage's middle -- only
+   * walking (script 9 begun), and then picks a new target; else, waiting,
+   * to its target; called, and not naughty, it brings the ball straight
+   * back (25), going on all the same. Then the pop: cue 4 waiting; the
+   * script done, its gait again; the target reached, clumsy and all on the
+   * stage, a tumble (36); else the cursor within a focus box twice the
+   * standard size, its gait again, or it lets the ball go (33).
+   */
+  private doReturningBallIndirect(mode: Mode): Step | undefined {
+    const { width: sw, height: sh } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+
+    if (mode === 'exit') {
+      this.resetScript();
+      return undefined;
+    }
+
+    if (mode === 'enter') {
+      this.resetSoft();
+      this.pushBallGrabAction();
+      this.push({ cue: 0 });
+      this.naughtyTarget = this.newNaughtyTarget();
+      this.locomotion = this.pickLocomotion(0, false);
+      this.waiting = false;
+      /* (Going on to the tick's work, `ENTER_RUNS_ON`.) */
+      return undefined;
+    }
+
+    const cursor = this.samples[0];
+
+    if (this.cursorTravel(2) > 30) {
+      if (this.begun === 9 && cursor) {
+        const at = this.middle();
+        let [dx, dy] = [at.x - cursor.x, at.y - cursor.y];
+        const distance = Math.max(1, Math.trunc(Math.sqrt(dx * dx + dy * dy)));
+        dx = Math.trunc((dx * 256) / distance) + Math.trunc(this.world.width / 2) - at.x;
+        dy = Math.trunc((dy * 256) / distance) + Math.trunc(this.world.height / 2) - at.y;
+        this.setTargetLocation({ x: at.x + dx, y: at.y + dy }, 5, sw, sh, FOCUS_DISTANCE);
+        this.naughtyTarget = this.newNaughtyTarget();
+      }
+    } else if (this.waiting) {
+      this.setTargetLocation(this.naughtyTarget, 5, sw, sh, FOCUS_DISTANCE);
+    }
+
+    if (this.called && !this.decideIfNaughty()) {
+      this.newState(STATE.returningBallDirect);
+    }
+
+    const { step, flags } = this.pop();
+
+    if (this.cues.has(4)) {
+      this.waiting = true;
+    }
+
+    if (flags & 1) {
+      this.pushStored(this.locomotion);
+    }
+
+    if (flags & 2) {
+      if (this.decideIfClumsy() && this.totallyOnscreen()) {
+        this.newState(STATE.tumbling);
+      } else if (cursor && Pet.within(this.focusRect(2, FOCUS_DISTANCE), cursor)) {
+        this.pushStored(this.locomotion);
+      } else {
+        this.newState(STATE.releasingBall);
+      }
     }
 
     return step;
@@ -4814,20 +4887,26 @@ export class Pet {
 
   /**
    * `MakeFocusRect` (seg7:3565) about the dog's middle: a box so many times
-   * its standard size, ahead of it by its diagonal over a distance.
+   * its standard size, ahead of it by its diagonal over a distance -- across
+   * by the cosine of its tilt and the sine of its turn, up or down by the
+   * sine of its tilt (`+0x528`, `+0x526`: the sprite's state's `+0xe` and
+   * `+0xc`; seg7:35ef to 3644).
    */
   private focusRect(scale: number, distance: number) {
     const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
     const [w, h] = [Math.trunc(width * scale), Math.trunc(height * scale)];
-    const centre = this.world.centre?.() ?? this.world.where();
     const ahead = Math.trunc(Math.trunc(Math.sqrt(w * w + h * h)) / distance);
+    const centre = this.middle();
+    const tilt = (this.fudged(AXIS.tilt) * Math.PI) / 128;
     const sine = Math.trunc(Math.sin((this.rotation * Math.PI) / 128) * 256);
-    const x = centre.x - Math.trunc((256 * ahead * sine) / 65536);
+    const [tiltCos, tiltSin] = [Math.trunc(Math.cos(tilt) * 256), Math.trunc(Math.sin(tilt) * 256)];
+    const x = centre.x - Math.trunc((tiltCos * ahead * sine) / 65536);
+    const y = centre.y - Math.trunc((tiltSin * ahead) / 256);
     return {
       left: x - Math.trunc(w / 2),
       right: x + Math.trunc(w / 2),
-      top: centre.y - Math.trunc(h / 2),
-      bottom: centre.y + Math.trunc(h / 2),
+      top: y - Math.trunc(h / 2),
+      bottom: y + Math.trunc(h / 2),
     };
   }
 
@@ -6386,19 +6465,7 @@ export class Pet {
    * standard size, a quarter of the box's diagonal ahead the way it faces.
    */
   private inFocusBox(point: { x: number; y: number }, scale: number) {
-    const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
-    const [w, h] = [Math.trunc(width * scale), Math.trunc(height * scale)];
-    const centre = this.world.centre?.() ?? this.world.where();
-    const ahead = Math.trunc(Math.trunc(Math.sqrt(w * w + h * h)) / FOCUS_DISTANCE);
-    const sine = Math.trunc(Math.sin((this.rotation * Math.PI) / 128) * 256);
-    const x = centre.x - Math.trunc((256 * ahead * sine) / 65536);
-
-    return (
-      point.x >= x - Math.trunc(w / 2) &&
-      point.x < x + Math.trunc(w / 2) &&
-      point.y >= centre.y - Math.trunc(h / 2) &&
-      point.y < centre.y + Math.trunc(h / 2)
-    );
+    return Pet.within(this.focusRect(scale, FOCUS_DISTANCE), point);
   }
 
   /**
@@ -6958,15 +7025,18 @@ export class Pet {
 
   /**
    * `PetModule::GetNewNaughtyTarget` (seg19:275f): a point on the stage far
-   * from the dog and from the user. How far, the engine's callers say;
-   * here half the stage's diagonal, inferred.
+   * from the dog and from the user (`GetNewNaughtyTarget(300, 300)`).
    */
   private newNaughtyTarget() {
     const cursor = this.samples[0] ?? { x: 0, y: 0 };
-    const at = this.world.centre?.() ?? this.world.where();
+    const at = this.middle();
     const { width, height } = this.world;
-    const most = Math.trunc(Math.hypot(width - 120, height - 120) / 2) - 50;
-    let fromUser = Math.hypot(at.x - cursor.x, at.y - cursor.y);
+    /* From the dog at least 300, or half the stage's inner diagonal less
+     * 50; from the user at least 300, or as far as the cursor is now: as
+     * its callers ask (seg19:16cf, 1874; seg19:2771 to 287e). */
+    const most = Math.trunc(Math.trunc(Math.hypot(width - 120, height - 120)) / 2) - 50;
+    const fromDog = Math.min(300, most);
+    let fromUser = Math.max(300, Math.trunc(Math.hypot(at.x - cursor.x, at.y - cursor.y)));
 
     for (let tries = 0; tries < 10000; tries++) {
       const point = {
@@ -6975,7 +7045,7 @@ export class Pet {
       };
 
       if (
-        Math.hypot(at.x - point.x, at.y - point.y) > most &&
+        Math.hypot(at.x - point.x, at.y - point.y) > fromDog &&
         Math.hypot(cursor.x - point.x, cursor.y - point.y) > fromUser
       ) {
         return point;
