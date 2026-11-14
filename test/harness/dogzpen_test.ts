@@ -2320,8 +2320,13 @@ function followLockstep(lines: string[]) {
       result.excitementPut++;
     }
 
+    /* (Its slider too where the two were one: a slider moved apart, as
+     * `LoadFactors` leaves it on frame 0, is the engine's to set.) */
+    if (inner.sliders[0] === inner.factors[0]) {
+      inner.sliders[0] = tick[4];
+    }
+
     inner.factors[0] = tick[4];
-    inner.sliders[0] = tick[4];
     /* Its factors as the frame begins, against the engine's (`tick`). */
     const factorsNow = inner.factors.join(' ');
 

@@ -470,6 +470,18 @@ export class Stage implements PetWorld {
     this.angles = angles;
     this.blend = blend;
 
+    /* Turned about its middle by `8ae5 1 turn frame`, and that frame then
+     * the one before (seg7:5c26 to 5cdb; `MoveFrameRectCenter`). */
+    if (step.turnFrame !== undefined) {
+      const before = this.centre();
+      this.rotation = rotation;
+      this.angles = angles;
+      const after = this.centre();
+      this.x += before.x - after.x;
+      this.y += before.y - after.y;
+      this.frame = this.frames[step.turnFrame] ?? this.frame;
+    }
+
     /* Moved by the script first (`8aeb`, `8aec`), then by the frame. */
     if (step.shift) {
       this.x += step.shift.x;

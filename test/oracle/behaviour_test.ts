@@ -83,7 +83,7 @@ withOracle('the engine’s behaviour', () => {
     };
 
     /* Turning round (219) turns the dog after its last frame; panting stops (28). */
-    expect(tail(219)).toEqual({ turn: 128, glue: 50 });
+    expect(tail(219)).toEqual({ turn: 128, turnFrame: 3349, glue: 50 });
     expect(tail(28)).toEqual({ breathe: null });
     expect(tail(27)).toBeUndefined();
   });

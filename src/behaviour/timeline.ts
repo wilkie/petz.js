@@ -38,6 +38,14 @@ export interface Step {
   turn?: number;
 
   /**
+   * Turned by `8ae5 1 turn frame`: the dog turned about its middle, the
+   * frame it shows set at the new angles where the old was
+   * (`MoveFrameRectCenter`, seg10:2e53), and `frame` then the frame before,
+   * which the next frame is glued from (`+0x104`, seg7:5cb5).
+   */
+  turnFrame?: number;
+
+  /**
    * Ease the dog's rotation to this, in 256ths of a turn, over the frames
    * left in the script (`8ae6 1 to`). Read as a fudge to a target; how the
    * engine spreads it is inferred from `Fudger::SetTargetFudge`.
@@ -332,9 +340,11 @@ export function timeline(
             break;
           }
           case TURN:
-            // `1 turn x`: only the first operand of 1 turns the dog.
+            // `1 turn frame`: only the first operand of 1 turns the dog.
             if (value(a) === 1) {
               pending.turn = (pending.turn ?? 0) + value(b);
+              /* And the frame before taken as `frame`, the dog turned about its middle (seg7:5c26 to 5cdb). */
+              pending.turnFrame = value(c);
             }
             break;
           case OP.call: {

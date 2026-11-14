@@ -1624,6 +1624,11 @@ export class Pet {
           step.glueBlend = earlier;
         }
 
+        if (this.tailTurnFrame !== undefined) {
+          step.turnFrame ??= this.tailTurnFrame;
+          this.tailTurnFrame = undefined;
+        }
+
         /* Its sounds chosen now, as `PopScript` plays them (seg7:620a). */
         if (step.soundChoices) {
           const chosen = step.soundChoices.map((choices) => choices[this.rand() % choices.length]);
@@ -1760,6 +1765,11 @@ export class Pet {
   /** What follows a script's last frame (`PopScript`, before the next): its turns as well. */
   private applyTail(after: Omit<Step, 'frame'>) {
     this.rotation = wrap(this.rotation + (after.turn ?? 0));
+
+    /* (Turned about its middle with a frame taken as the one before: for the next frame shown.) */
+    if (after.turnFrame !== undefined) {
+      this.tailTurnFrame = after.turnFrame;
+    }
 
     if (after.ease) {
       this.startEase(after.ease.to, this.framesAhead());
@@ -2047,6 +2057,9 @@ export class Pet {
       }
     }
   }
+
+  /** A turn's frame met after a script's last frame (`8ae5 1 turn frame`), for the next frame shown. */
+  private tailTurnFrame: number | undefined;
 
   /** The sounds popped since the last tick, each played as it is popped. */
   private popSounds: number[] = [];
