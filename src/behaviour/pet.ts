@@ -863,6 +863,9 @@ export function* pokeReaction(face: boolean, pokedInFace: number[], rand: Rand):
  * tumbling and eating return; the states the table does not name are left
  * as they were.
  */
+/** Words a negative pushed ease's angle passes over, taken for an opcode (`easeFramesAhead`). */
+const EASE_SKIPS = new Map([[-90, 4]]);
+
 const ENTER_RUNS_ON = new Set([
   2,
   105,
@@ -879,6 +882,9 @@ const ENTER_RUNS_ON = new Set([
   8,
   11,
   12,
+  20,
+  21,
+  23,
   26,
   27,
   28,
@@ -1908,7 +1914,7 @@ export class Pet {
         this.gotoState = item.goto;
         flags |= 8;
       } else if ('ease' in item) {
-        this.startEase(item.ease, this.framesAhead());
+        this.startEase(item.ease, this.easeFramesAhead(item.ease));
       } else if ('drift' in item) {
         this.drift = item.drift;
       } else if ('fudge' in item) {
@@ -2040,6 +2046,13 @@ export class Pet {
       this.turn(step);
     }
 
+    /* A look before the frame (`8afa` to `8afc`) is read in the pop before
+     * the frame's head is tracked, so it turns the head this frame
+     * ([[measured]] frame 171 of the petting day). */
+    if (step?.look) {
+      this.look(step.look);
+    }
+
     /* The head after the fudgers have moved the dog's angles on (`Fudger::ForAll`, seg7:6d3b, before seg7:6de2). */
     this.updateHeadTracking();
 
@@ -2065,7 +2078,7 @@ export class Pet {
         this.startAim(aim.ball, aim.at, this.placedThisTick[this.placedThisTick.length - 1]);
       }
 
-      this.applyEffects(step);
+      this.applyEffects(step, true);
     } else {
       step = { frame: this.lastStep.frame, still: true };
       this.placedBy = undefined;
@@ -2098,7 +2111,20 @@ export class Pet {
   }
 
   /** What a step does besides its frame: as the frame is shown, or after a script's last. */
-  private applyEffects(step: Omit<Step, 'frame'>) {
+  /** Where `8afa`, `8afb` or `8afc` has the dog look. */
+  private look(look: Step['look']) {
+    if (look === 'random') {
+      this.lookAtRandomPoint();
+    } else if (look === 'user') {
+      this.lookAtUser();
+      this.placeBeforeAfresh();
+    } else if (look === 'ahead') {
+      this.lookAhead();
+    }
+  }
+
+  /** What a frame popped brings; its look already taken where `looked` (the pop's own frame). */
+  private applyEffects(step: Omit<Step, 'frame'>, looked = false) {
     if (step.release !== undefined) {
       this.releaseObject(step.release);
     }
@@ -2108,13 +2134,8 @@ export class Pet {
       this.grabObject(step.grab);
     }
 
-    if (step.look === 'random') {
-      this.lookAtRandomPoint();
-    } else if (step.look === 'user') {
-      this.lookAtUser();
-      this.placeBeforeAfresh();
-    } else if (step.look === 'ahead') {
-      this.lookAhead();
+    if (!looked) {
+      this.look(step.look);
     }
 
     for (const each of step.fudges ?? []) {
@@ -2346,6 +2367,40 @@ export class Pet {
         /* (To the script's end, `0x8b0b` or `0x8b0c`, seg4:0f66 to 0f72.) */
         break;
       }
+    }
+
+    return Math.max(1, count);
+  }
+
+  /**
+   * The frames a pushed ease (`8ae6 1 to`) spreads its turn over, as
+   * `Fudger::SetTargetFudge` (seg4:0f37) counts them: from the read index,
+   * which still points at the ease's last operand, each word to the
+   * script's end that is not an opcode, an opcode's operands passed over by
+   * its count in the opcode table (ds:0xc22, 0x23 bytes each). So a turn to
+   * a positive angle counts as a frame itself, a frame marked a reference
+   * (`8ad3`) counts too, and a negative one is taken for an opcode and
+   * passes over the words its entry says: [[measured]] -90, 4 (its entry,
+   * ds:0xffd4, is past the DLL's initialised data); most others' entries
+   * are 0.
+   */
+  private easeFramesAhead(to: number) {
+    let count = to >= 0 ? 1 : 0;
+    const skip = to >= 0 ? 0 : (EASE_SKIPS.get(to) ?? 0);
+    let at = 0;
+
+    for (const item of this.queue) {
+      if ('end' in item) {
+        break;
+      }
+
+      const words = itemWords(item);
+
+      if ('step' in item && at + words - 1 >= skip) {
+        count++;
+      }
+
+      at += words;
     }
 
     return Math.max(1, count);
@@ -3929,19 +3984,22 @@ export class Pet {
       if (!this.inRect(this.samples[0] ?? { x: -1, y: -1 }, 8)) {
         this.queue = [];
         this.newState(STATE.chasingPetting);
-        return this.pop().step;
+        /* (No pop of its own after: the new state's is the tick's, seg17:07a0 to 07ae.) */
+        return this.enteredStep ?? { frame: this.lastStep.frame, still: true };
       }
 
       if (!this.isCursorOverPetSpot()) {
         this.newState(STATE.aligningPetting);
-        return this.pop().step;
+        /* (No pop of its own after: the new state's is the tick's, seg17:07a0 to 07ae.) */
+        return this.enteredStep ?? { frame: this.lastStep.frame, still: true };
       }
     }
 
     if (this.petting) {
       this.resetSoft();
       this.newState(STATE.pettingGood);
-      return this.pop().step;
+      /* (No pop of its own after, seg17:07ae.) */
+      return this.enteredStep ?? { frame: this.lastStep.frame, still: true };
     }
 
     const { step, flags } = this.pop();
@@ -3978,23 +4036,35 @@ export class Pet {
 
     const cursor = this.samples[0] ?? { x: -1, y: -1, button: false };
 
+    /* Entering (seg17:0917 to 0b74): whether the cursor is over the spot
+     * (`IsCursorOverPetSpot`, which finds the spot's ball), glued by the
+     * belly; side on, the cursor not over the spot, it walks forward (21)
+     * where the cursor is behind the spot -- to its left facing right
+     * (20 to 108), to its right facing left (-108 to -20) -- else
+     * backwards (210); facing the user or away, it walks round (13), the
+     * turn eased to 38, or 90 past a quarter turn, the way it faces. Then
+     * glued by the belly, cue 0, the belly again; not waiting; and on to
+     * the tick's work (`ENTER_RUNS_ON`). */
     if (mode === 'enter') {
       const spot = this.askBall(this.data.engineScripts.petSpots[this.petSpot].ball);
+      const over = this.isCursorOverPetSpot();
       const rotation = this.rotation;
-      const sideOn = (rotation > 20 && rotation < 108) || (rotation < -20 && rotation > -108);
+      this.push({ glue: BELLY });
 
-      if (sideOn && spot && !this.isCursorOverPetSpot()) {
-        /* Facing right, forward is to the right; facing left, to the left. */
-        const ahead = cursor.x > spot.x === rotation > 0;
-        this.walkDirection = ahead ? 1 : -1;
-        this.pushStored(ahead ? SCRIPT.startWalking : SCRIPT.startBackwards);
-      } else if (!sideOn) {
-        /* Facing the user or away: it turns side on. Inferred: the engine's
-         * own pushes here are not yet read. */
-        this.pushTransition(this.data.scripts[SCRIPT.walk].from, BELLY);
-        this.push({ ease: cursor.x > this.world.where().x ? 64 : -64 });
+      const right = rotation > 20 && rotation < 108;
+      const left = rotation < -20 && rotation > -108;
+
+      if (right || left) {
+        if (!over && spot) {
+          const forward = right ? cursor.x < spot.x : cursor.x > spot.x;
+          this.pushStored(forward ? SCRIPT.startWalking : SCRIPT.startBackwards);
+          this.walkDirection = forward ? 1 : -1;
+        }
+      } else {
+        const turn =
+          rotation > 0 ? (rotation > 0x40 ? 0x5a : 0x26) : rotation < -0x40 ? -0x5a : -0x26;
+        this.push({ ease: turn });
         this.pushStored(SCRIPT.walk);
-        this.walkDirection = 0;
       }
 
       this.push({ glue: BELLY }, { cue: 0 }, { glue: BELLY });
@@ -4009,21 +4079,50 @@ export class Pet {
     }
 
     const { step, flags } = this.pop();
-    this.noteWaiting();
 
+    if (this.cues.has(0)) {
+      this.waiting = true;
+    }
+
+    /* Its script done (seg17:0c4d to 0e1b): where the spot will be once
+     * the dog has stopped (`ComputeActionOffset` of the stop, 22 or
+     * backwards 211), its box (`IsCursorOverPetSpot`'s) stretched 300 the
+     * way the dog would go on -- behind it, by the old state's turn, where it
+     * walks forward -- the cursor in it, it waits to be petted (20); else
+     * it stops, glued by the belly about the stop, and pops again. */
     if (flags & 1) {
-      if (this.isCursorOverPetSpot() || this.walkDirection === 0) {
-        if (this.walkDirection !== 0) {
-          this.push({ glue: BELLY });
-          this.pushStored(this.walkDirection < 0 ? SCRIPT.stopBackwards : SCRIPT.stopWalking);
-          this.walkDirection = 0;
-          this.push({ glue: BELLY });
+      const stop = this.walkDirection < 0 ? SCRIPT.stopBackwards : SCRIPT.stopWalking;
+      const spot = this.data.engineScripts.petSpots[this.petSpot].ball;
+      const now = this.askBall(spot);
+      const there = this.actionOffset(stop, spot);
+
+      if (now && there) {
+        const half = Math.trunc(now.diameter * 0.8);
+        const rect = {
+          left: there.x - half,
+          right: there.x + half,
+          top: there.y - 300,
+          bottom: there.y + 300,
+        };
+
+        if (this.walkDirection > 0 === (this.lastPose?.rotation ?? this.rotation) < 0) {
+          rect.left -= 300;
         } else {
-          this.newState(STATE.waitPetting);
+          rect.right += 300;
         }
-      } else {
-        this.pushStored(this.walkDirection < 0 ? SCRIPT.walkBackwards : SCRIPT.walk);
+
+        if (Pet.inXRect(rect, cursor)) {
+          this.newState(STATE.waitPetting);
+          return this.enteredStep ?? step;
+        }
       }
+
+      this.push({ glue: BELLY });
+      this.pushTransition(this.data.scripts[stop].from, BELLY);
+      this.push({ glue: BELLY });
+      this.pushStored(stop);
+      this.push({ glue: BELLY });
+      return this.pop().step ?? step;
     }
 
     return step;
@@ -4064,8 +4163,8 @@ export class Pet {
           return this.pettedOnBack();
         }
 
-        this.queue = [];
-        this.push({ glue: BELLY });
+        /* (`ResetScript(48)`, seg17:1152.) */
+        this.resetScript(BELLY);
         this.pushPettingEyes();
 
         if (area === AREA.hindquarters) {
@@ -7283,6 +7382,73 @@ export class Pet {
    */
   /** An aim popped, to be played ahead once its frame is placed (`0x8af4`). */
   private pendingAim: { ball: number; at: { x: number; y: number } | null } | undefined;
+
+  /**
+   * `ScriptSprite::ComputeActionOffset` (seg7:2d28): where a ball of the dog
+   * will be once a script has played -- the sprite saved, the script pushed
+   * and popped to its end, the sprite put back. Its variant drawn from the
+   * game's table stays drawn, and each pop's pulse of the blink its draw;
+   * [[measured]] and the script pushed stays queued, unread (frame 134 of
+   * the petting day: the stop, 22, shown from its first frame the next pop).
+   */
+  private actionOffset(script: number, ball: number) {
+    this.pushStored(script);
+    const saved = {
+      position: this.position,
+      lastScript: this.lastScript,
+      rotation: this.rotation,
+      ease: this.ease,
+      drift: this.drift,
+    };
+    const frames: { step: Step; rotation: number; placedBy?: number }[] = [];
+    let glue: number | undefined;
+    let placedBy: number | undefined;
+    let ended = false;
+
+    for (const [index, item] of this.queue.entries()) {
+      if ('end' in item && item.end === script) {
+        ended = true;
+        break;
+      } else if ('ease' in item) {
+        const after = this.queue.slice(index + 1);
+        this.startEase(item.ease, Math.max(1, after.filter((later) => 'step' in later).length));
+      } else if ('glue' in item) {
+        glue = item.glue;
+      } else if ('step' in item && item.step.reference) {
+        placedBy = item.step.frame;
+      } else if ('step' in item) {
+        this.turn(item.step);
+        frames.push({
+          step: { ...item.step, glue: item.step.glue ?? glue },
+          rotation: this.rotation,
+          placedBy,
+        });
+        glue = placedBy = undefined;
+      }
+    }
+
+    Object.assign(this, saved);
+
+    const blinking = {
+      blinkAt: this.blinkAt,
+      blinkWait: this.blinkWait,
+      blinkShut: this.blinkShut,
+      blinkAsked: this.blinkAsked,
+      lids: this.lids,
+    };
+
+    for (let n = 0; n <= frames.length; n++) {
+      this.blinkPulse();
+    }
+
+    Object.assign(this, blinking);
+
+    if (!ended || !this.world.lookAhead) {
+      return undefined;
+    }
+
+    return this.world.lookAhead(frames, ball);
+  }
 
   private startAim(
     ball: number,
