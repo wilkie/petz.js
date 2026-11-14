@@ -41,7 +41,8 @@ export interface Step {
    * Turned by `8ae5 1 turn frame`: the dog turned about its middle, the
    * frame it shows set at the new angles where the old was
    * (`MoveFrameRectCenter`, seg10:2e53), and `frame` then the frame before,
-   * which the next frame is glued from (`+0x104`, seg7:5cb5).
+   * which the next frame is glued from (`+0x104`, seg7:5cb5); -1 where a
+   * pop ran dry after it, the frame before then the frame shown.
    */
   turnFrame?: number;
 
@@ -178,7 +179,8 @@ export interface TimelineOptions {
   call?: (
     call: { script: number; times: number; glue: number },
     frames: Step[],
-    pending: Omit<Step, 'frame'>
+    pending: Omit<Step, 'frame'>,
+    element: Element
   ) => void;
 }
 
@@ -212,10 +214,23 @@ export function timeline(
     pending = {};
   };
 
-  const value = (operand: Operand) =>
-    typeof operand === 'number'
-      ? operand
-      : operand.random[0] + table(Math.max(1, operand.random[1] - operand.random[0] + 1));
+  /* A random operand is drawn once as the script is pushed, its value
+   * written into the queue (seg7:4ae0), so a block repeated has it again. */
+  const drawn = new Map<Operand, number>();
+  const value = (operand: Operand) => {
+    if (typeof operand === 'number') {
+      return operand;
+    }
+
+    if (!drawn.has(operand)) {
+      drawn.set(
+        operand,
+        operand.random[0] + table(Math.max(1, operand.random[1] - operand.random[0] + 1))
+      );
+    }
+
+    return drawn.get(operand)!;
+  };
 
   const play = (elements: Element[], depth: number) => {
     let at = 0;
@@ -271,7 +286,8 @@ export function timeline(
             break;
           }
           case OP.repeat: {
-            const times = value(a) === 999 ? Infinity : value(a);
+            const count = value(a);
+            const times = count === 999 ? Infinity : count;
             const from = at;
 
             for (let n = 0; n < times && frames.length < limit; n++) {
@@ -361,7 +377,7 @@ export function timeline(
             break;
           case OP.call: {
             if (call) {
-              call({ script: value(a), times: value(b), glue: value(c) }, frames, pending);
+              call({ script: value(a), times: value(b), glue: value(c) }, frames, pending, element);
               pending = {};
               break;
             }

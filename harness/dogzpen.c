@@ -205,6 +205,25 @@ static int __cdecl __far __loadds pulsing(void __far *module)
     return pulseOn(module);
 }
 
+/* And the engine's clock as `PulseTrickData` (346, seg14:1783) reads it
+ * afresh (`pulsed n ms`, `timeGetTime`): the factors' drift is timed by it,
+ * a little after the frame's own clock. */
+typedef void(__cdecl __far *PULSETRICKS)(void __far *module);
+static PULSETRICKS tricksOn;
+
+static void __cdecl __far __loadds pulsingTricks(void __far *module)
+{
+    typedef DWORD(FAR PASCAL * TIMEGET)(void);
+    static TIMEGET timeGet;
+
+    if (!timeGet) {
+        timeGet = (TIMEGET)GetProcAddress(GetModuleHandle("MMSYSTEM"), "TIMEGETTIME");
+    }
+
+    say("pulsed %lu\r\n", timeGet ? timeGet() : 0ul);
+    tricksOn(module);
+}
+
 static int __cdecl __far __loadds realising(unsigned char __far *brain)
 {
     say("brainreal %d\r\n", draws);
@@ -633,6 +652,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
     factorsOn = (LOADFACTORS)hookPrologue(499, (void __far *)loadingFactors);
     exciteOn = (SETEXCITE)hookPrologue(352, (void __far *)exciting);
     pulseOn = (PULSE)hookPrologue(498, (void __far *)pulsing);
+    tricksOn = (PULSETRICKS)hookPrologue(346, (void __far *)pulsingTricks);
     findOn = (FINDSTART)hookPrologue(505, (void __far *)finding);
 
     /* The seed as the module is made (`seed`): the model's dog starts from it. */
@@ -960,6 +980,11 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
 
             say("clock %d %lu\r\n", n, timeGet ? timeGet() : 0ul);
         }
+
+        /* The place in the game's table of 50 numbers as the frame begins
+         * (`table n`): `ScriptSprite::theirSavedThis` (101, seg26) `+0x6e`,
+         * moved on before each is taken (seg7:44df, 4b99, 416d). */
+        say("table %d\r\n", *(int __far *)((unsigned char __far *)ordinal(101) + 0x6e));
 
         say("tick %d %d %d %lu", n, *(int __far *)(module + 0xc0), *(int __far *)(module + 0xd4),
             *(unsigned long __far *)MK_FP(dgroup, 0x2d28));

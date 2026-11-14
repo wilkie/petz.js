@@ -1316,9 +1316,10 @@ export class Pet {
   /**
    * One tick of the engine, `time` in its ticks, in the order of
    * `ReallyDoDrawFrame` (seg21:3dee): the cursor is sampled, petting is
-   * looked for, the dog's state acts and a frame plays, and its mood moves on.
+   * looked for, the dog's state acts and a frame plays, and its mood moves
+   * on, `pulsedAt` the clock as it does, where not `time`.
    */
-  tick(time: number): Tick {
+  tick(time: number, pulsedAt?: number): Tick {
     this.time = time;
     this.popsThisTick = 0;
     this.sample();
@@ -1335,6 +1336,12 @@ export class Pet {
     this.popSounds = [];
     this.world.updateBall?.();
     this.wearFullness();
+
+    /* (The engine reads its clock afresh as it pulses, a little on: where it is known, that.) */
+    if (pulsedAt !== undefined) {
+      this.time = pulsedAt;
+    }
+
     this.pulse();
     /* And the sliders the factors as the pulse left them (seg21:4bf9 to 4c27). */
     this.sliders = this.factors.map((_, n) => this.factor(n));
@@ -1474,6 +1481,7 @@ export class Pet {
     const variant = this.tableNext() % script.variants.length;
     let after: Omit<Step, 'frame'> | undefined;
     let pushed = 0;
+    const calls = new Map<object, Item[]>();
 
     /* Its start (`0x8b0a`), its frames, what follows them, its end (`0x8b0b`). */
     this.push({ begin: index });
@@ -1488,9 +1496,22 @@ export class Pet {
       /* A script it calls pushed as `PushScript` pushes it (seg7:4ae6 to
        * 4ca0): an end, then the script stored, so many times, each taken
        * to where it starts, and glued after by the ball the call names. */
-      call: ({ script: called, times, glue }, frames, pending) => {
+      call: ({ script: called, times, glue }, frames, pending, element) => {
         this.push(...frames.slice(pushed).map((step) => ({ step, script: index })));
         pushed = frames.length;
+        const from = this.queue.length;
+
+        /* (A call in a block repeated is pushed once; the engine's pop goes
+         * round the block again, so what it pushed is played again, nothing
+         * drawn anew.) */
+        const again = calls.get(element);
+
+        if (again) {
+          this.push(
+            ...again.map((item) => ('step' in item ? { ...item, step: { ...item.step } } : item))
+          );
+          return;
+        }
 
         this.pushAfter(pending);
 
@@ -1504,6 +1525,8 @@ export class Pet {
             this.push({ glue });
           }
         }
+
+        calls.set(element, this.queue.slice(from));
       },
     });
 
@@ -1715,6 +1738,13 @@ export class Pet {
 
     if (!step) {
       this.heldGlue = glue;
+
+      /* (Run dry after a turn, the state copied into the old as the pop
+       * ends, seg7:71eb: the turn's frame lost, the dog still turned about
+       * its middle.) */
+      if (this.tailTurnFrame !== undefined) {
+        this.tailTurnFrame = -1;
+      }
     }
 
     if (!step) {
@@ -1998,7 +2028,8 @@ export class Pet {
     for (const item of this.queue) {
       if ('step' in item && !item.step.reference) {
         count++;
-      } else if ('goto' in item) {
+      } else if ('goto' in item || 'end' in item) {
+        /* (To the script's end, `0x8b0b` or `0x8b0c`, seg4:0f66 to 0f72.) */
         break;
       }
     }

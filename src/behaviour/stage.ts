@@ -473,13 +473,29 @@ export class Stage implements PetWorld {
     /* Turned about its middle by `8ae5 1 turn frame`, and that frame then
      * the one before (seg7:5c26 to 5cdb; `MoveFrameRectCenter`). */
     if (step.turnFrame !== undefined) {
-      const before = this.centre();
+      /* The frame shown boxed at the new angles and centred where the old
+       * rectangle was, each centre its edges' sum halved toward 0
+       * (`MoveFrameRectCenter`, seg10:3054 to 3149); that rectangle the old
+       * state's, and the turn's frame placed by its corner, as the glue
+       * reads it (seg7:5cb5). */
+      const was = this.rect();
       this.rotation = rotation;
       this.angles = angles;
-      const after = this.centre();
-      this.x += before.x - after.x;
-      this.y += before.y - after.y;
-      this.frame = this.frames[step.turnFrame] ?? this.frame;
+      const rect = this.rect();
+      /* (The box about the dog's origin, `+0x38`, halved as it is.) */
+      const box = {
+        left: rect.left - this.x,
+        top: rect.top - this.y,
+        right: rect.right - this.x,
+        bottom: rect.bottom - this.y,
+      };
+      const half = (a: number, b: number) => Math.trunc((a + b) / 2);
+      const left = box.left - half(box.left, box.right) + half(was.left, was.right);
+      const top = box.top - half(box.top, box.bottom) + half(was.top, was.bottom);
+      this.frame = step.turnFrame >= 0 ? (this.frames[step.turnFrame] ?? this.frame) : this.frame;
+      const placed = this.rect();
+      this.x += left - placed.left;
+      this.y += top - placed.top;
     }
 
     /* Moved by the script first (`8aeb`, `8aec`), then by the frame. */

@@ -2251,7 +2251,13 @@ function followLockstep(lines: string[]) {
   /* (Each draw's caller this frame, to say where the two part.) */
   let callers: string[] = [];
   const rand = () => {
-    callers.push(new Error().stack!.split("\n").slice(2, 6).map((l) => l.trim().split(" ")[1]).join("<") ?? '?');
+    callers.push(
+      new Error()
+        .stack!.split('\n')
+        .slice(2, 6)
+        .map((l) => l.trim().split(' ')[1])
+        .join('<') ?? '?'
+    );
     return drawn0();
   };
   const brain = new Brain(parseBrain(read('BRAIN.PBT')), readBrainMap(dll), rand);
@@ -2287,11 +2293,21 @@ function followLockstep(lines: string[]) {
     .map(Number);
   /* The engine's clock, milliseconds over 17 (`timeGetTime`, seg9:0668), as each frame begins (`clock`). */
   const clocks = new Map<number, number>();
+  /* And its place in the game's table of 50 numbers (`table`, the line after). */
+  const places = new Map<number, number>();
+  const pulses = new Map<number, number>();
+  let clocked = -1;
 
   for (const line of lines) {
     if (line.startsWith('clock ')) {
       const [n, ms] = line.split(' ').slice(1).map(Number);
       clocks.set(n, Math.trunc(ms / 17));
+      clocked = n;
+    } else if (line.startsWith('pulsed ') && clocked >= 0) {
+      /* (The clock as `PulseTrickData` reads it, the drift timed by it.) */
+      pulses.set(clocked, Math.trunc(Number(line.split(' ')[1]) / 17));
+    } else if (line.startsWith('table ') && clocked >= 0) {
+      places.set(clocked, Number(line.split(' ')[1]));
     }
   }
 
@@ -2308,10 +2324,27 @@ function followLockstep(lines: string[]) {
     stage.nudge(inited[1] - rect.left, inited[2] - rect.top);
   }
 
+  /* Where the model takes from the game's table, for a parting there. */
+  let tables: string[] = [];
+  const tabled = pet as unknown as { tableNext: () => number };
+  const tableNext = tabled.tableNext.bind(pet);
+  tabled.tableNext = () => {
+    tables.push(
+      new Error()
+        .stack!.split('\n')
+        .slice(2, 5)
+        .map((l) => l.trim().split(' ')[1])
+        .join('<')
+    );
+    return tableNext();
+  };
+
   result.factors += `, started ${seeded.seed} / ${frames[0].tick[3]}`;
 
   for (const [n, { frame, state, drawn, tick }] of frames.entries()) {
     callers = [];
+    const took = tables;
+    tables = [];
     /* Its excitement put to the engine's as the frame begins: under
      * winbox.js the engine's cycle is not its code's power of it (not yet
      * known why, behaviour.md), so the rest is followed past it. */
@@ -2331,12 +2364,20 @@ function followLockstep(lines: string[]) {
     /* Its factors as the frame begins, against the engine's (`tick`). */
     const factorsNow = inner.factors.join(' ');
 
+    /* Its place in the game's table, where the trace has the engine's. */
+    const place = (pet as unknown as { randomAt: number }).randomAt;
+
+    if (places.has(n) && place !== places.get(n)) {
+      result.parted = `frame ${tick[0]} begins: the table at ${place}, not ${places.get(n)} (taken last frame in ${took.join(' ')})`;
+      break;
+    }
+
     if (factorsNow !== tick.slice(4, 15).join(' ')) {
       result.parted = `frame ${tick[0]} begins: factors ${factorsNow}, not ${tick.slice(4, 15).join(' ')}`;
       break;
     }
 
-    const step = pet.tick(clocks.get(n) ?? (n * 45) / 17);
+    const step = pet.tick(clocks.get(n) ?? (n * 45) / 17, pulses.get(n));
     stage.show(
       step,
       step.rotation,
@@ -2362,9 +2403,22 @@ function followLockstep(lines: string[]) {
     const mine = `${pet.state} ${pet.global} frame ${step.frame} at ${[box.left, box.top, box.right, box.bottom].map(Math.round).join(' ')}`;
     const theirs = `${frame[1]} ${frame[2]} frame ${state?.[13]} at ${state?.slice(0, 4).join(' ')}`;
 
+    /* (With `ORIGIN` set, the dog's origin held too -- the engine's its
+     * rectangle less its frame's box -- and the model's queue told where it
+     * parts: for finding a glue gone astray.) */
+    const sx = stage as unknown as { x: number; y: number };
+    if (
+      process.env.ORIGIN &&
+      state &&
+      (sx.x !== state[0] - state[19] || sx.y !== state[1] - state[20])
+    ) {
+      result.parted = `frame ${frame[0]}: origin ${sx.x} ${sx.y}, not ${state[0] - state[19]} ${state[1] - state[20]} (frame ${step.frame}, glue ${step.glue}, rot ${step.rotation}); queue ${JSON.stringify((pet as unknown as { queue: unknown[] }).queue.slice(0, 12))}; history ${JSON.stringify((pet as unknown as { history: unknown[] }).history)}`;
+      break;
+    }
+
     if (mine !== theirs || seed !== frame[3]) {
       const engine = drawn.map((each) => `${each.segment}:${each.offset.toString(16)}`).join(' ');
-      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]})`;
+      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]}; at ${(stage as unknown as { x: number }).x} ${(stage as unknown as { y: number }).y})`;
       break;
     }
 
