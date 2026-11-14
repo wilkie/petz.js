@@ -427,6 +427,23 @@ type Item =
 const wrap = (angle: number) => ((((angle + 128) % 256) + 256) % 256) - 128;
 
 /**
+ * An angle brought within -128 to 128, both kept (seg11:1f32): as the
+ * rotation's fudger writes it, easing or drifting. A turn by `0x8ae5` adds
+ * to it unwrapped (seg7:5c74), and so it stays until the fudger next moves it.
+ */
+const normalise = (angle: number) => {
+  while (angle < -128) {
+    angle += 256;
+  }
+
+  while (angle > 128) {
+    angle -= 256;
+  }
+
+  return angle;
+};
+
+/**
  * An idle dog's plan (`PetModule::SetupIdle`, seg16:0104): `rand() % (13 -
  * e/10) + 6 - e/20` items, e its excitement, after a draw it does not use.
  * Each, if `rand() % 100` is over e, one to four runs of one to three pants
@@ -1853,7 +1870,7 @@ export class Pet {
 
   /** What follows a script's last frame (`PopScript`, before the next): its turns as well. */
   private applyTail(after: Omit<Step, 'frame'>) {
-    this.rotation = wrap(this.rotation + (after.turn ?? 0));
+    this.rotation += after.turn ?? 0;
 
     /* (Turned about its middle with a frame taken as the one before: for the next frame shown.) */
     if (after.turnFrame !== undefined) {
@@ -2044,7 +2061,7 @@ export class Pet {
 
   /** The dog's rotation through a frame: its turn, then any ease and drift. */
   private turn(step: Step) {
-    this.rotation = wrap(this.rotation + (step.turn ?? 0));
+    this.rotation += step.turn ?? 0;
 
     if (step.ease) {
       this.startEase(step.ease.to, step.ease.frames);
@@ -2058,14 +2075,17 @@ export class Pet {
       const left = wrap(this.ease.to - this.rotation);
 
       if (Math.abs(left) <= Math.abs(this.ease.by)) {
-        this.rotation = this.ease.to;
+        this.rotation = normalise(this.ease.to);
         this.ease = null;
       } else {
-        this.rotation = wrap(this.rotation + this.ease.by);
+        this.rotation = normalise(this.rotation + this.ease.by);
       }
     }
 
-    this.rotation = wrap(this.rotation + this.drift);
+    /* (Drifting only where there is a drift, seg4:119b: else left as it is, unwrapped or not.) */
+    if (this.drift) {
+      this.rotation = normalise(this.rotation + this.drift);
+    }
     this.fudgers.forEach(fudgeFrame);
   }
 
