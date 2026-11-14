@@ -2073,12 +2073,6 @@ export class Pet {
     const handled = this.handle(this.state, 'run') ?? this.pop().step;
     const step = this.enteredStep ?? handled;
 
-    /* Run dry and given more by the state, popped again in the tick (the
-     * engine's second `PopScript`: frame 27 of the harness's day of 300). */
-    if (this.dryPop && this.queue.some((item) => 'step' in item && !item.step.reference)) {
-      return this.pop().step;
-    }
-
     return step;
   }
 
@@ -2740,6 +2734,11 @@ export class Pet {
 
       this.push({ lids: this.eyelidHeight() });
       this.pushStored(this.locomotion);
+
+      /* And popped again, the gait's first frame shown this tick (seg16:1536):
+       * frame 27 of the harness's day of 300, a dry call, script 9 pushed,
+       * a second showing frame 15 placed from the held 25. */
+      return this.pop().step ?? step;
     }
 
     return step;
