@@ -2304,6 +2304,10 @@ function followLockstep(lines: string[]) {
   const pulses = new Map<number, number>();
   /* And what each frame is handed: the cursor, buttons, toy slot and whether just taken (`params`). */
   const inputs = new Map<number, number[]>();
+  /* And how many times the engine popped each frame (`pulse` lines). */
+  const popCounts = new Map<number, number>();
+  /* And the blink as each frame begins: its phase and wait (`blinking`). */
+  const blinks = new Map<number, string>();
   let clocked = -1;
 
   for (const line of lines) {
@@ -2311,6 +2315,10 @@ function followLockstep(lines: string[]) {
       const [n, ms] = line.split(' ').slice(1).map(Number);
       clocks.set(n, Math.trunc(ms / 17));
       clocked = n;
+    } else if (line.startsWith('blinking ') && clocked >= 0) {
+      blinks.set(clocked, line.split(' ').slice(1).join(' '));
+    } else if (line.startsWith('pulse ') && clocked >= 0) {
+      popCounts.set(clocked, (popCounts.get(clocked) ?? 0) + 1);
     } else if (line.startsWith('params ') && clocked >= 0) {
       inputs.set(clocked, line.split(' ').slice(1).map(Number));
     } else if (line.startsWith('pulsed ') && clocked >= 0) {
@@ -2414,6 +2422,15 @@ function followLockstep(lines: string[]) {
       break;
     }
 
+    /* Its blink, where the trace has the engine's, as the frame begins. */
+    const inner2 = pet as unknown as { blinkAt: number; blinkWait: number };
+    const blinkNow = `${inner2.blinkAt} ${inner2.blinkWait}`;
+
+    if (blinks.has(n) && blinkNow !== blinks.get(n)) {
+      result.parted = `frame ${n} begins: blinking ${blinkNow}, not ${blinks.get(n)}`;
+      break;
+    }
+
     /* What the user does, as the frame is handed it (`params`), before the
      * frame: the cursor and its button; the ball (the toy box's slot 8)
      * taken out held where the cursor is, and let go of, thrown. */
@@ -2437,6 +2454,29 @@ function followLockstep(lines: string[]) {
     }
 
     const step = pet.tick(clocks.get(n) ?? (n * 45) / 17, pulses.get(n), frames[n].headClock);
+
+    if (process.env.POPS && popCounts.has(n)) {
+      const ours = pet.lastTickPops;
+
+      if (ours !== popCounts.get(n)) {
+        console.log(`pops at ${n}: ${ours}, not ${popCounts.get(n)}`);
+      }
+    }
+
+    /* (Frames the tick placed before its own, in turn.) */
+    for (const each of step.passed ?? []) {
+      stage.show(
+        each.step,
+        each.rotation,
+        each.placedBy,
+        undefined,
+        undefined,
+        stage.head,
+        stage.angles,
+        stage.blend
+      );
+    }
+
     stage.show(
       step,
       step.rotation,
@@ -2509,7 +2549,7 @@ function followLockstep(lines: string[]) {
 
     if (mine !== theirs || seed !== frame[3]) {
       const engine = drawn.map((each) => `${each.segment}:${each.offset.toString(16)}`).join(' ');
-      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]}; at ${(stage as unknown as { x: number }).x} ${(stage as unknown as { y: number }).y}, placed by ${step.placedBy}, glue ${step.glue}; head ${JSON.stringify(step.head)} / ${frames[n].head?.join(' ')} at ${frames[n].headClock}; history ${JSON.stringify((pet as unknown as { history: number[] }).history)}; ball ${stage.ball ? `${stage.ball.held ? 1 : 0} ${stage.ball.x} ${stage.ball.y} ${stage.ball.vx} ${stage.ball.vy} ${stage.ball.slot}` : 'none'} / ${frames[n].ball?.join(' ')})`;
+      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]}; at ${(stage as unknown as { x: number }).x} ${(stage as unknown as { y: number }).y}, placed by ${step.placedBy}, glue ${step.glue}; head ${JSON.stringify(step.head)} / ${frames[n].head?.join(' ')} at ${frames[n].headClock}; history ${JSON.stringify((pet as unknown as { history: number[] }).history)}; slide ${JSON.stringify((pet as unknown as { slide: unknown }).slide)}; ball ${stage.ball ? `${stage.ball.held ? 1 : 0} ${stage.ball.x} ${stage.ball.y} ${stage.ball.vx} ${stage.ball.vy} ${stage.ball.slot}` : 'none'} / ${frames[n].ball?.join(' ')})`;
       break;
     }
 
@@ -2700,6 +2740,13 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     }
 
     const lines = readFileSync(kept, 'latin1').split('\r\n');
+
+    /* (The lockstep first: what the model does from the start, told whatever fails after, before every other check.) */
+    const lockstep = followLockstep(lines);
+    console.log(
+      `lockstep: factors ${lockstep.factors}; ${lockstep.held} of ${lockstep.frames} frames held (excitement put to the engine's ${lockstep.excitementPut} times)${lockstep.parted ? `; parted at ${lockstep.parted}` : ''}`
+    );
+
     /* `InitPetModule` answered 0. */
     expect(lines.some((line) => line.startsWith('made module 0 '))).toBe(true);
 
@@ -2867,11 +2914,6 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
       `swing: ${swinging.calls} ticks, ${swinging.held} held; ${swinging.frames} frames' angles, ${swinging.angles} held`
     );
     expect(swinging.wrong).toEqual([]);
-
-    const lockstep = followLockstep(lines);
-    console.log(
-      `lockstep: factors ${lockstep.factors}; ${lockstep.held} of ${lockstep.frames} frames held (excitement put to the engine's ${lockstep.excitementPut} times)${lockstep.parted ? `; parted at ${lockstep.parted}` : ''}`
-    );
 
     const thinking = followBrain(lines);
     console.log(

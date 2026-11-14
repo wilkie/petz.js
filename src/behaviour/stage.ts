@@ -822,7 +822,8 @@ export class Stage implements PetWorld {
       this.show(step, rotation, placedBy);
     }
 
-    const at = this.ballOnStage(ball);
+    /* (Ball -1: the middle of its rectangle, as steering asks.) */
+    const at = ball < 0 ? this.centre() : this.ballOnStage(ball);
     Object.assign(this, saved);
     return { x: at.x, y: at.y };
   }

@@ -368,6 +368,14 @@ export interface Tick extends Step {
   state: number;
   placedBy?: number;
 
+  /**
+   * Frames placed earlier in the tick than this one, in order, each by a pop
+   * of its own -- a state changed between them -- for the stage to place
+   * before it, as the engine does (frame 325 of the ball's day: the chase's
+   * frame, then the grab's glued from it).
+   */
+  passed?: { step: Step; rotation: number; placedBy?: number }[];
+
   /** The head placed afresh for the frame before, taken at the new angles, as the plain move does turning (`MoveFrameRect`). */
   headCopy?: Head;
 
@@ -1380,6 +1388,9 @@ export class Pet {
 
     /* One frame played as it is made, by idle and walking's going on from
      * entering (frame 38, [[measured]]). */
+    /* (Its pops the module's making, before the first frame.) */
+    this.popsThisTick = 0;
+    this.placedThisTick = [];
     return this.enteredStep ?? this.lastStep;
   }
 
@@ -1430,7 +1441,7 @@ export class Pet {
       freshened = this.headTrackPrep();
       [this.headYaw, this.headPitch] = [yaw, pitch];
     }
-    this.popsThisTick = 0;
+
     this.sample();
     this.doPettingHandler();
     this.doScruffHandler();
@@ -1550,8 +1561,19 @@ export class Pet {
           tracking: !!head,
         };
 
+    /* (The frames taken this tick before the one shown: placed first, in turn.) */
+    const at = this.placedThisTick.findIndex((each) => each.step === shown);
+    const passed = at === -1 ? this.placedThisTick : this.placedThisTick.slice(0, at);
+    /* (Cleared as the tick ends, not as it begins: a pop between ticks --
+     * the user taking out the ball, say, before the frame -- is the next
+     * tick's, as the engine's is the frame's.) */
+    this.lastTickPops = this.popsThisTick;
+    this.popsThisTick = 0;
+    this.placedThisTick = [];
+
     return {
       ...shown,
+      passed: passed.length ? passed : undefined,
       rotation: this.rotation,
       state: this.state,
       placedBy: this.placedBy,
@@ -2010,6 +2032,7 @@ export class Pet {
 
     if (step) {
       this.lastStep = step;
+      this.placedThisTick.push({ step, rotation: this.rotation, placedBy });
       this.placedBy = placedBy;
 
       if (this.slide && this.slide.left-- > 0) {
@@ -2026,7 +2049,7 @@ export class Pet {
       if (this.pendingAim) {
         const aim = this.pendingAim;
         this.pendingAim = undefined;
-        this.startAim(aim.ball, aim.at, { step, rotation: this.rotation, placedBy });
+        this.startAim(aim.ball, aim.at, this.placedThisTick[this.placedThisTick.length - 1]);
       }
 
       this.applyEffects(step);
@@ -2241,13 +2264,18 @@ export class Pet {
   }
 
   private steerFrame() {
-    const { point, rate } = this.steer!;
     const centre = this.world.centre?.() ?? this.world.where();
 
     if (this.steerReached()) {
       return 2;
     }
 
+    return this.steerFrom(centre);
+  }
+
+  /** The turn toward where it steers, from a middle: an ease the shorter way round. */
+  private steerFrom(centre: { x: number; y: number }) {
+    const { point, rate } = this.steer!;
     const dx = Math.trunc(point.x - centre.x);
     const dy = Math.trunc(point.y - centre.y);
 
@@ -3283,9 +3311,12 @@ export class Pet {
     };
 
     if (mode === 'exit') {
-      this.queue = [];
+      /* Looking at nothing, the script reset, its tilt eased level
+       * (seg21:7b71 to 7bf2); then, from a run, maybe a hard stop. */
       this.lookAt(null);
       this.setTargetLocation(null);
+      this.resetScript();
+      this.push({ fudge: { kind: 'ease', axis: 0, to: 0 } });
 
       const stopping = [
         STATE.chasingOwner,
@@ -3295,7 +3326,7 @@ export class Pet {
         STATE.beggingChasing,
       ] as number[];
 
-      if (this.playing === SCRIPT.run && stopping.includes(state) && this.rand() % 3 === 0) {
+      if (this.begun === SCRIPT.run && stopping.includes(state) && this.rand() % 3 === 0) {
         this.push({ glue: BELLY });
         this.pushStored(SCRIPT.stopRunningHard);
       }
@@ -5758,6 +5789,12 @@ export class Pet {
     );
   }
 
+  /** How many pops the last tick made (for the harness, against the engine's). */
+  lastTickPops = 0;
+
+  /** Each frame a pop has taken this tick, its heading and reference as it was. */
+  private placedThisTick: { step: Step; rotation: number; placedBy?: number }[] = [];
+
   /** Whether a ball of the dog has been asked for this tick (`GetBallOffset`), placing it as it is. */
   private askedBall = false;
 
@@ -7013,8 +7050,13 @@ export class Pet {
     shown?: { step: Step; rotation: number; placedBy?: number }
   ) {
     const point = at ?? this.world.ball;
-    /* (From the frame just placed: the slide over those after it.) */
-    const frames: { step: Step; rotation: number; placedBy?: number }[] = shown ? [shown] : [];
+    /* (From the frames placed so far this tick, the one just placed last --
+     * the stage not yet shown them -- the slide over those after.) */
+    const frames: { step: Step; rotation: number; placedBy?: number }[] = shown
+      ? this.placedThisTick.includes(shown)
+        ? [...this.placedThisTick]
+        : [...this.placedThisTick, shown]
+      : [];
     const first = frames.length;
     let glue: number | undefined;
     let placedBy: number | undefined;
@@ -7043,7 +7085,13 @@ export class Pet {
           break;
         }
 
+        /* (Steered afresh each pop played ahead, from where the dog is by then, seg7:6b38.) */
+        if (this.steer && this.world.lookAhead) {
+          this.steerFrom(this.world.lookAhead(frames, -1));
+        }
+
         this.turn(item.step);
+
         frames.push({
           step: { ...item.step, glue: item.step.glue ?? glue },
           rotation: this.rotation,
@@ -7055,6 +7103,33 @@ export class Pet {
 
     Object.assign(this, saved);
     const count = frames.length - first;
+
+    /* Each pop played ahead pulses the sprite and plays its sounds -- the
+     * blink's draws and the sounds' drawn for good, `rand` being the
+     * program's -- and the sprite is then put back as it was, its blinking
+     * too (`SaveEnvironmentVars` copies all of it, seg7:3aeb): the frames
+     * ahead and one more, that finds the end. */
+    const blinking = {
+      blinkAt: this.blinkAt,
+      blinkWait: this.blinkWait,
+      blinkShut: this.blinkShut,
+      blinkAsked: this.blinkAsked,
+      lids: this.lids,
+    };
+
+    if (process.env.AIMLOG) {
+      console.log(`aim ${this.time} count ${count} blink ${this.blinkAt} ${this.blinkWait}`);
+    }
+
+    for (let n = 0; n <= count; n++) {
+      this.blinkPulse();
+
+      for (const choices of frames[first + n]?.step.soundChoices ?? []) {
+        this.rand() % choices.length;
+      }
+    }
+
+    Object.assign(this, blinking);
 
     if (!point || !this.world.lookAhead || count < 1) {
       return;

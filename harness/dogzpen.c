@@ -98,6 +98,9 @@ static long number(HFILE file)
 /* The library's data segment, its instance: C's `rand` keeps its seed there (ds:0x2d28). */
 static unsigned dgroup;
 
+/* The dog's sprite, as the frame begins (the module's `+0x58`). */
+static unsigned char __far *dogSprite;
+
 typedef UINT(FAR PASCAL *ALIAS)(UINT selector);
 
 /* KERNEL's `AllocCSToDSAlias` (170) or `AllocDSToCSAlias` (171). */
@@ -202,6 +205,12 @@ static PULSE pulseOn;
 static int __cdecl __far __loadds pulsing(void __far *module)
 {
     say("pulse %d\r\n", draws);
+
+    /* (And the blink as it is pulsed: `pulsing phase wait`.) */
+    if (dogSprite) {
+        say("pulsing %d %d\r\n", *(int __far *)(dogSprite + (unsigned)-0x720e),
+            *(int __far *)(dogSprite + (unsigned)-0x7218));
+    }
     return pulseOn(module);
 }
 
@@ -487,7 +496,6 @@ static void __cdecl __far __loadds released(void __far *module, int slot)
  * and whether the state is the dog's own (its sprite's `+0x51a`). */
 typedef void(__cdecl __far *HEADPREP)(void __far *ballz, int __far *block, unsigned char __far *state);
 static HEADPREP headOn;
-static unsigned char __far *dogSprite;
 
 static unsigned char __far *dogBallz;
 
@@ -529,6 +537,24 @@ typedef int(__cdecl __far *SPOTCHECK)(void __far *m, void __far *a, void __far *
                                       void __far *d, void __far *e, void __far *f, void __far *g);
 static SPOTCHECK spotCheckOn;
 
+/* And each step of the fudgers (`Fudger::ForAll`, 39, seg4:1257), as
+ * `PopScript` calls it: `forall heading old-heading`, the dog's heading
+ * (`+0x51a` `+0xc`) and the old state's (`+0xec` `+0xc`) as it is called.
+ * Passed on as it came, whatever it takes (cdecl: its caller clears). */
+typedef int(__cdecl __far *FORALL)(void __far *a, void __far *b, void __far *c, void __far *d,
+                                   void __far *e, void __far *f, void __far *g, void __far *h);
+static FORALL forAllOn;
+
+static int __cdecl __far __loadds forAll(void __far *a, void __far *b, void __far *c, void __far *d,
+                                         void __far *e, void __far *f, void __far *g, void __far *h)
+{
+    if (dogSprite) {
+        say("forall %d %d\r\n", *(int __far *)(dogSprite + 0x526), *(int __far *)(dogSprite + 0xf8));
+    }
+
+    return forAllOn(a, b, c, d, e, f, g, h);
+}
+
 static int __cdecl __far __loadds spotChecking(void __far *m, void __far *a, void __far *b,
                                                void __far *c, void __far *d, void __far *e,
                                                void __far *f, void __far *g)
@@ -544,6 +570,7 @@ static int __cdecl __far __loadds spotChecking(void __far *m, void __far *a, voi
 static void hookPushes(void)
 {
     spotCheckOn = (SPOTCHECK)hookPrologue(389, (void __far *)spotChecking);
+    forAllOn = (FORALL)hookPrologue(39, (void __far *)forAll);
     headOn = (HEADPREP)hookPrologue(45, (void __far *)heading);
     grabOn = (HOLDING)hookPrologue(340, (void __far *)grabbed);
     releaseOn = (HOLDING)hookPrologue(341, (void __far *)released);
@@ -997,6 +1024,9 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             int depth = *(int __far *)(dogSprite + 0x20ac);
             int at;
 
+            /* (And, before the words, the blink: its phase `-0x720e` and wait `-0x7218`.) */
+            say("blinking %d %d\r\n", *(int __far *)(dogSprite + (unsigned)-0x720e),
+                *(int __far *)(dogSprite + (unsigned)-0x7218));
             say("queue %d %d %d %d %d:", read, write, depth, *(int __far *)(dogSprite + 0x20ae + 2 * depth),
                 *(int __far *)(dogSprite + 0x20d6 + 2 * depth));
 
