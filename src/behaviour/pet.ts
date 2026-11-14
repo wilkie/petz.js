@@ -1492,21 +1492,18 @@ export class Pet {
      * that one, seg10:2b55 to 2ce4 -- as after the steering has asked where
      * the nose is, or anything has asked where a ball of it is, placing the
      * dog as it now is (frame 124 of the ball's day, steering; frame 2869
-     * of the day of 3,000, a target set; not frame 113).) */
-    const moved = this.steeredTracking || this.askedBall;
+     * of the day of 3,000, a target set; not frame 113) -- or a pop ran dry
+     * earlier in the tick, the state it copied changed since (frame 569 of
+     * the ball's day).) */
+    const moved = this.steeredTracking || this.askedBall || this.ranDryThisTick;
 
-    if (
-      !still &&
-      !freshened &&
-      shown.glue !== undefined &&
-      was?.tracking &&
-      this.headTracking &&
-      moved
-    ) {
+    /* (The old state's tracking is what asks it, whether or not the head tracks now.) */
+    if (!still && !freshened && shown.glue !== undefined && was?.tracking && moved) {
+      const tracking = this.headTracking;
       const [yaw, pitch] = [this.headYaw, this.headPitch];
-      [this.headYaw, this.headPitch] = [was.yaw, was.pitch];
+      [this.headYaw, this.headPitch, this.headTracking] = [was.yaw, was.pitch, true];
       headCopy = this.headTrackPrep();
-      [this.headYaw, this.headPitch] = [yaw, pitch];
+      [this.headYaw, this.headPitch, this.headTracking] = [yaw, pitch, tracking];
     }
 
     const head = still ? undefined : this.headTrackPrep();
@@ -1568,6 +1565,7 @@ export class Pet {
      * the user taking out the ball, say, before the frame -- is the next
      * tick's, as the engine's is the frame's.) */
     this.lastTickPops = this.popsThisTick;
+    this.ranDryThisTick = false;
     this.popsThisTick = 0;
     this.placedThisTick = [];
 
@@ -1717,10 +1715,11 @@ export class Pet {
     }
   }
 
-  private pushScript(index: number) {
+  private pushScript(index: number, chosen?: number) {
     const script = this.data.scripts[index];
     /* Its variant, and its numbers, from the game's table (`PushStoredScript`, seg7:44df; `PushScript`, seg7:4b99). */
-    const variant = this.tableNext() % script.variants.length;
+    const variant = chosen ?? this.tableNext() % script.variants.length;
+
     let after: Omit<Step, 'frame'> | undefined;
     let pushed = 0;
 
@@ -1777,9 +1776,11 @@ export class Pet {
    */
   private pushStored(index: number) {
     const script = this.data.scripts[index];
+    /* Its variant drawn first, before what takes the dog to its start (seg7:44df, then 459b). */
+    const variant = this.tableNext() % script.variants.length;
 
     this.pushTransition(script.from, this.lastScript === index ? -1 : BELLY);
-    this.pushScript(index);
+    this.pushScript(index, variant);
 
     if (script.to !== AUTO) {
       this.position = script.to;
@@ -1999,6 +2000,7 @@ export class Pet {
 
     if (!step) {
       this.heldGlue = glue;
+      this.ranDryThisTick = true;
 
       /* (Run dry after a turn, the state copied into the old as the pop
        * ends, seg7:71eb: the turn's frame lost, the dog still turned about
@@ -5792,6 +5794,9 @@ export class Pet {
     );
   }
 
+  /** Whether a pop ran dry this tick. */
+  private ranDryThisTick = false;
+
   /** How many pops the last tick made (for the harness, against the engine's). */
   lastTickPops = 0;
 
@@ -6876,6 +6881,8 @@ export class Pet {
     this.noteWaiting();
 
     if (flags & 8) {
+      /* (The script reset first, seg19:14e2 to 1513.) */
+      this.resetScript();
       this.newState(this.gotoState);
     } else if (flags & 1) {
       if (this.anticipations-- > 0) {
@@ -6884,6 +6891,8 @@ export class Pet {
         this.pushTrick(this.pickTrickState());
         this.push({ cue: 0 });
         this.pushBegWaitLoops();
+        /* And popped again, the trick's first frame this tick's (seg19:15d2). */
+        return this.pop().step ?? step;
       } else {
         this.queue = [{ glue: CHEST }];
         this.naughty = false;

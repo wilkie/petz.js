@@ -2415,6 +2415,11 @@ function followLockstep(lines: string[]) {
     /* Its place in the game's table, where the trace has the engine's. */
     const place = (pet as unknown as { randomAt: number }).randomAt;
 
+    if (places.has(n) && place !== places.get(n)) {
+      result.parted = `frame ${tick[0]} begins: the table at ${place}, not ${places.get(n)} (taken last frame in ${took.join(' ')})`;
+      break;
+    }
+
     /* Its queue's words unread, where the trace has the engine's: each item its words. */
     const words = pet as unknown as {
       unreadWords(): number;
@@ -2431,11 +2436,6 @@ function followLockstep(lines: string[]) {
 
     if (queues.has(n) && words.unreadWords() !== queues.get(n)!.unread) {
       result.parted = `frame ${tick[0]} begins: ${words.unreadWords()} words queued, not ${queues.get(n)!.unread}: ${words.describeQueue()} / ${queues.get(n)!.words}`;
-      break;
-    }
-
-    if (places.has(n) && place !== places.get(n)) {
-      result.parted = `frame ${tick[0]} begins: the table at ${place}, not ${places.get(n)} (taken last frame in ${took.join(' ')})`;
       break;
     }
 

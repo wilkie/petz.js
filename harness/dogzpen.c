@@ -328,13 +328,16 @@ static PUSHELEMENTS scriptOn;
 
 static int __cdecl __far __loadds storing(void __far *sprite, int a, int b)
 {
-    say("stored %u %d %d %d\r\n", FP_SEG(sprite), a, b, draws);
+    /* (And the game's table's place as it is called, the last number.) */
+    say("stored %u %d %d %d %d\r\n", FP_SEG(sprite), a, b, draws,
+        *(int __far *)((unsigned char __far *)ordinal(101) + 0x6e));
     return storedOn(sprite, a, b);
 }
 
 static int __cdecl __far __loadds neutral(void __far *sprite, int a, int b)
 {
-    say("neutral %u %d %d %d\r\n", FP_SEG(sprite), a, b, draws);
+    say("neutral %u %d %d %d %d\r\n", FP_SEG(sprite), a, b, draws,
+        *(int __far *)((unsigned char __far *)ordinal(101) + 0x6e));
     return neutralOn(sprite, a, b);
 }
 
@@ -1021,7 +1024,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
         /* And the dog's queue as the frame begins (`queue read write depth at
          * count: words`): its array (`+0x209c`), read from `+0x20a8` to
          * `+0x20a4`, and the repeat on top of its stack (`+0x20ac`, its place
-         * `+0x20ae` and count `+0x20d6`), then up to 400 words from the read. */
+         * `+0x20ae` and count `+0x20d6`), then up to 1500 words from the read. */
         if (dogSprite) {
             int __far *words = *(int __far *__far *)(dogSprite + 0x209c);
             int read = *(int __far *)(dogSprite + 0x20a8);
@@ -1035,7 +1038,7 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
             say("queue %d %d %d %d %d:", read, write, depth, *(int __far *)(dogSprite + 0x20ae + 2 * depth),
                 *(int __far *)(dogSprite + 0x20d6 + 2 * depth));
 
-            for (at = read; at < write && at < read + 400; at++) {
+            for (at = read; at < write && at < read + 1500; at++) {
                 say(" %x", (unsigned)words[at]);
             }
 
