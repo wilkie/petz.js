@@ -900,19 +900,22 @@ export class Stage implements PetWorld {
     ball.x = Math.trunc(holder.x);
     ball.y = Math.trunc(holder.y);
     ball.vx = ball.vy = 0;
-    ball.recorded = slot === 0 ? { x: ball.x, y: ball.y, chinX: holder.x, chinY: holder.y } : null;
+    /* (Ball 36 of the dog recorded, `RecordPosition`, seg20:201f.) */
+    const marker = this.placed()[36];
+    ball.recorded = slot === 0 ? { x: ball.x, y: ball.y, chinX: marker.x, chinY: marker.y } : null;
   }
 
-  /** `BallSprite::HasMoved` (seg20:1f28): moved since put down, or the dog's chin 7 pixels from where it was. */
+  /** `BallSprite::HasMoved` (seg20:1f28): moved since put down, or the dog's ball 36 more than 6 pixels from where it was. */
   ballHasMoved() {
     const ball = this.ball;
-    const chin = this.placed()[HOLDERS[0]];
+    const chin = this.placed()[36];
 
     if (!ball?.recorded) {
       return true;
     }
 
     const { x, y, chinX, chinY } = ball.recorded;
+
     return !(
       ball.x === x &&
       ball.y === y &&

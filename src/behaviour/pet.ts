@@ -6850,8 +6850,15 @@ export class Pet {
         this.lookAt(cursor);
       }
 
-      if (!this.isOnscreen() || !cursor || !this.inFocusBox(cursor, 1.8)) {
-        this.queue = [{ glue: 36 }];
+      /* (The cursor kept 100 in from the stage's edges, seg19:12a4 to 12fe;
+       * the dog all on the stage; the script reset by ball 36, seg19:1394.) */
+      const kept = cursor && {
+        x: Math.min(this.world.width - 100, Math.max(100, cursor.x)),
+        y: Math.min(this.world.height - 100, Math.max(100, cursor.y)),
+      };
+
+      if (!this.totallyOnscreen() || !kept || !this.inFocusBox(kept, 1.8)) {
+        this.resetScript(36);
 
         if (this.isBallGrabbable()) {
           this.pushBallGrabAction();
@@ -6860,7 +6867,8 @@ export class Pet {
           this.newState(STATE.chasingBall);
         }
 
-        return this.pop().step;
+        /* (No pop of its own after: the new state's, running on, is the tick's, seg19:13e1.) */
+        return this.enteredStep ?? { frame: this.lastStep.frame, still: true };
       }
     }
 
