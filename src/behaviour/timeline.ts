@@ -168,6 +168,18 @@ export interface TimelineOptions {
 
   /** What follows the script's last frame, which `PopScript` acts on before the next. */
   tail?: (after: Omit<Step, 'frame'>) => void;
+
+  /**
+   * A script called (`0x8b09 script times glue`), as `PushScript` pushes it
+   * (seg7:4ae6 to 4ca0): handed the frames so far and what is pending, and
+   * left to the caller, not played here. Without, called scripts are played
+   * in place.
+   */
+  call?: (
+    call: { script: number; times: number; glue: number },
+    frames: Step[],
+    pending: Omit<Step, 'frame'>
+  ) => void;
 }
 
 /** The steps a variant of a script plays out as, in order. */
@@ -175,7 +187,7 @@ export function timeline(
   scripts: Script[],
   index: number,
   variant: number,
-  { flags, random, table = random, deferSounds = false, limit = 2000, tail }: TimelineOptions
+  { flags, random, table = random, deferSounds = false, limit = 2000, tail, call }: TimelineOptions
 ): Step[] {
   const frames: Step[] = [];
 
@@ -348,6 +360,12 @@ export function timeline(
             }
             break;
           case OP.call: {
+            if (call) {
+              call({ script: value(a), times: value(b), glue: value(c) }, frames, pending);
+              pending = {};
+              break;
+            }
+
             const script = scripts[value(a)];
             const times = value(b);
 

@@ -2265,6 +2265,7 @@ function followLockstep(lines: string[]) {
       table: transitionTable(scripts),
       positionKinds: readPositionKinds(dll, states.length),
       heartRates: readHeartRates(dll, states.length),
+      ballCount: header.ballCount,
       tricks: tricks.current,
       trickDefaults: tricks.defaults,
       trickScripts: readTrickScripts(dll),
@@ -2347,6 +2348,15 @@ function followLockstep(lines: string[]) {
       step.blend
     );
     result.frames++;
+
+    /* Its cycle from now the engine's under winbox.js, the bare (1 + sin) / 2
+     * (behaviour.md): a power of 1, its centre 75, the phase as frame 0's
+     * `SetExcitement` left it. So the drift that follows the cycle in the
+     * same pulse takes its next time from the engine's excitement. */
+    if (n === 0) {
+      (pet as unknown as { centres: number[] }).centres[0] = 75;
+    }
+
     const seed = seeded.seed;
     const box = stage.rect();
     const mine = `${pet.state} ${pet.global} frame ${step.frame} at ${[box.left, box.top, box.right, box.bottom].map(Math.round).join(' ')}`;

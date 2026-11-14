@@ -1143,6 +1143,7 @@ async function start(files: GameFiles) {
     table: transitionTable(scripts),
     positionKinds: readPositionKinds(engine, states.length),
     heartRates: readHeartRates(engine, states.length),
+    ballCount: header.ballCount,
     tricks: tricks.current,
     trickDefaults: tricks.defaults,
     trickScripts: readTrickScripts(engine),

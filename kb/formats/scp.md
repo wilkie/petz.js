@@ -35,7 +35,7 @@ All little-endian.
   - `0x8ad5 f`: frames from f forward until one whose sequence flags mark an end.
   - `0x8ad6 f`: frames from f back until one whose flags mark a start.
   - `0x8b05 lo hi`: `lo + r % (hi - lo + 1)` for a number r from the game's table.
-  - `0x8b09 s n ball`: script s, n times, a variant at random each time; then, if `ball` is one of the dog's balls, `0x8ad8 ball`. Every script here passes 65, which is none.
+  - `0x8b09 s n ball`: script s, n times, a variant at random each time; then, if `ball` is one of the dog's balls, `0x8ad8 ball`. Nearly every call passes 65, which is none (script 212 has one by 48, the belly). `PushScript` does not play the called script in place (seg7:4ae6 to 4ca0): it queues the end (`0x8b0b`) there, then calls `PushStoredScript(s, -1)` n times -- each taken to where it starts by `PushTransitionToNeutralPos`, its draws among them (standing up excited, tripping as it starts to run), and its own start and end -- each followed by the glue. The script's elements after the call follow, and its own end.
   - `0x8b0c`: the end of a variant.
 - [[read out]] `PopScript` runs the rest as it reaches them, before showing the next frame. Those the viewer plays:
   - `0x8ada a` to `0x8ade a b c d e`: a sound, one of the one to five numbers at random, by `ScriptSprite::PlaySound` (seg7:75f1).

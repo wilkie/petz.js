@@ -137,7 +137,7 @@ describe('the scripts', () => {
     ).map((_, index, all) => timeline(all, index, 0, { flags, random: (n) => n - 1 }));
 
     expect(events).toEqual([
-      { frame: 20, sounds: [56, 4], glue: 52, turn: 16 },
+      { frame: 20, sounds: [56, 4], glue: 52, turn: 16, turnFrame: 0 },
       { frame: 21, glue: 50 },
     ]);
   });

@@ -252,6 +252,9 @@ export interface PetData {
 
   /** Each position's heart rate, -1 for none (`readHeartRates`); without, the heart stays as it starts. */
   heartRates?: number[];
+
+  /** How many balls the breed has (the animation header's): a script's call glues only by one of them. */
+  ballCount?: number;
   tricks: Trick[];
   trickDefaults: Trick[];
   trickScripts: TrickScript[];
@@ -1451,6 +1454,11 @@ export class Pet {
     /* Its variant, and its numbers, from the game's table (`PushStoredScript`, seg7:44df; `PushScript`, seg7:4b99). */
     const variant = this.tableNext() % script.variants.length;
     let after: Omit<Step, 'frame'> | undefined;
+    let pushed = 0;
+
+    /* Its start (`0x8b0a`), its frames, what follows them, its end (`0x8b0b`). */
+    this.push({ begin: index });
+
     const steps = timeline(this.data.scripts, index, variant, {
       flags: this.data.flags,
       random: (n) => this.rand() % n,
@@ -1458,12 +1466,32 @@ export class Pet {
       deferSounds: true,
       limit: 600,
       tail: (rest) => (after = rest),
+      /* A script it calls pushed as `PushScript` pushes it (seg7:4ae6 to
+       * 4ca0): an end, then the script stored, so many times, each taken
+       * to where it starts, and glued after by the ball the call names. */
+      call: ({ script: called, times, glue }, frames, pending) => {
+        this.push(...frames.slice(pushed).map((step) => ({ step, script: index })));
+        pushed = frames.length;
+
+        if (Object.keys(pending).length) {
+          this.push({ after: pending });
+        }
+
+        this.push({ end: index });
+
+        for (let n = 0; n < times; n++) {
+          this.pushStored(called);
+
+          /* (A ball the breed has: most calls name 65, which none has, `ds:0x3bbe` `+0x58`.) */
+          if (glue >= 0 && glue < (this.data.ballCount ?? 0)) {
+            this.push({ glue });
+          }
+        }
+      },
     });
 
-    /* Its start (`0x8b0a`), its frames, what follows them, its end (`0x8b0b`). */
     this.push(
-      { begin: index },
-      ...steps.map((step) => ({ step, script: index })),
+      ...steps.slice(pushed).map((step) => ({ step, script: index })),
       ...(after ? [{ after }] : []),
       { end: index }
     );
