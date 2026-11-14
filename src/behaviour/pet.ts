@@ -6751,6 +6751,16 @@ export class Pet {
         return undefined;
       }
 
+      /* Moving (`GetNeutralType` of where it is, its first flag, seg19:039f
+       * to 03ac): first to standing, waiting, then back here (`8b07 33`,
+       * seg19:03b4 to 0406). */
+      if (this.data.positionKinds[this.position] & POSITION.moving) {
+        this.pushTransition(STANDING, BELLY);
+        this.push({ goto: STATE.releasingBall });
+        this.newState(STATE.waitState);
+        return undefined;
+      }
+
       this.pushTransition(STANDING, BELLY);
       this.push({ cue: 0 }, { glue: CHEST });
 
@@ -6903,6 +6913,12 @@ export class Pet {
 
   /** `PetModule::DoWaitState` (seg21:6073): plays the queue out to the state it names. */
   private doWaitState(mode: Mode): Step | undefined {
+    /* Leaving, the script let play out (`ResetScriptSoft(-1)`, seg21:6097 to 60af). */
+    if (mode === 'exit') {
+      this.resetSoft();
+      return undefined;
+    }
+
     if (mode !== 'run') {
       return undefined;
     }
