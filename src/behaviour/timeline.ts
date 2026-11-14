@@ -112,6 +112,14 @@ export interface Step {
    * `Stage.show`.
    */
   glueBlend?: { scale: number; reference: number } | null;
+
+  /**
+   * How many words of the engine's queue this frame takes, with what came
+   * before it since the last (`PushScript` copies a script's words as they
+   * are but for its frame ranges, one word a frame, its random operands, one
+   * word each, and its calls, seg7:48a0 to 4ca2): counted where `repeat` is.
+   */
+  words?: number;
 }
 
 /** The ball a script glues by when it says none: the belly (`GetDefaultGlueBall`). */
@@ -137,6 +145,18 @@ const BRISTLE = 0x8b01;
 const EASE = 0x8ae6;
 const DRIFT = 0x8ae9;
 const LOOKS = { 0x8afa: 'random', 0x8afb: 'user', 0x8afc: 'ahead' } as const;
+
+/** The opcodes whose words are not queued as they are: expanded, left out, or counted with their frame. */
+const UNCOUNTED = new Set<number>([
+  OP.frames,
+  OP.framesToEnd,
+  OP.framesToStart,
+  OP.call,
+  OP.repeat,
+  OP.endRepeat,
+  /* (The script's end, where `PushScript` stops: not queued, seg7:4cdd.) */
+  0x8b0c,
+]);
 
 const BY = 0x8ae7;
 const TARGET = 0x8ae8;
@@ -182,6 +202,18 @@ export interface TimelineOptions {
     pending: Omit<Step, 'frame'>,
     element: Element
   ) => void;
+
+  /**
+   * A repeat (`0x8ad1 n`, `0x8ad2`) left in the queue, as the engine leaves
+   * it to `PopScript` (seg7:5a5a to 5b33): its block played once here, and
+   * this told of its start and its end with the frames so far and what is
+   * pending. With it, each frame's words are counted (`Step.words`).
+   */
+  repeat?: (
+    marker: { repeat: number } | { endRepeat: true },
+    frames: Step[],
+    pending: Omit<Step, 'frame'>
+  ) => void;
 }
 
 /** The steps a variant of a script plays out as, in order. */
@@ -189,7 +221,16 @@ export function timeline(
   scripts: Script[],
   index: number,
   variant: number,
-  { flags, random, table = random, deferSounds = false, limit = 2000, tail, call }: TimelineOptions
+  {
+    flags,
+    random,
+    table = random,
+    deferSounds = false,
+    limit = 2000,
+    tail,
+    call,
+    repeat,
+  }: TimelineOptions
 ): Step[] {
   const frames: Step[] = [];
 
@@ -204,7 +245,9 @@ export function timeline(
   };
 
   const show = (frame: number) => {
-    const step = { frame, ...pending };
+    const step = repeat
+      ? { frame, ...pending, words: (pending.words ?? 0) + 1 }
+      : { frame, ...pending };
 
     if (step.ease || step.fudges?.some((each) => each.kind === 'ease')) {
       eases.push(step);
@@ -242,6 +285,17 @@ export function timeline(
         if ('frame' in element) {
           show(element.frame);
           continue;
+        }
+
+        /* (Its words as queued: the opcode and an operand each, but for those
+         * the engine expands or leaves out as it pushes, seg7:48a0 to 4ca2.) */
+        if (repeat && !UNCOUNTED.has(element.op)) {
+          if (element.op === REFERENCE && frames.length) {
+            const last = frames[frames.length - 1];
+            last.words = (last.words ?? 1) + 1;
+          } else {
+            pending.words = (pending.words ?? 0) + 1 + element.operands.length;
+          }
         }
 
         if (element.op >= SOUND_FIRST && element.op <= SOUND_LAST) {
@@ -287,6 +341,17 @@ export function timeline(
           }
           case OP.repeat: {
             const count = value(a);
+
+            /* (Left in the queue, its block once, where asked.) */
+            if (repeat) {
+              repeat({ repeat: count }, frames, pending);
+              pending = {};
+              block();
+              repeat({ endRepeat: true }, frames, pending);
+              pending = {};
+              break;
+            }
+
             const times = count === 999 ? Infinity : count;
             const from = at;
 

@@ -421,7 +421,56 @@ type Item =
   | { factor: [number, number] }
   | { steerAt: { x: number; y: number; rate: number; width: number; height: number } }
   | { grab: number }
-  | { release: number };
+  | { release: number }
+  | { repeat: number }
+  | { endRepeat: true }
+  | { lookAt: null };
+
+/**
+ * How many words of the engine's queue an item takes (`PushScript` copies
+ * each opcode and its operands a word each, a frame a word): what the
+ * repeats' places are counted in.
+ */
+const itemWords = (item: Item): number => {
+  if ('whole' in item) {
+    return itemWords((item as { whole: Item }).whole);
+  }
+
+  if ('words' in item && typeof item.words === 'number') {
+    return item.words;
+  }
+
+  if ('step' in item) {
+    return item.step.words ?? 1;
+  }
+
+  if ('after' in item) {
+    return item.after.words ?? 0;
+  }
+
+  if ('fudge' in item) {
+    return item.fudge.kind === 'by' || item.fudge.kind === 'target' ? 4 : 3;
+  }
+
+  if ('steerAt' in item) {
+    return 6;
+  }
+
+  if ('aim' in item) {
+    return 4;
+  }
+
+  if ('ease' in item || 'drift' in item || 'factor' in item || 'lookAt' in item) {
+    return 3;
+  }
+
+  if ('end' in item || 'endRepeat' in item) {
+    return 1;
+  }
+
+  /* An opcode and one operand: a start, a glue, a cue, a state to go to, the lids, a repeat. */
+  return 2;
+};
 
 /** An angle in 256ths of a turn, from -128 to 127. */
 const wrap = (angle: number) => ((((angle + 128) % 256) + 256) % 256) - 128;
@@ -1051,7 +1100,29 @@ export class Pet {
     distance: number;
   } | null = null;
 
-  private queue: Item[] = [];
+  /**
+   * The queue, and what has been read from it since the last push: the
+   * engine's array, from the place a push last moved what was left unread
+   * to its front (`PushScript`, seg7:47fc to 4899), which a repeat's place
+   * is counted from.
+   */
+  private unread: Item[] = [];
+  private read: Item[] = [];
+
+  private get queue(): Item[] {
+    return this.unread;
+  }
+
+  private set queue(items: Item[]) {
+    this.unread = items;
+    this.read = [];
+  }
+
+  /**
+   * The repeats under way (`+0x20ac` on): each its count left and its place,
+   * in words from the front of the array as it was then (seg7:5a5a to 5ab2).
+   */
+  private repeats: { count: number; at: number }[] = [];
   private gotoState = 0;
   private lastScript = -1;
   private locomotion: number = SCRIPT.walk;
@@ -1461,7 +1532,85 @@ export class Pet {
   // The script queue: what `ScriptSprite` keeps and `PopScript` plays.
 
   private push(...items: Item[]) {
-    this.queue.push(...items);
+    /* (What was read let go, the rest at the front: the repeats' places not moved with it.) */
+    this.read = [];
+    this.unread.push(...items);
+  }
+
+  /** The words left unread in the queue (for the harness, against the engine's). */
+  unreadWords() {
+    return this.unread.reduce((sum, item) => sum + itemWords(item), 0);
+  }
+
+  /** The queue as items and their words (for the harness). */
+  describeQueue(limit = 80) {
+    return this.unread
+      .slice(0, limit)
+      .map((item) => {
+        const [key] = Object.keys(item).filter((name) => name !== 'words' && name !== 'script');
+        const value =
+          'step' in item
+            ? item.step.frame.toString(16)
+            : JSON.stringify((item as Record<string, unknown>)[key]);
+        return `${key}=${value}/${itemWords(item)}`;
+      })
+      .join(' ');
+  }
+
+  /**
+   * `0x8ad2`: the count down, and while any is left the queue read again
+   * from the repeat's place -- the place as it was, in words from the array's
+   * front, though a push since may have moved what is there (seg7:5acc to 5b38).
+   */
+  private endRepeat() {
+    const top = this.repeats[this.repeats.length - 1];
+
+    if (!top) {
+      return;
+    }
+
+    if (top.count !== 999) {
+      top.count--;
+    }
+
+    if (top.count <= 0) {
+      this.repeats.pop();
+      return;
+    }
+
+    const all = [...this.read, ...this.unread];
+    let at = 0;
+    let index = 0;
+
+    while (index < all.length && at + itemWords(all[index]) <= top.at) {
+      at += itemWords(all[index++]);
+    }
+
+    /* (Landed within a frame's words, the opcodes before it passed over: the
+     * frame read as it is, without them. Within anything else, read on from
+     * the next.) */
+    if (at < top.at && index < all.length) {
+      const within = all[index];
+
+      if ('step' in within) {
+        /* (Read as the frame alone; the item kept whole in the array.) */
+        this.read = all.slice(0, index);
+        this.unread = [
+          {
+            step: { frame: within.step.frame, reference: within.step.reference },
+            script: within.script,
+            whole: within,
+          } as Item,
+          ...all.slice(index + 1),
+        ];
+        return;
+      }
+
+      index++;
+    }
+
+    this.read = all.slice(0, index);
+    this.unread = all.slice(index);
   }
 
   /**
@@ -1480,15 +1629,16 @@ export class Pet {
       this.push({ after: rest });
     }
 
+    /* (Its word counted with the rest.) */
     if (glue !== undefined) {
-      this.push({ glue });
+      this.push({ glue, words: 0 } as Item);
     }
   }
 
   /** `GlueScriptsIfNotGlued`. */
-  private glueIfNotGlued(ball: number) {
+  private glueIfNotGlued(ball: number, words = 2) {
     if (!this.isGlued()) {
-      this.push({ glue: ball });
+      this.push({ glue: ball, words } as Item);
     }
   }
 
@@ -1498,7 +1648,6 @@ export class Pet {
     const variant = this.tableNext() % script.variants.length;
     let after: Omit<Step, 'frame'> | undefined;
     let pushed = 0;
-    const calls = new Map<object, Item[]>();
 
     /* Its start (`0x8b0a`), its frames, what follows them, its end (`0x8b0b`). */
     this.push({ begin: index });
@@ -1513,23 +1662,9 @@ export class Pet {
       /* A script it calls pushed as `PushScript` pushes it (seg7:4ae6 to
        * 4ca0): an end, then the script stored, so many times, each taken
        * to where it starts, and glued after by the ball the call names. */
-      call: ({ script: called, times, glue }, frames, pending, element) => {
+      call: ({ script: called, times, glue }, frames, pending) => {
         this.push(...frames.slice(pushed).map((step) => ({ step, script: index })));
         pushed = frames.length;
-        const from = this.queue.length;
-
-        /* (A call in a block repeated is pushed once; the engine's pop goes
-         * round the block again, so what it pushed is played again, nothing
-         * drawn anew.) */
-        const again = calls.get(element);
-
-        if (again) {
-          this.push(
-            ...again.map((item) => ('step' in item ? { ...item, step: { ...item.step } } : item))
-          );
-          return;
-        }
-
         this.pushAfter(pending);
 
         this.push({ end: index });
@@ -1542,8 +1677,13 @@ export class Pet {
             this.push({ glue });
           }
         }
-
-        calls.set(element, this.queue.slice(from));
+      },
+      /* A repeat left to the pop, its block pushed once (seg7:5a5a to 5b38). */
+      repeat: (marker, frames, pending) => {
+        this.push(...frames.slice(pushed).map((step) => ({ step, script: index })));
+        pushed = frames.length;
+        this.pushAfter(pending);
+        this.push(marker);
       },
     });
 
@@ -1689,6 +1829,17 @@ export class Pet {
         this.applyFudge(item.fudge, this.framesAhead());
       } else if ('lids' in item) {
         this.restLids(item.lids);
+      } else if ('lookAt' in item) {
+        /* `0x8af9 7ffe 7ffe`: the head and the eyes look at nothing (seg7:62f0 to 6350). */
+        this.lookAt(null);
+      } else if ('repeat' in item) {
+        /* (Its place the word after it, seg7:5a96 to 5aad.) */
+        this.repeats.push({
+          count: item.repeat,
+          at: this.read.reduce((sum, each) => sum + itemWords(each), 0),
+        });
+      } else if ('endRepeat' in item) {
+        this.endRepeat();
       } else if ('begin' in item) {
         this.begun = item.begin;
         this.updateHeartRate(item.begin);
@@ -1704,6 +1855,7 @@ export class Pet {
 
     while (this.queue.length && !step) {
       const item = this.queue.shift()!;
+      this.read.push((item as { whole?: Item }).whole ?? item);
 
       if ('step' in item && item.step.reference) {
         placedBy = item.step.frame;
@@ -1930,6 +2082,8 @@ export class Pet {
    * their own size, and the eyelids and blinks as they start.
    */
   private resetParams() {
+    /* (No repeat under way, seg7:347a.) */
+    this.repeats = [];
     this.ease = null;
     this.drift = 0;
     /* (And the swing stopped, `+0x210e` 0, seg7:3498.) */
@@ -2152,7 +2306,8 @@ export class Pet {
     this.handle(this.state, 'exit');
     this.history = [state, ...this.history].slice(0, 10);
     this.state = state;
-    this.glueIfNotGlued(CHEST);
+    /* (By the chest, `0x8ad7`, a word, seg21:5c48.) */
+    this.glueIfNotGlued(CHEST, 1);
     this.handle(state, 'enter');
 
     /* Most of the engine's handlers go on from entering to their tick's
@@ -2325,6 +2480,8 @@ export class Pet {
    * it has played, and a glue — the one that followed, or the chest.
    */
   private resetSoft() {
+    /* (No repeat under way, seg7:339e.) */
+    this.repeats = [];
     /* Kept to the end of the script playing, or all of it where none ends
      * (seg7:3248 to 32a1); its glue the one `IsScriptGlued` finds ahead --
      * the last not followed by a frame (seg7:36fb) -- else the chest. */
@@ -2341,7 +2498,8 @@ export class Pet {
 
     this.target = null;
     this.steer = null;
-    this.push({ cue: 3 }, { glue: glued ?? CHEST });
+    /* (Cue 3, an end, and the glue: `8ae3 3 8b0b`, `8ad8 n`, seg7:3362 to 3394.) */
+    this.push({ cue: 3 }, { end: this.begun }, { glue: glued ?? CHEST });
   }
 
   /** `IsScriptGlued` (seg7:36fb): the last glue queued that no frame follows, if any. */
@@ -2550,6 +2708,9 @@ export class Pet {
         return undefined;
       }
 
+      /* Its tilt eased level (`8ae6 0 0`, seg18:07bf to 07df). */
+      this.push({ fudge: { kind: 'ease', axis: 0, to: 0 } });
+
       const facing = this.data.tricks[this.state - FIRST_TRICK].facing;
       const rotation = this.rotation;
 
@@ -2628,10 +2789,6 @@ export class Pet {
       }
     };
 
-    /* The engine also eases the dog's tilt level here (`8ae6 0 0`); tilt is
-     * not drawn yet. */
-    this.glueIfNotGlued(CHEST);
-
     /* At play, after some tricks the dog may grab the ball; else it drops it. */
     const weights = this.data.tricks[state - FIRST_TRICK];
 
@@ -2639,6 +2796,11 @@ export class Pet {
       this.pushBallTrick(state);
       return;
     }
+
+    /* Glued by the chest; looking nowhere, its tilt eased level (`8af9 7ffe
+     * 7ffe 8ae6 0 0`, seg21:70d4 to 711c). */
+    this.glueIfNotGlued(CHEST);
+    this.push({ lookAt: null }, { fudge: { kind: 'ease', axis: 0, to: 0 } });
 
     if (weights?.grabAfter && this.global === GLOBAL.fetch && this.rand() % 2 === 0) {
       if (this.isBallGrabbable()) {
@@ -2820,6 +2982,8 @@ export class Pet {
   private doLocomote(mode: Mode): Step | undefined {
     if (mode === 'exit') {
       this.resetSoft();
+      /* And cue 3, its tilt eased level (`8ae3 3 8ae6 0 0`, seg16:129b to 12c0). */
+      this.push({ cue: 3 }, { fudge: { kind: 'ease', axis: 0, to: 0 } });
       return undefined;
     }
 

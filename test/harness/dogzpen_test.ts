@@ -2295,6 +2295,8 @@ function followLockstep(lines: string[]) {
   const clocks = new Map<number, number>();
   /* And its place in the game's table of 50 numbers (`table`, the line after). */
   const places = new Map<number, number>();
+  /* And its queue's words unread, and them (`queue read write ...: words`). */
+  const queues = new Map<number, { unread: number; words: string; repeat: string }>();
   const pulses = new Map<number, number>();
   let clocked = -1;
 
@@ -2306,6 +2308,14 @@ function followLockstep(lines: string[]) {
     } else if (line.startsWith('pulsed ') && clocked >= 0) {
       /* (The clock as `PulseTrickData` reads it, the drift timed by it.) */
       pulses.set(clocked, Math.trunc(Number(line.split(' ')[1]) / 17));
+    } else if (line.startsWith('queue ') && clocked >= 0) {
+      const [head, words] = line.split(':');
+      const [, read, write, depth, at, count] = head.split(' ').map(Number);
+      queues.set(clocked, {
+        unread: write - read,
+        words: words.trim(),
+        repeat: depth ? `${depth} ${at} ${count}` : '0',
+      });
     } else if (line.startsWith('table ') && clocked >= 0) {
       places.set(clocked, Number(line.split(' ')[1]));
     }
@@ -2366,6 +2376,25 @@ function followLockstep(lines: string[]) {
 
     /* Its place in the game's table, where the trace has the engine's. */
     const place = (pet as unknown as { randomAt: number }).randomAt;
+
+    /* Its queue's words unread, where the trace has the engine's: each item its words. */
+    const words = pet as unknown as {
+      unreadWords(): number;
+      describeQueue(): string;
+      repeats: { count: number; at: number }[];
+    };
+    const top = words.repeats[words.repeats.length - 1];
+    const repeating = top ? `${words.repeats.length} ${top.at} ${top.count}` : '0';
+
+    if (queues.has(n) && repeating !== queues.get(n)!.repeat) {
+      result.parted = `frame ${tick[0]} begins: repeating ${repeating}, not ${queues.get(n)!.repeat}: ${words.describeQueue()} / ${queues.get(n)!.words}`;
+      break;
+    }
+
+    if (queues.has(n) && words.unreadWords() !== queues.get(n)!.unread) {
+      result.parted = `frame ${tick[0]} begins: ${words.unreadWords()} words queued, not ${queues.get(n)!.unread}: ${words.describeQueue()} / ${queues.get(n)!.words}`;
+      break;
+    }
 
     if (places.has(n) && place !== places.get(n)) {
       result.parted = `frame ${tick[0]} begins: the table at ${place}, not ${places.get(n)} (taken last frame in ${took.join(' ')})`;

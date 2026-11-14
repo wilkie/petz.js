@@ -986,6 +986,27 @@ int PASCAL WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command, int sh
          * moved on before each is taken (seg7:44df, 4b99, 416d). */
         say("table %d\r\n", *(int __far *)((unsigned char __far *)ordinal(101) + 0x6e));
 
+        /* And the dog's queue as the frame begins (`queue read write depth at
+         * count: words`): its array (`+0x209c`), read from `+0x20a8` to
+         * `+0x20a4`, and the repeat on top of its stack (`+0x20ac`, its place
+         * `+0x20ae` and count `+0x20d6`), then up to 400 words from the read. */
+        if (dogSprite) {
+            int __far *words = *(int __far *__far *)(dogSprite + 0x209c);
+            int read = *(int __far *)(dogSprite + 0x20a8);
+            int write = *(int __far *)(dogSprite + 0x20a4);
+            int depth = *(int __far *)(dogSprite + 0x20ac);
+            int at;
+
+            say("queue %d %d %d %d %d:", read, write, depth, *(int __far *)(dogSprite + 0x20ae + 2 * depth),
+                *(int __far *)(dogSprite + 0x20d6 + 2 * depth));
+
+            for (at = read; at < write && at < read + 400; at++) {
+                say(" %x", (unsigned)words[at]);
+            }
+
+            say("\r\n");
+        }
+
         say("tick %d %d %d %lu", n, *(int __far *)(module + 0xc0), *(int __far *)(module + 0xd4),
             *(unsigned long __far *)MK_FP(dgroup, 0x2d28));
 
