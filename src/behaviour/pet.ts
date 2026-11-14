@@ -772,6 +772,53 @@ export function* pokeReaction(face: boolean, pokedInFace: number[], rand: Rand):
   }
 }
 
+/**
+ * The states whose engine handler goes on from entering to its tick's work
+ * in one call (their enter block falling through, not jumping to the end):
+ * read from each handler of `StateDispatch`'s table (seg21:534a). Waiting,
+ * scruffed, grabbing and leaping for the ball, the owner too close, faking,
+ * tumbling and eating return; the states the table does not name are left
+ * as they were.
+ */
+const ENTER_RUNS_ON = new Set([
+  2,
+  105,
+  3,
+  19,
+  24,
+  25,
+  38,
+  84,
+  4,
+  5,
+  6,
+  7,
+  8,
+  11,
+  12,
+  26,
+  27,
+  28,
+  30,
+  32,
+  33,
+  37,
+  39,
+  41,
+  42,
+  ...Array.from({ length: 96 - 43 + 1 }, (_, n) => 43 + n).filter((n) => n !== 84),
+  97,
+  98,
+  99,
+  100,
+  101,
+  102,
+  104,
+  106,
+  107,
+  108,
+]);
+
 /** The INI's sliders as Dogz installs them (`Control Val0` to `2`): factor 1 keeps its 30. */
 export const SLIDERS = [10, 30, 100];
 
@@ -1234,10 +1281,9 @@ export class Pet {
     this.global = GLOBAL.idle;
     this.enterIdle(0);
 
-    /* One frame played as it is made: the engine's dog is on it when the
-     * first frame begins (frame 38, [[measured]]); its pop pulses the
-     * sprite, so the blinking a step on (`ScriptSprite::Pulse`, seg7:590e). */
-    return this.pop().step;
+    /* One frame played as it is made, by idle and walking's going on from
+     * entering (frame 38, [[measured]]). */
+    return this.enteredStep ?? this.lastStep;
   }
 
   /** The game's table of numbers the scripts take in turn (`theirSavedThings` `+0xa`), and its place (`+0x6e`). */
@@ -1277,6 +1323,10 @@ export class Pet {
     this.checkFake();
 
     const shown = this.dispatch();
+    /* Every sound popped since the last tick played, shown or not (as
+     * `PopScript` plays them): a frame popped and passed over keeps its own. */
+    shown.sounds = this.popSounds.length ? this.popSounds : undefined;
+    this.popSounds = [];
     this.world.updateBall?.();
     this.wearFullness();
     this.pulse();
@@ -1585,6 +1635,8 @@ export class Pet {
           step.sounds = [...(step.sounds ?? []), ...this.sounds];
           this.sounds = [];
         }
+
+        this.popSounds.push(...(step.sounds ?? []));
         this.playing = item.script ?? this.playing;
       } else {
         control(item);
@@ -1982,11 +2034,26 @@ export class Pet {
     this.state = state;
     this.glueIfNotGlued(CHEST);
     this.handle(state, 'enter');
+
+    /* Most of the engine's handlers go on from entering to their tick's
+     * work, a pop among it, in the one call (`NewState`'s dispatch with
+     * `+0xe2` set, seg21:5d9c): the frame that pop shows is the tick's. */
+    if (ENTER_RUNS_ON.has(state) && this.state === state) {
+      this.enteredStep = this.handle(state, 'run') ?? this.pop().step;
+    }
   }
+
+  /** The sounds popped since the last tick, each played as it is popped. */
+  private popSounds: number[] = [];
+
+  /** The frame the state last entered showed, going on from entering in the same call. */
+  private enteredStep: Step | undefined;
 
   private dispatch(): Step {
     this.dryPop = false;
-    const step = this.handle(this.state, 'run') ?? this.pop().step;
+    this.enteredStep = undefined;
+    const handled = this.handle(this.state, 'run') ?? this.pop().step;
+    const step = this.enteredStep ?? handled;
 
     /* Run dry and given more by the state, popped again in the tick (the
      * engine's second `PopScript`: frame 27 of the harness's day of 300). */

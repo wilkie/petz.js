@@ -560,6 +560,8 @@ withOracle('the engine’s behaviour', () => {
     it('begs for a treat held up, and eats it when it is put down', () => {
       const { stage, pet, run, states } = setUp(3);
       run(200);
+      /* (Not grabby, so it does not snatch the treat from the hand, `DecideIfGrabFromUser`.) */
+      pet.setFactor(2, 1);
 
       const treat = takeOut(stage, pet, FOOD.redTreat, { x: 0, y: 0 }, true);
       expect(pet.global).toBe(GLOBAL.begEat + FOOD.redTreat);
@@ -715,7 +717,8 @@ withOracle('the engine’s behaviour', () => {
       const scales = looks.flatMap(({ blend }) => (blend ? [blend.scale] : []));
       expect(scales.length).toBeGreaterThan(0);
       expect(Math.min(...scales)).toBeGreaterThanOrEqual(20);
-      expect(Math.max(...scales)).toBeLessThan(100);
+      /* (At most the fastest heart, 110 tenths over 10, and the 15 it may step past it, seg7:7a71.) */
+      expect(Math.max(...scales)).toBeLessThanOrEqual(111);
 
       expect(states).toContain(STATE.sprayReact);
       expect(pet.global).toBe(GLOBAL.idle);

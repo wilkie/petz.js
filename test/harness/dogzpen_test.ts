@@ -2232,7 +2232,7 @@ function followLockstep(lines: string[]) {
   const { frames, dll } = readTrace(lines);
   /* (From `LoadFactors`, the 66,307 draws before it -- the fur's speckles and the rest -- not played.) */
   const seedLine = lines.find((line) => line.startsWith('factors in '));
-  const result = { frames: 0, held: 0, factors: '', parted: '' };
+  const result = { frames: 0, held: 0, factors: '', parted: '', excitementPut: 0 };
 
   if (!seedLine || !frames.length) {
     return result;
@@ -2310,8 +2310,19 @@ function followLockstep(lines: string[]) {
 
   for (const [n, { frame, state, drawn, tick }] of frames.entries()) {
     callers = [];
+    /* Its excitement put to the engine's as the frame begins: under
+     * winbox.js the engine's cycle is not its code's power of it (not yet
+     * known why, behaviour.md), so the rest is followed past it. */
+    const inner = pet as unknown as { factors: number[]; sliders: number[] };
+
+    if (inner.factors[0] !== tick[4]) {
+      result.excitementPut++;
+    }
+
+    inner.factors[0] = tick[4];
+    inner.sliders[0] = tick[4];
     /* Its factors as the frame begins, against the engine's (`tick`). */
-    const factorsNow = (pet as unknown as { factors: number[] }).factors.join(' ');
+    const factorsNow = inner.factors.join(' ');
 
     if (factorsNow !== tick.slice(4, 15).join(' ')) {
       result.parted = `frame ${tick[0]} begins: factors ${factorsNow}, not ${tick.slice(4, 15).join(' ')}`;
@@ -2697,7 +2708,7 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
 
     const lockstep = followLockstep(lines);
     console.log(
-      `lockstep: factors ${lockstep.factors}; ${lockstep.held} of ${lockstep.frames} frames held${lockstep.parted ? `; parted at ${lockstep.parted}` : ''}`
+      `lockstep: factors ${lockstep.factors}; ${lockstep.held} of ${lockstep.frames} frames held (excitement put to the engine's ${lockstep.excitementPut} times)${lockstep.parted ? `; parted at ${lockstep.parted}` : ''}`
     );
 
     const thinking = followBrain(lines);
