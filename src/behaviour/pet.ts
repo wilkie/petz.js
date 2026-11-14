@@ -167,6 +167,8 @@ const SCRIPT = {
   landFromLunge: 171,
   lookAbout: 184,
   stopRunning: 26,
+  /** Running to standing, as the grab counts its frames (seg19:09e1). */
+  stopRunningGrab: 11,
   stopRunningHard: 205,
   snatch: 240,
   reachForBall: 82,
@@ -1436,12 +1438,13 @@ export class Pet {
     this.called = false;
     this.checkFake();
 
+    /* The ball's sprite moved on before the dog's state acts (`BallSprite::Update`, ahead of the module's pulse). */
+    this.world.updateBall?.();
     const shown = this.dispatch();
     /* Every sound popped since the last tick played, shown or not (as
      * `PopScript` plays them): a frame popped and passed over keeps its own. */
     shown.sounds = this.popSounds.length ? this.popSounds : undefined;
     this.popSounds = [];
-    this.world.updateBall?.();
     this.wearFullness();
 
     /* (The engine reads its clock afresh as it pulses, a little on: where it is known, that.) */
@@ -2390,7 +2393,12 @@ export class Pet {
     this.state = state;
     /* (By the chest, `0x8ad7`, a word, seg21:5c48.) */
     this.glueIfNotGlued(CHEST, 1);
-    this.handle(state, 'enter');
+    /* (An enter that pops itself shows that frame this tick, as the grab's does.) */
+    const entered = this.handle(state, 'enter');
+
+    if (entered && this.state === state) {
+      this.enteredStep = entered;
+    }
 
     /* Most of the engine's handlers go on from entering to their tick's
      * work, a pop among it, in the one call (`NewState`'s dispatch with
@@ -3341,7 +3349,10 @@ export class Pet {
 
     if (this.waiting) {
       const box = this.locomotionFudge(this.locomotion);
-      this.setTargetLocation(target(), TURN_RATE, box.width, box.height);
+      /* (Its distance a word `GetLocomotionFudge` does not set, left on the
+       * stack, seg21:80fa: [[measured]] 1 chasing the ball, else 4.) */
+      const distance = state === STATE.chasingBall ? 1 : FOCUS_DISTANCE;
+      this.setTargetLocation(target(), TURN_RATE, box.width, box.height, distance);
     }
 
     if (flags & 2) {
@@ -6337,7 +6348,7 @@ export class Pet {
    * since the dog put it down, a pounce (script 29); otherwise reach down to
    * it (82) and grab it (81).
    */
-  private pushBallGrabAction() {
+  private pushBallGrabAction(point?: { x: number; y: number }) {
     const ball = this.world.ball;
 
     if (!ball || ball.held || this.ballInMouthAfterQueue()) {
@@ -6346,18 +6357,59 @@ export class Pet {
 
     this.push({ glue: CHEST });
 
-    if (!(this.world.ballHasMoved?.() ?? true)) {
+    if (!(this.world.ballHasMoved?.() ?? true) && !point) {
       this.push({ cue: 7 });
       this.pushStored(SCRIPT.pounceOnBall);
       this.push({ cue: 6 });
     } else {
-      /* The engine also turns the dog towards the ball (`0x8ae8`); not yet played. */
+      /* Reaching for it where it is, or at the point given (seg19:2db7 to 2f13):
+       * turned toward it where the chin is the other side of it from the way
+       * it faces (`8ae8 1 d |d / 2|`, d the chin across from it, within a
+       * half turn), the chin aimed at it (`8af4 55`, at nothing without a
+       * point), and the grab. */
+      const target = point ?? { x: ball.x, y: ball.y };
       this.pushStored(SCRIPT.reachForBall);
-      this.push({ aim: { ball: NOSE, at: null } });
+      const chin = this.askBall(NOSE);
+
+      if (chin) {
+        const across = Math.max(-128, Math.min(128, Math.trunc(chin.x) - Math.trunc(target.x)));
+
+        if ((across > 0 && this.rotation < 0) || (across < 0 && this.rotation > 0)) {
+          this.push({
+            fudge: { kind: 'target', axis: 1, to: across, speed: Math.abs(Math.trunc(across / 2)) },
+          });
+        }
+      }
+
+      this.push({ aim: { ball: NOSE, at: point ?? null } });
       this.pushStored(SCRIPT.grabBall);
     }
 
     this.push({ glue: CHEST });
+  }
+
+  /**
+   * `ScriptSprite::CountFrames` (seg7:382c), a variant of -1: a script's
+   * frames, its variant and numbers from the game's table, which is left
+   * where it was; the script pushed to be counted, so the queue's read is
+   * let go of as by any push.
+   */
+  private countFrames(index: number) {
+    const script = this.data.scripts[index];
+    const place = this.randomAt;
+    const variant = this.tableNext() % script.variants.length;
+    const frames = timeline(this.data.scripts, index, variant, {
+      flags: this.data.flags,
+      random: (n) => this.rand() % n,
+      table: (n) => this.tableNext() % n,
+      deferSounds: true,
+      limit: 600,
+      repeat: () => undefined,
+      call: () => undefined,
+    });
+    this.randomAt = place;
+    this.read = [];
+    return frames.length;
   }
 
   /** `PetModule::PushBallReleaseAction` (seg19:2a84): with the ball in its mouth, it drops it (script 8). */
@@ -6506,25 +6558,51 @@ export class Pet {
 
     if (mode === 'enter') {
       this.setTargetLocation(null);
-      const ahead = this.world.projectBall?.(4);
 
-      if (ahead && ahead.bounces !== 0 && (ahead.bounces !== 1 || this.rand() % 3 !== 0)) {
-        this.newState(STATE.chasingBall);
-        return undefined;
+      if (this.position === RUNNING) {
+        /* Running (seg19:09d5 to 0af1): the ball where it will be after the
+         * frames of stopping (script 11); a glue by the chest, steering at it,
+         * the chin aimed at it; standing; cue 3 and the grab. */
+        const frames = this.countFrames(SCRIPT.stopRunningGrab);
+        const ahead = this.world.projectBall?.(frames);
+        const at = ahead ? { x: Math.trunc(ahead.x), y: Math.trunc(ahead.y) } : { x: 0, y: 0 };
+        this.push(
+          { glue: CHEST },
+          { steerAt: { x: at.x, y: at.y, rate: 6, width: 0, height: 0 } },
+          { aim: { ball: NOSE, at } }
+        );
+        this.pushTransition(STANDING, BELLY);
+        this.push({ cue: 3 }, { grab: 0 });
+      } else {
+        /* Else (seg19:0af4 to 0bc7): where it will be 7 frames on, unless it
+         * bounces by then, more than once or by `rand() % 3` once: back to the
+         * chase. */
+        const ahead = this.world.projectBall?.(7);
+
+        if (ahead && ahead.bounces !== 0 && (ahead.bounces !== 1 || this.rand() % 3 !== 0)) {
+          this.newState(STATE.chasingBall);
+          return undefined;
+        }
+
+        this.setTargetLocation(null);
+        this.resetScript();
+        this.pushBallGrabAction(
+          ahead ? { x: Math.trunc(ahead.x), y: Math.trunc(ahead.y) } : undefined
+        );
       }
 
-      this.queue = [];
-      this.pushBallGrabAction();
       this.fumbled = false;
 
       if (this.decideIfClumsy()) {
         this.pushStored(SCRIPT.fumble);
         this.pushStored(SCRIPT.pawBall);
-        this.push({ step: { frame: this.lastStep.frame, release: 1 } });
+        /* (`8b04 1`, seg19:0c3b.) */
+        this.push({ release: 1 });
         this.fumbled = true;
       }
 
-      return undefined;
+      /* And popped, its first frame the tick's (seg19:0c7c). */
+      return this.pop().step;
     }
 
     const { step, flags } = this.pop();

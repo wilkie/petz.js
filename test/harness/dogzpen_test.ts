@@ -2488,6 +2488,10 @@ function followLockstep(lines: string[]) {
       : undefined;
     const theirHead = frames[n].head?.slice(0, 6).join(' ');
 
+    if (process.env.STEERLOG && n >= Number(process.env.STEERLOG)) {
+      console.log(`${n} steer ${JSON.stringify((pet as unknown as { steer: unknown }).steer)} / ${state?.slice(26, 35).join(' ')}`);
+    }
+
     if (process.env.HEADLOG && n >= Number(process.env.HEADLOG)) {
       const inner = pet as unknown as { waiting: boolean; headTarget: unknown };
       console.log(
