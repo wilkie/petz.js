@@ -275,6 +275,8 @@ interface Frame {
   slide?: number[];
   /** The head's block for the dog's own state, placed in the frame (`head 1`), the last. */
   head?: number[];
+  /** The wobbles' clock, milliseconds, at the head's last placing tracking. */
+  headClock?: number;
   /** How many times the head was placed for the dog's own state in the frame. */
   headPlacings?: number;
   /** And for the copy the plain move takes of the frame before at the new angles (`head 0`), the last. */
@@ -403,6 +405,8 @@ function readTrace(lines: string[]) {
       open.slide = values;
     } else if (kind === 'head' && open && values[0] === 1) {
       open.head = values.slice(1, 10);
+      /* (And the wobbles' clock, milliseconds, as `HeadTrackPrep` read it.) */
+      open.headClock = values[11];
       open.headPlacings = (open.headPlacings ?? 0) + 1;
     } else if (kind === 'head' && open) {
       open.headCopy = values.slice(1, 10);
@@ -2406,7 +2410,7 @@ function followLockstep(lines: string[]) {
       break;
     }
 
-    const step = pet.tick(clocks.get(n) ?? (n * 45) / 17, pulses.get(n));
+    const step = pet.tick(clocks.get(n) ?? (n * 45) / 17, pulses.get(n), frames[n].headClock);
     stage.show(
       step,
       step.rotation,
@@ -2445,9 +2449,27 @@ function followLockstep(lines: string[]) {
       break;
     }
 
+    /* Its head where the engine's tracked: turn, nod, roll and offset. */
+    const ourHead = step.head
+      ? [
+          step.head.yaw,
+          step.head.pitch,
+          step.head.roll,
+          step.head.offset.x,
+          step.head.offset.y,
+          step.head.offset.z,
+        ].join(' ')
+      : undefined;
+    const theirHead = frames[n].head?.slice(0, 6).join(' ');
+
+    if (theirHead !== undefined && ourHead !== theirHead) {
+      result.parted = `frame ${frame[0]}: head ${ourHead}, not ${theirHead} at ${frames[n].headClock}`;
+      break;
+    }
+
     if (mine !== theirs || seed !== frame[3]) {
       const engine = drawn.map((each) => `${each.segment}:${each.offset.toString(16)}`).join(' ');
-      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]}; at ${(stage as unknown as { x: number }).x} ${(stage as unknown as { y: number }).y}, placed by ${step.placedBy}, glue ${step.glue})`;
+      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]}; at ${(stage as unknown as { x: number }).x} ${(stage as unknown as { y: number }).y}, placed by ${step.placedBy}, glue ${step.glue}; head ${JSON.stringify(step.head)} / ${frames[n].head?.join(' ')} at ${frames[n].headClock})`;
       break;
     }
 

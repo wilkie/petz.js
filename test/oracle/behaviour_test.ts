@@ -780,9 +780,10 @@ withOracle('the engine’s behaviour', () => {
     });
 
     it('charges at a shoe picked up, and on the run grabs it and tugs at it', () => {
-      /* (Seed 2: on 3's course, with the standard size as the engine measures it, 161 wide, its
-       * grabs all slip within 2,000 frames; on 1, 2, 6 and 7 it tugs.) */
-      const { stage, pet, run, states } = setUp(2, 640, 480);
+      /* (Seed 1: the course is a matter of the seed -- with the queue
+       * repeating as the engine's does, on 2's and 6's its grabs all slip
+       * within 2,000 frames; on 1, 3 and 7 it tugs.) */
+      const { stage, pet, run, states } = setUp(1, 640, 480);
       run(200);
 
       const shoe = { x: 0, y: 200, held: true, inMouth: false };

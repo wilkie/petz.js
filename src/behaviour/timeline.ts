@@ -120,6 +120,13 @@ export interface Step {
    * word each, and its calls, seg7:48a0 to 4ca2): counted where `repeat` is.
    */
   words?: number;
+
+  /**
+   * Nothing new shown: a pop that ran dry, the frame before kept where it
+   * was, nothing placed nor its head wobbled (no `MoveFrameRect`, no
+   * `HeadTrackPrep`), only its angles as the fudgers leave them.
+   */
+  still?: boolean;
 }
 
 /** The ball a script glues by when it says none: the belly (`GetDefaultGlueBall`). */

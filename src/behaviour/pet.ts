@@ -1405,10 +1405,27 @@ export class Pet {
    * One tick of the engine, `time` in its ticks, in the order of
    * `ReallyDoDrawFrame` (seg21:3dee): the cursor is sampled, petting is
    * looked for, the dog's state acts and a frame plays, and its mood moves
-   * on, `pulsedAt` the clock as it does, where not `time`.
+   * on, `pulsedAt` the clock as it does, where not `time`, and `wobbledAt`
+   * the head's wobbles' clock in milliseconds.
    */
-  tick(time: number, pulsedAt?: number): Tick {
+  tick(time: number, pulsedAt?: number, wobbledAt?: number): Tick {
     this.time = time;
+    this.wobbledAt = wobbledAt;
+    this.poppedCentre = undefined;
+
+    /* After a tick that showed nothing new, its head tracking, the frame
+     * before is placed afresh before the module pulses -- its head, its turn
+     * and nod as they were, the wobbles moved on (the trace's `head 0` ahead
+     * of `pulse`, frames 2758 to 2854 of the day of 3,000; [[inferred]]: what
+     * places it is not yet read out). */
+    let freshened: Head | undefined;
+
+    if (this.lastStill && this.lastPose?.tracking && this.headTracking) {
+      const [yaw, pitch] = [this.headYaw, this.headPitch];
+      [this.headYaw, this.headPitch] = [this.lastPose.yaw, this.lastPose.pitch];
+      freshened = this.headTrackPrep();
+      [this.headYaw, this.headPitch] = [yaw, pitch];
+    }
     this.popsThisTick = 0;
     this.sample();
     this.doPettingHandler();
@@ -1437,14 +1454,31 @@ export class Pet {
     const centredAt = this.centreAt ?? undefined;
     this.centreAt = null;
     /* (Placed again for the steering's ask, before the frame's own, the turn and nod as they were.) */
-    if (this.steeredTracking && this.lastPose) {
+    /* (Nothing shown, nothing placed: the head not wobbled.) */
+    const still = !!shown.still;
+    this.lastStill = still;
+
+    if (this.steeredTracking && this.lastPose && !still) {
       const [yaw, pitch] = [this.headYaw, this.headPitch];
       [this.headYaw, this.headPitch] = [this.lastPose.yaw, this.lastPose.pitch];
       this.headTrackPrep();
       [this.headYaw, this.headPitch] = [yaw, pitch];
     }
 
-    const head = this.headTrackPrep();
+    const was = this.lastPose;
+    /* (A glue reads the frame before as it was so placed; else places it
+     * afresh itself, its head tracking, as `MoveFrameRectBall` reads its
+     * ball -- the trace's `head 0` in the glue, frame 2869.) */
+    let headCopy: Head | undefined = shown.glue !== undefined ? freshened : undefined;
+
+    if (!still && !freshened && shown.glue !== undefined && was?.tracking && this.headTracking) {
+      const [yaw, pitch] = [this.headYaw, this.headPitch];
+      [this.headYaw, this.headPitch] = [was.yaw, was.pitch];
+      headCopy = this.headTrackPrep();
+      [this.headYaw, this.headPitch] = [yaw, pitch];
+    }
+
+    const head = still ? undefined : this.headTrackPrep();
     const angles = {
       tilt: this.fudged(AXIS.tilt),
       spin: this.fudged(AXIS.spin),
@@ -1471,15 +1505,12 @@ export class Pet {
      * frame before at the new angles and places its head afresh -- its turn
      * and nod as they were, the wobbles moved on again (`MoveFrameRect`'s
      * second `GetFrame`, seg10:29ee): so here, after the head of the frame. */
-    const was = this.lastPose;
     const turned =
       was &&
       (was.rotation !== this.rotation ||
         was.tilt !== angles.tilt ||
         was.spin !== angles.spin ||
         was.roll !== angles.roll);
-    let headCopy: Head | undefined;
-
     /* (The frame before's head is placed afresh only if it tracked: its
      * state's `+0x1e` set, as the engine's `GetFrame` asks.) */
     if (head && was?.tracking && turned && shown.glue === undefined) {
@@ -1489,13 +1520,15 @@ export class Pet {
       [this.headYaw, this.headPitch] = [yaw, pitch];
     }
 
-    this.lastPose = {
-      rotation: this.rotation,
-      ...angles,
-      yaw: this.headYaw,
-      pitch: this.headPitch,
-      tracking: !!head,
-    };
+    this.lastPose = still
+      ? this.lastPose
+      : {
+          rotation: this.rotation,
+          ...angles,
+          yaw: this.headYaw,
+          pitch: this.headPitch,
+          tracking: !!head,
+        };
 
     return {
       ...shown,
@@ -1950,9 +1983,16 @@ export class Pet {
 
       this.applyEffects(step);
     } else {
-      step = { frame: this.lastStep.frame };
+      step = { frame: this.lastStep.frame, still: true };
       this.placedBy = undefined;
     }
+
+    /* Its middle as the frame just placed has it (`+0x86`, `+0x88`), for
+     * what the tick asks after (a new target measured from it, seg16:177b). */
+    this.poppedCentre =
+      step && !step.still && this.world.peek && this.world.centre
+        ? this.world.peek(step, this.rotation, this.placedBy, () => this.world.centre!())
+        : this.poppedCentre;
 
     /* Reached, asked of the frame just placed (seg7:7144 on): the point
      * within the box ahead of its nose (`MakeFocusRect`), flag 2. */
@@ -2962,8 +3002,12 @@ export class Pet {
   /** `PetModule::GetNewTarget`: a point on the stage at least so far from the dog. */
   /** `GetNewTarget` (seg16:177b): far enough from the dog's middle (`+0x86`, `+0x88`, seg16:1867). */
   private newTarget(distance = 400) {
-    return pickTarget(this.world, this.world.centre?.() ?? this.world.where(), distance, this.rand);
+    const at = this.poppedCentre ?? this.world.centre?.() ?? this.world.where();
+    return pickTarget(this.world, at, distance, this.rand);
   }
+
+  /** The dog's middle as this tick's last pop placed it, if it did. */
+  private poppedCentre: { x: number; y: number } | undefined;
 
   /** Walks a stretch towards the target, steered by `SetTargetLocation`. */
   private pushLocomotion() {
@@ -5585,11 +5629,17 @@ export class Pet {
       this.lubes,
       this.headYaw,
       this.headPitch,
-      Math.trunc(this.time * 17),
+      this.wobbledAt ?? Math.trunc(this.time * 17),
       scale,
       this.rand
     );
   }
+
+  /** Whether the last tick showed nothing new (`Step.still`). */
+  private lastStill = false;
+
+  /** The wobbles' clock in milliseconds this tick, where known (`Lube::curtime`); else the tick's times 17. */
+  private wobbledAt: number | undefined;
 
   // The eyelids.
 

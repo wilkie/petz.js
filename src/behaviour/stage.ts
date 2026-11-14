@@ -443,6 +443,12 @@ export class Stage implements PetWorld {
     angles?: Angles,
     blend?: { scale: number; reference: number }
   ) {
+    /* Nothing new shown, nothing placed: the rectangle as it was, its
+     * frame and angles too, for the next placing to move on from. */
+    if (step.still) {
+      return;
+    }
+
     const next = this.frames[step.frame];
 
     /* The frame before as it was drawn, the new one with the head, the dog's angles and its breathing as they now are. */
