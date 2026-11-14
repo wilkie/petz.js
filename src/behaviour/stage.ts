@@ -5,8 +5,9 @@
  * - glued by a ball, so that the ball stays where it was
  *   (`Ballz::MoveFrameRectBall`, inferred from its name: not yet read);
  * - after a reference frame, moved by the difference between the centres of
- *   the reference's rectangle and its own (`Ballz::GetCenterOffset`), which
- *   is how a walk carries the dog on from one cycle to the next;
+ *   the reference's rectangle and its own (`Ballz::GetCenterOffset`), and
+ *   then as any frame is, which is how a walk carries the dog on from one
+ *   cycle to the next;
  * - otherwise where its own coordinates put it (`Ballz::MoveFrameRect`).
  */
 
@@ -428,26 +429,6 @@ export class Stage implements PetWorld {
     return blend && { scale: blend.scale, reference: this.frames[blend.reference] };
   }
 
-  /** The centre of the rectangle a frame is drawn in, from the dog's origin. */
-  private frameCentre(frame: Frame, rotation: number) {
-    const placed = project(
-      this.breed,
-      this.header,
-      frame,
-      scalesForAge(this.breed, this.age),
-      rotation,
-      100 - this.age,
-      this.head,
-      this.angles,
-      this.blendOf()
-    );
-    const left = Math.min(...placed.map((ball) => ball.x - ball.diameter / 2));
-    const right = Math.max(...placed.map((ball) => ball.x + ball.diameter / 2));
-    const top = Math.min(...placed.map((ball) => ball.y - ball.diameter / 2));
-    const bottom = Math.max(...placed.map((ball) => ball.y + ball.diameter / 2));
-    return { x: Math.trunc((left + right) / 2), y: Math.trunc((top + bottom) / 2) };
-  }
-
   /**
    * Moves on to a step's frame, turned to `rotation`: glued, or placed by a
    * reference frame, or where its own coordinates put it.
@@ -521,12 +502,18 @@ export class Stage implements PetWorld {
       const after = this.ballOf(next, step.glue, rotation);
       this.x += before.x + had.left - turned.left - after.x;
       this.y += before.y + had.top - turned.top - after.y;
-    } else if (reference !== undefined) {
-      const from = this.frameCentre(this.frames[reference], rotation);
-      const to = this.frameCentre(next, rotation);
-      this.x += from.x - to.x;
-      this.y += from.y - to.y;
     } else {
+      /* After a reference frame, the rectangle moved first by the
+       * difference between the reference's centre and the frame's
+       * (`GetCenterOffset`), and then as any frame is (seg7:6e8e to 6f28). */
+      if (reference !== undefined) {
+        /* (The boxes about the origin, `+0x38`, their sums' difference halved toward 0, seg10:271f to 2765.) */
+        const shown = this.boxOf(next, rotation);
+        const held = this.boxOf(this.frames[reference], rotation);
+        this.x -= Math.trunc((shown.left + shown.right - held.left - held.right) / 2);
+        this.y -= Math.trunc((shown.top + shown.bottom - held.top - held.bottom) / 2);
+      }
+
       /* `MoveFrameRect` (seg10:2788): the rectangle moved by how the frame's
        * changed from the frame before taken at the new angles, its head and
        * blend as they were; so a turn alone keeps its top left in place. */

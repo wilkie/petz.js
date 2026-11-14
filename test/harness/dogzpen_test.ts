@@ -2418,7 +2418,7 @@ function followLockstep(lines: string[]) {
 
     if (mine !== theirs || seed !== frame[3]) {
       const engine = drawn.map((each) => `${each.segment}:${each.offset.toString(16)}`).join(' ');
-      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]}; at ${(stage as unknown as { x: number }).x} ${(stage as unknown as { y: number }).y})`;
+      result.parted = `frame ${frame[0]}: state ${mine}, not ${theirs} (seed ${seed} / ${frame[3]}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'}; blend ${stage.blend ? `${stage.blend.scale} ${stage.blend.reference}` : 'none'} / ${state?.[17]} ${state?.[18]}; at ${(stage as unknown as { x: number }).x} ${(stage as unknown as { y: number }).y}, placed by ${step.placedBy}, glue ${step.glue})`;
       break;
     }
 
