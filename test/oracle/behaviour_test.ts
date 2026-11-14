@@ -928,9 +928,15 @@ withOracle('the engine’s behaviour', () => {
       run(1);
       expect(pet.state).toBe(STATE.chasingOwner);
 
-      run(400);
-      const now = stage.where();
-      expect(Math.abs(now.x - stage.pointer.x)).toBeLessThan(Math.abs(at.x - stage.pointer.x));
+      /* (The nearest it came: having come, it goes about its business again.) */
+      let nearest = Infinity;
+
+      for (let n = 0; n < 400; n++) {
+        run(1);
+        nearest = Math.min(nearest, Math.abs(stage.where().x - stage.pointer.x));
+      }
+
+      expect(nearest).toBeLessThan(Math.abs(at.x - stage.pointer.x));
       expect(states).toContain(STATE.chasingOwner);
     });
 

@@ -1056,6 +1056,9 @@ export class Pet {
   private playing = -1;
   lastTrick = 0;
 
+  /** The script whose start was last popped (`+0x948`, seg7:65ee): where a soft reset leaves the dog. */
+  private begun = -1;
+
   /** Sounds the engine plays itself (`ScriptSprite::PlaySound`), with the next frame shown. */
   private sounds: number[] = [];
 
@@ -1437,9 +1440,25 @@ export class Pet {
     this.queue.push(...items);
   }
 
+  /**
+   * `ScriptSprite::IsScriptGlued` (seg7:36fb): a glue queued that no frame
+   * follows, whatever else (an end, say) comes after it.
+   */
   private isGlued() {
-    const last = this.queue[this.queue.length - 1];
-    return last !== undefined && 'glue' in last;
+    return this.gluedAhead() !== undefined;
+  }
+
+  /** What follows a script's frames, queued: its glue as a glue of its own, as the engine queues it (`0x8ad7`, `0x8ad8`). */
+  private pushAfter(after: Omit<Step, 'frame'>) {
+    const { glue, ...rest } = after;
+
+    if (Object.keys(rest).length) {
+      this.push({ after: rest });
+    }
+
+    if (glue !== undefined) {
+      this.push({ glue });
+    }
   }
 
   /** `GlueScriptsIfNotGlued`. */
@@ -1473,9 +1492,7 @@ export class Pet {
         this.push(...frames.slice(pushed).map((step) => ({ step, script: index })));
         pushed = frames.length;
 
-        if (Object.keys(pending).length) {
-          this.push({ after: pending });
-        }
+        this.pushAfter(pending);
 
         this.push({ end: index });
 
@@ -1490,11 +1507,13 @@ export class Pet {
       },
     });
 
-    this.push(
-      ...steps.slice(pushed).map((step) => ({ step, script: index })),
-      ...(after ? [{ after }] : []),
-      { end: index }
-    );
+    this.push(...steps.slice(pushed).map((step) => ({ step, script: index })));
+
+    if (after) {
+      this.pushAfter(after);
+    }
+
+    this.push({ end: index });
   }
 
   /**
@@ -1576,7 +1595,9 @@ export class Pet {
    */
   private pop(): { step: Step; flags: number } {
     let flags = 0;
-    let glue: number | undefined;
+    /* (A glue met by a pop that ran dry stands for the next frame shown: `+0x950`, done with only once used, seg7:6e81.) */
+    let glue: number | undefined = this.heldGlue;
+    this.heldGlue = undefined;
     let step: Step | undefined;
     /* (A frame held to place the next by, taken up by a pop that ran dry, places the next pop's.) */
     let placedBy: number | undefined = this.heldReference;
@@ -1629,6 +1650,7 @@ export class Pet {
       } else if ('lids' in item) {
         this.restLids(item.lids);
       } else if ('begin' in item) {
+        this.begun = item.begin;
         this.updateHeartRate(item.begin);
       } else if ('after' in item) {
         /* Met after this frame, it is for the next (`PopScript` reaches it then). */
@@ -1647,6 +1669,11 @@ export class Pet {
         placedBy = item.step.frame;
       } else if ('step' in item) {
         step = { ...item.step, glue: item.step.glue ?? glue };
+
+        /* (A glue by no ball of the dog's, -1 say, is none: the frame placed as it is, seg7:6e33 to 6e44.) */
+        if (step.glue !== undefined && (step.glue < 0 || step.glue >= 65)) {
+          delete step.glue;
+        }
 
         if (step.glue !== undefined && earlier !== undefined) {
           step.glueBlend = earlier;
@@ -1684,6 +1711,10 @@ export class Pet {
 
     if (!step && placedBy !== undefined) {
       this.heldReference = placedBy;
+    }
+
+    if (!step) {
+      this.heldGlue = glue;
     }
 
     if (!step) {
@@ -2110,6 +2141,9 @@ export class Pet {
   /** A frame held to place the next by (`0x8ad3`, `+0x20aa`), taken up by a pop that ran dry. */
   private heldReference: number | undefined;
 
+  /** A glue taken up by a pop that ran dry, for the next frame shown. */
+  private heldGlue: number | undefined;
+
   /**
    * `PetModule::StateDispatch`: the state's handler, as it enters, as it
    * leaves, or as it goes from tick to tick.
@@ -2246,6 +2280,14 @@ export class Pet {
     const glued = this.gluedAhead();
     const end = this.queue.findIndex((item) => 'end' in item);
     this.queue = end === -1 ? this.queue : this.queue.slice(0, end + 1);
+
+    /* The dog where the script playing leaves it, and that script the last
+     * pushed (seg7:331e to 3345), whatever was pushed after it. */
+    if (this.begun >= 0) {
+      this.position = this.data.scripts[this.begun].to;
+      this.lastScript = this.begun;
+    }
+
     this.target = null;
     this.steer = null;
     this.push({ cue: 3 }, { glue: glued ?? CHEST });
@@ -2373,7 +2415,10 @@ export class Pet {
     const { step, flags } = this.pop();
 
     if (flags & 1) {
-      if (!this.isOnscreen()) {
+      /* All of it on the stage, but for half the standard width less 5 (seg16:0594 to 05b2). */
+      const { width } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+
+      if (!this.isOnscreenMargin(Math.trunc(width / 2) - 5)) {
         this.newState(STATE.postLocomote);
         return step;
       }
@@ -2800,15 +2845,29 @@ export class Pet {
         this.rand();
         this.newState(STATE.idle);
       } else {
+        /* Taken to the walk's start, glued by the belly, or else not glued;
+         * steered at the stage's middle as the walk begins; the walk; taken
+         * on to position 24; and popped again, the first of it shown this
+         * tick (seg16:160d to 1713). */
         const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
-        this.setTargetLocation(
-          { x: this.world.width / 2, y: this.world.height / 2 },
-          5,
-          width,
-          height
-        );
+
+        if (!this.pushTransition(this.data.scripts[SCRIPT.walk].from, BELLY)) {
+          this.push({ glue: -1 });
+        }
+
+        this.push({
+          steerAt: {
+            x: Math.trunc(this.world.width / 2),
+            y: Math.trunc(this.world.height / 2),
+            rate: 5,
+            width,
+            height,
+          },
+        });
         this.locomotion = SCRIPT.walk;
         this.pushStored(SCRIPT.walk);
+        this.pushTransition(24, BELLY);
+        return this.pop().step ?? step;
       }
     }
 
