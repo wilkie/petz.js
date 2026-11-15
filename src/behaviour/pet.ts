@@ -4236,7 +4236,8 @@ export class Pet {
         this.pickNewPetSpot();
       }
 
-      this.resetSoft();
+      /* (Glued by ball 36, `ResetScriptSoft(0x24)`, seg17:0eb8 to 0ed0: [[measured]] frame 383 of the petting day.) */
+      this.resetSoft(36);
 
       /* The hand shown petting, from its fourth frame (seg17:0e92). */
       this.hand = 4;

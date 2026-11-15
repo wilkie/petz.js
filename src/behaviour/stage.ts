@@ -524,7 +524,8 @@ export class Stage implements PetWorld {
       const before = this.ballOf(this.frame, step.glue, rotation, copy, angles, old);
       const had = this.boxOf(this.frame, this.rotation, was.head, was.angles, was.blend);
       const turned = this.boxOf(this.frame, rotation, copy, angles, old);
-      const after = this.ballOf(next, step.glue, rotation);
+      /* (The new frame's ball as Ballz works its state out, its head too: frame 383 of the petting day.) */
+      const after = this.ballOf(next, step.glue, rotation, head, angles, blend);
       this.x += before.x + had.left - turned.left - after.x;
       this.y += before.y + had.top - turned.top - after.y;
     } else {

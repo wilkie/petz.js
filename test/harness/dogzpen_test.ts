@@ -2609,6 +2609,34 @@ function followLockstep(lines: string[]) {
       : undefined;
     const theirHead = frames[n].head?.slice(0, 6).join(' ');
 
+    /* (And the pivot -- the neck scaled and the drift -- against the head
+     * line's, so a drift apart shows where it parts.) */
+    const theirPivot = frames[n].head?.slice(6, 9).join(' ');
+    let ourPivot: string | undefined;
+
+    if (step.head && theirPivot && state) {
+      const inner = stage as unknown as {
+        frames: { balls: { x: number; y: number; z: number }[] }[];
+        age: number;
+      };
+      const neckBall = skeletonOf(breed).neck;
+      const neck = inner.frames[state[13]]?.balls[neckBall];
+      const from = inner.frames[state[18]]?.balls[neckBall];
+      const scale = state[17];
+      const pet = scalesForAge(breed, inner.age).pet;
+      const toward = (axis: 'x' | 'y' | 'z') =>
+        scale !== 100 && from
+          ? Math.trunc(((neck[axis] - from[axis]) * scale) / 100) + from[axis]
+          : neck[axis];
+      ourPivot = neck
+        ? (['x', 'y', 'z'] as const)
+            .map((axis) =>
+              Math.trunc(Math.floor((toward(axis) * pet) / 256) + step.head!.drift[axis])
+            )
+            .join(' ')
+        : undefined;
+    }
+
     if (process.env.STEERLOG && n >= Number(process.env.STEERLOG)) {
       console.log(
         `${n} steer ${JSON.stringify((pet as unknown as { steer: unknown }).steer)} / ${state?.slice(26, 35).join(' ')}`
@@ -2635,10 +2663,13 @@ function followLockstep(lines: string[]) {
       break;
     }
 
-    if (theirHead !== undefined && ourHead !== theirHead) {
+    if (
+      (theirHead !== undefined && ourHead !== theirHead) ||
+      (ourPivot !== undefined && ourPivot !== theirPivot)
+    ) {
       const inner = pet as unknown as { waiting: boolean; headTarget: unknown; samples: unknown[] };
       const engine = drawn.map((each) => `${each.segment}:${each.offset.toString(16)}`).join(' ');
-      result.parted = `frame ${frame[0]}: head ${ourHead}, not ${theirHead} at ${frames[n].headClock} (waiting ${inner.waiting}, target ${JSON.stringify(inner.headTarget)}, samples ${JSON.stringify(inner.samples.slice(0, 2))}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'})`;
+      result.parted = `frame ${frame[0]}: head ${ourHead} pivot ${ourPivot}, not ${theirHead} pivot ${theirPivot} at ${frames[n].headClock} (waiting ${inner.waiting}, target ${JSON.stringify(inner.headTarget)}, samples ${JSON.stringify(inner.samples.slice(0, 2))}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'})`;
       break;
     }
 
