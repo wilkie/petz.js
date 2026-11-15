@@ -3188,6 +3188,8 @@ export class Pet {
   /** `PetModule::DoSleeping`, seg16:198e, undisturbed. */
   private doSleeping(mode: Mode): Step | undefined {
     if (mode === 'exit') {
+      /* (The lids back to rest, `8ae0 -1`, seg16:19aa: [[measured]] frame 576 of the petting day.) */
+      this.push({ lids: -1 });
       this.plan = [];
       this.planAt = 0;
       return undefined;
@@ -3210,13 +3212,24 @@ export class Pet {
 
     const { step, flags } = this.pop();
 
+    /* Its script done (seg16:1e43 to 1f04): not all on the stage
+     * (`IsPetTotallyOnscreen`), or its plan done, it wakes (idle); else
+     * the next of the plan, glued by the belly, its eyes shut for it
+     * (`8ae1 100`), not waiting. Cue 0, waiting (seg16:1f18). */
     if (flags & 1) {
-      if (!this.isOnscreen() || this.planAt >= this.plan.length) {
+      if (!this.totallyOnscreen() || this.planAt >= this.plan.length) {
         this.newState(STATE.idle);
-      } else {
-        this.push({ glue: BELLY });
-        this.pushStored(this.plan[this.planAt++]);
+        return step;
       }
+
+      this.push({ glue: BELLY });
+      this.pushStored(this.plan[this.planAt++]);
+      this.push({ after: { blink: 100, words: 2 } });
+      this.waiting = false;
+    }
+
+    if (this.cues.has(0)) {
+      this.waiting = true;
     }
 
     return step;
@@ -4312,7 +4325,8 @@ export class Pet {
   private pettedOnBack(): undefined {
     const rolls = this.data.engineScripts.pettedOnBack;
 
-    this.resetSoft();
+    /* (Glued by ball 50, `ResetScriptSoft(0x32)`, seg17:0f48: [[measured]] frame 487 of the petting day.) */
+    this.resetSoft(50);
     this.pushTransition(SCRIPT.rollover, BELLY);
     this.pushPettingEyes();
     this.pushStored(rolls[this.rand() % 3]);
@@ -4320,7 +4334,8 @@ export class Pet {
 
     if (
       this.pettingLevel > 14 &&
-      this.playing === SCRIPT.rollOnBack &&
+      /* (The script begun, `+0x948`, seg17:0ff2.) */
+      this.begun === SCRIPT.rollOnBack &&
       this.rand() % 150 > this.factor(0)
     ) {
       this.pushStored(SCRIPT.sleepOnBack);
