@@ -881,9 +881,6 @@ export function* pokeReaction(face: boolean, pokedInFace: number[], rand: Rand):
  * tumbling and eating return; the states the table does not name are left
  * as they were.
  */
-/** Words a negative pushed ease's angle passes over, taken for an opcode (`easeFramesAhead`). */
-const EASE_SKIPS = new Map([[-90, 4]]);
-
 const ENTER_RUNS_ON = new Set([
   2,
   105,
@@ -1913,7 +1910,7 @@ export class Pet {
         this.gotoState = item.goto;
         flags |= 8;
       } else if ('ease' in item) {
-        this.startEase(item.ease, this.easeFramesAhead(item.ease));
+        this.startEase(item.ease, this.easeFramesAhead());
       } else if ('drift' in item) {
         this.drift = item.drift;
       } else if ('fudge' in item) {
@@ -2439,36 +2436,27 @@ export class Pet {
 
   /**
    * The frames a pushed ease (`8ae6 1 to`) spreads its turn over, as
-   * `Fudger::SetTargetFudge` (seg4:0f37) counts them: from the read index,
-   * which still points at the ease's last operand, each word to the
-   * script's end that is not an opcode, an opcode's operands passed over by
-   * its count in the opcode table (ds:0xc22, 0x23 bytes each). So a turn to
-   * a positive angle counts as a frame itself, a frame marked a reference
-   * (`8ad3`) counts too, and a negative one is taken for an opcode and
-   * passes over the words its entry says: [[measured]] -90, 4 (its entry,
-   * ds:0xffd4, is past the DLL's initialised data); most others' entries
-   * are 0.
+   * `Fudger::SetTargetFudge` (seg4:0f37) counts them: every frame to the
+   * script's end, a reference frame (`8ad3`) too, less one -- as the slide
+   * counts. [[measured]] 5 frames ahead, 4 (frame 108 of the petting day,
+   * to -90); 15, 14 (frame 1601 of the day of 3,000, to 59, and frame 1423
+   * of the petting day, to 27). The speed is the turn over the count, and 1
+   * (seg4:0fe6).
    */
-  private easeFramesAhead(to: number) {
-    let count = to >= 0 ? 1 : 0;
-    const skip = to >= 0 ? 0 : (EASE_SKIPS.get(to) ?? 0);
-    let at = 0;
+  private easeFramesAhead() {
+    let count = 0;
 
     for (const item of this.queue) {
       if ('end' in item) {
         break;
       }
 
-      const words = itemWords(item);
-
-      if ('step' in item && at + words - 1 >= skip) {
+      if ('step' in item) {
         count++;
       }
-
-      at += words;
     }
 
-    return Math.max(1, count);
+    return Math.max(1, count - 1);
   }
 
   private startEase(to: number, frames: number) {
