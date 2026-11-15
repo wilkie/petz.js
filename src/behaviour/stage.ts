@@ -484,9 +484,18 @@ export class Stage implements PetWorld {
        * (`MoveFrameRectCenter`, seg10:3054 to 3149); that rectangle the old
        * state's, and the turn's frame placed by its corner, as the glue
        * reads it (seg7:5cb5). */
-      const was = this.rect();
+      /* (Each box with its head: the rectangle as it stands, the old; the
+       * dog's state at the new turn as Ballz works it out, the centring's;
+       * the turn's frame, the old state's as the glue then reads it --
+       * frame 993 of the petting day.) */
+      const keep = this.head;
+      const centred = (step as { centredHead?: Head }).centredHead;
+      const copied = (step as { headCopy?: Head }).headCopy;
+      this.head = was.head;
+      const wasRect = this.rect();
       this.rotation = rotation;
       this.angles = angles;
+      this.head = centred ?? was.head;
       const rect = this.rect();
       /* (The box about the dog's origin, `+0x38`, halved as it is.) */
       const box = {
@@ -496,12 +505,17 @@ export class Stage implements PetWorld {
         bottom: rect.bottom - this.y,
       };
       const half = (a: number, b: number) => Math.trunc((a + b) / 2);
-      const left = box.left - half(box.left, box.right) + half(was.left, was.right);
-      const top = box.top - half(box.top, box.bottom) + half(was.top, was.bottom);
+      const left = box.left - half(box.left, box.right) + half(wasRect.left, wasRect.right);
+      const top = box.top - half(box.top, box.bottom) + half(wasRect.top, wasRect.bottom);
       this.frame = step.turnFrame >= 0 ? (this.frames[step.turnFrame] ?? this.frame) : this.frame;
+      this.head = copied ?? was.head;
       const placed = this.rect();
       this.x += left - placed.left;
       this.y += top - placed.top;
+      /* (The frame before now the turn's, at the new angles, its head the copy's.) */
+      was.head = copied ?? was.head;
+      was.angles = angles;
+      this.head = keep;
     }
 
     /* Moved by the script first (`8aeb`, `8aec`), then by the frame. */

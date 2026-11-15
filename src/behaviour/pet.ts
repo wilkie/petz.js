@@ -393,6 +393,8 @@ export interface Tick extends Step {
   passed?: { step: Step; rotation: number; placedBy?: number; head?: Head }[];
   /** Whose states Ballz worked out afresh this tick, in turn: 1 the dog's own, 2 its old, 0 another. */
   workedAfresh?: number[];
+  /** Centred on a turn, the dog's head as Ballz worked it out then (`MoveFrameRectCenter`). */
+  centredHead?: Head;
 
   /** The head placed afresh for the frame before, taken at the new angles, as the plain move does turning (`MoveFrameRect`). */
   headCopy?: Head;
@@ -1538,7 +1540,7 @@ export class Pet {
      * has it, the frame shown then by the last of them as placed.) */
     const passed = (at === -1 ? this.placedThisTick : this.placedThisTick.slice(0, at)).map(
       (each) => ({
-        step: each.copy ? { ...each.step, headCopy: each.copy } : each.step,
+        step: { ...each.step, headCopy: each.copy, centredHead: each.centred },
         rotation: each.rotation,
         placedBy: each.placedBy,
         head: each.head,
@@ -1577,6 +1579,7 @@ export class Pet {
       centredAt,
       head,
       headCopy,
+      centredHead: still ? undefined : last?.centred,
       eyes: { mode: this.eyeMode, ...this.eyeTarget },
       lids: this.lids,
       eyesWide: this.eyesWide,
@@ -2050,6 +2053,9 @@ export class Pet {
 
     /* The head after the fudgers have moved the dog's angles on (`Fudger::ForAll`, seg7:6d3b, before seg7:6de2);
      * not where the pop ran dry, which goes straight to its end ([[measured]] frame 199 of the petting day). */
+    /* (The head as it stood before: a turn's centring places the state so, frame 993.) */
+    const headBefore = { yaw: this.headYaw, pitch: this.headPitch, tracking: this.headTracking };
+
     if (step) {
       this.updateHeadTracking();
     }
@@ -2070,7 +2076,22 @@ export class Pet {
         spin: this.fudged(AXIS.spin),
         roll: this.fudged(AXIS.roll),
       };
-      const before = old && { ...old, ...angles };
+      /* (Centred on a turn, the old state holds the turn's frame: frame 993
+       * of the petting day, glued from 3349.) */
+      const before = old && {
+        ...old,
+        ...angles,
+        ...(step.turnFrame !== undefined && step.turnFrame >= 0 ? { frame: step.turnFrame } : {}),
+      };
+
+      /* Centred on a turn first (`MoveFrameRectCenter`), the state as it
+       * stands -- its frame as before, at the new turn -- worked out
+       * ([[measured]] frame 885 of the petting day). */
+      const centred =
+        step.turnFrame !== undefined
+          ? this.workOut({ ...this.currentPlacing(), ...headBefore })
+          : undefined;
+
       const glued = step.glue !== undefined && before ? this.workOut(before, 2) : undefined;
       this.stateFrame = step.frame;
       this.stateLids = this.liveLids();
@@ -2097,6 +2118,7 @@ export class Pet {
         placedBy,
         head: own,
         copy: glued ?? copied,
+        centred,
       });
       this.placedBy = placedBy;
 
@@ -6238,6 +6260,8 @@ export class Pet {
     head?: Head;
     /** The frame before's, glued or turned, as Ballz has it. */
     copy?: Head;
+    /** Centred on a turn, the dog's state's as Ballz worked it out then. */
+    centred?: Head;
   }[] = [];
 
   /**
