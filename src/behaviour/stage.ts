@@ -602,18 +602,6 @@ export class Stage implements PetWorld {
     return this.pointer;
   }
 
-  /** A check made with the dog's head as given (as Ballz has just worked it out). */
-  withHead<T>(head: Head | undefined, check: () => T): T {
-    const kept = this.head;
-    this.head = head;
-
-    try {
-      return check();
-    } finally {
-      this.head = kept;
-    }
-  }
-
   /**
    * How wide a ball of the dog is, as Ballz's vtable `+0x38` (seg10:5c49)
    * has it: its size times the ball scale, `>> 8` -- not twice the drawn
@@ -625,21 +613,27 @@ export class Stage implements PetWorld {
   }
 
   /**
-   * A ball of the dog as it is but no longer blended (`8b00` earlier in the
-   * pop), as `GetBallOffset` (seg10:3213) finds it: the sprite's rectangle's
-   * corner, and the ball from the corner of the box the unblended frame has.
+   * A ball of the dog as `GetBallOffset` (seg10:3213) finds it of a state
+   * Ballz has worked out: the sprite's rectangle's corner, and the ball from
+   * the corner of that state's box -- with its head as worked out (the
+   * wobbles moved on may move the box a pixel, frame 257 of the petting
+   * day), or no longer blended (`8b00` earlier in the pop).
    */
-  unblendedBall(ball: number) {
-    const blend = this.blend;
+  askedBall(ball: number, head: Head | undefined, unblended = false) {
+    const kept = { head: this.head, blend: this.blend };
     const shown = this.rect();
-    this.blend = undefined;
+    this.head = head;
+
+    if (unblended) {
+      this.blend = undefined;
+    }
 
     try {
       const box = this.rect();
       const at = this.ballOnStage(ball);
       return { ...at, x: at.x + shown.left - box.left, y: at.y + shown.top - box.top };
     } finally {
-      this.blend = blend;
+      Object.assign(this, kept);
     }
   }
 
@@ -864,6 +858,28 @@ export class Stage implements PetWorld {
    * stage left as it was: what `0x8af4` aims with, as `PopScript` plays the
    * queue ahead between `SaveEnvironmentVars` and `RestoreEnvironmentVars`.
    */
+  /**
+   * Where a ball would be once these frames had played, as
+   * `ComputeActionOffset` (seg7:2d28) has it asked: the rectangle the dog
+   * starts from (the sprite's `+0x58`, copied before the sprite is put
+   * back), the ball from the corner of the last frame's box -- [[measured]]
+   * not where the frames would move the dog (frame 333 of the petting day,
+   * the stop's spot at 247 146 for the dog's 264 135 had it walked on).
+   */
+  lookAheadInPlace(frames: { step: Step; rotation: number; placedBy?: number }[], ball: number) {
+    const shown = this.rect();
+    const saved = { x: this.x, y: this.y, frame: this.frame, rotation: this.rotation };
+
+    for (const { step, rotation, placedBy } of frames) {
+      this.show(step, rotation, placedBy);
+    }
+
+    const at = this.ballOnStage(ball);
+    const box = this.rect();
+    Object.assign(this, saved);
+    return { x: shown.left + at.x - box.left, y: shown.top + at.y - box.top };
+  }
+
   lookAhead(frames: { step: Step; rotation: number; placedBy?: number }[], ball: number) {
     const saved = { x: this.x, y: this.y, frame: this.frame, rotation: this.rotation };
 

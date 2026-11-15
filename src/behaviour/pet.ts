@@ -341,15 +341,22 @@ export interface PetWorld {
     frames: { step: Step; rotation: number; placedBy?: number }[],
     ball: number
   ): { x: number; y: number };
+  /** Where a ball would be once frames had played, from where the dog starts (`Stage.lookAheadInPlace`). */
+  lookAheadInPlace?(
+    frames: { step: Step; rotation: number; placedBy?: number }[],
+    ball: number
+  ): { x: number; y: number };
   nudge?(dx: number, dy: number): void;
   /** The dog's frame placed from a point: its origin there (`FindStartingLocation`). */
   placeAt?(x: number, y: number): void;
   /** A check made with a step shown as it will be, the stage then as it was (`Stage.peek`). */
   peek?<T>(step: Step, rotation: number, reference: number | undefined, check: () => T): T;
-  /** A ball of the dog as it is, but no longer blended (`8b00` earlier in the pop; `Stage.unblendedBall`). */
-  unblendedBall?(ball: number): { x: number; y: number; diameter: number } | undefined;
-  /** A check made with the dog's head as given (`Stage.withHead`). */
-  withHead?<T>(head: Head | undefined, check: () => T): T;
+  /** A ball as `GetBallOffset` finds it of a state Ballz has worked out (`Stage.askedBall`). */
+  askedBall?(
+    ball: number,
+    head: Head | undefined,
+    unblended?: boolean
+  ): { x: number; y: number; diameter: number } | undefined;
 }
 
 /** A cursor sample, one a frame: `ReallyDoDrawFrame` keeps thirty. */
@@ -1596,8 +1603,20 @@ export class Pet {
   private push(...items: Item[]) {
     /* (What was read let go, the rest at the front: the repeats' places not moved with it.) */
     this.read = [];
+    /* (Written over any words left past the queue's end, `ghost`.) */
+    this.ghost = [];
     this.unread.push(...items);
   }
+
+  /**
+   * Words pushed and then dropped as the queue's indices were put back
+   * (`ComputeActionOffset`'s script, `RestoreEnvironmentVars`): still in the
+   * buffer past its end until something is pushed over them, and taken up
+   * again by a soft reset, which reads on to the end of a script
+   * ([[measured]] frame 134 of the petting day, the stop shown after; not
+   * frame 333, the aligning's own pushes over it).
+   */
+  private ghost: Item[] = [];
 
   /** The words left unread in the queue (for the harness, against the engine's). */
   unreadWords() {
@@ -2741,6 +2760,12 @@ export class Pet {
      * else the one `IsScriptGlued` finds ahead -- the last not followed by a
      * frame (seg7:36fb) -- else the chest (seg7:320b to 3243). */
     const glued = glue >= 0 && glue < (this.data.ballCount ?? 65) ? glue : this.gluedAhead();
+
+    if (!this.queue.some((item) => 'end' in item) && this.ghost.length) {
+      const ends = this.ghost.findIndex((item) => 'end' in item);
+      this.queue = [...this.queue, ...(ends === -1 ? this.ghost : this.ghost.slice(0, ends + 1))];
+    }
+
     const end = this.queue.findIndex((item) => 'end' in item);
     this.queue = end === -1 ? this.queue : this.queue.slice(0, end + 1);
 
@@ -6194,11 +6219,9 @@ export class Pet {
     const placing = old && this.lastPose ? this.lastPose : this.currentPlacing();
     const head = this.workOut(placing);
     const find = () =>
-      unblended && this.world.unblendedBall
-        ? this.world.unblendedBall(ball)
+      this.world.askedBall
+        ? this.world.askedBall(ball, placing.tracking ? head : undefined, unblended)
         : this.world.ballOnStage?.(ball);
-    const withHead = () =>
-      placing.tracking && this.world.withHead ? this.world.withHead(head, find) : find();
 
     /* Of the dog as it now is: once a frame is placed this tick, that frame,
      * which the stage shows only as the tick ends ([[measured]] frame 207 of
@@ -6206,10 +6229,10 @@ export class Pet {
     const placed = this.placedThisTick[this.placedThisTick.length - 1];
 
     if (!old && placed && !this.inPeek && this.world.peek) {
-      return this.world.peek(placed.step, placed.rotation, placed.placedBy, withHead);
+      return this.world.peek(placed.step, placed.rotation, placed.placedBy, find);
     }
 
-    return withHead();
+    return find();
   }
 
   /** The wobbles' clock in milliseconds this tick, where known (`Lube::curtime`); else the tick's times 17. */
@@ -7526,10 +7549,13 @@ export class Pet {
    * the petting day: the stop, 22, shown from its first frame the next pop).
    */
   private actionOffset(script: number, ball: number) {
+    /* (The sprite saved before the script is pushed: where the dog stands
+     * put back after, though the script stays queued, frame 333.) */
+    const placedAt = { position: this.position, lastScript: this.lastScript };
+    const queued = [...this.queue];
     this.pushStored(script);
     const saved = {
-      position: this.position,
-      lastScript: this.lastScript,
+      ...placedAt,
       rotation: this.rotation,
       ease: this.ease,
       drift: this.drift,
@@ -7609,11 +7635,16 @@ export class Pet {
 
     Object.assign(this, blinking, head);
 
-    if (!ended || !this.world.lookAhead) {
+    /* (The queue's indices put back with the sprite: the script dropped, its words left over.) */
+    const pushed = this.queue.slice(queued.length);
+    this.queue = queued;
+    this.ghost = pushed;
+
+    if (!ended || !this.world.lookAheadInPlace) {
       return undefined;
     }
 
-    return this.world.lookAhead(frames, ball);
+    return this.world.lookAheadInPlace(frames, ball);
   }
 
   private startAim(
