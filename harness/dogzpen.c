@@ -532,6 +532,22 @@ static int __cdecl __far __loadds popping(void __far *sprite)
     return flags;
 }
 
+/* And each aim of the dog's head (`ScriptSprite::SetHeadTarget`, 46):
+ * `aimed x y middle-x middle-y draws`, the point given (none, -1 -1) and
+ * the sprite's middle (`+0x86`, `+0x88`) it is kept relative to. */
+typedef void(__cdecl __far *SETHEAD)(void __far *sprite, int __far *point);
+static SETHEAD aimOn;
+
+static void __cdecl __far __loadds aiming(void __far *sprite, int __far *point)
+{
+    if (sprite == (void __far *)dogSprite) {
+        say("aimed %d %d %d %d %d\r\n", point ? point[0] : -1, point ? point[1] : -1,
+            *(int __far *)(dogSprite + 0x86), *(int __far *)(dogSprite + 0x88), draws);
+    }
+
+    aimOn(sprite, point);
+}
+
 typedef void __far *(__cdecl __far *CARTESIAN)(void __far *ballz, unsigned char __far *state);
 static CARTESIAN cartOn;
 
@@ -637,6 +653,7 @@ static void hookPushes(void)
     headOn = (HEADPREP)hookPrologue(45, (void __far *)heading);
     cartOn = (CARTESIAN)hookPrologue(210, (void __far *)carting);
     popOn = (POPSCRIPT)hookPrologue(69, (void __far *)popping);
+    aimOn = (SETHEAD)hookPrologue(46, (void __far *)aiming);
     grabOn = (HOLDING)hookPrologue(340, (void __far *)grabbed);
     releaseOn = (HOLDING)hookPrologue(341, (void __far *)released);
     placingOn[0] = (PLACING)hookPrologue(199, (void __far *)plainly);

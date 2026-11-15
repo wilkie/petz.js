@@ -602,6 +602,18 @@ export class Stage implements PetWorld {
     return this.pointer;
   }
 
+  /** A check made with the dog's head as given (as Ballz has just worked it out). */
+  withHead<T>(head: Head | undefined, check: () => T): T {
+    const kept = this.head;
+    this.head = head;
+
+    try {
+      return check();
+    } finally {
+      this.head = kept;
+    }
+  }
+
   /**
    * How wide a ball of the dog is, as Ballz's vtable `+0x38` (seg10:5c49)
    * has it: its size times the ball scale, `>> 8` -- not twice the drawn

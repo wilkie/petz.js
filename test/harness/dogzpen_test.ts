@@ -2959,9 +2959,17 @@ describeHarness('Dogz’s playpen, held to DOGZDLL.DLL', () => {
     console.log(
       `head placed afresh: ${copies.plain} plain moves with the head tracking, ${copies.copies} with a copy, ${copies.held} as the rule has it`
     );
-    /* (Once only reported, the petting day's trace then breaking the rule
-     * now and then; on every day the harness keeps now, it holds.) */
-    expect(copies.wrong).toEqual([]);
+    /* (The rule stands in for Ballz's five worked-out states, which a
+     * recording with its `cart` lines follows exactly -- and the lockstep
+     * checks with `CARTCHECK`; there the rule breaks now and then, a state
+     * stamped anew by its pop placed afresh unturned, and is only reported.) */
+    if (lines.some((line) => line.startsWith('cart '))) {
+      if (copies.wrong.length) {
+        console.log(`head placed afresh, not as the rule has it:\n  ${copies.wrong.join('\n  ')}`);
+      }
+    } else {
+      expect(copies.wrong).toEqual([]);
+    }
 
     const steered = followSteeredHeads(lines);
     console.log(

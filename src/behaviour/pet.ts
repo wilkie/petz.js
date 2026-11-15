@@ -347,7 +347,9 @@ export interface PetWorld {
   /** A check made with a step shown as it will be, the stage then as it was (`Stage.peek`). */
   peek?<T>(step: Step, rotation: number, reference: number | undefined, check: () => T): T;
   /** A ball of the dog as it is, but no longer blended (`8b00` earlier in the pop; `Stage.unblendedBall`). */
-  unblendedBall?(ball: number): { x: number; y: number } | undefined;
+  unblendedBall?(ball: number): { x: number; y: number; diameter: number } | undefined;
+  /** A check made with the dog's head as given (`Stage.withHead`). */
+  withHead?<T>(head: Head | undefined, check: () => T): T;
 }
 
 /** A cursor sample, one a frame: `ReallyDoDrawFrame` keeps thirty. */
@@ -5944,9 +5946,7 @@ export class Pet {
   private lookAtUser() {
     /* (Asked of the dog's state as it now is: the breathing stopped earlier
      * in the pop, `8b00`, its blend is none at once, the frame shown or not.) */
-    const asked = this.askBall(NOSE);
-    const nose =
-      this.motionScale === 100 && this.world.unblendedBall ? this.world.unblendedBall(NOSE) : asked;
+    const nose = this.askBall(NOSE, false, this.motionScale === 100);
 
     if (nose) {
       this.setHeadTarget({ x: Math.trunc(nose.x) + this.rotation, y: Math.trunc(nose.y) + 10 });
@@ -6186,23 +6186,30 @@ export class Pet {
    * places the dog as it now is, so that Ballz's last placed is no longer
    * the frame before (see `MoveFrameRectBall`).
    */
-  private askBall(ball: number, old = false) {
+  private askBall(ball: number, old = false, unblended = false) {
     /* (Ballz works the state out, the old one as the scruff handler asks,
-     * placing it afresh only if it is none of the five it keeps.) */
-    this.workOut(old && this.lastPose ? this.lastPose : this.currentPlacing());
+     * placing it afresh only if it is none of the five it keeps; the ball
+     * found with its head as so worked out -- [[measured]] its wobbles moved
+     * on, the nose a pixel apart, frame 257 of the petting day.) */
+    const placing = old && this.lastPose ? this.lastPose : this.currentPlacing();
+    const head = this.workOut(placing);
+    const find = () =>
+      unblended && this.world.unblendedBall
+        ? this.world.unblendedBall(ball)
+        : this.world.ballOnStage?.(ball);
+    const withHead = () =>
+      placing.tracking && this.world.withHead ? this.world.withHead(head, find) : find();
 
     /* Of the dog as it now is: once a frame is placed this tick, that frame,
      * which the stage shows only as the tick ends ([[measured]] frame 207 of
      * the petting day, the spot asked after the stroke's pop). */
     const placed = this.placedThisTick[this.placedThisTick.length - 1];
 
-    if (!old && placed && !this.inPeek && this.world.peek && this.world.ballOnStage) {
-      return this.world.peek(placed.step, placed.rotation, placed.placedBy, () =>
-        this.world.ballOnStage!(ball)
-      );
+    if (!old && placed && !this.inPeek && this.world.peek) {
+      return this.world.peek(placed.step, placed.rotation, placed.placedBy, withHead);
     }
 
-    return this.world.ballOnStage?.(ball);
+    return withHead();
   }
 
   /** The wobbles' clock in milliseconds this tick, where known (`Lube::curtime`); else the tick's times 17. */
