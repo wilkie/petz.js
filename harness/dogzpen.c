@@ -548,6 +548,20 @@ static void __cdecl __far __loadds aiming(void __far *sprite, int __far *point)
     aimOn(sprite, point);
 }
 
+/* And each part of the body asked for under a point (`Ballz::HitTestBodyArea`,
+ * 206): `area answer x y draws`, the point the third far argument. */
+typedef int(__cdecl __far *HITAREA)(void __far *ballz, void __far *rect, void __far *state,
+                                    int __far *point, int across, int down);
+static HITAREA hitAreaOn;
+
+static int __cdecl __far __loadds hitArea(void __far *ballz, void __far *rect, void __far *state,
+                                          int __far *point, int across, int down)
+{
+    int answer = hitAreaOn(ballz, rect, state, point, across, down);
+    say("area %d %d %d %d\r\n", answer, point[0], point[1], draws);
+    return answer;
+}
+
 typedef void __far *(__cdecl __far *CARTESIAN)(void __far *ballz, unsigned char __far *state);
 static CARTESIAN cartOn;
 
@@ -654,6 +668,7 @@ static void hookPushes(void)
     cartOn = (CARTESIAN)hookPrologue(210, (void __far *)carting);
     popOn = (POPSCRIPT)hookPrologue(69, (void __far *)popping);
     aimOn = (SETHEAD)hookPrologue(46, (void __far *)aiming);
+    hitAreaOn = (HITAREA)hookPrologue(206, (void __far *)hitArea);
     grabOn = (HOLDING)hookPrologue(340, (void __far *)grabbed);
     releaseOn = (HOLDING)hookPrologue(341, (void __far *)released);
     placingOn[0] = (PLACING)hookPrologue(199, (void __far *)plainly);

@@ -2543,6 +2543,12 @@ function followLockstep(lines: string[]) {
       step.angles,
       step.blend
     );
+
+    /* (Drawn afresh, the balls' order kept on from the last, as `ZOrder` does.) */
+    if (!step.still) {
+      stage.noteDrawn();
+    }
+
     result.frames++;
     /* (With `BALLSLOG` a frame, each of the model's balls on the stage against the engine's `balls` line.) */
     if (process.env.BALLSLOG && n === Number(process.env.BALLSLOG)) {

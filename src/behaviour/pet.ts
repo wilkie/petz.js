@@ -293,7 +293,7 @@ export interface PetWorld {
   holding?(): boolean;
 
   /** The part of the dog's body under a point (`AREA`), or -1. */
-  areaAt?(point: { x: number; y: number }, slop?: { x: number; y: number }): number;
+  areaAt?(point: { x: number; y: number }, slop?: { x: number; y: number }, head?: Head): number;
 
   /** A ball of the dog on the stage, and how wide it is drawn. */
   ballOnStage?(ball: number): { x: number; y: number; diameter: number };
@@ -2041,6 +2041,13 @@ export class Pet {
       this.look(step.look);
     }
 
+    /* So too its breathing (`8aff`, `8b00`), read before the frame is placed:
+     * the state placed has its reference frame ([[measured]] frame 286 of the
+     * petting day, worked out by Ballz with 38). */
+    if (step?.breathe !== undefined) {
+      this.breathe(step.breathe);
+    }
+
     /* The head after the fudgers have moved the dog's angles on (`Fudger::ForAll`, seg7:6d3b, before seg7:6de2);
      * not where the pop ran dry, which goes straight to its end ([[measured]] frame 199 of the petting day). */
     if (step) {
@@ -2185,7 +2192,7 @@ export class Pet {
       this.doBlink(step.blink);
     }
 
-    if (step.breathe !== undefined) {
+    if (!looked && step.breathe !== undefined) {
       this.breathe(step.breathe);
     }
 
@@ -3881,8 +3888,14 @@ export class Pet {
   }
 
   /** The kind of position the script playing ends in (`0x94a`). */
+  /**
+   * The kind of position the script begun ends in (`GetNeutralType` of the
+   * sprite's `+0x94a`, set from the script begun as its `8b0a` is read,
+   * seg7:6642 to 6654) -- not the last frame's script ([[measured]] frame
+   * 445 of the petting day: stroked lying, not yet so).
+   */
   private playingKind() {
-    const script = this.data.scripts[this.playing];
+    const script = this.data.scripts[this.begun];
     return script ? this.data.positionKinds[script.to] : this.data.positionKinds[this.position];
   }
 
@@ -3904,10 +3917,14 @@ export class Pet {
 
     /* `HitTestBodyArea` with a seventh of the standard width and a third of its height to spare (seg17:002c to 0078). */
     const standard = this.world.standardSize?.() ?? { width: 0, height: 0 };
-    this.area = this.world.areaAt(cursor, {
-      x: Math.trunc(standard.width / 7),
-      y: Math.trunc(standard.height / 3),
-    });
+    /* (Ballz works the dog's state out for it, and tests its balls so placed.) */
+    const placing = this.currentPlacing();
+    const head = this.workOut(placing);
+    this.area = this.world.areaAt(
+      cursor,
+      { x: Math.trunc(standard.width / 7), y: Math.trunc(standard.height / 3) },
+      placing.tracking ? head : undefined
+    );
     this.petting = this.samples.length >= 5;
 
     for (let n = 0; n < 4 && this.petting; n++) {

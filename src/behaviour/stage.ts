@@ -13,7 +13,7 @@
 
 import { type AnimationHeader, type Frame } from '../formats/animation.ts';
 import { type Breed } from '../formats/lnz.ts';
-import { ballAt } from '../render/ballz.ts';
+import { ballAt, drawOrder } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
 import {
   type Angles,
@@ -679,8 +679,8 @@ export class Stage implements PetWorld {
    * holds it, as `Ballz::HitTest` (seg10:46d8) tries them nearest first, and
    * that ball's area (`HitTestBodyArea`).
    */
-  areaAt(point: { x: number; y: number }, slop = { x: 0, y: 0 }) {
-    const ball = this.ballUnder(point, slop);
+  areaAt(point: { x: number; y: number }, slop = { x: 0, y: 0 }, head?: Head) {
+    const ball = this.ballUnder(point, slop, head);
     return ball < 0 ? -1 : (this.bodyAreas[ball] ?? -1);
   }
 
@@ -690,11 +690,46 @@ export class Stage implements PetWorld {
    * down (seg10:47b6 to 47c9). The petting handler gives a seventh of the
    * dog's standard width and a third of its height; the brush none.
    */
-  ballUnder(point: { x: number; y: number }, slop = { x: 0, y: 0 }) {
-    const placed = this.placed();
-    const nearestFirst = placed
-      .map((_, ball) => ball)
-      .sort((a, b) => placed[a].depth - placed[b].depth);
+  /**
+   * The order the dog's balls were last drawn in (`Ballz::ZOrder`, seg10:48ad,
+   * its list at `+0x17f`, kept from frame to frame): what `HitTest` tries
+   * them in, from its end ([[measured]] frames 175 and 280 of the petting
+   * day: two balls as near, or one nearer by less than the tolerance, the
+   * one drawn later found). Kept by `noteDrawn`, as a frame is drawn.
+   */
+  zOrder: number[] | undefined;
+
+  noteDrawn() {
+    this.zOrder = drawOrder(this.breed, this.placed(), this.zOrder);
+  }
+
+  ballUnder(point: { x: number; y: number }, slop = { x: 0, y: 0 }, head?: Head) {
+    /* (Of the state Ballz has worked out, with its head as worked out: each
+     * ball from the rectangle's corner, less that state's box's, as
+     * `GetBallOffset` -- seg10:4770 to 4808.) */
+    let placed = this.placed();
+
+    if (head) {
+      const shown = this.rect();
+      const kept = this.head;
+      this.head = head;
+
+      try {
+        const box = this.rect();
+        placed = this.placed().map((ball) => ({
+          ...ball,
+          x: ball.x + shown.left - box.left,
+          y: ball.y + shown.top - box.top,
+        }));
+      } finally {
+        this.head = kept;
+      }
+    }
+
+    const nearestFirst =
+      this.zOrder?.length === placed.length
+        ? [...this.zOrder].reverse()
+        : placed.map((_, ball) => ball).sort((a, b) => placed[a].depth - placed[b].depth);
 
     for (const ball of nearestFirst) {
       const { x, y, diameter } = placed[ball];
