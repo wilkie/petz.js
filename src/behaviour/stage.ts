@@ -868,7 +868,16 @@ export class Stage implements PetWorld {
    */
   lookAheadInPlace(frames: { step: Step; rotation: number; placedBy?: number }[], ball: number) {
     const shown = this.rect();
-    const saved = { x: this.x, y: this.y, frame: this.frame, rotation: this.rotation };
+    /* (Put back whole after: its head, angles and blend too, which a frame shown sets.) */
+    const saved = {
+      x: this.x,
+      y: this.y,
+      frame: this.frame,
+      rotation: this.rotation,
+      head: this.head,
+      angles: this.angles,
+      blend: this.blend,
+    };
 
     for (const { step, rotation, placedBy } of frames) {
       this.show(step, rotation, placedBy);
@@ -881,7 +890,16 @@ export class Stage implements PetWorld {
   }
 
   lookAhead(frames: { step: Step; rotation: number; placedBy?: number }[], ball: number) {
-    const saved = { x: this.x, y: this.y, frame: this.frame, rotation: this.rotation };
+    /* (Put back whole after: its head, angles and blend too, which a frame shown sets.) */
+    const saved = {
+      x: this.x,
+      y: this.y,
+      frame: this.frame,
+      rotation: this.rotation,
+      head: this.head,
+      angles: this.angles,
+      blend: this.blend,
+    };
 
     for (const { step, rotation, placedBy } of frames) {
       this.show(step, rotation, placedBy);

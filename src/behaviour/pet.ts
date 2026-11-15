@@ -769,17 +769,18 @@ export function rollsOver(level: number, rand: Rand): boolean {
  * in five that blink after it.
  */
 export function pettingEyes(rand: Rand): Omit<Step, 'frame'>[] {
-  const blink = () => ({ blink: (rand() % 15) + 30 });
+  /* (Words of the engine's queue: `8ae1 n` two, `8afb` and `8afa` one.) */
+  const blink = () => ({ blink: (rand() % 15) + 30, words: 2 });
 
   if (rand() % 2) {
     return [blink()];
   }
 
   if (rand() % 2) {
-    return [{ look: 'user' }];
+    return [{ look: 'user', words: 1 }];
   }
 
-  return rand() % 5 ? [{ look: 'random' }, blink()] : [{ look: 'random' }];
+  return rand() % 5 ? [{ look: 'random', words: 1 }, blink()] : [{ look: 'random', words: 1 }];
 }
 
 /**
@@ -7561,12 +7562,16 @@ export class Pet {
       drift: this.drift,
     };
     const frames: { step: Step; rotation: number; placedBy?: number }[] = [];
-    let glue: number | undefined;
-    let placedBy: number | undefined;
+    /* (From the glue and reference a pop that ran dry took up: frame 342.) */
+    let glue: number | undefined = this.heldGlue;
+    let placedBy: number | undefined = this.heldReference;
     let ended = false;
 
     for (const [index, item] of this.queue.entries()) {
-      if ('end' in item && item.end === script) {
+      /* (Played ahead, the end of any script stops it: flag 4, seg7:6671 to
+       * 667e, a transition's end too -- [[measured]] frame 342 of the petting
+       * day, 21's seven frames, not on into the stop.) */
+      if ('end' in item) {
         ended = true;
         break;
       } else if ('ease' in item) {
