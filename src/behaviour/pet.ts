@@ -1482,8 +1482,9 @@ export class Pet {
     this.poppedCentre = undefined;
 
     this.sample();
-    this.doPettingHandler();
+    /* (Scruffing looked for before petting, seg21:4931 and 493f.) */
     this.doScruffHandler();
+    this.doPettingHandler();
     this.doCallingHandler();
     this.called = false;
     this.checkFake();
@@ -2029,11 +2030,14 @@ export class Pet {
     if (!step) {
       this.heldGlue = glue;
 
-      /* (Run dry after a turn, the state copied into the old as the pop
-       * ends, seg7:71eb: the turn's frame lost, the dog still turned about
-       * its middle.) */
+      /* (Run dry after a turn, centred there and then (`MoveFrameRectCenter`,
+       * the state as it stands worked out at this pop's stamp), the state
+       * copied into the old as the pop ends, seg7:71eb: the turn's frame
+       * lost. [[measured]] Frame 1334 of the treat's day: no centring with
+       * the next frame shown. [[inferred]] Nor does it move the dog.) */
       if (this.tailTurnFrame !== undefined) {
-        this.tailTurnFrame = -1;
+        this.workOut(this.currentPlacing());
+        this.tailTurnFrame = undefined;
       }
     }
 
@@ -3858,6 +3862,9 @@ export class Pet {
     if (desktop) {
       this.newGlobalState(desktop);
     } else {
+      /* (Its idle plan done with, `+0x11c4` and `+0x11c6` cleared, seg16:0061.) */
+      this.plan = [];
+      this.planAt = 0;
       this.newState(state || STATE.locomote);
     }
   }
