@@ -6182,7 +6182,10 @@ export class Pet {
     const was = this.lastPose;
 
     /* (Not where an ask after a dry pop has just placed the dog as it is:
-     * frame 299 of the petting day.) */
+     * frame 299 of the petting day. [[read out]] Ballz keeps the last five
+     * states it placed and places again only for one matching none of them,
+     * field by field (seg10:3770 to 39a8); the model does not keep them yet,
+     * and so places a look's ask once too few at frame 419.) */
     if (!was?.tracking || this.placedSinceDry) {
       return;
     }
@@ -7600,11 +7603,44 @@ export class Pet {
       lids: this.lids,
     };
 
+    /* Each pop played ahead places its frame, and the head where it tracks
+     * -- glued, the frame before afresh first -- and the wobbles, Ballz's,
+     * not the sprite's, are not put back ([[measured]] frame 334 of the
+     * petting day: ten placings, three waits drawn). */
+    const head = {
+      headYaw: this.headYaw,
+      headPitch: this.headPitch,
+      headTracking: this.headTracking,
+      headWeight: this.headWeight,
+    };
+
     for (let n = 0; n <= frames.length; n++) {
       this.blinkPulse();
+      const frame = frames[n];
+
+      if (!frame) {
+        continue;
+      }
+
+      if (n === 0 && frame.step.glue !== undefined && this.lastPose?.tracking) {
+        const kept = [this.headYaw, this.headPitch, this.headTracking] as const;
+        [this.headYaw, this.headPitch, this.headTracking] = [
+          this.lastPose.yaw,
+          this.lastPose.pitch,
+          true,
+        ];
+        this.headTrackPrep();
+        [this.headYaw, this.headPitch, this.headTracking] = kept;
+      }
+
+      this.updateHeadTracking();
+
+      if (this.headTracking) {
+        this.headTrackPrep();
+      }
     }
 
-    Object.assign(this, blinking);
+    Object.assign(this, blinking, head);
 
     if (!ended || !this.world.lookAhead) {
       return undefined;
