@@ -52,6 +52,7 @@ import type { Rand } from '../../src/behaviour/random.ts';
 import {
   ballRect,
   brushTip,
+  type Food,
   frameBox,
   rollBall,
   SHOE_SIZE,
@@ -2490,9 +2491,27 @@ function followLockstep(lines: string[]) {
         /* (The cursor was there already: no throw in its first move.) */
         (stage as unknown as { lastPointer: { x: number; y: number } }).lastPointer = { x, y };
         pet.ballPickedUp();
+      } else if (taken && slot >= 9 && slot <= 11) {
+        /* A treat (slots 9 to 11, the blue, green and red) taken out held where the cursor is. */
+        const treat: Food = { kind: slot - 7, held: true, x, y, servings: 0, full: 0, touched: 0 };
+        stage.foods.push(treat);
+        pet.foodTakenOut(treat);
       } else if (wasDown && !down && stage.ball?.held) {
         stage.ball.held = false;
         pet.ballThrown();
+      }
+
+      /* A food held goes where the cursor is; let go of, it is put down there. */
+      const heldFood = stage.foods.find((food) => food.held);
+
+      if (heldFood) {
+        heldFood.x = x;
+        heldFood.y = y;
+
+        if (wasDown && !down) {
+          heldFood.held = false;
+          pet.foodPutDown(heldFood);
+        }
       }
     }
 

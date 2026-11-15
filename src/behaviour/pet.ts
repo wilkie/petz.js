@@ -926,7 +926,7 @@ const ENTER_RUNS_ON = new Set([
 /** The INI's sliders as Dogz installs them (`Control Val0` to `2`): factor 1 keeps its 30. */
 export const SLIDERS = [10, 30, 100];
 
-/** A bowl taken out of the toy box filled (`FoodSprite::Update`, seg20:0e35): `rand() % 11 + 25` servings. */
+/** A food taken out of the toy box filled, a treat too (`FoodSprite::Update`, seg20:0e35): `rand() % 11 + 25` servings. */
 export function fillBowl(rand: Rand): number {
   return (rand() % 11) + 25;
 }
@@ -1120,6 +1120,12 @@ export interface Placing {
   blend: string;
   lids: string;
   stamp: number;
+  /**
+   * Whether a food is drawn with it, under its head (`+0x40c` to `+0x418`,
+   * the food sprite's draw calls `DoEating` sets from cue 0 to cue 13 or
+   * its eating, seg18:1c62 to 1d18).
+   */
+  food: boolean;
 }
 
 export class Pet {
@@ -1810,7 +1816,8 @@ export class Pet {
         script = SCRIPT.standUpExcited;
       }
 
-      if (script === SCRIPT.startRunning && this.decideIfClumsy()) {
+      /* (Clumsy, and its head on the stage, seg7:410a to 4137.) */
+      if (script === SCRIPT.startRunning && this.decideIfClumsy() && this.isHeadOnscreen()) {
         script = SCRIPT.trip;
         tripped = true;
       }
@@ -1872,8 +1879,18 @@ export class Pet {
      * ends, run dry or not, seg7:71eb). */
     const earlier = this.popsThisTick > 0 ? this.poppedBlend : undefined;
     this.popsThisTick++;
-    /* (Its state stamped with the time as it starts, `+0x48`, seg7:5822.) */
-    this.stampState();
+    /* (Its state stamped with the time as it starts, `+0x48`, seg7:5822.
+     * Where it meets an aim, the pops played ahead within it come first in
+     * the driver's record, which writes each as it ends.) */
+    const ahead = this.stamps.length ? this.popsAheadOfAim() : 0;
+
+    if (ahead && this.stampIndex + ahead < this.stamps.length) {
+      this.aheadStamps = this.stamps.slice(this.stampIndex, this.stampIndex + ahead);
+      this.stamp = this.stamps[this.stampIndex + ahead];
+      this.stampIndex += ahead + 1;
+    } else {
+      this.stampState();
+    }
 
     this.cues.clear();
     this.easeMotionScale();
@@ -2833,8 +2850,8 @@ export class Pet {
    * down, its rectangle; all within the stage.
    */
   private isHeadOnscreen() {
-    /* (Asked before the pop, of the state Ballz last placed: nothing placed again.) */
-    const [a, b] = [this.askBall(50, true), this.askBall(55, true)];
+    /* (Of the dog's own state, `+0x51a`, seg21:5aad and 5af5.) */
+    const [a, b] = [this.askBall(50), this.askBall(55)];
     const rect = this.world.rect?.();
 
     if (!a || !b || !rect) {
@@ -3055,8 +3072,11 @@ export class Pet {
     /* Waiting, for a treat or at play for the ball (seg18:09fc to 0a0c),
      * the cursor -- what it holds -- still in a box 1.8 times the standard
      * size about the dog's middle (`MakeFocusRect`, seg18:0990 to 09e6,
-     * `ds:0x20f7`; the module's `+0x86`, and its `+0xfa`, which stays 0):
-     * asked before the pop (seg18:0ad8), a new state's frame the tick's. */
+     * `ds:0x20f7`; the module's `+0x86`, and its `+0xfa`, the cursor four
+     * frames before -- the fifth of the 30 kept from `+0xea`, newest first,
+     * seg21:43d4 to 4472): asked before the pop (seg18:0ad8), a new state's
+     * frame the tick's. [[measured]] Frame 380 of the treat's day: the
+     * treat moved off, the dog did not chase it at once. */
     if (
       this.waiting &&
       (this.reducedGlobal() === GLOBAL.begEat || this.reducedGlobal() === GLOBAL.fetch)
@@ -3065,9 +3085,11 @@ export class Pet {
       const middle = this.world.centre?.() ?? this.world.where();
       const box = this.focusRectAt(middle, Math.trunc(width * 1.8), Math.trunc(height * 1.8), 3);
       const cursor = this.samples[0];
+      const before = this.samples[4];
 
-      if (!cursor || !Pet.within(box, cursor)) {
-        this.queue = [];
+      if ((!cursor || !Pet.within(box, cursor)) && (!before || !Pet.within(box, before))) {
+        /* (`ResetScript(-1)`, seg18:0a47: a script moving the dog plays out.) */
+        this.resetScript();
         this.newState(STATE.beggingChasing);
         return this.enteredStep ?? this.pop().step;
       }
@@ -3080,11 +3102,20 @@ export class Pet {
     }
 
     const { step, flags } = this.pop();
-    this.noteWaiting();
 
     if (flags & 8) {
       this.newState(this.gotoState);
-    } else if (flags & 1) {
+    } else if (!(flags & 1)) {
+      /* Cue 0 waiting, cue 1 not -- no other (seg18:0b6a to 0b99): [[measured]]
+       * frame 318 of the treat's day, the trick not waiting. */
+      if (this.cues.has(0)) {
+        this.waiting = true;
+      }
+
+      if (this.cues.has(1)) {
+        this.waiting = false;
+      }
+    } else {
       const global = this.reducedGlobal();
 
       if (global === GLOBAL.fetch) {
@@ -3582,6 +3613,10 @@ export class Pet {
 
       this.push({ lids: this.eyelidHeight() });
       this.pushStored(this.locomotion);
+
+      /* And popped again, the gait's first frame the tick's (seg21:8310):
+       * frame 260 of the treat's day. */
+      return this.pop().step ?? step;
     }
 
     return step;
@@ -4464,13 +4499,12 @@ export class Pet {
   }
 
   /**
-   * A food taken out of the toy box (`FoodSprite::Update`): a bowl is filled
-   * with 25 to 35 servings; then it is held, as picked up.
+   * A food taken out of the toy box (`FoodSprite::Update`): filled with 25
+   * to 35 servings, a treat as much as a bowl (seg20:0e35 draws for any
+   * food sprite out of its box); then it is held, as picked up.
    */
   foodTakenOut(food: Food) {
-    if (!isTreat(food)) {
-      food.full = food.servings = fillBowl(this.rand);
-    }
+    food.full = food.servings = fillBowl(this.rand);
 
     food.touched = this.time;
     this.foodPickedUp(food);
@@ -4828,7 +4862,9 @@ export class Pet {
         food.touched = this.time;
       }
 
-      this.resetSoft();
+      /* (`ResetScript(-1)`, seg18:12e7: [[measured]] frame 447 of the
+       * treat's day, the eating done, `ResetParams` restarting the blink.) */
+      this.resetScript();
       return undefined;
     }
 
@@ -4842,14 +4878,21 @@ export class Pet {
       this.target = null;
       this.setTargetLocation(null);
 
-      if (!this.foodInReach(food)) {
-        this.target = { x: food.x, y: food.y };
-        this.locomotion = this.pickLocomotion();
-        this.pushLocomotion();
-      } else {
+      /* Within a focus box of three times the standard size lying (21), else
+       * twice, about the dog's middle (distance 4) that meets the food's own
+       * (seg18:1423 to 14b8), it eats, and pops the first frame of it
+       * itself, going no further (seg18:1aac to 1ad3): [[measured]] frame
+       * 400 of the treat's day, two frames that tick. */
+      if (this.withinEatingReach(food)) {
         this.eat(food);
+        return this.pop().step;
       }
 
+      /* [[inferred]] Else the engine chases it (0x26, seg18:14c6); the model
+       * walks to it as it has, its chase not yet after a food put down. */
+      this.target = { x: food.x, y: food.y };
+      this.locomotion = this.pickLocomotion();
+      this.pushLocomotion();
       return undefined;
     }
 
@@ -4933,7 +4976,8 @@ export class Pet {
       this.push({ ease: turn });
     }
 
-    /* `0x8ae8 0 0 6`, turning towards it, is not yet played. */
+    /* (`8ae8 0 0 6`: its tilt to level at 6 a frame, seg18:16c2.) */
+    this.push({ fudge: { kind: 'target', axis: 0, to: 0, speed: 6 } });
     this.push({ aim: { ball: NOSE, at: { x: food.x + across, y: food.y - lift } } });
 
     if (isTreat(food)) {
@@ -5009,6 +5053,21 @@ export class Pet {
    * it walks to it. Which box the engine takes is the target's last set,
    * inferred to be a walk's.
    */
+  /** `DoEating`'s reach as it enters (seg18:1423 to 14b8): its focus box meets the food's. */
+  private withinEatingReach(food: Food) {
+    const { width, height } = this.world.standardSize?.() ?? { width: 60, height: 60 };
+    const times = this.position === RUNNING ? 3 : 2;
+    const middle = this.world.centre?.() ?? this.world.where();
+    const box = this.focusRectAt(middle, width * times, height * times, 4);
+    const rect = ballRect(food, foodSize(food));
+    return (
+      box.left < rect.right &&
+      rect.left < box.right &&
+      box.top < rect.bottom &&
+      rect.top < box.bottom
+    );
+  }
+
   private foodInReach(food: Food) {
     const { width, height } = this.locomotionFudge(SCRIPT.walk);
     const box = this.noseBox(width, height);
@@ -6130,6 +6189,7 @@ export class Pet {
       blend: `${this.motionScale} ${this.reference}`,
       lids: this.stateLids,
       stamp: this.stamp,
+      food: !!this.food?.beingEaten,
     };
   }
 
@@ -7698,6 +7758,95 @@ export class Pet {
     return this.world.lookAheadInPlace(frames, ball);
   }
 
+  /**
+   * A frame played ahead placed as a pop places it: glued, the old state at
+   * the new angles first; then the new; by a reference frame, that too;
+   * moved plainly and turned, the old again at the new angles.
+   */
+  private placeAhead(frame: { step: Step; rotation: number; placedBy?: number }) {
+    const old = this.lastPose;
+    this.rotation = frame.rotation;
+    this.updateHeadTracking();
+    const angles = {
+      rotation: this.rotation,
+      tilt: this.fudged(AXIS.tilt),
+      spin: this.fudged(AXIS.spin),
+      roll: this.fudged(AXIS.roll),
+    };
+    const before = old && { ...old, ...angles };
+    const glued = frame.step.glue !== undefined;
+
+    if (glued && before) {
+      this.workOut(before, 2);
+    }
+
+    this.stateFrame = frame.step.frame;
+    this.stateLids = this.liveLids();
+    const now = this.currentPlacing();
+    this.workOut(now);
+
+    if (frame.placedBy !== undefined && !glued) {
+      this.workOut({ ...now, frame: frame.placedBy }, 0);
+    }
+
+    const turned =
+      old &&
+      (old.rotation !== now.rotation ||
+        old.tilt !== now.tilt ||
+        old.spin !== now.spin ||
+        old.roll !== now.roll);
+
+    if (!glued && turned && before) {
+      this.workOut(before, 2);
+    }
+
+    this.lastPose = this.currentPlacing();
+  }
+
+  /** The stamps of the pops an aim will play ahead within this one, in turn. */
+  private aheadStamps: number[] = [];
+
+  /**
+   * How many pops an aim met before this pop's frame will play ahead (as
+   * `startAim` stops): the frames after it to a script's end, a state
+   * named or cue 2, and one more that finds the stop; 0 without an aim.
+   */
+  private popsAheadOfAim() {
+    let aim = false;
+    let frame = false;
+    let count = 0;
+
+    for (const item of this.queue) {
+      if (!frame) {
+        if ('aim' in item) {
+          aim = true;
+        } else if ('end' in item || 'goto' in item) {
+          return 0;
+        } else if ('step' in item && !item.step.reference) {
+          if (!aim) {
+            return 0;
+          }
+
+          frame = true;
+        }
+
+        continue;
+      }
+
+      if ('end' in item || 'goto' in item || ('cue' in item && item.cue === 2)) {
+        break;
+      } else if ('step' in item && !item.step.reference) {
+        if (item.step.cues?.includes(2)) {
+          break;
+        }
+
+        count++;
+      }
+    }
+
+    return frame ? count + 1 : 0;
+  }
+
   private startAim(
     ball: number,
     at: { x: number; y: number } | null,
@@ -7775,15 +7924,41 @@ export class Pet {
       console.log(`aim ${this.time} count ${count} blink ${this.blinkAt} ${this.blinkWait}`);
     }
 
-    for (let n = 0; n <= count; n++) {
-      this.blinkPulse();
+    /* Each places its frame too -- Ballz working its state out, as a pop
+     * does -- the sprite put back after, but not Ballz's five
+     * ([[measured]] frame 409 of the treat's day: eight frames turned
+     * ahead, each the dog's state and its old afresh). */
+    const kept = {
+      headYaw: this.headYaw,
+      headPitch: this.headPitch,
+      headTracking: this.headTracking,
+      headWeight: this.headWeight,
+      rotation: this.rotation,
+      stateFrame: this.stateFrame,
+      stateLids: this.stateLids,
+      stamp: this.stamp,
+      lastPose: this.lastPose,
+    };
 
-      for (const choices of frames[first + n]?.step.soundChoices ?? []) {
+    for (let n = 0; n <= count; n++) {
+      if (this.stamps.length) {
+        this.stamp = this.aheadStamps.shift() ?? this.stamp;
+      }
+
+      this.blinkPulse();
+      const frame = frames[first + n];
+
+      for (const choices of frame?.step.soundChoices ?? []) {
         this.rand() % choices.length;
+      }
+
+      if (frame) {
+        this.placeAhead(frame);
       }
     }
 
-    Object.assign(this, blinking);
+    this.aheadStamps = [];
+    Object.assign(this, blinking, kept);
 
     if (!point || !this.world.lookAhead || count < 1) {
       return;
