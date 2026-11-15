@@ -539,7 +539,8 @@ static void __cdecl __far __loadds heading(void __far *ballz, int __far *block,
 }
 
 /* And `PetModule::IsCursorOverPetSpot` (389), which works out where the pet
- * spot's ball is: `spotcheck` as it is asked, `spotchecked answer` after.
+ * spot's ball is: `spotcheck` as it is asked, `spotchecked answer left top right bottom x y`
+ * after, the box it made and where the ball is.
  * Passed on as it came, whatever it takes. */
 typedef int(__cdecl __far *SPOTCHECK)(void __far *m, void __far *a, void __far *b, void __far *c,
                                       void __far *d, void __far *e, void __far *f, void __far *g);
@@ -571,7 +572,9 @@ static int __cdecl __far __loadds spotChecking(void __far *m, void __far *a, voi
 
     say("spotcheck %d\r\n", draws);
     answer = spotCheckOn(m, a, b, c, d, e, f, g);
-    say("spotchecked %d\r\n", answer);
+    /* And the box it made and the spot's ball (its second and third arguments). */
+    say("spotchecked %d %d %d %d %d %d %d\r\n", answer, ((int __far *)b)[0], ((int __far *)b)[1],
+        ((int __far *)b)[2], ((int __far *)b)[3], ((int __far *)c)[0], ((int __far *)c)[1]);
     return answer;
 }
 

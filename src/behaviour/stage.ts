@@ -17,6 +17,7 @@ import { ballAt } from '../render/ballz.ts';
 import { extendFrames } from '../render/extend.ts';
 import {
   type Angles,
+  ballSize,
   type Blend,
   type Head,
   type Placed,
@@ -599,6 +600,16 @@ export class Stage implements PetWorld {
 
   cursor() {
     return this.pointer;
+  }
+
+  /**
+   * How wide a ball of the dog is, as Ballz's vtable `+0x38` (seg10:5c49)
+   * has it: its size times the ball scale, `>> 8` -- not twice the drawn
+   * radius, which is `>> 9`, and so an odd width a pixel wider.
+   */
+  ballWidth(ball: number) {
+    const size = ballSize(this.breed, this.header, ball, 100 - this.age);
+    return Math.floor((Math.max(0, size) * scalesForAge(this.breed, this.age).ball) / 256);
   }
 
   /**

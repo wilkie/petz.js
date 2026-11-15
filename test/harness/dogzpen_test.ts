@@ -277,6 +277,8 @@ interface Frame {
   head?: number[];
   /** The wobbles' clock, milliseconds, at the head's last placing tracking. */
   headClock?: number;
+  /** Every head placing's clock in the frame, in order (`HeadTrackPrep` reads it afresh each time). */
+  headClocks?: number[];
   /** How many times the head was placed for the dog's own state in the frame. */
   headPlacings?: number;
   /** And for the copy the plain move takes of the frame before at the new angles (`head 0`), the last. */
@@ -407,11 +409,13 @@ function readTrace(lines: string[]) {
       open.head = values.slice(1, 10);
       /* (And the wobbles' clock, milliseconds, as `HeadTrackPrep` read it.) */
       open.headClock = values[11];
+      (open.headClocks ??= []).push(values[11]);
       open.headPlacings = (open.headPlacings ?? 0) + 1;
     } else if (kind === 'head' && open) {
       open.headCopy = values.slice(1, 10);
       /* (The same clock, where only an ask placed the head: a still frame's, 1346 of the ball's day.) */
       open.headClock ??= values[11];
+      (open.headClocks ??= []).push(values[11]);
     } else if (kind === 'moved' && open) {
       open.moved.push(values);
     } else if (kind === 'state' && open) {
@@ -2477,7 +2481,11 @@ function followLockstep(lines: string[]) {
       }
     }
 
-    const step = pet.tick(clocks.get(n) ?? (n * 45) / 17, pulses.get(n), frames[n].headClock);
+    const step = pet.tick(
+      clocks.get(n) ?? (n * 45) / 17,
+      pulses.get(n),
+      frames[n].headClocks ?? frames[n].headClock
+    );
 
     if (process.env.POPS && popCounts.has(n)) {
       const ours = pet.lastTickPops;
@@ -2495,7 +2503,7 @@ function followLockstep(lines: string[]) {
         each.placedBy,
         undefined,
         undefined,
-        stage.head,
+        each.head ?? stage.head,
         stage.angles,
         stage.blend
       );
@@ -2586,7 +2594,8 @@ function followLockstep(lines: string[]) {
 
     if (theirHead !== undefined && ourHead !== theirHead) {
       const inner = pet as unknown as { waiting: boolean; headTarget: unknown; samples: unknown[] };
-      result.parted = `frame ${frame[0]}: head ${ourHead}, not ${theirHead} at ${frames[n].headClock} (waiting ${inner.waiting}, target ${JSON.stringify(inner.headTarget)}, samples ${JSON.stringify(inner.samples.slice(0, 2))})`;
+      const engine = drawn.map((each) => `${each.segment}:${each.offset.toString(16)}`).join(' ');
+      result.parted = `frame ${frame[0]}: head ${ourHead}, not ${theirHead} at ${frames[n].headClock} (waiting ${inner.waiting}, target ${JSON.stringify(inner.headTarget)}, samples ${JSON.stringify(inner.samples.slice(0, 2))}; the model drew in ${callers.join(' ') || 'nothing'}, the engine at ${engine || 'nothing'})`;
       break;
     }
 
