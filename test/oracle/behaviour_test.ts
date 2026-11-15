@@ -1055,7 +1055,9 @@ withOracle('the engine’s behaviour', () => {
         run(1200, hold);
         return states;
       };
-      const dogs = [3, 4, 5, 6, 7].map(beg);
+      /* (Ten dogs, as the course of each turns on every draw: with Ballz's
+       * placings followed, four of these do -- 8, 9, 11 and 12.) */
+      const dogs = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(beg);
 
       expect(dogs.every((states) => states.includes(STATE.begging))).toBe(true);
       expect(dogs.some((states) => states.includes(STATE.beggingChasingHindLegs))).toBe(true);

@@ -382,6 +382,8 @@ export interface Tick extends Step {
    * frame, then the grab's glued from it).
    */
   passed?: { step: Step; rotation: number; placedBy?: number; head?: Head }[];
+  /** Whose states Ballz worked out afresh this tick, in turn: 1 the dog's own, 2 its old, 0 another. */
+  workedAfresh?: number[];
 
   /** The head placed afresh for the frame before, taken at the new angles, as the plain move does turning (`MoveFrameRect`). */
   headCopy?: Head;
@@ -1091,6 +1093,26 @@ export function lungeChance(excitement: number, rand: Rand): boolean {
   return rand() % 1000 < excitement;
 }
 
+/**
+ * A dog's state as `Ballz::GetCartesianCoordinates` compares it with the
+ * five it last worked out (seg10:3770 to 39a8): its frame, turn and angles,
+ * head, blend, eyelids, and the time its pop stamped it (`+0x48`).
+ */
+export interface Placing {
+  frame: number;
+  rotation: number;
+  tilt: number;
+  spin: number;
+  roll: number;
+  yaw: number;
+  pitch: number;
+  /** Whether its head tracked (`+0x1e`): only then is its head placed. */
+  tracking: boolean;
+  blend: string;
+  lids: string;
+  stamp: number;
+}
+
 export class Pet {
   readonly factors: number[];
 
@@ -1435,33 +1457,14 @@ export class Pet {
    * on, `pulsedAt` the clock as it does, where not `time`, and `wobbledAt`
    * the head's wobbles' clock in milliseconds.
    */
-  tick(time: number, pulsedAt?: number, wobbledAt?: number | number[]): Tick {
+  tick(time: number, pulsedAt?: number, wobbledAt?: number | number[], stamps?: number[]): Tick {
     this.time = time;
     this.wobbleClocks =
       wobbledAt === undefined ? [] : Array.isArray(wobbledAt) ? wobbledAt : [wobbledAt];
     this.wobbleIndex = 0;
+    this.stamps = stamps ?? [];
+    this.stampIndex = 0;
     this.poppedCentre = undefined;
-    this.askedBall = false;
-    this.askedAtPlacing = false;
-
-    /* After a tick that showed nothing new, its head tracking, the frame
-     * before is placed afresh before the module pulses -- its head, its turn
-     * and nod as they were, the wobbles moved on (the trace's `head 0` ahead
-     * of `pulse`, frames 2758 to 2854 of the day of 3,000; [[inferred]]: what
-     * places it is not yet read out). */
-    let freshened: Head | undefined;
-
-    /* (Not where an ask after the dry pop placed the dog as it is already,
-     * frame 1347 of the ball's day: the old state is what Ballz last placed.) */
-    const placedAlready = this.placedAfterDry;
-    this.placedAfterDry = false;
-
-    if (this.lastStill && !placedAlready && this.lastPose?.tracking && this.headTracking) {
-      const [yaw, pitch] = [this.headYaw, this.headPitch];
-      [this.headYaw, this.headPitch] = [this.lastPose.yaw, this.lastPose.pitch];
-      freshened = this.headTrackPrep();
-      [this.headYaw, this.headPitch] = [yaw, pitch];
-    }
 
     this.sample();
     this.doPettingHandler();
@@ -1490,69 +1493,13 @@ export class Pet {
     this.data.brain?.pulse();
     const centredAt = this.centreAt ?? undefined;
     this.centreAt = null;
-    /* (Placed again for the steering's ask, before the frame's own, the turn and nod as they were.) */
-    /* (Nothing shown, nothing placed: the head not wobbled.) */
     const still = !!shown.still;
-    this.lastStill = still;
-
-    if (this.steeredTracking && this.lastPose && !still) {
-      const [yaw, pitch] = [this.headYaw, this.headPitch];
-      [this.headYaw, this.headPitch] = [this.lastPose.yaw, this.lastPose.pitch];
-      this.headTrackPrep();
-      [this.headYaw, this.headPitch] = [yaw, pitch];
-    }
-
-    const was = this.lastPose;
-    /* (A glue reads the frame before as it was so placed; else places it
-     * afresh itself, its head tracking, as `MoveFrameRectBall` reads its
-     * ball -- the trace's `head 0` in the glue, frame 2869.) */
-    /* (Or, where an ask after a pop that ran dry placed it afresh, as that
-     * placed it: frame 257 of the petting day.) */
-    /* (The glue is the first frame's placed this tick: the others are placed by the frame before them.) */
-    const first = this.placedThisTick[0]?.step ?? shown;
-    let headCopy: Head | undefined =
-      first.glue !== undefined ? (freshened ?? this.headAfterDry) : undefined;
-    this.headAfterDry = undefined;
-
-    /* (Only where the frame before is not what Ballz last placed:
-     * `MoveFrameRectBall` reads it again only if the old state differs from
-     * that one, seg10:2b55 to 2ce4 -- as after the steering has asked where
-     * the nose is, or anything has asked where a ball of it is, placing the
-     * dog as it now is (frame 124 of the ball's day, steering; frame 2869
-     * of the day of 3,000, a target set; not frame 113) -- or a pop ran dry
-     * earlier in the tick, the state it copied changed since (frame 569 of
-     * the ball's day).) */
-    /* (But not where an ask after the dry pop placed the dog as it is,
-     * the old state then what Ballz last placed: frame 199 of the petting day.) */
-    const moved =
-      !this.placedSinceDry && (this.steeredTracking || this.askedAtPlacing || this.ranDryThisTick);
-
-    /* (The old state's tracking is what asks it, whether or not the head tracks now.) */
-    if (!still && !freshened && first.glue !== undefined && was?.tracking && moved) {
-      const tracking = this.headTracking;
-      const [yaw, pitch] = [this.headYaw, this.headPitch];
-      [this.headYaw, this.headPitch, this.headTracking] = [was.yaw, was.pitch, true];
-      headCopy = this.headTrackPrep();
-      [this.headYaw, this.headPitch, this.headTracking] = [yaw, pitch, tracking];
-    }
-
-    /* Each frame a pop placed before the tick's last, its head placed too,
-     * the wobbles moved on ([[measured]] frame 299 of the petting day: the
-     * stroke's glue, then aligning's own pop). */
-    const passedHeads = new Map<Step, Head | undefined>();
-
-    if (!still) {
-      for (const passed of this.placedThisTick.slice(0, -1)) {
-        if (passed.head) {
-          const kept = [this.headYaw, this.headPitch] as const;
-          [this.headYaw, this.headPitch] = [passed.head.yaw, passed.head.pitch];
-          passedHeads.set(passed.step, this.headTrackPrep());
-          [this.headYaw, this.headPitch] = kept;
-        }
-      }
-    }
-
-    const head = still ? undefined : this.headTrackPrep(true);
+    /* (What this tick's pops placed, each worked out by Ballz as it was
+     * placed, inside the pop: the last the frame shown.) */
+    const placed = this.placedThisTick;
+    const last = placed[placed.length - 1];
+    const head = still ? undefined : last?.head;
+    let headCopy: Head | undefined = still ? undefined : last?.copy;
     const angles = {
       tilt: this.fudged(AXIS.tilt),
       spin: this.fudged(AXIS.spin),
@@ -1575,63 +1522,43 @@ export class Pet {
       angles.tilt = tilt ?? angles.tilt;
     }
 
-    /* Moved plainly and turned, the head tracking, the engine takes the
-     * frame before at the new angles and places its head afresh -- its turn
-     * and nod as they were, the wobbles moved on again (`MoveFrameRect`'s
-     * second `GetFrame`, seg10:29ee): so here, after the head of the frame. */
-    const turned =
-      was &&
-      (was.rotation !== this.rotation ||
-        was.tilt !== angles.tilt ||
-        was.spin !== angles.spin ||
-        was.roll !== angles.roll);
-    /* (The frame before's head is placed afresh only if it tracked: its
-     * state's `+0x1e` set, as the engine's `GetFrame` asks.) */
-    if (head && was?.tracking && turned && shown.glue === undefined) {
-      const [yaw, pitch] = [this.headYaw, this.headPitch];
-      [this.headYaw, this.headPitch] = [was.yaw, was.pitch];
-      headCopy = this.headTrackPrep();
-      [this.headYaw, this.headPitch] = [yaw, pitch];
-    }
-
-    this.lastPose = still
-      ? this.lastPose
-      : {
-          rotation: this.rotation,
-          ...angles,
-          yaw: this.headYaw,
-          pitch: this.headPitch,
-          tracking: !!head,
-        };
-
     /* (The frames taken this tick before the one shown: placed first, in turn.) */
     const at = this.placedThisTick.findIndex((each) => each.step === shown);
     /* (Each with its head; the first glued by the frame before as the copy
      * has it, the frame shown then by the last of them as placed.) */
     const passed = (at === -1 ? this.placedThisTick : this.placedThisTick.slice(0, at)).map(
-      (each, index) => ({
-        step: index === 0 && headCopy ? { ...each.step, headCopy } : each.step,
+      (each) => ({
+        step: each.copy ? { ...each.step, headCopy: each.copy } : each.step,
         rotation: each.rotation,
         placedBy: each.placedBy,
-        head: passedHeads.get(each.step),
+        head: each.head,
       })
     );
 
-    if (passed.length) {
+    if (still) {
       headCopy = undefined;
+    }
+
+    /* (The dog as drawn, its state worked out again: Ballz has it. Not where
+     * nothing new was shown and nothing is drawn afresh: the next tick's
+     * first ask places it, the old state stamped anew -- the `head 0` ahead
+     * of the pulse after a still frame, frames 2758 on of the day of 3,000.) */
+    if (!still) {
+      this.workOut(this.currentPlacing());
     }
     /* (Cleared as the tick ends, not as it begins: a pop between ticks --
      * the user taking out the ball, say, before the frame -- is the next
      * tick's, as the engine's is the frame's.) */
+    const workedAfresh = this.workedAfresh;
+    this.workedAfresh = [];
     this.lastTickPops = this.popsThisTick;
-    this.ranDryThisTick = false;
-    this.placedSinceDry = false;
     this.popsThisTick = 0;
     this.placedThisTick = [];
 
     return {
       ...shown,
       passed: passed.length ? passed : undefined,
+      workedAfresh,
       rotation: this.rotation,
       state: this.state,
       placedBy: this.placedBy,
@@ -1923,6 +1850,8 @@ export class Pet {
      * ends, run dry or not, seg7:71eb). */
     const earlier = this.popsThisTick > 0 ? this.poppedBlend : undefined;
     this.popsThisTick++;
+    /* (Its state stamped with the time as it starts, `+0x48`, seg7:5822.) */
+    this.stampState();
 
     this.cues.clear();
     this.easeMotionScale();
@@ -1970,7 +1899,6 @@ export class Pet {
         /* `0x8afb`; `0x8afe 6`, the cursor; `0x8afe 7`, what is held, or else the cursor. */
         if (item.seek === 'user') {
           this.lookAtUser();
-          this.placeBeforeAfresh();
         } else {
           const held = item.seek === 'held' ? this.heldObject() : undefined;
           this.lookAt(held ?? this.samples[0]);
@@ -2061,8 +1989,6 @@ export class Pet {
 
     if (!step) {
       this.heldGlue = glue;
-      this.ranDryThisTick = true;
-      this.placedSinceDry = false;
 
       /* (Run dry after a turn, the state copied into the old as the pop
        * ends, seg7:71eb: the turn's frame lost, the dog still turned about
@@ -2075,11 +2001,6 @@ export class Pet {
     if (!step) {
       flags |= 1;
     }
-
-    /* Steering, the engine asks where the nose of the frame before is
-     * (`GetBallOffset`), its state changed since it was kept: while the head
-     * tracks, its head placed again (seg7:6b38 on; the tick does it). */
-    this.steeredTracking = !!this.steer && this.headTracking;
 
     /* Turned toward where it steers as the last frame left it (the engine
      * sets the turn as a call ends, and its fudgers take it up the next). */
@@ -2106,14 +2027,47 @@ export class Pet {
 
     if (step) {
       this.lastStep = step;
-      /* (Whether anything had asked where a ball is by the time the frame was
-       * placed: an ask after, in the handler, comes too late for its glue.) */
-      this.askedAtPlacing = this.askedBall;
+      /* Placed (`MoveFrameRectBall`, `MoveFrameRect`), each state Ballz
+       * works out going by the five it keeps (seg10:3770 on): glued, the
+       * old state first, as Ballz has it; then the new; moved plainly and
+       * turned, the old again at the new angles. */
+      /* (Both take the frame before at the new angles, set in the old state
+       * itself: [[measured]] its working out missed, frames 12 and 17 of the
+       * petting day.) */
+      const old = this.lastPose;
+      const angles = {
+        rotation: this.rotation,
+        tilt: this.fudged(AXIS.tilt),
+        spin: this.fudged(AXIS.spin),
+        roll: this.fudged(AXIS.roll),
+      };
+      const before = old && { ...old, ...angles };
+      const glued = step.glue !== undefined && before ? this.workOut(before, 2) : undefined;
+      this.stateFrame = step.frame;
+      this.stateLids = this.liveLids();
+      const now = this.currentPlacing();
+      const own = this.workOut(now);
+
+      /* Placed by a reference frame (`GetCenterOffset`), that frame too, in a
+       * state of its own ([[measured]] frame 27 of the petting day). */
+      if (placedBy !== undefined) {
+        this.workOut({ ...now, frame: placedBy }, 0);
+      }
+
+      const turned =
+        old &&
+        (old.rotation !== now.rotation ||
+          old.tilt !== now.tilt ||
+          old.spin !== now.spin ||
+          old.roll !== now.roll);
+      const copied =
+        step.glue === undefined && turned && before ? this.workOut(before, 2) : undefined;
       this.placedThisTick.push({
         step,
         rotation: this.rotation,
         placedBy,
-        head: this.headTracking ? { yaw: this.headYaw, pitch: this.headPitch } : undefined,
+        head: own,
+        copy: glued ?? copied,
       });
       this.placedBy = placedBy;
 
@@ -2165,6 +2119,8 @@ export class Pet {
 
     this.poppedBlend =
       this.motionScale === 100 ? null : { scale: this.motionScale, reference: this.reference };
+    /* (The state copied into the old as the pop ends, run dry or not, seg7:71eb.) */
+    this.lastPose = this.currentPlacing();
     return { step, flags };
   }
 
@@ -2175,7 +2131,6 @@ export class Pet {
       this.lookAtRandomPoint();
     } else if (look === 'user') {
       this.lookAtUser();
-      this.placeBeforeAfresh();
     } else if (look === 'ahead') {
       this.lookAhead();
     }
@@ -2880,22 +2835,8 @@ export class Pet {
   private handStep = -1;
   private handCountdown = 0;
 
-  /** Whether this tick's pop steered with the head tracking: the head placed once more. */
-  private steeredTracking = false;
-
   /** The dog's rotation, angles and head turn and nod as the last tick left them (`BallState` `+0xec`). */
-  private lastPose:
-    | {
-        rotation: number;
-        tilt: number;
-        spin: number;
-        roll: number;
-        yaw: number;
-        pitch: number;
-        /** Whether its head tracked (`+0x1e`): only then is it placed afresh. */
-        tracking: boolean;
-      }
-    | undefined;
+  private lastPose: Placing | undefined;
 
   /** Whether the dog has left `eIdle` since it was last made idle (`0xda`, seg16:02fe). */
   private leftIdle = false;
@@ -4198,7 +4139,8 @@ export class Pet {
     if (flags & 1) {
       const stop = this.walkDirection < 0 ? SCRIPT.stopBackwards : SCRIPT.stopWalking;
       const spot = this.data.engineScripts.petSpots[this.petSpot].ball;
-      const now = this.askBall(spot);
+      /* (Its width only, as Ballz has it: no state worked out, seg17:0c4d to 0cb6.) */
+      const now = this.world.ballOnStage?.(spot);
       const there = this.actionOffset(stop, spot);
 
       if (now && there) {
@@ -6104,6 +6046,87 @@ export class Pet {
     }
   }
 
+  /** The dog's state as it now is (`+0x51a`), for Ballz to work out. */
+  private currentPlacing(): Placing {
+    return {
+      frame: this.stateFrame >= 0 ? this.stateFrame : this.lastStep.frame,
+      rotation: this.rotation,
+      tilt: this.fudged(AXIS.tilt),
+      spin: this.fudged(AXIS.spin),
+      roll: this.fudged(AXIS.roll),
+      yaw: this.headYaw,
+      pitch: this.headPitch,
+      tracking: this.headTracking,
+      blend: `${this.motionScale} ${this.reference}`,
+      lids: this.stateLids,
+      stamp: this.stamp,
+    };
+  }
+
+  /** The frame the dog's state holds (`+0x18`): the last placed. */
+  private stateFrame = -1;
+
+  /**
+   * Its eyelids (`+0x20` to `+0x26`), as its last frame placed set them:
+   * [[measured]] a blink ending at a pulse since leaves the state as it was
+   * for Ballz (frame 199 of the petting day).
+   */
+  private stateLids = '';
+
+  private liveLids() {
+    return [
+      this.lids,
+      this.fudged(AXIS.leftEyelidHeight),
+      this.fudged(AXIS.rightEyelidHeight),
+      this.fudged(AXIS.leftEyelidTilt),
+      this.fudged(AXIS.rightEyelidTilt),
+    ].join(' ');
+  }
+
+  /** The time its last pop stamped the dog's state with (`+0x48`, `GetTickCount` at seg7:5822). */
+  private stamp = 0;
+
+  /** The times the pops this tick stamped with, where known; else the tick's time. */
+  private stamps: number[] = [];
+  private stampIndex = 0;
+
+  private stampState() {
+    if (this.stampIndex < this.stamps.length) {
+      this.stamp = this.stamps[this.stampIndex++];
+    } else if (!this.stamps.length) {
+      this.stamp = Math.trunc(this.time * 17);
+    }
+  }
+
+  /**
+   * Ballz working a state out (`GetCartesianCoordinates`, seg10:367a): one
+   * of the five it last worked out, as it was (its head as then placed);
+   * else afresh, into the next of the five (`+0x52`), its head placed where
+   * it tracks -- the wobbles moved on at its stamp -- or else put back.
+   */
+  private workOut(placing: Placing, whose = placing === this.lastPose ? 2 : 1): Head | undefined {
+    const key = JSON.stringify(placing);
+    const kept = this.worked.findIndex((each) => each?.key === key);
+
+    if (kept >= 0) {
+      return this.worked[kept]!.head;
+    }
+
+    /* (For the harness: whose states this tick Ballz worked out afresh, 1 the dog's own, 2 its old, 0 another.) */
+    this.workedAfresh.push(whose);
+    this.workedAt = (this.workedAt + 1) % 5;
+    const head = this.headTrackPrep(placing);
+    this.worked[this.workedAt] = { key, head };
+    return head;
+  }
+
+  /** The five states Ballz last worked out, and the last's place among them (`+0x50`, `+0x52`). */
+  private worked: ({ key: string; head: Head | undefined } | undefined)[] = [];
+
+  /** Whose states this tick Ballz worked out afresh (`Tick.workedAfresh`). */
+  private workedAfresh: number[] = [];
+  private workedAt = 4;
+
   /**
    * `Ballz::HeadTrackPrep` (seg5:05ba), each frame drawn: tracking, the
    * head's turn and nod, a roll, a drift of the neck it turns about and
@@ -6112,28 +6135,23 @@ export class Pet {
    * (the roll, and across) and some to the nod (up and down, and back),
    * scaled by `headWobble`; not tracking, the wobbles are put back.
    */
-  private headTrackPrep(own = false): Head | undefined {
-    if (!this.headTracking) {
+  private headTrackPrep(placing: Placing): Head | undefined {
+    if (!placing.tracking) {
       restLubes(this.lubes);
       return undefined;
     }
 
     const scale = this.headWobble === 0 ? 1 : this.headWobble / 100;
+    /* (Its clock read afresh, `Lube::curtime`: not the state's stamp, which may be older.) */
     return wobbleHead(
       this.lubes,
-      this.headYaw,
-      this.headPitch,
-      this.wobbleClock(own) ?? Math.trunc(this.time * 17),
+      placing.yaw,
+      placing.pitch,
+      this.wobbleClock() ?? Math.trunc(this.time * 17),
       scale,
       this.rand
     );
   }
-
-  /** Whether a pop ran dry this tick. */
-  private ranDryThisTick = false;
-
-  /** Placed afresh by an ask since the pop that ran dry (`askBall`); and so, for the next tick's start. */
-  private placedSinceDry = false;
 
   /** Within a check made with the frame just placed shown (`World.peek`): asks need not peek again. */
   private inPeek = false;
@@ -6149,10 +6167,6 @@ export class Pet {
     }
   }
 
-  /** The head as that ask placed it, for a glue to read the frame before by. */
-  private headAfterDry: Head | undefined;
-  private placedAfterDry = false;
-
   /** How many pops the last tick made (for the harness, against the engine's). */
   lastTickPops = 0;
 
@@ -6161,40 +6175,11 @@ export class Pet {
     step: Step;
     rotation: number;
     placedBy?: number;
-    /** The head's turn and nod as that pop left them, where it tracked. */
-    head?: { yaw: number; pitch: number };
+    /** Its head as Ballz worked it out, where it tracked. */
+    head?: Head;
+    /** The frame before's, glued or turned, as Ballz has it. */
+    copy?: Head;
   }[] = [];
-
-  /** Whether a ball of the dog has been asked for this tick (`GetBallOffset`), placing it as it is. */
-  private askedBall = false;
-
-  /** `askedBall` as the tick's last frame was placed (frame 205 of the petting day). */
-  private askedAtPlacing = false;
-
-  /**
-   * Looking at the user in a pop (`8afb`), `LookAtUser` asks where ball 55
-   * is (seg7:2a85), the state changed since it was kept: the frame before
-   * placed afresh then and there, its head tracking -- the turn and nod as
-   * they were, the wobbles moved on -- before the frame's own and before
-   * the handler's work after the pop.
-   */
-  private placeBeforeAfresh() {
-    const was = this.lastPose;
-
-    /* (Not where an ask after a dry pop has just placed the dog as it is:
-     * frame 299 of the petting day. [[read out]] Ballz keeps the last five
-     * states it placed and places again only for one matching none of them,
-     * field by field (seg10:3770 to 39a8); the model does not keep them yet,
-     * and so places a look's ask once too few at frame 419.) */
-    if (!was?.tracking || this.placedSinceDry) {
-      return;
-    }
-
-    const kept = [this.headYaw, this.headPitch, this.headTracking] as const;
-    [this.headYaw, this.headPitch, this.headTracking] = [was.yaw, was.pitch, true];
-    this.headTrackPrep();
-    [this.headYaw, this.headPitch, this.headTracking] = kept;
-  }
 
   /**
    * Where a ball of the dog is on the stage (`Ballz::GetBallOffset`), which
@@ -6202,23 +6187,9 @@ export class Pet {
    * the frame before (see `MoveFrameRectBall`).
    */
   private askBall(ball: number, old = false) {
-    /* (Asked of the old state, as the scruff handler asks, Ballz's last placed is the old state: no cause to place it again.) */
-    if (!old) {
-      this.askedBall = true;
-
-      /* After a pop ran dry, the state copied into the old as it ended is
-       * not what Ballz last placed: the first ask places the dog as it now
-       * is, its head too where it tracks, the wobbles moved on (frame 1346
-       * of the ball's day, `PushBallGrabAction`'s ask for the chin). */
-      if (this.ranDryThisTick && !this.placedSinceDry) {
-        this.placedSinceDry = true;
-        this.placedAfterDry = true;
-
-        if (this.headTracking) {
-          this.headAfterDry = this.headTrackPrep();
-        }
-      }
-    }
+    /* (Ballz works the state out, the old one as the scruff handler asks,
+     * placing it afresh only if it is none of the five it keeps.) */
+    this.workOut(old && this.lastPose ? this.lastPose : this.currentPlacing());
 
     /* Of the dog as it now is: once a frame is placed this tick, that frame,
      * which the stage shows only as the tick ends ([[measured]] frame 207 of
@@ -6234,9 +6205,6 @@ export class Pet {
     return this.world.ballOnStage?.(ball);
   }
 
-  /** Whether the last tick showed nothing new (`Step.still`). */
-  private lastStill = false;
-
   /** The wobbles' clock in milliseconds this tick, where known (`Lube::curtime`); else the tick's times 17. */
   private wobbleClocks: number[] = [];
   private wobbleIndex = 0;
@@ -6247,16 +6215,9 @@ export class Pet {
    * before it -- an ask's, a copy's -- the earlier, in turn ([[measured]]
    * frame 199 of the petting day, 43281 then 43391).
    */
-  private wobbleClock(own: boolean) {
+  private wobbleClock() {
     const clocks = this.wobbleClocks;
-
-    if (!clocks.length) {
-      return undefined;
-    }
-
-    return own
-      ? clocks[clocks.length - 1]
-      : clocks[Math.min(this.wobbleIndex++, clocks.length - 1)];
+    return clocks.length ? clocks[Math.min(this.wobbleIndex++, clocks.length - 1)] : undefined;
   }
 
   // The eyelids.
@@ -7603,41 +7564,40 @@ export class Pet {
       lids: this.lids,
     };
 
-    /* Each pop played ahead places its frame, and the head where it tracks
-     * -- glued, the frame before afresh first -- and the wobbles, Ballz's,
-     * not the sprite's, are not put back ([[measured]] frame 334 of the
-     * petting day: ten placings, three waits drawn). */
+    /* Each pop played ahead, stamped, places its frame -- Ballz working its
+     * state out, glued the old state first -- and the head where it tracks;
+     * the sprite put back after, but not Ballz's five, nor its wobbles
+     * ([[measured]] frame 334 of the petting day: ten placings). */
     const head = {
       headYaw: this.headYaw,
       headPitch: this.headPitch,
       headTracking: this.headTracking,
       headWeight: this.headWeight,
+      rotation: this.rotation,
+      stateFrame: this.stateFrame,
+      stateLids: this.stateLids,
+      stamp: this.stamp,
+      lastPose: this.lastPose,
     };
 
     for (let n = 0; n <= frames.length; n++) {
+      this.stampState();
       this.blinkPulse();
       const frame = frames[n];
 
-      if (!frame) {
-        continue;
+      if (frame) {
+        if (n === 0 && frame.step.glue !== undefined && this.lastPose) {
+          this.workOut(this.lastPose);
+        }
+
+        this.rotation = frame.rotation;
+        this.updateHeadTracking();
+        this.stateFrame = frame.step.frame;
+        this.stateLids = this.liveLids();
+        this.workOut(this.currentPlacing());
       }
 
-      if (n === 0 && frame.step.glue !== undefined && this.lastPose?.tracking) {
-        const kept = [this.headYaw, this.headPitch, this.headTracking] as const;
-        [this.headYaw, this.headPitch, this.headTracking] = [
-          this.lastPose.yaw,
-          this.lastPose.pitch,
-          true,
-        ];
-        this.headTrackPrep();
-        [this.headYaw, this.headPitch, this.headTracking] = kept;
-      }
-
-      this.updateHeadTracking();
-
-      if (this.headTracking) {
-        this.headTrackPrep();
-      }
+      this.lastPose = this.currentPlacing();
     }
 
     Object.assign(this, blinking, head);

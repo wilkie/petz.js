@@ -279,6 +279,10 @@ interface Frame {
   headClock?: number;
   /** Every head placing's clock in the frame, in order (`HeadTrackPrep` reads it afresh each time). */
   headClocks?: number[];
+  /** Each pop's stamp in the frame, in order (`popped`, `PopScript` stamping the state at seg7:5822). */
+  stamps?: number[];
+  /** Whose states Ballz worked out afresh in the frame, in order (`cart` lines that missed). */
+  workedAfresh?: number[];
   /** How many times the head was placed for the dog's own state in the frame. */
   headPlacings?: number;
   /** And for the copy the plain move takes of the frame before at the new angles (`head 0`), the last. */
@@ -401,6 +405,14 @@ function readTrace(lines: string[]) {
       open.heldSlot = undefined;
     } else if (kind === 'glue' && open) {
       open.glueLine = values;
+    } else if (kind === 'cart' && open) {
+      open.workedAfresh ??= [];
+
+      if (values[1]) {
+        open.workedAfresh.push(values[0]);
+      }
+    } else if (kind === 'popped' && open) {
+      (open.stamps ??= []).push(values[0]);
     } else if (kind === 'shoe' && open) {
       open.shoe = values;
     } else if (kind === 'slide' && open) {
@@ -2325,6 +2337,8 @@ function followLockstep(lines: string[]) {
     .map(Number);
   /* The engine's clock, milliseconds over 17 (`timeGetTime`, seg9:0668), as each frame begins (`clock`). */
   const clocks = new Map<number, number>();
+  /* (And in milliseconds, for a recording without its pops' stamps.) */
+  const clockMs = new Map<number, number>();
   /* And its place in the game's table of 50 numbers (`table`, the line after). */
   const places = new Map<number, number>();
   /* And its queue's words unread, and them (`queue read write ...: words`). */
@@ -2342,6 +2356,7 @@ function followLockstep(lines: string[]) {
     if (line.startsWith('clock ')) {
       const [n, ms] = line.split(' ').slice(1).map(Number);
       clocks.set(n, Math.trunc(ms / 17));
+      clockMs.set(n, ms);
       clocked = n;
     } else if (line.startsWith('blinking ') && clocked >= 0) {
       blinks.set(clocked, line.split(' ').slice(1).join(' '));
@@ -2484,7 +2499,16 @@ function followLockstep(lines: string[]) {
     const step = pet.tick(
       clocks.get(n) ?? (n * 45) / 17,
       pulses.get(n),
-      frames[n].headClocks ?? frames[n].headClock
+      frames[n].headClocks ?? frames[n].headClock,
+      /* (Recorded before the driver wrote them, the pops' stamps stood in for
+       * by the head's clocks, read in the same tick of the timer, or else the
+       * frame's own.) */
+      frames[n].stamps ??
+        (frames[n].headClocks?.length
+          ? [...new Set(frames[n].headClocks)]
+          : clockMs.has(n)
+            ? [clockMs.get(n)!]
+            : undefined)
     );
 
     if (process.env.POPS && popCounts.has(n)) {
@@ -2590,6 +2614,19 @@ function followLockstep(lines: string[]) {
       console.log(
         `${n} ${ourHead} / ${theirHead} ${inner.waiting} ${JSON.stringify(inner.headTarget)} rot ${(pet as unknown as { rotation: number }).rotation} / ${state?.[9]}`
       );
+    }
+
+    /* (With `CARTCHECK`, whose states Ballz worked out afresh, against the engine's `cart` lines.) */
+    const theirsWorked = frames[n].workedAfresh;
+
+    if (
+      process.env.CARTCHECK &&
+      n > 0 &&
+      theirsWorked &&
+      JSON.stringify(step.workedAfresh ?? []) !== JSON.stringify(theirsWorked)
+    ) {
+      result.parted = `frame ${frame[0]}: worked afresh ${JSON.stringify(step.workedAfresh)}, not ${JSON.stringify(theirsWorked)}`;
+      break;
     }
 
     if (theirHead !== undefined && ourHead !== theirHead) {

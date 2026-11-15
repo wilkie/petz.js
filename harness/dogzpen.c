@@ -507,6 +507,58 @@ static HEADPREP headOn;
 
 static unsigned char __far *dogBallz;
 
+/* And every working out of a state's balls (`Ballz::GetCartesianCoordinates`,
+ * 210), which keeps the last five states it worked out and works one out
+ * afresh only if it matches none (seg10:3770 to 39a8): `cart whose missed
+ * slot draws` -- whose 1 the dog's own state (`+0x51a`), 2 its old (`+0xec`),
+ * 0 another; missed if the ring's index (`+0x52`) moved on -- then the
+ * fields it compares not yet named: `+0x14` (long), `+0x42`, `+0x44`,
+ * `+0x48` (long), `+0x40c` (long), `+0x414` (long), and the 80-bit `+0x41c`
+ * as five words. */
+/* And each pop of the dog's script (`ScriptSprite::PopScript`, 69), which
+ * stamps its state with the time as it starts (`+0x48`, seg7:5822):
+ * `popped stamp flags draws` as it returns -- played ahead too. */
+typedef int(__cdecl __far *POPSCRIPT)(void __far *sprite);
+static POPSCRIPT popOn;
+
+static int __cdecl __far __loadds popping(void __far *sprite)
+{
+    int flags = popOn(sprite);
+
+    if (sprite == (void __far *)dogSprite) {
+        say("popped %ld %d %d\r\n", *(long __far *)(dogSprite + 0x562), flags, draws);
+    }
+
+    return flags;
+}
+
+typedef void __far *(__cdecl __far *CARTESIAN)(void __far *ballz, unsigned char __far *state);
+static CARTESIAN cartOn;
+
+static void __far *__cdecl __far __loadds carting(void __far *ballz, unsigned char __far *state)
+{
+    int before;
+    void __far *answer;
+    int whose;
+
+    if (dogBallz && ballz != (void __far *)dogBallz) {
+        return cartOn(ballz, state);
+    }
+
+    before = *(int __far *)((unsigned char __far *)ballz + 0x52);
+    answer = cartOn(ballz, state);
+    whose = !dogSprite ? 0 : state == dogSprite + 0x51a ? 1 : state == dogSprite + 0xec ? 2 : 0;
+    say("cart %d %d %d %d %ld %d %d %ld %ld %ld %u %u %u %u %u\r\n", whose,
+        *(int __far *)((unsigned char __far *)ballz + 0x52) != before,
+        *(int __far *)((unsigned char __far *)ballz + 0x50), draws, *(long __far *)(state + 0x14),
+        *(int __far *)(state + 0x42), *(int __far *)(state + 0x44), *(long __far *)(state + 0x48),
+        *(long __far *)(state + 0x40c), *(long __far *)(state + 0x414),
+        *(unsigned __far *)(state + 0x41c), *(unsigned __far *)(state + 0x41e),
+        *(unsigned __far *)(state + 0x420), *(unsigned __far *)(state + 0x422),
+        *(unsigned __far *)(state + 0x424));
+    return answer;
+}
+
 static void __cdecl __far __loadds heading(void __far *ballz, int __far *block,
                                            unsigned char __far *state)
 {
@@ -583,6 +635,8 @@ static void hookPushes(void)
     spotCheckOn = (SPOTCHECK)hookPrologue(389, (void __far *)spotChecking);
     forAllOn = (FORALL)hookPrologue(39, (void __far *)forAll);
     headOn = (HEADPREP)hookPrologue(45, (void __far *)heading);
+    cartOn = (CARTESIAN)hookPrologue(210, (void __far *)carting);
+    popOn = (POPSCRIPT)hookPrologue(69, (void __far *)popping);
     grabOn = (HOLDING)hookPrologue(340, (void __far *)grabbed);
     releaseOn = (HOLDING)hookPrologue(341, (void __far *)released);
     placingOn[0] = (PLACING)hookPrologue(199, (void __far *)plainly);
