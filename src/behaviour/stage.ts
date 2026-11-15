@@ -478,7 +478,10 @@ export class Stage implements PetWorld {
 
     /* Turned about its middle by `8ae5 1 turn frame`, and that frame then
      * the one before (seg7:5c26 to 5cdb; `MoveFrameRectCenter`). */
-    if (step.turnFrame !== undefined) {
+    /* (Not a turn whose pop ran dry, its frame lost, -1: the engine centred
+     * the dog then, at the frame it had, and nothing moved -- [[measured]]
+     * frame 1374 of the petting day.) */
+    if (step.turnFrame !== undefined && step.turnFrame >= 0) {
       /* The frame shown boxed at the new angles and centred where the old
        * rectangle was, each centre its edges' sum halved toward 0
        * (`MoveFrameRectCenter`, seg10:3054 to 3149); that rectangle the old

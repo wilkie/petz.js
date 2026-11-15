@@ -2100,7 +2100,8 @@ export class Pet {
 
       /* Placed by a reference frame (`GetCenterOffset`), that frame too, in a
        * state of its own ([[measured]] frame 27 of the petting day). */
-      if (placedBy !== undefined) {
+      if (placedBy !== undefined && step.glue === undefined) {
+        /* (Not glued: a glue places the frame by its ball, no reference taken, frame 1093.) */
         this.workOut({ ...now, frame: placedBy }, 0);
       }
 
